@@ -14,7 +14,7 @@ use tracing::error;
 use uuid::Uuid;
 
 use crate::p2p::{P2PNetwork, ShareMessage};
-use crate::terminal::{SessionHeader, TerminalEvent, TerminalRecorder, TerminalPlayer};
+use crate::terminal::{SessionHeader, TerminalEvent, TerminalPlayer, TerminalRecorder};
 
 #[derive(Parser)]
 #[command(name = "iroh-code-remote")]
@@ -42,6 +42,9 @@ pub enum Commands {
 
         #[arg(short, long)]
         save: Option<String>,
+
+        #[arg(long, help = "Enable passthrough mode (like asciinema)")]
+        passthrough: bool,
     },
 
     #[command(about = "Join an existing shared session")]
@@ -49,7 +52,11 @@ pub enum Commands {
         #[arg(help = "Session ID to join")]
         session_id: String,
 
-        #[arg(short, long, help = "Node address to connect to (format: node_id@addr:port)")]
+        #[arg(
+            short,
+            long,
+            help = "Node address to connect to (format: node_id@addr:port)"
+        )]
         peer: Option<String>,
     },
 
@@ -70,7 +77,8 @@ pub struct CliApp {
 
 impl CliApp {
     pub async fn new() -> Result<Self> {
-        let (network, message_receiver) = P2PNetwork::new().await
+        let (network, message_receiver) = P2PNetwork::new()
+            .await
             .context("Failed to initialize P2P network")?;
 
         Ok(Self {
@@ -81,18 +89,20 @@ impl CliApp {
 
     pub async fn run(&mut self, cli: Cli) -> Result<()> {
         match cli.command {
-            Commands::Host { command, title, width, height, save } => {
-                self.host_session(command, title, width, height, save).await
+            Commands::Host {
+                command,
+                title,
+                width,
+                height,
+                save,
+                passthrough,
+            } => {
+                self.host_session(command, title, width, height, save, passthrough)
+                    .await
             }
-            Commands::Join { session_id, peer } => {
-                self.join_session(session_id, peer).await
-            }
-            Commands::List => {
-                self.list_sessions().await
-            }
-            Commands::Play { file } => {
-                self.play_session(file).await
-            }
+            Commands::Join { session_id, peer } => self.join_session(session_id, peer).await,
+            Commands::List => self.list_sessions().await,
+            Commands::Play { file } => self.play_session(file).await,
         }
     }
 
@@ -103,6 +113,7 @@ impl CliApp {
         width: u16,
         height: u16,
         save_file: Option<String>,
+        passthrough: bool,
     ) -> Result<()> {
         let session_id = Uuid::new_v4().to_string();
 
@@ -125,14 +136,25 @@ impl CliApp {
         // Display node address for others to connect
         if let Ok(node_addr) = self.network.get_node_addr().await {
             println!("📍 Node Address: {:?}", node_addr);
-            println!("💡 Others can join using: iroh-code-remote join {} --peer {:?}", session_id, node_addr);
+            println!(
+                "💡 Others can join using: iroh-code-remote join {} --peer {:?}",
+                session_id, node_addr
+            );
         }
 
         println!("💻 Command: {}", command);
         println!("📏 Size: {}x{}", width, height);
+        if passthrough {
+            println!("🔄 Mode: Passthrough (asciinema-like)");
+        } else {
+            println!("🔄 Mode: Standard");
+        }
         println!();
 
-        let input_receiver = self.network.create_shared_session(header.clone()).await
+        let input_receiver = self
+            .network
+            .create_shared_session(header.clone())
+            .await
             .context("Failed to create shared session")?;
 
         let (recorder, mut event_receiver) = TerminalRecorder::new(session_id.clone());
@@ -141,20 +163,29 @@ impl CliApp {
         let session_id_clone = session_id.clone();
         tokio::spawn(async move {
             while let Some(event) = event_receiver.recv().await {
-                if let Err(e) = network_clone.send_terminal_event(session_id_clone.clone(), event).await {
+                if let Err(e) = network_clone
+                    .send_terminal_event(session_id_clone.clone(), event)
+                    .await
+                {
                     error!("Failed to send terminal event: {}", e);
                 }
             }
         });
 
         self.handle_input_forwarding(input_receiver).await;
-
         self.handle_network_messages().await;
 
-        println!("✅ Starting terminal session. Press Ctrl+C to exit.");
-        recorder.start_session(&command, width, height)?;
+        if passthrough {
+            println!("✅ Starting passthrough terminal session. Press Ctrl+C to exit.");
+            recorder
+                .start_passthrough_session(&command, width, height)
+                .await?;
+        } else {
+            println!("✅ Starting terminal session. Press Ctrl+C to exit.");
+            recorder.start_session(&command, width, height)?;
+            tokio::signal::ctrl_c().await?;
+        }
 
-        tokio::signal::ctrl_c().await?;
         self.network.end_session(session_id.clone()).await?;
 
         if let Some(save_path) = save_file {
@@ -185,7 +216,10 @@ impl CliApp {
             println!("✅ Peer connection feature coming soon");
         }
 
-        let mut event_receiver = self.network.join_session(session_id.clone()).await
+        let mut event_receiver = self
+            .network
+            .join_session(session_id.clone())
+            .await
             .context("Failed to join session")?;
 
         let network_clone = self.network.clone();
@@ -212,7 +246,10 @@ impl CliApp {
                                         _ => continue,
                                     };
 
-                                    if let Err(e) = network_clone.send_input(session_id_clone.clone(), input_data).await {
+                                    if let Err(e) = network_clone
+                                        .send_input(session_id_clone.clone(), input_data)
+                                        .await
+                                    {
                                         error!("Failed to send input: {}", e);
                                     }
                                 }
@@ -242,7 +279,8 @@ impl CliApp {
                             SetForegroundColor(Color::Green),
                             Print(format!("🎬 Session started: {}\n", event.data)),
                             ResetColor
-                        ).ok();
+                        )
+                        .ok();
                     }
                     crate::terminal::EventType::End => {
                         execute!(
@@ -250,7 +288,8 @@ impl CliApp {
                             SetForegroundColor(Color::Red),
                             Print("🛑 Session ended\n"),
                             ResetColor
-                        ).ok();
+                        )
+                        .ok();
                         break;
                     }
                     crate::terminal::EventType::Resize { width, height } => {
@@ -259,7 +298,8 @@ impl CliApp {
                             SetForegroundColor(Color::Yellow),
                             Print(format!("📐 Terminal resized: {}x{}\n", width, height)),
                             ResetColor
-                        ).ok();
+                        )
+                        .ok();
                     }
                     _ => {}
                 }
@@ -305,7 +345,8 @@ impl CliApp {
     async fn play_session(&self, file: String) -> Result<()> {
         println!("🎬 Playing back session from: {}", file);
 
-        let file_content = tokio::fs::read_to_string(&file).await
+        let file_content = tokio::fs::read_to_string(&file)
+            .await
             .with_context(|| format!("Failed to read session file: {}", file))?;
 
         let events: Vec<TerminalEvent> = serde_json::from_str(&file_content)
@@ -316,7 +357,10 @@ impl CliApp {
             return Ok(());
         }
 
-        println!("📺 Starting playback of {} events. Press Ctrl+C to stop.", events.len());
+        println!(
+            "📺 Starting playback of {} events. Press Ctrl+C to stop.",
+            events.len()
+        );
         println!("⏯️  Press any key to start...");
 
         // Wait for user input to start
@@ -359,6 +403,7 @@ impl CliApp {
             Print("╰─────────────────────────────────────────────╯\n"),
             ResetColor,
             Print("\n")
-        ).ok();
+        )
+        .ok();
     }
 }
