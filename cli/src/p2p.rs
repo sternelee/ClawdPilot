@@ -1,5 +1,5 @@
 use anyhow::Result;
-use iroh::{NodeAddr, NodeId};
+use iroh::{Endpoint, NodeAddr, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{broadcast, mpsc, RwLock};
@@ -45,6 +45,7 @@ pub struct SharedSession {
 
 pub struct P2PNetwork {
     node_id: NodeId,
+    endpoint: Option<Endpoint>,
     sessions: RwLock<HashMap<String, SharedSession>>,
     message_sender: mpsc::UnboundedSender<ShareMessage>,
 }
@@ -53,6 +54,7 @@ impl Clone for P2PNetwork {
     fn clone(&self) -> Self {
         Self {
             node_id: self.node_id,
+            endpoint: None, // Clone doesn't copy endpoint
             sessions: RwLock::new(HashMap::new()),
             message_sender: self.message_sender.clone(),
         }
@@ -63,9 +65,13 @@ impl P2PNetwork {
     pub async fn new() -> Result<(Self, mpsc::UnboundedReceiver<ShareMessage>)> {
         info!("Initializing iroh P2P network...");
 
-        // For now, use a random node ID
-        let node_id = NodeId::from_bytes(&rand::random::<[u8; 32]>())?;
+        // Create a new iroh endpoint with discovery
+        let endpoint = iroh::Endpoint::builder()
+            .discovery_n0()
+            .bind()
+            .await?;
 
+        let node_id = endpoint.node_id();
         info!("Node ID: {}", node_id);
 
         let (message_sender, message_receiver) = mpsc::unbounded_channel();
@@ -74,6 +80,7 @@ impl P2PNetwork {
             node_id,
             sessions: RwLock::new(HashMap::new()),
             message_sender,
+            endpoint: Some(endpoint),
         };
 
         Ok((network, message_receiver))
@@ -294,13 +301,28 @@ impl P2PNetwork {
     }
 
     pub async fn get_node_addr(&self) -> Result<NodeAddr> {
-        // For now, return a simple NodeAddr without real network addresses
-        Ok(NodeAddr::new(self.node_id))
+        if let Some(endpoint) = &self.endpoint {
+            // For now, just return the basic NodeAddr with the node_id
+            // In a real implementation, you would get the actual network addresses
+            // from the endpoint and include them in the NodeAddr
+            Ok(NodeAddr::new(self.node_id))
+        } else {
+            // Fallback to simple NodeAddr
+            Ok(NodeAddr::new(self.node_id))
+        }
     }
 
     pub async fn connect_to_peer(&self, node_addr: NodeAddr) -> Result<()> {
-        info!("Would connect to peer: {}", node_addr.node_id);
-        // TODO: Implement actual peer connection
+        info!("Connecting to peer: {}", node_addr.node_id);
+        
+        if let Some(endpoint) = &self.endpoint {
+            // Add the peer to our endpoint
+            endpoint.add_node_addr(node_addr.clone())?;
+            info!("Successfully added peer {} to endpoint", node_addr.node_id);
+        } else {
+            return Err(anyhow::anyhow!("No endpoint available for connection"));
+        }
+        
         Ok(())
     }
 

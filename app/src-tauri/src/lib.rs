@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::str::FromStr;
 use std::sync::Mutex;
 use tauri::{Emitter, State};
 use tokio::sync::mpsc;
@@ -11,42 +10,51 @@ mod terminal_events;
 use p2p::P2PNetwork;
 use terminal_events::{EventType, TerminalEvent};
 
-// Helper function to validate node address format
-fn is_valid_node_address(address: &str) -> bool {
+// Helper function to validate and parse node address format
+fn parse_node_address(address: &str) -> Result<iroh::NodeAddr, String> {
+    // Try to parse as node_id@address:port format
     let parts: Vec<&str> = address.split('@').collect();
     if parts.len() != 2 {
-        return false;
+        return Err("Invalid format. Expected: node_id@address:port".to_string());
     }
 
-    let node_id = parts[0];
+    let node_id_str = parts[0];
     let addr_port = parts[1];
 
-    // Node ID should be a hex string of reasonable length (typically 64 chars for ed25519)
-    if node_id.len() < 32 || node_id.len() > 128 {
-        return false;
-    }
+    // Parse node ID
+    let node_id = node_id_str
+        .parse::<iroh::NodeId>()
+        .map_err(|e| format!("Invalid node ID: {}", e))?;
 
-    // Check if node_id contains only hex characters
-    if !node_id.chars().all(|c| c.is_ascii_hexdigit()) {
-        return false;
-    }
-
-    // Address:port should contain a colon and have reasonable format
+    // Parse address:port
     if !addr_port.contains(':') {
-        return false;
+        return Err("Address must contain port (address:port)".to_string());
     }
 
     let addr_parts: Vec<&str> = addr_port.split(':').collect();
     if addr_parts.len() != 2 {
-        return false;
+        return Err("Invalid address:port format".to_string());
     }
 
-    // Validate port is a number
-    if addr_parts[1].parse::<u16>().is_err() {
-        return false;
-    }
+    let addr = addr_parts[0];
+    let port = addr_parts[1]
+        .parse::<u16>()
+        .map_err(|e| format!("Invalid port: {}", e))?;
 
-    true
+    // Create socket address
+    let socket_addr = format!("{}:{}", addr, port)
+        .parse::<std::net::SocketAddr>()
+        .map_err(|e| format!("Invalid socket address: {}", e))?;
+
+    // Create NodeAddr with direct address
+    let node_addr = iroh::NodeAddr::new(node_id).with_direct_addresses([socket_addr]);
+
+    Ok(node_addr)
+}
+
+// Helper function to validate node address format
+fn is_valid_node_address(address: &str) -> bool {
+    parse_node_address(address).is_ok()
 }
 
 #[derive(Default)]
@@ -98,7 +106,10 @@ async fn connect_to_peer(
 
     // Validate node address format more thoroughly
     if !is_valid_node_address(&node_address) {
-        return Err("Invalid node address format. Expected: node_id@address:port".to_string());
+        return Err(
+            "Invalid node address format. Expected: node_id@address:port or iroh NodeAddr format"
+                .to_string(),
+        );
     }
 
     let network = {
@@ -110,6 +121,14 @@ async fn connect_to_peer(
             }
         }
     };
+
+    // Parse and connect to the peer
+    let node_addr = parse_node_address(&node_address)?;
+
+    network
+        .connect_to_peer(node_addr)
+        .await
+        .map_err(|e| format!("Failed to connect to peer: {}", e))?;
 
     // Join session
     let mut event_receiver = network
@@ -210,7 +229,7 @@ async fn get_node_info(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn parse_node_address(address: String) -> Result<String, String> {
+async fn parse_node_address_command(address: String) -> Result<String, String> {
     // Use the same validation function
     if is_valid_node_address(&address) {
         Ok(address)
@@ -230,7 +249,7 @@ pub fn run() {
             disconnect_session,
             get_active_sessions,
             get_node_info,
-            parse_node_address
+            parse_node_address_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

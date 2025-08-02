@@ -157,10 +157,13 @@ impl CliApp {
         // Display node address for others to connect
         if let Ok(node_addr) = self.network.get_node_addr().await {
             println!("📍 Node Address: {:?}", node_addr);
-            println!(
-                "💡 Others can join using: roterm join {} --peer {:?}",
-                session_id, node_addr
-            );
+            
+            // For now, provide a placeholder connection string since we don't have real network addresses
+            // In a real implementation, this would use the actual endpoint addresses
+            let placeholder_addr = format!("{}@127.0.0.1:8080", node_addr.node_id);
+            println!("🔗 App Connection String (placeholder): {}", placeholder_addr);
+            println!("💡 Others can join using: roterm join {} --peer {}", session_id, placeholder_addr);
+            println!("⚠️  Note: This is a placeholder address. Real P2P networking is not yet implemented.");
         }
 
         println!("🐚 Shell: {} ({})", shell_type.get_display_name(), command);
