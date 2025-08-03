@@ -128,14 +128,26 @@ function App() {
       // Setup terminal first
       setupTerminal();
 
-      // Listen for terminal events
+      // Connect using session ticket and get the session ID
+      const actualSessionId = await invoke<string>("connect_to_peer", {
+        sessionTicket: nodeAddress.trim(),
+      });
+
+      console.log(`Connected with session ID: ${actualSessionId}`);
+
+      // Listen for terminal events using the actual session ID
+      const eventName = `terminal-event-${actualSessionId}`;
+      console.log(`Listening for events: ${eventName}`);
+      
       const unlisten = await listen<TerminalEvent>(
-        `terminal-event-${sessionId}`,
+        eventName,
         (event) => {
+          console.log("Received terminal event:", event);
           const terminalEvent = event.payload;
 
           if (terminal.current) {
             if (terminalEvent.event_type === "Output") {
+              console.log("Writing output to terminal:", terminalEvent.data);
               terminal.current.write(terminalEvent.data);
             } else if (terminalEvent.event_type === "Start") {
               terminal.current.writeln(
@@ -151,10 +163,8 @@ function App() {
         },
       );
 
-      // Connect using session ticket
-      await invoke("connect_to_peer", {
-        sessionTicket: nodeAddress.trim(),
-      });
+      // Set the session ID for later use
+      setSessionId(actualSessionId);
 
       setIsConnected(true);
       setStatus("Connecting...");

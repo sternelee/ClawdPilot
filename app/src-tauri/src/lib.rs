@@ -55,7 +55,7 @@ async fn connect_to_peer(
     session_ticket: String,
     state: State<'_, AppState>,
     app_handle: tauri::AppHandle,
-) -> Result<(), String> {
+) -> Result<String, String> {
     // Validate inputs
     if session_ticket.trim().is_empty() {
         return Err("Session ticket cannot be empty".to_string());
@@ -101,7 +101,10 @@ async fn connect_to_peer(
     let session_id_clone = session_id.clone();
     tokio::spawn(async move {
         while let Ok(event) = event_receiver.recv().await {
-            let _ = app_handle_clone.emit(&format!("terminal-event-{}", session_id_clone), &event);
+            let event_name = format!("terminal-event-{}", session_id_clone);
+            println!("Broadcasting event to: {}", event_name);
+            println!("Event data: {:?}", event);
+            let _ = app_handle_clone.emit(&event_name, &event);
         }
     });
 
@@ -121,7 +124,7 @@ async fn connect_to_peer(
         }
     });
 
-    Ok(())
+    Ok(session_id)
 }
 
 #[tauri::command]

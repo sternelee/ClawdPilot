@@ -367,13 +367,17 @@ impl P2PNetwork {
                     data,
                     timestamp,
                 } => {
+                    println!("Received terminal output: {}", data);
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
                         event_type: crate::terminal_events::EventType::Output,
                         data,
                     };
+                    println!("Sending event to session: {}", session_id);
                     if let Err(e) = session.event_sender.send(event) {
                         warn!("Failed to send output event to subscribers: {}", e);
+                    } else {
+                        println!("Successfully sent event to session");
                     }
                 }
                 TerminalMessageBody::Input {

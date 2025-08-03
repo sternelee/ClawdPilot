@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use crossterm;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use std::time::{SystemTime, UNIX_EPOCH};

@@ -222,7 +222,9 @@ impl CliApp {
             tokio::signal::ctrl_c().await?;
         }
 
-        self.network.end_session(&sender, session_id.clone()).await?;
+        self.network
+            .end_session(&sender, session_id.clone())
+            .await?;
 
         if let Some(save_path) = save_file {
             println!("💾 Saving session to: {}", save_path);
@@ -242,10 +244,13 @@ impl CliApp {
         // Parse session ticket
         let ticket = if let Some(ticket_str) = peer {
             println!("📡 Parsing session ticket...");
-            ticket_str.parse::<crate::p2p::SessionTicket>()
+            ticket_str
+                .parse::<crate::p2p::SessionTicket>()
                 .context("Failed to parse session ticket")?
         } else {
-            return Err(anyhow::anyhow!("Session ticket is required to join a session"));
+            return Err(anyhow::anyhow!(
+                "Session ticket is required to join a session"
+            ));
         };
 
         let (sender, mut event_receiver) = self
@@ -278,9 +283,8 @@ impl CliApp {
                                         _ => continue,
                                     };
 
-                                    if let Err(e) = network_clone
-                                        .send_input(&sender_clone, input_data)
-                                        .await
+                                    if let Err(e) =
+                                        network_clone.send_input(&sender_clone, input_data).await
                                     {
                                         error!("Failed to send input: {}", e);
                                     }

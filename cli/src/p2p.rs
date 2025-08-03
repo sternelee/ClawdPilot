@@ -161,7 +161,7 @@ impl P2PNetwork {
 
         // Create topic for this session using random bytes
         let topic_id = TopicId::from_bytes(rand::random());
-        
+
         let (event_sender, _event_receiver) = broadcast::channel(1000);
         let (_input_sender, input_receiver) = mpsc::unbounded_channel();
 
@@ -404,27 +404,27 @@ impl P2PNetwork {
     pub async fn get_node_addr(&self) -> Result<NodeAddr> {
         // Wait a bit for the network to initialize
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-        
+
         let node_id = self.endpoint.node_id();
         let mut node_addr = NodeAddr::new(node_id);
-        
+
         // Add a placeholder direct address (localhost for testing)
         // In production, this should be the actual public IP/port
         let placeholder_addr = "127.0.0.1:11204".parse::<std::net::SocketAddr>()
             .map_err(|e| anyhow::anyhow!("Failed to parse placeholder address: {}", e))?;
         node_addr = node_addr.with_direct_addresses([placeholder_addr]);
-        
+
         info!("Generated node address: {:?}", node_addr);
         Ok(node_addr)
     }
 
     pub async fn connect_to_peer(&self, node_addr: NodeAddr) -> Result<()> {
         info!("Connecting to peer: {}", node_addr.node_id);
-        
+
         // Add the peer to our endpoint
         self.endpoint.add_node_addr(node_addr.clone())?;
         info!("Successfully added peer {} to endpoint", node_addr.node_id);
-        
+
         Ok(())
     }
 
