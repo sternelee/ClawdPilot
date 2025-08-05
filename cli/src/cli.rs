@@ -10,12 +10,13 @@ use crossterm::{
 use std::io::{self, Write};
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
-use tracing::error;
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::p2p::P2PNetwork;
 use crate::shell::{ShellConfig, ShellDetector, ShellType};
 use crate::terminal::{SessionHeader, TerminalEvent, TerminalPlayer, TerminalRecorder};
+use crate::remote_terminal::RemoteInputTerminalRecorder;
 
 #[derive(Parser)]
 #[command(name = "iroh-code-remote")]
@@ -168,7 +169,7 @@ impl CliApp {
         }
         println!();
 
-        let (topic_id, sender, input_receiver) = self
+        let (topic_id, sender, mut event_receiver) = self
             .network
             .create_shared_session(header.clone())
             .await
@@ -178,12 +179,16 @@ impl CliApp {
         let ticket = self.network.create_session_ticket(topic_id).await?;
         println!("🎫 Session Ticket: {}", ticket);
 
-        let (recorder, mut event_receiver) = TerminalRecorder::new(session_id.clone());
+        let (recorder, mut recorder_event_receiver) = RemoteInputTerminalRecorder::new(
+            session_id.clone(),
+            event_receiver,
+        );
 
+        // Forward terminal recorder events to network
         let network_clone = self.network.clone();
         let sender_clone = sender.clone();
         tokio::spawn(async move {
-            while let Some(event) = event_receiver.recv().await {
+            while let Some(event) = recorder_event_receiver.recv().await {
                 match event.event_type {
                     crate::terminal::EventType::Output => {
                         if let Err(e) = network_clone
@@ -201,26 +206,53 @@ impl CliApp {
                             error!("Failed to send resize event: {}", e);
                         }
                     }
-                    _ => {
-                        // Handle other event types if needed
-                    }
+                    _ => {}
                 }
             }
+            debug!("Terminal event forwarding task ended");
         });
 
-        self.handle_input_forwarding(input_receiver).await;
         self.handle_network_messages().await;
 
-        if passthrough {
-            println!("✅ Starting passthrough terminal session. Press Ctrl+C to exit.");
-            recorder
+        let save_recorder = if passthrough {
+            println!("✅ Starting passthrough terminal session with remote input support. Press Ctrl+C to exit.");
+            // For now, we'll use the regular recorder for passthrough mode
+            let (regular_recorder, _) = TerminalRecorder::new(session_id.clone());
+            regular_recorder
                 .start_passthrough_session_with_config(&shell_config, width, height)
                 .await?;
+            None
         } else {
-            println!("✅ Starting terminal session. Press Ctrl+C to exit.");
-            recorder.start_session_with_config(&shell_config, width, height)?;
-            tokio::signal::ctrl_c().await?;
-        }
+            println!("✅ Starting terminal session with remote input support. Press Ctrl+C to exit.");
+            let mut recorder_mut = recorder;
+            
+            // Start the session in a separate task
+            let session_handle = tokio::spawn(async move {
+                if let Err(e) = recorder_mut.start_session_with_config_and_remote_input(&shell_config, width, height).await {
+                    error!("Terminal session error: {}", e);
+                }
+                recorder_mut
+            });
+            
+            // Wait for either ctrl_c or session completion
+            let session_result = tokio::select! {
+                _ = tokio::signal::ctrl_c() => {
+                    info!("Ctrl+C received, shutting down...");
+                    None
+                }
+                result = session_handle => {
+                    match result {
+                        Ok(recorder) => Some(recorder),
+                        Err(e) => {
+                            error!("Session task failed: {}", e);
+                            None
+                        }
+                    }
+                }
+            };
+            
+            session_result
+        };
 
         self.network
             .end_session(&sender, session_id.clone())
@@ -228,7 +260,13 @@ impl CliApp {
 
         if let Some(save_path) = save_file {
             println!("💾 Saving session to: {}", save_path);
-            recorder.save_to_file(&save_path).await?;
+            if let Some(recorder) = save_recorder {
+                recorder.save_to_file(&save_path).await?;
+            } else {
+                // Passthrough mode - create a dummy recorder for save
+                let (regular_recorder, _) = TerminalRecorder::new(session_id.clone());
+                regular_recorder.save_to_file(&save_path).await?;
+            }
             println!("✅ Session saved successfully!");
         }
 

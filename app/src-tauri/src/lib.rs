@@ -154,6 +154,32 @@ async fn send_terminal_input(
 }
 
 #[tauri::command]
+async fn execute_remote_command(
+    command: String,
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let sessions = state.sessions.lock().unwrap();
+    let session = sessions.get(&session_id).ok_or("Session not found")?;
+
+    let event = TerminalEvent {
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64(),
+        event_type: EventType::Input,
+        data: format!("{}\n", command),
+    };
+
+    session
+        .event_sender
+        .send(event)
+        .map_err(|e| format!("Failed to send command event: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let mut sessions = state.sessions.lock().unwrap();
     sessions.remove(&session_id);
@@ -197,6 +223,7 @@ pub fn run() {
             initialize_network,
             connect_to_peer,
             send_terminal_input,
+            execute_remote_command,
             disconnect_session,
             get_active_sessions,
             get_node_info,

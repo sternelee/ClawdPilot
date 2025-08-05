@@ -3,9 +3,10 @@ use crossterm;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::AsyncReadExt;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, broadcast, Mutex};
 use tracing::{debug, error, info};
 
 use crate::shell::ShellConfig;
@@ -56,6 +57,10 @@ impl TerminalRecorder {
             events,
         };
         (recorder, event_receiver)
+    }
+
+    pub fn get_event_sender(&self) -> &mpsc::UnboundedSender<TerminalEvent> {
+        &self.event_sender
     }
 
     pub fn get_session_id(&self) -> &str {
