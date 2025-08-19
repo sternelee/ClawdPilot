@@ -1,12 +1,26 @@
 import { useState, useCallback } from 'react';
 
 const HISTORY_KEY = 'riterm-connection-history';
-const MAX_HISTORY_ITEMS = 10;
+const MAX_HISTORY_ITEMS = 20;
+
+export type ConnectionStatus = 'Active' | 'Completed' | 'Failed' | 'Waiting Input';
 
 export interface HistoryEntry {
-  ticket: string;
+  ticket: string; // Using ticket as the unique ID
   timestamp: number;
+  title: string;
+  description: string;
+  status: ConnectionStatus;
 }
+
+const generateDefaultTitle = (ticket: string): string => {
+  const parts = ticket.split('-');
+  if (parts.length > 2) {
+    const potentialTitle = parts.slice(0, -2).join(' ');
+    return potentialTitle.charAt(0).toUpperCase() + potentialTitle.slice(1);
+  }
+  return `Session ${ticket.substring(0, 8)}...`;
+};
 
 export function useConnectionHistory() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
@@ -19,26 +33,44 @@ export function useConnectionHistory() {
     }
   });
 
+  const saveHistory = (newHistory: HistoryEntry[]) => {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+    } catch (error) {
+      console.error('Failed to save connection history:', error);
+    }
+  };
+
   const addHistoryEntry = useCallback((ticket: string) => {
     setHistory((prevHistory) => {
-      // Remove any previous entries with the same ticket
       const filteredHistory = prevHistory.filter((entry) => entry.ticket !== ticket);
 
-      // Add the new entry to the top
-      const newHistory: HistoryEntry[] = [
-        { ticket, timestamp: Date.now() },
-        ...filteredHistory,
-      ].slice(0, MAX_HISTORY_ITEMS); // Limit the number of history items
+      const newEntry: HistoryEntry = {
+        ticket,
+        timestamp: Date.now(),
+        title: generateDefaultTitle(ticket),
+        description: 'Connecting to peer...',
+        status: 'Active',
+      };
 
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
-      } catch (error) {
-        console.error('Failed to save connection history:', error);
-      }
-
+      const newHistory = [newEntry, ...filteredHistory].slice(0, MAX_HISTORY_ITEMS);
+      saveHistory(newHistory);
       return newHistory;
     });
   }, []);
+
+  const updateHistoryEntry = useCallback(
+    (ticket: string, updates: Partial<Omit<HistoryEntry, 'ticket'>>) => {
+      setHistory((prevHistory) => {
+        const newHistory = prevHistory.map((entry) =>
+          entry.ticket === ticket ? { ...entry, ...updates, timestamp: Date.now() } : entry
+        );
+        saveHistory(newHistory);
+        return newHistory;
+      });
+    },
+    []
+  );
 
   const clearHistory = useCallback(() => {
     setHistory([]);
@@ -49,5 +81,5 @@ export function useConnectionHistory() {
     }
   }, []);
 
-  return { history, addHistoryEntry, clearHistory };
+  return { history, addHistoryEntry, updateHistoryEntry, clearHistory };
 }

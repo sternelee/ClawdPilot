@@ -4,9 +4,10 @@ import { FitAddon } from 'xterm-addon-fit';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import './App.css';
-import { useConnectionHistory } from './hooks/useConnectionHistory';
+import { useConnectionHistory, HistoryEntry } from './hooks/useConnectionHistory';
 import { ConnectionView } from './components/ConnectionView';
 import { TerminalView } from './components/TerminalView';
+import { SettingsModal } from './components/SettingsModal';
 
 function App() {
   const [sessionTicket, setSessionTicket] = useState('');
@@ -14,13 +15,15 @@ function App() {
   const [status, setStatus] = useState('Disconnected');
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTicket, setActiveTicket] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
 
   const terminalInstance = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
   const unlistenRef = useRef<(() => void) | null>(null);
 
-  const { history, addHistoryEntry } = useConnectionHistory();
+  const { history, addHistoryEntry, updateHistoryEntry } = useConnectionHistory();
 
   const initializeNetwork = useCallback(async () => {
     try {
@@ -59,6 +62,10 @@ function App() {
       terminalInstance.current.writeln('\r\n\x1b[1;33m👋 Disconnected from session\x1b[0m');
     }
 
+    if (activeTicket) {
+      updateHistoryEntry(activeTicket, { status: 'Completed', description: 'Session ended by user.' });
+    }
+
     if (sessionIdRef.current) {
       try {
         await invoke('disconnect_session', { sessionId: sessionIdRef.current });
@@ -74,27 +81,34 @@ function App() {
 
     setIsConnected(false);
     sessionIdRef.current = null;
+    setActiveTicket(null);
     setStatus('Disconnected');
-  }, []);
+  }, [activeTicket, updateHistoryEntry]);
 
-  const handleConnect = useCallback(async () => {
-    if (!sessionTicket.trim()) {
+  const handleConnect = useCallback(async (ticketOverride?: string) => {
+    const ticket = (ticketOverride || sessionTicket).trim();
+    if (!ticket) {
       alert('Please enter a session ticket.');
       return;
     }
 
+    // If a new ticket is used, add it to history.
+    if (!history.some(h => h.ticket === ticket)) {
+      addHistoryEntry(ticket);
+    }
     setConnecting(true);
     setStatus('Connecting...');
     setConnectionError(null);
 
     try {
       const actualSessionId = await invoke<string>('connect_to_peer', {
-        sessionTicket: sessionTicket.trim(),
+        sessionTicket: ticket,
       });
 
       sessionIdRef.current = actualSessionId;
-      addHistoryEntry(sessionTicket.trim());
+      setActiveTicket(ticket);
       setIsConnected(true);
+      updateHistoryEntry(ticket, { description: 'Connection established.' });
 
       const unlisten = await listen<any>(`terminal-event-${actualSessionId}`, (event) => {
         const termEvent = event.payload;
@@ -116,17 +130,30 @@ function App() {
     } catch (error) {
       console.error('Connection failed:', error);
       setStatus('Connection failed');
+      updateHistoryEntry(ticket, { status: 'Failed', description: String(error) });
       setConnectionError(String(error));
     } finally {
       setConnecting(false);
     }
-  }, [sessionTicket, addHistoryEntry, handleDisconnect]);
+  }, [sessionTicket, history, addHistoryEntry, updateHistoryEntry, handleDisconnect]);
+
+  const handleSaveSettings = (ticket: string, updates: { title: string; description: string }) => {
+    updateHistoryEntry(ticket, updates);
+  };
+
+  const activeHistoryEntry = history.find((entry) => entry.ticket === activeTicket);
 
   return (
     <div className="app">
       <div className="header">
-        <h1>iroh-code-remote</h1>
-        <div className="status-bar">{status}</div>
+        <div className="header-controls">
+          <div className="status-bar">{status}</div>
+          {isConnected && (
+            <button className="settings-btn" onClick={() => setIsSettingsOpen(true)}>
+              Settings
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="terminal-container-wrapper">
@@ -151,6 +178,13 @@ function App() {
           </button>
         </div>
       )}
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        entry={activeHistoryEntry || null}
+        onSave={handleSaveSettings}
+      />
     </div>
   );
 }
