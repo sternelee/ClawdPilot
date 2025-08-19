@@ -23,6 +23,7 @@ export function TerminalView({ onInput, onReady }: TerminalViewProps) {
     if (terminalRef.current && !terminalInstance.current) {
       const term = new Terminal({
         cursorBlink: true,
+        scrollback: 1000,
         theme: {
           background: '#000000',
           foreground: '#ffffff',
