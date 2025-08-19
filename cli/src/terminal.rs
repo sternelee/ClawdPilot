@@ -326,7 +326,7 @@ impl TerminalRecorder {
                         }
                     } => {
                         if let Some(input_data) = remote_data {
-                            debug!("Received remote input: {}", input_data);
+                            info!("Terminal received remote input in passthrough PTY writer task: {:?}", input_data);
                             if let Err(e) = writer.write(input_data.as_bytes()) {
                                 error!("Failed to write remote input to PTY: {}", e);
                                 break;
@@ -335,6 +335,7 @@ impl TerminalRecorder {
                                 error!("Failed to flush remote input to PTY: {}", e);
                                 break;
                             }
+                            info!("Successfully wrote remote input to passthrough PTY");
 
                             // Record the input event
                             if let Err(e) = recorder_input_clone2.record_input(input_data.as_bytes()) {
@@ -528,7 +529,7 @@ impl TerminalRecorder {
                         }
                     } => {
                         if let Some(input_data) = remote_data {
-                            debug!("Received remote input: {}", input_data);
+                            info!("Terminal received remote input in PTY writer task: {:?}", input_data);
                             if let Err(e) = writer.write(input_data.as_bytes()) {
                                 error!("Failed to write remote input to PTY: {}", e);
                                 break;
@@ -537,6 +538,7 @@ impl TerminalRecorder {
                                 error!("Failed to flush remote input to PTY: {}", e);
                                 break;
                             }
+                            info!("Successfully wrote remote input to PTY");
 
                             // Record the input event but don't send it back to network
                             // to avoid infinite loop

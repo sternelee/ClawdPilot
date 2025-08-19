@@ -127,7 +127,7 @@ pub struct P2PNetwork {
     endpoint: Endpoint,
     gossip: Gossip,
     router: Router,
-    sessions: RwLock<HashMap<String, SharedSession>>,
+    sessions: Arc<RwLock<HashMap<String, SharedSession>>>,
 }
 
 impl Clone for P2PNetwork {
@@ -136,7 +136,7 @@ impl Clone for P2PNetwork {
             endpoint: self.endpoint.clone(),
             gossip: self.gossip.clone(),
             router: self.router.clone(),
-            sessions: RwLock::new(HashMap::new()),
+            sessions: self.sessions.clone(),
         }
     }
 }
@@ -175,7 +175,7 @@ impl P2PNetwork {
             endpoint,
             gossip,
             router,
-            sessions: RwLock::new(HashMap::new()),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
         };
 
         Ok(network)
@@ -433,24 +433,8 @@ impl P2PNetwork {
         mut receiver: GossipReceiver,
         session_id: String,
     ) -> Result<()> {
-        // Create a new Arc with a copy of the current sessions
-        let sessions = {
-            let current_sessions = self.sessions.read().await;
-            let mut new_sessions = HashMap::new();
-            for (k, v) in current_sessions.iter() {
-                new_sessions.insert(
-                    k.clone(),
-                    SharedSession {
-                        header: v.header.clone(),
-                        participants: v.participants.clone(),
-                        is_host: v.is_host,
-                        event_sender: v.event_sender.clone(),
-                        input_sender: v.input_sender.clone(),
-                    },
-                );
-            }
-            Arc::new(RwLock::new(new_sessions))
-        };
+        // Use the original sessions reference instead of creating a copy
+        let sessions = self.sessions.clone();
 
         tokio::spawn(async move {
             debug!(
@@ -522,10 +506,13 @@ impl P2PNetwork {
                     data,
                     timestamp,
                 } => {
+                    // Deserialize the ANSI escape sequences back from the sanitized version
+                    let desanitized_data = data.replace("\\e", "\u{1b}");
+                    
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
                         event_type: crate::terminal::EventType::Output,
-                        data,
+                        data: desanitized_data,
                     };
                     if let Err(e) = session.event_sender.send(event) {
                         warn!("Failed to send output event to subscribers: {}", e);
@@ -536,25 +523,31 @@ impl P2PNetwork {
                     data,
                     timestamp,
                 } => {
-                    debug!("Received input event from {}: {}", from.fmt_short(), data);
+                    debug!("Received input event from {}: {:?}", from.fmt_short(), data);
+                    
+                    // Deserialize the ANSI escape sequences back from the sanitized version
+                    let desanitized_data = data.replace("\\e", "\u{1b}");
+                    
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
                         event_type: crate::terminal::EventType::Input,
-                        data: data.clone(), // Clone for logging
+                        data: desanitized_data.clone(),
                     };
 
                     // For host sessions, forward input to the input sender if available
-                    let sessions_guard = sessions.read().await;
-                    if let Some(session) = sessions_guard.get(session_id) {
-                        if session.is_host {
-                            if let Some(input_sender) = &session.input_sender {
-                                if let Err(e) = input_sender.send(data.clone()) {
-                                    warn!("Failed to send input to terminal: {}", e);
-                                } else {
-                                    debug!("Successfully sent input to terminal");
-                                }
+                    if session.is_host {
+                        if let Some(input_sender) = &session.input_sender {
+                            debug!("Host session - forwarding input to terminal");
+                            if let Err(e) = input_sender.send(desanitized_data.clone()) {
+                                warn!("Failed to send input to terminal: {}", e);
+                            } else {
+                                debug!("Successfully sent input to terminal");
                             }
+                        } else {
+                            warn!("Host session but no input_sender available");
                         }
+                    } else {
+                        debug!("Not a host session, skipping terminal input forwarding");
                     }
 
                     // Broadcast input event to all subscribers

@@ -61,7 +61,6 @@ function App() {
       // Handle terminal input
       const disposeOnData = terminalInstance.current.onData((data) => {
         console.log('Terminal input received:', data);
-        inputBuffer += data;
         terminalInstance.current?.write(data);
         if (data.includes('\r') || data.includes('\n')) {
           if (isConnectedRef.current && sessionIdRef.current) {
@@ -74,6 +73,7 @@ function App() {
               console.error('Failed to send input:', error);
               terminalInstance.current?.writeln(`\r\n❌ Failed to send input: ${error}`);
             });
+            inputBuffer = ""
           }
         }
       });
@@ -84,6 +84,9 @@ function App() {
         const printable = !ev.altKey && !ev.ctrlKey && !ev.metaKey;
 
         console.log('Key event:', ev.key, 'Printable:', printable);
+        if (ev.key === 'Backspace') {
+          inputBuffer = inputBuffer.slice(0, -1);
+        }
 
         // Handle Enter key specifically
         if (ev.keyCode === 13) {

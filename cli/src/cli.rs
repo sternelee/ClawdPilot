@@ -240,14 +240,20 @@ impl CliApp {
         let (pty_input_sender, pty_input_receiver) = mpsc::unbounded_channel::<String>();
 
         // Handle input from network and forward to PTY
+        let network_sessions = self.network.clone();
+        let session_id_clone = session_id.clone();
         tokio::spawn(async move {
+            info!("Starting remote input handler for session: {}", session_id_clone);
             let mut input_receiver = input_receiver;
             while let Some(input_data) = input_receiver.recv().await {
-                debug!("Received network input: {}", input_data);
+                info!("Host received remote input from P2P network: {:?}", input_data);
                 if let Err(e) = pty_input_sender.send(input_data) {
                     error!("Failed to send input to PTY channel: {}", e);
+                } else {
+                    debug!("Successfully forwarded remote input to PTY");
                 }
             }
+            warn!("Remote input handler task ended for session: {}", session_id_clone);
         });
 
         self.handle_network_messages().await;
@@ -316,54 +322,46 @@ impl CliApp {
             .await
             .context("Failed to join session after multiple attempts")?;
 
-        let network_clone = self.network.clone();
-        let sender_clone = sender.clone();
-        tokio::spawn(async move {
-            loop {
-                if let Ok(has_event) = event::poll(std::time::Duration::from_millis(100)) {
-                    if has_event {
-                        if let Ok(event) = event::read() {
-                            match event {
-                                Event::Key(KeyEvent {
-                                    code: KeyCode::Char('c'),
-                                    modifiers: KeyModifiers::CONTROL,
-                                    ..
-                                }) => {
-                                    break;
-                                }
-                                Event::Key(KeyEvent { code, .. }) => {
-                                    let input_data = match code {
-                                        KeyCode::Enter => "\n".to_string(),
-                                        KeyCode::Tab => "\t".to_string(),
-                                        KeyCode::Backspace => "\x08".to_string(),
-                                        KeyCode::Char(c) => c.to_string(),
-                                        _ => continue,
-                                    };
-
-                                    if let Err(e) =
-                                        network_clone.send_input(&sender_clone, input_data).await
-                                    {
-                                        error!("Failed to send input: {}", e);
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
         println!("✅ Joined session. Receiving terminal output...");
         println!("💡 Type to send input to the remote session. Press Ctrl+C to exit.");
 
         terminal::enable_raw_mode()?;
 
-        // Create a channel for sending input to the PTY
-        let (_pty_input_sender, _pty_input_receiver) = mpsc::unbounded_channel::<String>();
+        // Spawn task to handle input and send to network
+        let network_clone = self.network.clone();
+        let sender_clone = sender.clone();
+        let input_task = tokio::spawn(async move {
+            let mut stdin = tokio::io::stdin();
+            let mut buffer = [0u8; 1024];
+
+            loop {
+                match stdin.read(&mut buffer).await {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let data = &buffer[..n];
+                        let input_str = String::from_utf8_lossy(data).to_string();
+                        
+                        // Check for Ctrl+C
+                        if data.contains(&3) {
+                            debug!("Ctrl+C detected, exiting input loop");
+                            break;
+                        }
+
+                        if let Err(e) = network_clone.send_input(&sender_clone, input_str).await {
+                            error!("Failed to send input: {}", e);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to read from stdin: {}", e);
+                        break;
+                    }
+                }
+            }
+            debug!("Input task ended");
+        });
 
         // Spawn task to handle events from the network
-        let _event_task = tokio::spawn(async move {
+        let event_task = tokio::spawn(async move {
             while let Ok(event) = event_receiver.recv().await {
                 match event.event_type {
                     crate::terminal::EventType::Output => {
@@ -371,12 +369,8 @@ impl CliApp {
                         io::stdout().flush().ok();
                     }
                     crate::terminal::EventType::Input => {
-                        // Forward input to PTY
-                        // Note: In this version, we're not actually using the channel since we don't have a PTY to send to
-                        debug!("Received input event: {}", event.data);
-                        // Print the input to stdout so we can see it
-                        print!("{}", event.data);
-                        io::stdout().flush().ok();
+                        // Don't echo remote input events in join mode
+                        debug!("Received input event (not echoing): {}", event.data);
                     }
                     crate::terminal::EventType::Start => {
                         execute!(
@@ -408,11 +402,22 @@ impl CliApp {
                     }
                 }
             }
+            debug!("Event task ended");
         });
 
-        self.handle_network_messages().await;
+        // Wait for either task to complete or Ctrl+C
+        tokio::select! {
+            _ = input_task => {
+                debug!("Input task completed");
+            }
+            _ = event_task => {
+                debug!("Event task completed");
+            }
+            _ = tokio::signal::ctrl_c() => {
+                debug!("Ctrl+C signal received");
+            }
+        }
 
-        tokio::signal::ctrl_c().await?;
         terminal::disable_raw_mode()?;
         println!("\n👋 Disconnected from session.");
 
