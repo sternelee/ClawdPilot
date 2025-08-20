@@ -133,29 +133,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "app"
-version = "0.1.0"
-dependencies = [
- "aead",
- "anyhow",
- "bincode",
- "chacha20poly1305",
- "data-encoding",
- "futures",
- "iroh",
- "iroh-gossip",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tokio",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -652,34 +629,6 @@ name = "clap_lex"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
-
-[[package]]
-name = "cli"
-version = "0.1.0"
-dependencies = [
- "aead",
- "anyhow",
- "bincode",
- "bytes",
- "chacha20poly1305",
- "clap",
- "crossterm",
- "data-encoding",
- "futures",
- "iroh",
- "iroh-gossip",
- "portable-pty",
- "qrcode",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "url",
- "uuid",
-]
 
 [[package]]
 name = "cobs"
@@ -4745,6 +4694,58 @@ dependencies = [
 ]
 
 [[package]]
+name = "riterm_app"
+version = "0.1.0"
+dependencies = [
+ "aead",
+ "anyhow",
+ "bincode",
+ "chacha20poly1305",
+ "data-encoding",
+ "futures",
+ "iroh",
+ "iroh-gossip",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-barcode-scanner",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "riterm_cli"
+version = "0.1.0"
+dependencies = [
+ "aead",
+ "anyhow",
+ "bincode",
+ "bytes",
+ "chacha20poly1305",
+ "clap",
+ "crossterm",
+ "data-encoding",
+ "futures",
+ "iroh",
+ "iroh-gossip",
+ "portable-pty",
+ "qrcode",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5760,6 +5761,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9946a3cede302eac0c6eb6c6070ac47b1768e326092d32efbb91f21ed58d978f"
+dependencies = [
+ "anyhow",
+ "glob",
+ "plist",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tauri-utils",
+ "toml 0.9.4",
+ "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-barcode-scanner"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3f79bba83da3c115ac248a658c5613db1325a7c7ba889e344287e373828a08b"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "tauri-runtime"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5810,9 +5842,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-utils"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9330c15cabfe1d9f213478c9e8ec2b0c76dab26bb6f314b8ad1c8a568c1d186e"
+checksum = "41a3852fdf9a4f8fbeaa63dc3e9a85284dd6ef7200751f0bd66ceee30c93f212"
 dependencies = [
  "anyhow",
  "brotli",
@@ -5839,7 +5871,7 @@ dependencies = [
  "serde_with",
  "swift-rs",
  "thiserror 2.0.12",
- "toml 0.8.23",
+ "toml 0.9.4",
  "url",
  "urlpattern",
  "uuid",

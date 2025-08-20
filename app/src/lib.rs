@@ -319,6 +319,11 @@ pub fn run() {
             get_node_info,
             parse_session_ticket
         ])
+        .setup(|app| {
+            #[cfg(mobile)]
+            app.handle().plugin(tauri_plugin_barcode_scanner::init());
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
