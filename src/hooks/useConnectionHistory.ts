@@ -23,15 +23,18 @@ const generateDefaultTitle = (ticket: string): string => {
 };
 
 export function createConnectionHistory() {
-  const [history, setHistory] = createSignal<HistoryEntry[]>(() => {
-    try {
-      const storedHistory = localStorage.getItem(HISTORY_KEY);
-      return storedHistory ? JSON.parse(storedHistory) : [];
-    } catch (error) {
-      console.error('Failed to parse connection history:', error);
-      return [];
-    }
-  });
+  // 首先获取初始历史记录
+  let initialHistory: HistoryEntry[] = [];
+  try {
+    const storedHistory = localStorage.getItem(HISTORY_KEY);
+    console.log("storedHistory", storedHistory);
+    initialHistory = storedHistory ? JSON.parse(storedHistory) : [];
+  } catch (error) {
+    console.error('Failed to parse connection history:', error);
+  }
+
+  // 然后将其作为直接值传递给createSignal
+  const [history, setHistory] = createSignal<HistoryEntry[]>(initialHistory);
 
   const saveHistory = (newHistory: HistoryEntry[]) => {
     try {

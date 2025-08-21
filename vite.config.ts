@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite'
-import { solidPlugin } from 'vite-plugin-solid'
+import solid from 'vite-plugin-solid'
 
 export default defineConfig({
-  plugins: [solidPlugin()],
+  plugins: [solid()],
   clearScreen: false,
   server: {
     port: 1420,

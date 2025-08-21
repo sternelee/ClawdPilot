@@ -8,7 +8,7 @@ interface HistoryCardProps {
 
 const statusColorMap: { [key in HistoryEntry['status']]: string } = {
   Active: 'success',
-  Completed: 'info', 
+  Completed: 'info',
   Failed: 'error',
   'Waiting Input': 'warning',
 };
@@ -17,7 +17,7 @@ export function HistoryCard(props: HistoryCardProps) {
   const statusColor = () => statusColorMap[props.entry.status] || 'neutral';
 
   return (
-    <div 
+    <div
       class="card card-compact bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
       onClick={() => props.onConnect(props.entry.ticket)}
     >

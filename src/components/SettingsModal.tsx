@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { createSignal, createEffect, Show } from 'solid-js';
 import { HistoryEntry } from '../hooks/useConnectionHistory';
 
 interface SettingsModalProps {
@@ -8,69 +8,93 @@ interface SettingsModalProps {
   onSave: (ticket: string, updates: { title: string; description: string }) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, entry, onSave }: SettingsModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+export function SettingsModal(props: SettingsModalProps) {
+  const [title, setTitle] = createSignal('');
+  const [description, setDescription] = createSignal('');
 
-  useEffect(() => {
-    if (entry) {
-      setTitle(entry.title);
-      setDescription(entry.description);
+  createEffect(() => {
+    if (props.entry) {
+      setTitle(props.entry.title);
+      setDescription(props.entry.description);
     }
-  }, [entry]);
+  });
 
-  useEffect(() => {
-    if (isOpen) {
+  createEffect(() => {
+    if (props.isOpen) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen]);
-
-  if (!isOpen || !entry) {
-    return null;
-  }
+  });
 
   const handleSave = () => {
-    onSave(entry.ticket, { title, description });
-    onClose();
+    if (props.entry) {
+      props.onSave(props.entry.ticket, { title: title(), description: description() });
+      props.onClose();
+    }
+  };
+
+  const handleOverlayClick = (e: MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      props.onClose();
+    }
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Edit Connection Details</h2>
-          <button className="modal-close-btn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="form-group">
-          <label htmlFor="session-title">Title</label>
-          <input
-            id="session-title"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="ticket-input"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="session-description">Description</label>
-          <textarea
-            id="session-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="ticket-input"
-            rows={4}
-          />
-        </div>
-        <div className="modal-actions">
-          <button className="disconnect-btn" onClick={onClose}>Cancel</button>
-          <button className="connect-btn" onClick={handleSave}>Save</button>
+    <Show when={props.isOpen && props.entry}>
+      <div
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+        onClick={handleOverlayClick}
+      >
+        <div class="modal-box w-full max-w-md">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">Edit Connection Details</h2>
+            <button
+              class="btn btn-sm btn-circle btn-ghost"
+              onClick={props.onClose}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Title</span>
+              </label>
+              <input
+                type="text"
+                value={title()}
+                onInput={(e) => setTitle(e.currentTarget.value)}
+                class="input input-bordered w-full"
+                placeholder="Session title"
+              />
+            </div>
+
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">Description</span>
+              </label>
+              <textarea
+                value={description()}
+                onInput={(e) => setDescription(e.currentTarget.value)}
+                class="textarea textarea-bordered w-full"
+                rows={4}
+                placeholder="Session description"
+              />
+            </div>
+          </div>
+
+          <div class="modal-action">
+            <button class="btn btn-ghost" onClick={props.onClose}>
+              Cancel
+            </button>
+            <button class="btn btn-primary" onClick={handleSave}>
+              Save
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Show>
   );
 }

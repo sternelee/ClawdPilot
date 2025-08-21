@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { onMount, onCleanup } from 'solid-js';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
@@ -9,18 +9,14 @@ interface TerminalViewProps {
   onReady: (terminal: Terminal, fitAddon: FitAddon) => void;
 }
 
-export function TerminalView({ onInput, onReady }: TerminalViewProps) {
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const terminalInstance = useRef<Terminal | null>(null);
-  const fitAddon = useRef<FitAddon | null>(null);
-  const onInputRef = useRef(onInput);
+export function TerminalView(props: TerminalViewProps) {
+  let terminalRef: HTMLDivElement | undefined;
+  let terminalInstance: Terminal | null = null;
+  let fitAddon: FitAddon | null = null;
+  let onDataDispose: { dispose: () => void } | null = null;
 
-  useEffect(() => {
-    onInputRef.current = onInput;
-  }, [onInput]);
-
-  useEffect(() => {
-    if (terminalRef.current && !terminalInstance.current) {
+  onMount(() => {
+    if (terminalRef && !terminalInstance) {
       const term = new Terminal({
         cursorBlink: true,
         scrollback: 1000,
@@ -35,28 +31,32 @@ export function TerminalView({ onInput, onReady }: TerminalViewProps) {
       });
 
       const addon = new FitAddon();
-      fitAddon.current = addon;
+      fitAddon = addon;
       term.loadAddon(addon);
       term.loadAddon(new WebLinksAddon());
 
-      term.open(terminalRef.current);
+      term.open(terminalRef);
       addon.fit();
       term.focus();
 
-      terminalInstance.current = term;
-      onReady(term, addon);
+      terminalInstance = term;
+      props.onReady(term, addon);
 
-      const onDataDispose = term.onData((data) => {
-        onInputRef.current(data);
+      onDataDispose = term.onData((data) => {
+        props.onInput(data);
       });
-
-      return () => {
-        onDataDispose.dispose();
-        term.dispose();
-        terminalInstance.current = null;
-      };
     }
-  }, [onReady]);
+  });
 
-  return <div ref={terminalRef} className="terminal-container" />;
+  onCleanup(() => {
+    if (onDataDispose) {
+      onDataDispose.dispose();
+    }
+    if (terminalInstance) {
+      terminalInstance.dispose();
+      terminalInstance = null;
+    }
+  });
+
+  return <div ref={terminalRef} class="terminal-container h-full w-full" />;
 }

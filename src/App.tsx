@@ -119,6 +119,33 @@ function App() {
           } else if (termEvent.event_type === 'End') {
             terminalInstance.writeln('\r\n\r\n[Session Ended]');
             handleDisconnect();
+          } else if (termEvent.event_type === 'HistoryData') {
+            // 处理接收到的历史记录数据
+            console.log('📜 Received session history:', termEvent.data);
+
+            // 解析历史记录数据
+            try {
+              const historyData = JSON.parse(termEvent.data);
+              const { logs, shell, cwd } = historyData;
+
+              // 在终端中显示历史记录
+              terminalInstance.writeln('\r\n\x1b[1;36m📜 Session History Received\x1b[0m');
+              terminalInstance.writeln(`\x1b[1;33mShell:\x1b[0m ${shell}`);
+              terminalInstance.writeln(`\x1b[1;33mWorking Directory:\x1b[0m ${cwd}`);
+              terminalInstance.writeln('\x1b[1;33m--- History Start ---\x1b[0m');
+              terminalInstance.write(logs);
+              terminalInstance.writeln('\x1b[1;33m--- History End ---\x1b[0m\r\n');
+
+              // 更新连接历史记录
+              updateHistoryEntry(ticket, {
+                description: `Connected with history (Shell: ${shell}, CWD: ${cwd})`
+              });
+
+              console.log(`✅ History displayed: ${logs.length} characters, Shell: ${shell}, CWD: ${cwd}`);
+            } catch (error) {
+              console.error('❌ Failed to parse history data:', error);
+              terminalInstance.writeln('\r\n\x1b[1;31m❌ Failed to parse session history\x1b[0m\r\n');
+            }
           }
         }
       });
@@ -142,7 +169,7 @@ function App() {
     updateHistoryEntry(ticket, updates);
   };
 
-  const activeHistoryEntry = createMemo(() => 
+  const activeHistoryEntry = createMemo(() =>
     history().find((entry) => entry.ticket === activeTicket())
   );
 
@@ -154,8 +181,8 @@ function App() {
         </div>
         {isConnected() && (
           <div class="flex-none">
-            <button 
-              class="btn btn-ghost btn-sm" 
+            <button
+              class="btn btn-ghost btn-sm"
               onClick={() => setIsSettingsOpen(true)}
             >
               Settings
@@ -181,8 +208,8 @@ function App() {
 
       {isConnected() && (
         <div class="p-4 bg-base-100 border-t">
-          <button 
-            class="btn btn-error btn-sm" 
+          <button
+            class="btn btn-error btn-sm"
             onClick={handleDisconnect}
           >
             Disconnect
