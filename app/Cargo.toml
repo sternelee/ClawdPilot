@@ -1,10 +1,10 @@
 [package]
-name = "riterm_app"
+name = "app"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "riterm_app"
+name = "riterm"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Clone)]
@@ -646,91 +645,232 @@ impl ShellType {
     }
 }
 
+// 平台特定的 shell 检测模块
+#[cfg(target_os = "windows")]
+mod platform {
+    use anyhow::{Context, Result};
+    use std::process::Command;
+    use tracing::debug;
+
+    pub fn find_shell_path(shell_name: &str) -> Result<String> {
+        let output = Command::new("where")
+            .arg(shell_name)
+            .output()
+            .context("Failed to execute 'where' command")?;
+
+        if output.status.success() {
+            let path = String::from_utf8(output.stdout)
+                .context("Failed to parse command output as UTF-8")?
+                .lines()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("No output from 'where' command"))?
+                .trim()
+                .to_string();
+            debug!("Found shell {} at path: {}", shell_name, path);
+            Ok(path)
+        } else {
+            Err(anyhow::anyhow!("Shell {} not found", shell_name))
+        }
+    }
+
+    pub fn get_default_shell_info() -> (String, Vec<String>) {
+        // Windows 默认使用 PowerShell
+        if is_shell_available("pwsh") {
+            ("pwsh".to_string(), vec!["-NoLogo".to_string()])
+        } else if is_shell_available("powershell") {
+            ("powershell".to_string(), vec!["-NoLogo".to_string()])
+        } else {
+            ("cmd".to_string(), vec![])
+        }
+    }
+
+    pub fn is_shell_available(shell_name: &str) -> bool {
+        find_shell_path(shell_name).is_ok()
+    }
+
+    pub fn get_platform_specific_shells() -> Vec<super::ShellType> {
+        let mut shells = Vec::new();
+
+        if is_shell_available("cmd") {
+            shells.push(super::ShellType::Cmd);
+        }
+
+        if is_shell_available("powershell") || is_shell_available("pwsh") {
+            shells.push(super::ShellType::PowerShell);
+        }
+
+        // Windows 上的 WSL 可能提供这些 shell
+        if is_shell_available("bash") {
+            shells.push(super::ShellType::Bash);
+        }
+
+        if is_shell_available("zsh") {
+            shells.push(super::ShellType::Zsh);
+        }
+
+        shells
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod platform {
+    use anyhow::{Context, Result};
+    use std::process::Command;
+    use tracing::debug;
+
+    pub fn find_shell_path(shell_name: &str) -> Result<String> {
+        let output = Command::new("which")
+            .arg(shell_name)
+            .output()
+            .context("Failed to execute 'which' command")?;
+
+        if output.status.success() {
+            let path = String::from_utf8(output.stdout)
+                .context("Failed to parse command output as UTF-8")?
+                .trim()
+                .to_string();
+            debug!("Found shell {} at path: {}", shell_name, path);
+            Ok(path)
+        } else {
+            Err(anyhow::anyhow!("Shell {} not found", shell_name))
+        }
+    }
+
+    pub fn get_default_shell_info() -> (String, Vec<String>) {
+        // macOS 默认使用 zsh (从 Catalina 开始)
+        if is_shell_available("zsh") {
+            ("zsh".to_string(), vec!["--login".to_string()])
+        } else {
+            ("bash".to_string(), vec!["--login".to_string()])
+        }
+    }
+
+    pub fn is_shell_available(shell_name: &str) -> bool {
+        find_shell_path(shell_name).is_ok()
+    }
+
+    pub fn get_platform_specific_shells() -> Vec<super::ShellType> {
+        let mut shells = Vec::new();
+
+        // macOS 常见 shell
+        if is_shell_available("zsh") {
+            shells.push(super::ShellType::Zsh);
+        }
+
+        if is_shell_available("bash") {
+            shells.push(super::ShellType::Bash);
+        }
+
+        if is_shell_available("fish") {
+            shells.push(super::ShellType::Fish);
+        }
+
+        shells
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+mod platform {
+    // Linux 和其他 Unix 系统
+    use anyhow::{Context, Result};
+    use std::process::Command;
+    use tracing::debug;
+
+    pub fn find_shell_path(shell_name: &str) -> Result<String> {
+        let output = Command::new("which")
+            .arg(shell_name)
+            .output()
+            .context("Failed to execute 'which' command")?;
+
+        if output.status.success() {
+            let path = String::from_utf8(output.stdout)
+                .context("Failed to parse command output as UTF-8")?
+                .trim()
+                .to_string();
+            debug!("Found shell {} at path: {}", shell_name, path);
+            Ok(path)
+        } else {
+            Err(anyhow::anyhow!("Shell {} not found", shell_name))
+        }
+    }
+
+    pub fn get_default_shell_info() -> (String, Vec<String>) {
+        // Linux 默认使用 bash
+        ("bash".to_string(), vec!["--login".to_string()])
+    }
+
+    pub fn is_shell_available(shell_name: &str) -> bool {
+        find_shell_path(shell_name).is_ok()
+    }
+
+    pub fn get_platform_specific_shells() -> Vec<super::ShellType> {
+        let mut shells = Vec::new();
+
+        // Linux 常见 shell
+        if is_shell_available("bash") {
+            shells.push(super::ShellType::Bash);
+        }
+
+        if is_shell_available("zsh") {
+            shells.push(super::ShellType::Zsh);
+        }
+
+        if is_shell_available("fish") {
+            shells.push(super::ShellType::Fish);
+        }
+
+        shells
+    }
+}
+
 pub struct ShellDetector;
 
 impl ShellDetector {
+    /// 使用平台特定模块检测可用的 shell
     pub fn detect_available_shells() -> Vec<ShellType> {
-        let shells_to_check = vec![
-            ShellType::Bash,
-            ShellType::Zsh,
-            ShellType::Fish,
-            ShellType::Nushell,
-            ShellType::PowerShell,
-        ];
+        let mut available_shells = platform::get_platform_specific_shells();
 
-        let mut available_shells = Vec::new();
-
-        for shell in shells_to_check {
-            if Self::is_shell_available(&shell) {
-                available_shells.push(shell);
-            }
-        }
-
-        // Add CMD on Windows
-        if cfg!(windows) {
-            available_shells.push(ShellType::Cmd);
+        // 检查通用 shell
+        if Self::is_shell_available("nu") {
+            available_shells.push(ShellType::Nushell);
         }
 
         available_shells
     }
 
     pub fn get_current_shell() -> Option<ShellType> {
-        // Try to get from environment variables
+        // 尝试从环境变量获取
         if let Ok(shell_path) = env::var("SHELL") {
             return Some(ShellType::from_command(&shell_path));
         }
 
-        // Fallback to checking parent process or common shells
+        // 回退到检查父进程或常见 shell
         Self::detect_available_shells().into_iter().next()
     }
 
     pub fn get_default_shell() -> ShellType {
-        Self::get_current_shell().unwrap_or_else(|| {
-            if cfg!(windows) {
-                ShellType::PowerShell
-            } else {
-                ShellType::Bash
-            }
-        })
+        if let Ok(shell_path) = env::var("SHELL") {
+            ShellType::from_command(&shell_path)
+        } else {
+            let (command, _) = platform::get_default_shell_info();
+            ShellType::from_command(&command)
+        }
     }
 
-    fn is_shell_available(shell: &ShellType) -> bool {
-        let command = shell.get_command_path();
+    /// 使用平台特定的方法检查 shell 可用性
+    pub fn is_shell_available(shell_name: &str) -> bool {
+        platform::is_shell_available(shell_name)
+    }
 
-        let result = Command::new("which")
-            .arg(command)
-            .output()
-            .or_else(|_| Command::new("where").arg(command).output());
-
-        match result {
-            Ok(output) => {
-                let available = output.status.success();
-                if available {
-                    debug!(
-                        "Found shell: {} at {:?}",
-                        shell.get_display_name(),
-                        String::from_utf8_lossy(&output.stdout).trim()
-                    );
-                } else {
-                    debug!("Shell {} not found", shell.get_display_name());
-                }
-                available
-            }
-            Err(e) => {
-                warn!(
-                    "Failed to check availability of {}: {}",
-                    shell.get_display_name(),
-                    e
-                );
-                false
-            }
-        }
+    /// 查找 shell 的完整路径
+    pub fn find_shell_path(shell_name: &str) -> Result<String> {
+        platform::find_shell_path(shell_name)
     }
 
     pub fn validate_shell_command(command: &str) -> Result<ShellType> {
         let shell_type = ShellType::from_command(command);
 
-        if Self::is_shell_available(&shell_type) {
+        if Self::is_shell_available(shell_type.get_command_path()) {
             Ok(shell_type)
         } else {
             Err(anyhow::anyhow!(

@@ -16,7 +16,7 @@ use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::terminal::{SessionHeader, TerminalEvent};
+use crate::terminal::{SessionHeader, SessionInfo, TerminalEvent};
 
 pub type EncryptionKey = [u8; 32];
 
@@ -39,9 +39,39 @@ impl std::str::FromStr for SessionTicket {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // 清理输入：移除空白字符和换行符
+        let cleaned = s.trim().replace([' ', '\n', '\r', '\t'], "");
+
+        // 验证BASE32字符集（A-Z, 2-7, =）
+        if !cleaned
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || ('2'..='7').contains(&c) || c == '=')
+        {
+            return Err(anyhow::anyhow!(
+                "Invalid BASE32 characters in ticket. Only A-Z, 2-7, and = are allowed"
+            ));
+        }
+
+        // 验证长度（BASE32编码的长度应该是8的倍数，或者有正确的填充）
+        let len = cleaned.len();
+        if len == 0 {
+            return Err(anyhow::anyhow!("Empty ticket"));
+        }
+
+        // BASE32解码
         let bytes = data_encoding::BASE32
-            .decode(s.as_bytes())
-            .map_err(|e| anyhow::anyhow!("Failed to decode ticket: {}", e))?;
+            .decode(cleaned.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to decode ticket (length: {}): {}", len, e))?;
+
+        // 验证解码后的数据长度是否合理
+        if bytes.len() < 32 {
+            // 至少需要包含topic_id和key
+            return Err(anyhow::anyhow!(
+                "Decoded ticket too short: {} bytes",
+                bytes.len()
+            ));
+        }
+
         let ticket: SessionTicket = bincode::deserialize(&bytes)
             .map_err(|e| anyhow::anyhow!("Failed to deserialize ticket: {}", e))?;
         Ok(ticket)
@@ -73,6 +103,14 @@ pub enum TerminalMessageBody {
     },
     /// Session ended
     SessionEnd { from: NodeId, timestamp: u64 },
+    /// New participant joined, request history
+    ParticipantJoined { from: NodeId, timestamp: u64 },
+    /// History data sent to new participant
+    HistoryData {
+        from: NodeId,
+        session_info: SessionInfo,
+        timestamp: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +165,7 @@ pub struct SharedSession {
     pub event_sender: broadcast::Sender<TerminalEvent>,
     pub input_sender: Option<mpsc::UnboundedSender<String>>,
     pub key: EncryptionKey,
+    pub gossip_sender: Option<GossipSender>,
 }
 
 pub struct P2PNetwork {
@@ -134,6 +173,18 @@ pub struct P2PNetwork {
     gossip: Gossip,
     router: Router,
     sessions: Arc<RwLock<HashMap<String, SharedSession>>>,
+    // 历史记录发送回调
+    history_callback: Arc<
+        RwLock<
+            Option<
+                Box<
+                    dyn Fn(&str) -> tokio::sync::oneshot::Receiver<Option<SessionInfo>>
+                        + Send
+                        + Sync,
+                >,
+            >,
+        >,
+    >,
 }
 
 impl Clone for P2PNetwork {
@@ -143,6 +194,7 @@ impl Clone for P2PNetwork {
             gossip: self.gossip.clone(),
             router: self.router.clone(),
             sessions: self.sessions.clone(),
+            history_callback: self.history_callback.clone(),
         }
     }
 }
@@ -182,6 +234,7 @@ impl P2PNetwork {
             gossip,
             router,
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            history_callback: Arc::new(RwLock::new(None)),
         };
 
         Ok(network)
@@ -202,6 +255,10 @@ impl P2PNetwork {
         let (event_sender, _event_receiver) = broadcast::channel(1000);
         let (input_sender, input_receiver) = mpsc::unbounded_channel();
 
+        // Subscribe to the gossip topic (empty node_ids means we're creating a new topic)
+        let topic = self.gossip.subscribe(topic_id, vec![]).await?;
+        let (sender, receiver) = topic.split();
+
         let session = SharedSession {
             header: header.clone(),
             participants: vec![self.endpoint.node_id().to_string()],
@@ -209,16 +266,13 @@ impl P2PNetwork {
             event_sender: event_sender.clone(),
             input_sender: Some(input_sender),
             key,
+            gossip_sender: Some(sender.clone()),
         };
 
         self.sessions
             .write()
             .await
             .insert(session_id.clone(), session);
-
-        // Subscribe to the gossip topic (empty node_ids means we're creating a new topic)
-        let topic = self.gossip.subscribe(topic_id, vec![]).await?;
-        let (sender, receiver) = topic.split();
 
         // Start listening for messages on this topic
         self.start_topic_listener(receiver, session_id).await?;
@@ -244,6 +298,19 @@ impl P2PNetwork {
         let session_id = format!("session_{}", ticket.topic_id);
         let (event_sender, event_receiver) = broadcast::channel(1000);
 
+        // Add peer addresses to endpoint's addressbook
+        for peer in &ticket.nodes {
+            self.endpoint.add_node_addr(peer.clone())?;
+        }
+
+        // Subscribe and join the gossip topic with known peers
+        let node_ids = ticket.nodes.iter().map(|p| p.node_id).collect();
+        let topic = self
+            .gossip
+            .subscribe_and_join(ticket.topic_id, node_ids)
+            .await?;
+        let (sender, receiver) = topic.split();
+
         // Create session entry for this joined session
         let session = SharedSession {
             header: SessionHeader {
@@ -262,25 +329,13 @@ impl P2PNetwork {
             event_sender: event_sender.clone(),
             input_sender: None, // Joining sessions don't need to handle input this way
             key: ticket.key,
+            gossip_sender: Some(sender.clone()),
         };
 
         self.sessions
             .write()
             .await
             .insert(session_id.clone(), session);
-
-        // Add peer addresses to endpoint's addressbook
-        for peer in &ticket.nodes {
-            self.endpoint.add_node_addr(peer.clone())?;
-        }
-
-        // Subscribe and join the gossip topic with known peers
-        let node_ids = ticket.nodes.iter().map(|p| p.node_id).collect();
-        let topic = self
-            .gossip
-            .subscribe_and_join(ticket.topic_id, node_ids)
-            .await?;
-        let (sender, receiver) = topic.split();
 
         // Start listening for messages on this topic
         self.start_topic_listener(receiver, session_id).await?;
@@ -394,10 +449,57 @@ impl P2PNetwork {
         Ok(())
     }
 
+    /// 发送参与者加入通知
+    pub async fn send_participant_joined(
+        &self,
+        sender: &GossipSender,
+        session_id: &str,
+    ) -> Result<()> {
+        info!("Sending participant joined notification");
+        let key = self.get_session_key(session_id).await?;
+        let body = TerminalMessageBody::ParticipantJoined {
+            from: self.endpoint.node_id(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        Ok(())
+    }
+
+    /// 发送历史记录数据给新参与者
+    pub async fn send_history_data(
+        &self,
+        sender: &GossipSender,
+        session_info: SessionInfo,
+        session_id: &str,
+    ) -> Result<()> {
+        info!(
+            "Sending history data: {} logs, shell: {}, cwd: {}",
+            session_info.logs.len(),
+            session_info.shell,
+            session_info.cwd
+        );
+        let key = self.get_session_key(session_id).await?;
+        let body = TerminalMessageBody::HistoryData {
+            from: self.endpoint.node_id(),
+            session_info,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        Ok(())
+    }
+
     pub async fn end_session(&self, sender: &GossipSender, session_id: String) -> Result<()> {
         info!("Ending session: {}", session_id);
 
+        // 获取会话密钥
         let key = self.get_session_key(&session_id).await?;
+
         let body = TerminalMessageBody::SessionEnd {
             from: self.endpoint.node_id(),
             timestamp: std::time::SystemTime::now()
@@ -406,7 +508,13 @@ impl P2PNetwork {
         };
         let message = EncryptedTerminalMessage::new(body, &key)?;
         sender.broadcast(message.to_vec()?.into()).await?;
-        self.sessions.write().await.remove(&session_id);
+
+        // 移除会话时只短暂持有写锁
+        {
+            let mut sessions = self.sessions.write().await;
+            sessions.remove(&session_id);
+        }
+
         Ok(())
     }
 
@@ -416,9 +524,7 @@ impl P2PNetwork {
         mut receiver: GossipReceiver,
         session_id: String,
     ) -> Result<()> {
-        // Use the original sessions reference instead of creating a copy
-        let sessions = self.sessions.clone();
-        let _node_id = self.endpoint.node_id();
+        let network_clone = self.clone();
 
         tokio::spawn(async move {
             info!("Starting gossip message listener");
@@ -430,16 +536,16 @@ impl P2PNetwork {
 
                         match EncryptedTerminalMessage::from_bytes(&msg.content) {
                             Ok(encrypted_msg) => {
-                                let sessions_guard = sessions.read().await;
+                                let sessions_guard = network_clone.sessions.read().await;
                                 if let Some(session) = sessions_guard.get(&session_id) {
-                                    match encrypted_msg.decrypt(&session.key) {
+                                    let key = session.key;
+                                    drop(sessions_guard); // 释放锁
+
+                                    match encrypted_msg.decrypt(&key) {
                                         Ok(body) => {
-                                            if let Err(e) = Self::handle_gossip_message(
-                                                &sessions,
-                                                &session_id,
-                                                body,
-                                            )
-                                            .await
+                                            if let Err(e) = network_clone
+                                                .handle_gossip_message(&session_id, body)
+                                                .await
                                             {
                                                 error!("Failed to handle gossip message: {}", e);
                                             }
@@ -491,13 +597,13 @@ impl P2PNetwork {
         Ok(())
     }
 
-    #[tracing::instrument(skip(sessions, body), fields(session_id = %session_id))]
+    #[tracing::instrument(skip(self, body), fields(session_id = %session_id))]
     async fn handle_gossip_message(
-        sessions: &Arc<RwLock<HashMap<String, SharedSession>>>,
+        &self,
         session_id: &str,
         body: TerminalMessageBody,
     ) -> Result<()> {
-        let sessions_guard = sessions.read().await;
+        let sessions_guard = self.sessions.read().await;
         if let Some(session) = sessions_guard.get(session_id) {
             match body {
                 TerminalMessageBody::Output {
@@ -569,6 +675,99 @@ impl P2PNetwork {
                         session_id
                     );
                 }
+                TerminalMessageBody::ParticipantJoined { from, timestamp: _ } => {
+                    info!(
+                        "New participant {} joined session {}",
+                        from.fmt_short(),
+                        session_id
+                    );
+
+                    // 如果我们是主机，自动发送历史记录
+                    if session.is_host {
+                        info!("We are the host, attempting to send history data");
+
+                        // 获取 gossip_sender 的克隆
+                        let gossip_sender = session.gossip_sender.clone();
+                        drop(sessions_guard); // 释放锁
+
+                        if let Some(sender) = gossip_sender {
+                            // 获取历史记录回调
+                            let callback = {
+                                let history_callback_guard = self.history_callback.read().await;
+                                history_callback_guard.as_ref().map(|cb| cb(session_id))
+                            };
+
+                            if let Some(receiver) = callback {
+                                // 在新的任务中处理历史记录发送，避免阻塞消息处理
+                                let network_clone = self.clone();
+                                let session_id_clone = session_id.to_string();
+
+                                tokio::spawn(async move {
+                                    match receiver.await {
+                                        Ok(Some(session_info)) => {
+                                            info!("Got history data, sending to new participant");
+
+                                            if let Err(e) = network_clone
+                                                .send_history_data(
+                                                    &sender,
+                                                    session_info,
+                                                    &session_id_clone,
+                                                )
+                                                .await
+                                            {
+                                                error!("Failed to send history data: {}", e);
+                                            } else {
+                                                info!(
+                                                    "✅ Successfully sent history data to new participant"
+                                                );
+                                            }
+                                        }
+                                        Ok(None) => {
+                                            info!("No history data available to send");
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to get history data: {}", e);
+                                        }
+                                    }
+                                });
+                            } else {
+                                warn!("No history callback set, cannot send history data");
+                            }
+                        } else {
+                            warn!("No gossip sender available for sending history data");
+                        }
+                    }
+                }
+                TerminalMessageBody::HistoryData {
+                    from,
+                    session_info,
+                    timestamp: _,
+                } => {
+                    info!(
+                        "Received history data from {}: {} logs, shell: {}, cwd: {}",
+                        from.fmt_short(),
+                        session_info.logs.len(),
+                        session_info.shell,
+                        session_info.cwd
+                    );
+
+                    // 将历史记录作为输出事件发送给订阅者
+                    let event = TerminalEvent {
+                        timestamp: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs() as f64,
+                        event_type: crate::terminal::EventType::Output,
+                        data: format!(
+                            "\r\n📜 Session History (Shell: {}, CWD: {})\r\n{}\r\n--- End of History ---\r\n",
+                            session_info.shell, session_info.cwd, session_info.logs
+                        ),
+                    };
+
+                    if let Err(e) = session.event_sender.send(event) {
+                        warn!("Failed to send history event to subscribers: {}", e);
+                    }
+                }
             }
         }
         Ok(())
@@ -626,24 +825,86 @@ impl P2PNetwork {
         self.router.shutdown().await.map_err(Into::into)
     }
 
+    /// 批量获取活跃会话，减少锁的获取次数
     pub async fn get_active_sessions(&self) -> Vec<String> {
         self.sessions.read().await.keys().cloned().collect()
     }
 
+    /// 检查是否为会话主机，使用短暂的读锁
     pub async fn is_session_host(&self, session_id: &str) -> bool {
-        if let Some(session) = self.sessions.read().await.get(session_id) {
-            session.is_host
-        } else {
-            false
-        }
+        self.sessions
+            .read()
+            .await
+            .get(session_id)
+            .map(|s| s.is_host)
+            .unwrap_or(false)
     }
 
+    /// 优化的会话密钥获取方法，使用作用域减少锁的持有时间
     async fn get_session_key(&self, session_id: &str) -> Result<EncryptionKey> {
+        let key = {
+            let sessions = self.sessions.read().await;
+            sessions.get(session_id).map(|s| s.key)
+        };
+
+        key.ok_or_else(|| anyhow::anyhow!("Session not found"))
+    }
+
+    /// 批量操作：获取会话统计信息
+    pub async fn get_session_stats(&self) -> (usize, usize) {
         let sessions = self.sessions.read().await;
-        sessions
-            .get(session_id)
-            .map(|s| s.key)
-            .ok_or_else(|| anyhow::anyhow!("Session not found"))
+        let total = sessions.len();
+        let hosted = sessions.values().filter(|s| s.is_host).count();
+        (total, hosted)
+    }
+
+    /// 检查会话是否存在
+    pub async fn session_exists(&self, session_id: &str) -> bool {
+        self.sessions.read().await.contains_key(session_id)
+    }
+
+    /// 设置历史记录获取回调函数
+    pub async fn set_history_callback<F>(&self, callback: F)
+    where
+        F: Fn(&str) -> tokio::sync::oneshot::Receiver<Option<SessionInfo>> + Send + Sync + 'static,
+    {
+        let mut history_callback = self.history_callback.write().await;
+        *history_callback = Some(Box::new(callback));
+    }
+
+    /// 自动发送历史记录给新参与者
+    pub async fn auto_send_history(&self, sender: &GossipSender, session_id: &str) -> Result<()> {
+        // 检查是否为主机
+        if !self.is_session_host(session_id).await {
+            return Ok(());
+        }
+
+        // 获取历史记录回调
+        let callback = {
+            let history_callback = self.history_callback.read().await;
+            history_callback.as_ref().map(|cb| cb(session_id))
+        };
+
+        if let Some(receiver) = callback {
+            // 等待历史记录数据
+            match receiver.await {
+                Ok(Some(session_info)) => {
+                    info!("Auto-sending history data to new participant");
+                    self.send_history_data(sender, session_info, session_id)
+                        .await?;
+                }
+                Ok(None) => {
+                    info!("No history data available to send");
+                }
+                Err(e) => {
+                    error!("Failed to get history data: {}", e);
+                }
+            }
+        } else {
+            warn!("No history callback set, cannot send history data");
+        }
+
+        Ok(())
     }
 
     pub async fn diagnose_connection(&self, ticket: &SessionTicket) -> Result<()> {

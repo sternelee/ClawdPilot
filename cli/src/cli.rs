@@ -159,7 +159,10 @@ impl CliApp {
         height: u16,
         passthrough: bool,
     ) -> Result<TerminalRecorder> {
-        let (recorder, mut event_receiver) = TerminalRecorder::new(session_id.clone());
+        let shell_type = shell_config.shell_type.get_display_name().to_string();
+        let (recorder, mut event_receiver) = TerminalRecorder::new(session_id.clone(), shell_type)
+            .await
+            .context("Failed to create terminal recorder")?;
 
         // Forward terminal recorder events to network
         let network_clone = self.network.clone();
@@ -294,6 +297,26 @@ impl CliApp {
             )
             .await?;
 
+        // 设置历史记录回调，当有新参与者加入时自动发送历史记录
+        let recorder_clone = recorder.clone();
+        self.network
+            .set_history_callback(move |_session_id| {
+                let recorder = recorder_clone.clone();
+                let (tx, rx) = tokio::sync::oneshot::channel();
+
+                tokio::spawn(async move {
+                    let session_info = recorder.get_session_info().await;
+                    let _ = tx.send(Some(session_info));
+                });
+
+                rx
+            })
+            .await;
+
+        info!(
+            "✅ History callback set successfully. New participants will receive session history automatically."
+        );
+
         self.network
             .end_session(&sender, session_id.clone())
             .await?;
@@ -334,6 +357,21 @@ impl CliApp {
             .join_session_with_retry(ticket.clone(), 3)
             .await
             .context("Failed to join session after multiple attempts")?;
+
+        // 发送参与者加入通知，请求历史记录
+        let session_id = format!("session_{}", ticket.topic_id);
+        if let Err(e) = self
+            .network
+            .send_participant_joined(&sender, &session_id)
+            .await
+        {
+            warn!("Failed to send participant joined notification: {}", e);
+        } else {
+            info!("✅ Sent participant joined notification, waiting for history data...");
+        }
+
+        // 等待一小段时间让主机处理参与者加入通知并发送历史记录
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
         let network_clone = self.network.clone();
         let sender_clone = sender.clone();
@@ -537,15 +575,6 @@ impl CliApp {
 
         println!();
         println!("💡 Use --shell <name> to specify a shell, or let roterm detect automatically");
-    }
-
-    async fn handle_input_forwarding(&self, mut input_receiver: mpsc::UnboundedReceiver<String>) {
-        tokio::spawn(async move {
-            while let Some(input_data) = input_receiver.recv().await {
-                print!("{}", input_data);
-                io::stdout().flush().ok();
-            }
-        });
     }
 
     async fn handle_network_messages(&mut self) {

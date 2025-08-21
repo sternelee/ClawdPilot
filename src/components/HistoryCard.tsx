@@ -1,4 +1,3 @@
-import React from 'react';
 import { HistoryEntry } from '../hooks/useConnectionHistory';
 import { formatTimeAgo } from '../utils/time';
 
@@ -8,28 +7,30 @@ interface HistoryCardProps {
 }
 
 const statusColorMap: { [key in HistoryEntry['status']]: string } = {
-  Active: '#2ecc71', // green
-  Completed: '#3498db', // blue
-  Failed: '#e74c3c', // red
-  'Waiting Input': '#f39c12', // orange
+  Active: 'success',
+  Completed: 'info', 
+  Failed: 'error',
+  'Waiting Input': 'warning',
 };
 
-export function HistoryCard({ entry, onConnect }: HistoryCardProps) {
-  const statusColor = statusColorMap[entry.status] || '#bdc3c7'; // default to grey
+export function HistoryCard(props: HistoryCardProps) {
+  const statusColor = () => statusColorMap[props.entry.status] || 'neutral';
 
   return (
-    <div className="history-card" onClick={() => onConnect(entry.ticket)}>
-      <div className="history-card-header">
-        <span className="history-card-title">{entry.title}</span>
-        <span className="history-card-time">{formatTimeAgo(entry.timestamp)}</span>
-      </div>
-      <div className="history-card-body">
-        <p className="history-card-description">{entry.description}</p>
-      </div>
-      <div className="history-card-footer">
-        <div className="history-card-status">
-          <span className="status-dot" style={{ backgroundColor: statusColor }}></span>
-          <span>{entry.status}</span>
+    <div 
+      class="card card-compact bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      onClick={() => props.onConnect(props.entry.ticket)}
+    >
+      <div class="card-body">
+        <div class="flex justify-between items-start">
+          <h3 class="card-title text-sm">{props.entry.title}</h3>
+          <div class="text-xs text-base-content/60">{formatTimeAgo(props.entry.timestamp)}</div>
+        </div>
+        <p class="text-sm text-base-content/80 line-clamp-2">{props.entry.description}</p>
+        <div class="card-actions justify-end mt-2">
+          <div class={`badge badge-${statusColor()} badge-sm`}>
+            {props.entry.status}
+          </div>
         </div>
       </div>
     </div>

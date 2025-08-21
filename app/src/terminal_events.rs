@@ -14,4 +14,5 @@ pub enum EventType {
     Resize { width: u16, height: u16 },
     Start,
     End,
+    HistoryData,
 }

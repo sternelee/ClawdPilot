@@ -34,7 +34,12 @@
       "mcp__mcp-hub__tavily-mcp-tavily-search",
       "mcp__mcp-hub__tavily-mcp-tavily-extract",
       "mcp__mcp-hub__tavily-mcp-tavily-crawl",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(bun add:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(bunx tailwindcss:*)",
+      "Bash(bun run:*)"
     ],
     "deny": []
   }

@@ -133,6 +133,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "aead",
+ "anyhow",
+ "bincode",
+ "chacha20poly1305",
+ "data-encoding",
+ "futures",
+ "iroh",
+ "iroh-gossip",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-barcode-scanner",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -629,6 +653,34 @@ name = "clap_lex"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
+
+[[package]]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+ "aead",
+ "anyhow",
+ "bincode",
+ "bytes",
+ "chacha20poly1305",
+ "clap",
+ "crossterm",
+ "data-encoding",
+ "futures",
+ "iroh",
+ "iroh-gossip",
+ "portable-pty",
+ "qrcode",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "cobs"
@@ -4691,58 +4743,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "riterm_app"
-version = "0.1.0"
-dependencies = [
- "aead",
- "anyhow",
- "bincode",
- "chacha20poly1305",
- "data-encoding",
- "futures",
- "iroh",
- "iroh-gossip",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-barcode-scanner",
- "tokio",
- "tracing",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "riterm_cli"
-version = "0.1.0"
-dependencies = [
- "aead",
- "anyhow",
- "bincode",
- "bytes",
- "chacha20poly1305",
- "clap",
- "crossterm",
- "data-encoding",
- "futures",
- "iroh",
- "iroh-gossip",
- "portable-pty",
- "qrcode",
- "rand 0.9.2",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "url",
- "uuid",
 ]
 
 [[package]]

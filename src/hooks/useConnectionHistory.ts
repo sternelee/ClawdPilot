@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { createSignal, createEffect } from 'solid-js';
 
 const HISTORY_KEY = 'riterm-connection-history';
 const MAX_HISTORY_ITEMS = 20;
@@ -22,8 +22,8 @@ const generateDefaultTitle = (ticket: string): string => {
   return `Session ${ticket.substring(0, 8)}...`;
 };
 
-export function useConnectionHistory() {
-  const [history, setHistory] = useState<HistoryEntry[]>(() => {
+export function createConnectionHistory() {
+  const [history, setHistory] = createSignal<HistoryEntry[]>(() => {
     try {
       const storedHistory = localStorage.getItem(HISTORY_KEY);
       return storedHistory ? JSON.parse(storedHistory) : [];
@@ -41,7 +41,7 @@ export function useConnectionHistory() {
     }
   };
 
-  const addHistoryEntry = useCallback((ticket: string) => {
+  const addHistoryEntry = (ticket: string) => {
     setHistory((prevHistory) => {
       const filteredHistory = prevHistory.filter((entry) => entry.ticket !== ticket);
 
@@ -57,29 +57,26 @@ export function useConnectionHistory() {
       saveHistory(newHistory);
       return newHistory;
     });
-  }, []);
+  };
 
-  const updateHistoryEntry = useCallback(
-    (ticket: string, updates: Partial<Omit<HistoryEntry, 'ticket'>>) => {
-      setHistory((prevHistory) => {
-        const newHistory = prevHistory.map((entry) =>
-          entry.ticket === ticket ? { ...entry, ...updates, timestamp: Date.now() } : entry
-        );
-        saveHistory(newHistory);
-        return newHistory;
-      });
-    },
-    []
-  );
+  const updateHistoryEntry = (ticket: string, updates: Partial<Omit<HistoryEntry, 'ticket'>>) => {
+    setHistory((prevHistory) => {
+      const newHistory = prevHistory.map((entry) =>
+        entry.ticket === ticket ? { ...entry, ...updates, timestamp: Date.now() } : entry
+      );
+      saveHistory(newHistory);
+      return newHistory;
+    });
+  };
 
-  const clearHistory = useCallback(() => {
+  const clearHistory = () => {
     setHistory([]);
     try {
       localStorage.removeItem(HISTORY_KEY);
     } catch (error) {
       console.error('Failed to clear connection history:', error);
     }
-  }, []);
+  };
 
   return { history, addHistoryEntry, updateHistoryEntry, clearHistory };
 }

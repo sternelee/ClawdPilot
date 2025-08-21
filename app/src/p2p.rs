@@ -63,6 +63,16 @@ pub enum TerminalMessageBody {
         data: String,
         timestamp: u64,
     },
+    /// Participant joined notification
+    ParticipantJoined { from: NodeId, timestamp: u64 },
+    /// History data message
+    HistoryData {
+        from: NodeId,
+        shell_type: String,
+        working_dir: String,
+        history: Vec<String>,
+        timestamp: u64,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,9 +138,39 @@ impl std::str::FromStr for SessionTicket {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // 清理输入：移除空白字符和换行符
+        let cleaned = s.trim().replace([' ', '\n', '\r', '\t'], "");
+
+        // 验证BASE32字符集（A-Z, 2-7, =）
+        if !cleaned
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || ('2'..='7').contains(&c) || c == '=')
+        {
+            return Err(anyhow::anyhow!(
+                "Invalid BASE32 characters in ticket. Only A-Z, 2-7, and = are allowed"
+            ));
+        }
+
+        // 验证长度（BASE32编码的长度应该是8的倍数，或者有正确的填充）
+        let len = cleaned.len();
+        if len == 0 {
+            return Err(anyhow::anyhow!("Empty ticket"));
+        }
+
+        // BASE32解码
         let bytes = data_encoding::BASE32
-            .decode(s.as_bytes())
-            .map_err(|e| anyhow::anyhow!("Failed to decode ticket: {}", e))?;
+            .decode(cleaned.as_bytes())
+            .map_err(|e| anyhow::anyhow!("Failed to decode ticket (length: {}): {}", len, e))?;
+
+        // 验证解码后的数据长度是否合理
+        if bytes.len() < 32 {
+            // 至少需要包含topic_id和key
+            return Err(anyhow::anyhow!(
+                "Decoded ticket too short: {} bytes",
+                bytes.len()
+            ));
+        }
+
         let ticket: SessionTicket = bincode::deserialize(&bytes)
             .map_err(|e| anyhow::anyhow!("Failed to deserialize ticket: {}", e))?;
         Ok(ticket)
@@ -424,6 +464,56 @@ impl P2PNetwork {
         Ok(())
     }
 
+    pub async fn send_participant_joined(
+        &self,
+        session_id: &str,
+        sender: &GossipSender,
+    ) -> Result<()> {
+        debug!("Sending participant joined notification");
+        let sessions = self.sessions.read().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| anyhow::anyhow!("Session not found for participant joined"))?;
+
+        let body = TerminalMessageBody::ParticipantJoined {
+            from: self.endpoint.node_id(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &session.key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        Ok(())
+    }
+
+    pub async fn send_history_data(
+        &self,
+        session_id: &str,
+        sender: &GossipSender,
+        shell_type: String,
+        working_dir: String,
+        history: Vec<String>,
+    ) -> Result<()> {
+        debug!("Sending history data");
+        let sessions = self.sessions.read().await;
+        let session = sessions
+            .get(session_id)
+            .ok_or_else(|| anyhow::anyhow!("Session not found for history data"))?;
+
+        let body = TerminalMessageBody::HistoryData {
+            from: self.endpoint.node_id(),
+            shell_type,
+            working_dir,
+            history,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &session.key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        Ok(())
+    }
+
     async fn start_topic_listener(
         &self,
         mut receiver: GossipReceiver,
@@ -548,6 +638,61 @@ impl P2PNetwork {
                         if let Some(session) = sessions_write.get_mut(session_id) {
                             session.participants.push(from.to_string());
                             session.header = header;
+                        }
+                    }
+                    TerminalMessageBody::ParticipantJoined { from, timestamp } => {
+                        info!("Participant {} joined session", from.fmt_short());
+                        let event = TerminalEvent {
+                            timestamp: timestamp as f64,
+                            event_type: crate::terminal_events::EventType::Output,
+                            data: format!("Participant {} joined the session", from.fmt_short()),
+                        };
+                        if session.event_sender.send(event).is_err() {
+                            warn!("No active receivers for participant joined event, skipping");
+                        }
+                    }
+                    TerminalMessageBody::HistoryData {
+                        from,
+                        shell_type,
+                        working_dir,
+                        history,
+                        timestamp,
+                    } => {
+                        info!("Received history data from {}", from.fmt_short());
+
+                        // Send session info event
+                        let info_event = TerminalEvent {
+                            timestamp: timestamp as f64,
+                            event_type: crate::terminal_events::EventType::Output,
+                            data: format!(
+                                "=== Session History ===\nShell: {}\nWorking Directory: {}\n",
+                                shell_type, working_dir
+                            ),
+                        };
+                        if session.event_sender.send(info_event).is_err() {
+                            warn!("No active receivers for history info event, skipping");
+                        }
+
+                        // Send each history line as a separate event
+                        for (i, line) in history.iter().enumerate() {
+                            let history_event = TerminalEvent {
+                                timestamp: (timestamp as f64) + (i as f64 * 0.001), // Slight time offset for ordering
+                                event_type: crate::terminal_events::EventType::HistoryData,
+                                data: line.clone(),
+                            };
+                            if session.event_sender.send(history_event).is_err() {
+                                warn!("No active receivers for history data event, skipping");
+                            }
+                        }
+
+                        // Send separator
+                        let separator_event = TerminalEvent {
+                            timestamp: (timestamp as f64) + (history.len() as f64 * 0.001) + 0.001,
+                            event_type: crate::terminal_events::EventType::Output,
+                            data: "=== End of History ===\n".to_string(),
+                        };
+                        if session.event_sender.send(separator_event).is_err() {
+                            warn!("No active receivers for history separator event, skipping");
                         }
                     }
                 }
