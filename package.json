@@ -8,6 +8,7 @@
     "@tauri-apps/plugin-os": "^2.3.0",
     "@xterm/xterm": "^5.5.0",
     "daisyui": "^5.0.50",
+    "lucide-solid": "^0.540.0",
     "solid-js": "^1.9.9",
     "typescript": "^5.9.2",
     "vite-plugin-solid": "^2.11.8",

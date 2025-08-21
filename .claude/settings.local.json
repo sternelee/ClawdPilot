@@ -39,7 +39,11 @@
       "Bash(bun add:*)",
       "Bash(npx tailwindcss:*)",
       "Bash(bunx tailwindcss:*)",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "WebFetch(domain:daisyui.com)",
+      "mcp__mcphub__context7-resolve-library-id",
+      "mcp__mcphub__context7-get-library-docs",
+      "WebSearch"
     ],
     "deny": []
   }

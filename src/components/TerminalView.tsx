@@ -1,8 +1,10 @@
-import { onMount, onCleanup } from 'solid-js';
+import { onMount, onCleanup, createEffect } from 'solid-js';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
+import { SearchAddon } from 'xterm-addon-search';
 import 'xterm/css/xterm.css';
+import { settingsStore } from '../stores/settingsStore';
 
 interface TerminalViewProps {
   onInput: (data: string) => void;
@@ -11,41 +13,211 @@ interface TerminalViewProps {
 
 export function TerminalView(props: TerminalViewProps) {
   let terminalRef: HTMLDivElement | undefined;
+  let containerRef: HTMLDivElement | undefined;
   let terminalInstance: Terminal | null = null;
   let fitAddon: FitAddon | null = null;
+  let searchAddon: SearchAddon | null = null;
   let onDataDispose: { dispose: () => void } | null = null;
 
-  onMount(() => {
+  // Dynamic theme based on settings
+  const getTerminalTheme = () => {
+    const theme = settingsStore.get().theme;
+    const opacity = settingsStore.get().terminalOpacity;
+    
+    const themeMap = {
+      'terminal-green': {
+        background: `rgba(0, 0, 0, ${opacity})`,
+        foreground: '#00ff41',
+        cursor: '#00ff41',
+        cursorAccent: '#000000',
+        selection: 'rgba(0, 255, 65, 0.3)',
+        black: '#000000',
+        red: '#ff0000',
+        green: '#00ff41',
+        yellow: '#ffaa00',
+        blue: '#0099ff',
+        magenta: '#ff00ff',
+        cyan: '#00ffff',
+        white: '#ffffff',
+        brightBlack: '#444444',
+        brightRed: '#ff4444',
+        brightGreen: '#44ff44',
+        brightYellow: '#ffff44',
+        brightBlue: '#4444ff',
+        brightMagenta: '#ff44ff',
+        brightCyan: '#44ffff',
+        brightWhite: '#ffffff'
+      },
+      'terminal-amber': {
+        background: `rgba(10, 10, 8, ${opacity})`,
+        foreground: '#ffaa00',
+        cursor: '#ffaa00',
+        cursorAccent: '#000000',
+        selection: 'rgba(255, 170, 0, 0.3)',
+        black: '#000000',
+        red: '#ff4444',
+        green: '#88ff00',
+        yellow: '#ffaa00',
+        blue: '#0099ff',
+        magenta: '#ff8800',
+        cyan: '#00aaff',
+        white: '#ffffff',
+        brightBlack: '#444444',
+        brightRed: '#ff6666',
+        brightGreen: '#aaff22',
+        brightYellow: '#ffcc22',
+        brightBlue: '#2299ff',
+        brightMagenta: '#ffaa22',
+        brightCyan: '#22aaff',
+        brightWhite: '#ffffff'
+      },
+      'terminal-cyan': {
+        background: `rgba(0, 17, 17, ${opacity})`,
+        foreground: '#00ffff',
+        cursor: '#00ffff',
+        cursorAccent: '#000000',
+        selection: 'rgba(0, 255, 255, 0.3)',
+        black: '#000000',
+        red: '#ff4444',
+        green: '#44ff44',
+        yellow: '#ffaa00',
+        blue: '#4488ff',
+        magenta: '#ff44ff',
+        cyan: '#00ffff',
+        white: '#ffffff',
+        brightBlack: '#444444',
+        brightRed: '#ff6666',
+        brightGreen: '#66ff66',
+        brightYellow: '#ffcc22',
+        brightBlue: '#6699ff',
+        brightMagenta: '#ff66ff',
+        brightCyan: '#22ffff',
+        brightWhite: '#ffffff'
+      }
+    };
+    
+    return themeMap[theme];
+  };
+
+  const getFontSettings = () => {
+    const fontSize = settingsStore.get().fontSize;
+    const fontSizeMap = {
+      'small': 12,
+      'medium': 14,
+      'large': 16,
+      'extra-large': 18
+    };
+    
+    return {
+      fontSize: fontSizeMap[fontSize],
+      fontFamily: 'JetBrains Mono, Fira Code, Cascadia Code, SF Mono, Monaco, Inconsolata, Roboto Mono, Source Code Pro, Menlo, Consolas, DejaVu Sans Mono, monospace'
+    };
+  };
+
+  const initializeTerminal = () => {
     if (terminalRef && !terminalInstance) {
+      const fontSettings = getFontSettings();
+      
       const term = new Terminal({
         cursorBlink: true,
-        scrollback: 1000,
-        theme: {
-          background: '#000000',
-          foreground: '#ffffff',
-          cursor: '#ffffff',
-        },
-        fontSize: 14,
-        fontFamily: 'Monaco, "Courier New", monospace',
+        cursorStyle: 'block',
+        scrollback: 10000,
+        theme: getTerminalTheme(),
+        fontSize: fontSettings.fontSize,
+        fontFamily: fontSettings.fontFamily,
+        letterSpacing: 0.5,
+        lineHeight: 1.2,
         allowProposedApi: true,
+        allowTransparency: true,
+        convertEol: true,
+        screenReaderMode: false,
+        rightClickSelectsWord: true,
+        macOptionIsMeta: true,
+        fastScrollModifier: 'alt',
+        fastScrollSensitivity: 5,
+        scrollSensitivity: 3,
+        minimumContrastRatio: 4.5
       });
 
-      const addon = new FitAddon();
-      fitAddon = addon;
-      term.loadAddon(addon);
-      term.loadAddon(new WebLinksAddon());
+      // Load addons
+      const fitAddon = new FitAddon();
+      const webLinksAddon = new WebLinksAddon();
+      const searchAddon = new SearchAddon();
+      
+      term.loadAddon(fitAddon);
+      term.loadAddon(webLinksAddon);
+      term.loadAddon(searchAddon);
 
+      // Store references
+      terminalInstance = term;
+      TerminalView.fitAddon = fitAddon;
+      TerminalView.searchAddon = searchAddon;
+
+      // Open terminal
       term.open(terminalRef);
-      addon.fit();
+      fitAddon.fit();
+      
+      // Add terminal-specific styling
+      if (terminalRef) {
+        terminalRef.style.background = 'transparent';
+        const terminalElement = terminalRef.querySelector('.terminal');
+        if (terminalElement) {
+          (terminalElement as HTMLElement).style.background = 'transparent';
+        }
+      }
+
+      // Welcome message with cyber styling
+      const welcomeMessage = [
+        '\\x1b[1;32m╔══════════════════════════════════════════════════════════════╗\\x1b[0m',
+        '\\x1b[1;32m║\\x1b[0m                    \\x1b[1;36mRiTerm P2P Terminal\\x1b[0m                     \\x1b[1;32m║\\x1b[0m',
+        '\\x1b[1;32m║\\x1b[0m                  \\x1b[36mSecure • Fast • Decentralized\\x1b[0m                \\x1b[1;32m║\\x1b[0m',
+        '\\x1b[1;32m╚══════════════════════════════════════════════════════════════╝\\x1b[0m',
+        '',
+        '\\x1b[33m[INFO]\\x1b[0m Terminal initialized with cyber theme',
+        '\\x1b[33m[INFO]\\x1b[0m P2P network stack ready',
+        '\\x1b[32m[READY]\\x1b[0m Awaiting connection...',
+        ''
+      ].join('\\r\\n');
+      
+      term.writeln(welcomeMessage);
       term.focus();
 
-      terminalInstance = term;
-      props.onReady(term, addon);
-
+      // Setup callbacks
+      props.onReady(term, fitAddon);
+      
       onDataDispose = term.onData((data) => {
         props.onInput(data);
       });
+
+      // Handle resize
+      const handleResize = () => {
+        if (fitAddon && terminalInstance) {
+          setTimeout(() => fitAddon.fit(), 100);
+        }
+      };
+      
+      window.addEventListener('resize', handleResize);
+      onCleanup(() => window.removeEventListener('resize', handleResize));
     }
+  };
+
+  // Update terminal theme when settings change
+  createEffect(() => {
+    if (terminalInstance) {
+      terminalInstance.options.theme = getTerminalTheme();
+      const fontSettings = getFontSettings();
+      terminalInstance.options.fontSize = fontSettings.fontSize;
+      terminalInstance.options.fontFamily = fontSettings.fontFamily;
+      
+      if (TerminalView.fitAddon) {
+        TerminalView.fitAddon.fit();
+      }
+    }
+  });
+
+  onMount(() => {
+    // Delay initialization slightly to ensure DOM is ready
+    setTimeout(initializeTerminal, 50);
   });
 
   onCleanup(() => {
@@ -58,5 +230,50 @@ export function TerminalView(props: TerminalViewProps) {
     }
   });
 
-  return <div ref={terminalRef} class="terminal-container h-full w-full" />;
+  return (
+    <div 
+      ref={containerRef} 
+      class="terminal-container h-full w-full relative overflow-hidden"
+    >
+      {/* Terminal Background Effects */}
+      <ProgressiveScan class="absolute inset-0 pointer-events-none z-0" />
+      
+      {/* Scanning Line Effect */}
+      <div 
+        class="absolute inset-0 pointer-events-none z-10"
+        classList={{ 'hidden': !settingsStore.get().enableScanLines }}
+      >
+        <div class="scan-line" />
+      </div>
+      
+      {/* Terminal Content */}
+      <div class="relative z-20 h-full">
+        <div 
+          ref={terminalRef} 
+          class="terminal-content h-full w-full terminal-glow"
+          style={{
+            filter: settingsStore.get().customCSSFilters || 'none'
+          }}
+        />
+      </div>
+      
+      {/* Corner Decorations */}
+      <div class="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-current opacity-50 pointer-events-none z-30" />
+      <div class="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-current opacity-50 pointer-events-none z-30" />
+      <div class="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-current opacity-50 pointer-events-none z-30" />
+      <div class="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-current opacity-50 pointer-events-none z-30" />
+      
+      {/* Status Bar */}
+      <div class="absolute bottom-0 right-0 p-2 text-xs font-mono opacity-50 pointer-events-none z-30">
+        <div class="flex items-center space-x-2">
+          <span>SECURE</span>
+          <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
 }
+
+// Static references for external access
+TerminalView.fitAddon = null;
+TerminalView.searchAddon = null;
