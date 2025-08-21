@@ -1,0 +1,18 @@
+/* Google Fonts - Nerd Font compatible monospace fonts */
+@import url("https://fonts.googleapis.com/css2?family=Cascadia+Code:ital,wght@0,200..700;1,200..700&family=Fira+Code:wght@300..700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&display=swap");
+
+/* Terminal specific font styling */
+.terminal-content {
+  font-feature-settings:
+    "liga" 1,
+    "calt" 1;
+  font-variant-ligatures: contextual;
+}
+
+/* Ensure proper rendering of special characters */
+.xterm-screen {
+  font-feature-settings:
+    "liga" 1,
+    "calt" 1;
+}
+

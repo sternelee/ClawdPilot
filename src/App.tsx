@@ -246,7 +246,7 @@ function App() {
       <P2PBackground />
 
       {/* Main Content */}
-      <div class="relative z-20 w-full h-screen flex flex-col">
+      <div class="relative z-20 w-full h-screen flex flex-col overflow-auto">
         {/* Status Bar */}
         {isConnected() && (
           <div class="flex items-center justify-between px-4 py-2 border-b border-current border-opacity-20 text-sm">

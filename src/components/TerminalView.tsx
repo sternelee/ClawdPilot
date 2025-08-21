@@ -3,7 +3,6 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 import { SearchAddon } from "xterm-addon-search";
-import { WandSparkles } from "lucide-solid";
 import "xterm/css/xterm.css";
 import { settingsStore } from "../stores/settingsStore";
 
@@ -112,7 +111,7 @@ export function TerminalView(props: TerminalViewProps) {
     return {
       fontSize: fontSizeMap[fontSize],
       fontFamily:
-        "JetBrains Mono, Fira Code, Cascadia Code, SF Mono, Monaco, Inconsolata, Roboto Mono, Source Code Pro, Menlo, Consolas, DejaVu Sans Mono, monospace",
+        "'JetBrains Mono Nerd Font', 'Fira Code Nerd Font', 'Cascadia Code NF', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', 'Menlo', 'Consolas', 'DejaVu Sans Mono', 'Noto Sans Mono', monospace",
     };
   };
 
@@ -139,6 +138,14 @@ export function TerminalView(props: TerminalViewProps) {
         fastScrollSensitivity: 5,
         scrollSensitivity: 3,
         minimumContrastRatio: 4.5,
+        // Enhanced support for Nerd Fonts and special characters
+        fontWeight: "normal",
+        fontWeightBold: "bold",
+        drawBoldTextInBrightColors: true,
+        // Better Unicode support
+        unicodeVersion: "11",
+        // Enable ligatures and contextual alternates
+        customGlyphs: true,
       });
 
       // Load addons
@@ -171,8 +178,8 @@ export function TerminalView(props: TerminalViewProps) {
       // Welcome message with cyber styling
       const welcomeMessage = [
         "\x1b[1;32m╔══════════════════════════════════════════════════════════════╗\x1b[0m",
-        "\x1b[1;32m║\x1b[0m                    \x1b[1;36mRiTerm P2P Terminal\x1b[0m                       \x1b[1;32m║\x1b[0m",
-        "\x1b[1;32m║\x1b[0m                  \x1b[36mSecure • Fast • Decentralized\x1b[0m               \x1b[1;32m║\x1b[0m",
+        "\x1b[1;32m║\x1b[0m                    \x1b[1;36mRiTerm P2P Terminal\x1b[0m                     \x1b[1;32m║\x1b[0m",
+        "\x1b[1;32m║\x1b[0m                  \x1b[36mSecure • Fast • Decentralized\x1b[0m                \x1b[1;32m║\x1b[0m",
         "\x1b[1;32m╚══════════════════════════════════════════════════════════════╝\x1b[0m",
         "",
         "\x1b[33m[INFO]\x1b[0m Terminal initialized with cyber theme",
@@ -239,8 +246,6 @@ export function TerminalView(props: TerminalViewProps) {
     >
       {/* Terminal Content Area */}
       <div class="flex-1 relative overflow-hidden">
-        {/* Terminal Background Effects */}
-
         {/* Scanning Line Effect */}
         <div
           class="absolute inset-0 pointer-events-none z-10"
@@ -288,7 +293,7 @@ export function TerminalView(props: TerminalViewProps) {
               ESC
             </button>
             <button
-              class="p-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-mono rounded border border-gray-600 active:bg-gray-600 transition-colors"
+              class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-mono rounded border border-gray-600 active:bg-gray-600 transition-colors"
               onClick={() => terminalInstance?.write("\t")}
               title="Tab"
             >
@@ -301,18 +306,11 @@ export function TerminalView(props: TerminalViewProps) {
             >
               ~
             </button>
-            <button
-              class="px-3 py-2 h-9.5 bg-gray-800 hover:bg-gray-700 text-white text-sm font-mono rounded border border-gray-600 active:bg-gray-600 transition-colors"
-              onClick={() => terminalInstance?.write("~")}
-              title="~"
-            >
-              <WandSparkles size={14} />
-            </button>
           </div>
 
           {/* Center arrow keys */}
           <div class="flex items-center space-x-1">
-            <div class="grid grid-cols-3 gap-1 hidden">
+            <div class="grid grid-cols-3 gap-1">
               <div></div>
               <button
                 class="w-8 h-8 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded border border-gray-600 active:bg-gray-600 transition-colors flex items-center justify-center"
@@ -374,7 +372,7 @@ export function TerminalView(props: TerminalViewProps) {
         </div>
 
         {/* Second row with more functions */}
-        <div class="flex items-center justify-between px-2 pb-2 hidden">
+        <div class="flex items-center justify-between px-2 pb-2">
           <div class="flex items-center space-x-1">
             <button
               class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-white text-xs font-mono rounded border border-gray-600 active:bg-gray-600 transition-colors"
@@ -406,7 +404,7 @@ export function TerminalView(props: TerminalViewProps) {
             </button>
           </div>
 
-          <div class="flex items-center space-x-1 hidden">
+          <div class="flex items-center space-x-1">
             <button
               class="px-2 py-1 bg-gray-800 hover:bg-gray-700 text-white text-xs font-mono rounded border border-gray-600 active:bg-gray-600 transition-colors"
               onClick={() => terminalInstance?.write("\x7f")}
@@ -431,3 +429,4 @@ export function TerminalView(props: TerminalViewProps) {
 // Static references for external access
 TerminalView.fitAddon = null;
 TerminalView.searchAddon = null;
+

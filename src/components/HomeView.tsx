@@ -27,7 +27,6 @@ export function HomeView(props: HomeViewProps) {
   );
   const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
-  const [showQuickConnect, setShowQuickConnect] = createSignal(false);
 
   const handleLogin = () => {
     props.onLogin(username(), password());
@@ -97,47 +96,6 @@ export function HomeView(props: HomeViewProps) {
             <button class="btn btn-ghost" onClick={handleGuestMode}>
               Continue as Guest 👻
             </button>
-
-            <button
-              class="btn btn-outline btn-sm"
-              onClick={() => setShowQuickConnect(!showQuickConnect())}
-            >
-              Quick Connect 🎯
-            </button>
-
-            <Show when={showQuickConnect()}>
-              <div class="card bg-base-200 mt-4">
-                <div class="card-body card-compact">
-                  <h3 class="card-title text-sm">Quick Connect</h3>
-                  <div class="form-control">
-                    <input
-                      type="text"
-                      placeholder={t("connection.ticket.placeholder")}
-                      class="input input-bordered input-sm"
-                      value={props.sessionTicket}
-                      onInput={(e) =>
-                        props.onTicketInput(e.currentTarget.value)
-                      }
-                    />
-                  </div>
-                  <div class="card-actions justify-end">
-                    <button
-                      class="btn btn-primary btn-sm"
-                      onClick={() => handleQuickConnect(props.sessionTicket)}
-                      disabled={!props.sessionTicket.trim() || props.connecting}
-                    >
-                      {props.connecting ? "Connecting..." : "Connect Now"}
-                    </button>
-                  </div>
-
-                  {props.connectionError && (
-                    <div class="alert alert-error text-xs">
-                      <span>❌ {props.connectionError}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Show>
           </div>
         </div>
       </div>
@@ -316,4 +274,3 @@ export function HomeView(props: HomeViewProps) {
     </div>
   );
 }
-
