@@ -122,7 +122,9 @@ async fn connect_to_peer(
     tokio::spawn(async move {
         while let Ok(event) = event_receiver.recv().await {
             let event_name = format!("terminal-event-{}", session_id_clone_events);
+            #[cfg(debug_assertions)]
             println!("Broadcasting event to: {}", event_name);
+            #[cfg(debug_assertions)]
             println!("Event data: {:?}", event);
             let _ = app_handle_clone.emit(&event_name, &event);
         }
@@ -139,6 +141,7 @@ async fn connect_to_peer(
                     .send_input(&session_id_clone_input, &sender_clone, event.data)
                     .await
                 {
+                    #[cfg(debug_assertions)]
                     eprintln!("Failed to send input: {}", e);
                 }
             }
@@ -154,10 +157,11 @@ async fn send_terminal_input(
     input: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    #[cfg(debug_assertions)]
     println!(
         "send_terminal_input called with session_id: {}, input: {:?}",
         session_id, input
-    ); // Add this for immediate visibility
+    );
     let sessions = state.sessions.read().await;
     let session = sessions.get(&session_id).ok_or("Session not found")?;
 
@@ -170,7 +174,8 @@ async fn send_terminal_input(
         data: input.clone(), // Clone for logging
     };
 
-    println!("Sending event: {:?}", event); // Add this for immediate visibility
+    #[cfg(debug_assertions)]
+    println!("Sending event: {:?}", event);
     session
         .event_sender
         .send(event)
@@ -264,6 +269,7 @@ async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> R
 
         if let Some(network) = network {
             if let Err(e) = network.end_session(&session_id, &session.sender).await {
+                #[cfg(debug_assertions)]
                 eprintln!("Failed to end P2P session gracefully: {}", e);
             }
         }

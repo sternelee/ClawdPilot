@@ -10,7 +10,19 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast, mpsc};
+#[cfg(debug_assertions)]
 use tracing::{debug, error, info, warn};
+
+#[cfg(not(debug_assertions))]
+use tracing::{debug, error};
+#[cfg(not(debug_assertions))]
+macro_rules! info {
+    ($($arg:tt)*) => {};
+}
+#[cfg(not(debug_assertions))]
+macro_rules! warn {
+    ($($arg:tt)*) => {};
+}
 use url::Url;
 
 use crate::terminal_events::TerminalEvent;

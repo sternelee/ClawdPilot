@@ -201,12 +201,12 @@ impl Clone for P2PNetwork {
 
 impl P2PNetwork {
     pub async fn new(relay_url: Option<String>) -> Result<Self> {
-        info!("Initializing iroh P2P network with gossip...");
+        debug!("Initializing iroh P2P network with gossip...");
 
         // Create iroh endpoint with optional custom relay
         let endpoint_builder = Endpoint::builder();
         let endpoint = if let Some(relay) = relay_url {
-            info!("Using custom relay server: {}", relay);
+            debug!("Using custom relay server: {}", relay);
             // Parse the relay URL and use it for discovery
             let _relay_url: Url = relay.parse()?;
             endpoint_builder
@@ -214,12 +214,12 @@ impl P2PNetwork {
                 .bind()
                 .await?
         } else {
-            info!("Using default n0 relay server");
+            debug!("Using default n0 relay server");
             endpoint_builder.discovery_n0().bind().await?
         };
 
-        let node_id = endpoint.node_id();
-        info!("Node ID: {}", node_id);
+        let _node_id = endpoint.node_id();
+        debug!("Node ID: {}", _node_id);
 
         // Create gossip instance
         let gossip = Gossip::builder().spawn(endpoint.clone());
@@ -240,13 +240,12 @@ impl P2PNetwork {
         Ok(network)
     }
 
-    #[tracing::instrument(skip(self, header), fields(session_id = %header.session_id))]
     pub async fn create_shared_session(
         &self,
         header: SessionHeader,
     ) -> Result<(TopicId, GossipSender, mpsc::UnboundedReceiver<String>)> {
         let session_id = header.session_id.clone();
-        info!("Creating shared session");
+        debug!("Creating shared session");
 
         // Create topic for this session using random bytes
         let topic_id = TopicId::from_bytes(rand::random());
@@ -288,12 +287,11 @@ impl P2PNetwork {
         Ok((topic_id, sender, input_receiver))
     }
 
-    #[tracing::instrument(skip(self, ticket), fields(topic_id = %ticket.topic_id))]
     pub async fn join_session(
         &self,
         ticket: SessionTicket,
     ) -> Result<(GossipSender, broadcast::Receiver<TerminalEvent>)> {
-        info!("Joining session");
+        debug!("Joining session");
 
         let session_id = format!("session_{}", ticket.topic_id);
         let (event_sender, event_receiver) = broadcast::channel(1000);
@@ -348,7 +346,7 @@ impl P2PNetwork {
         ticket: SessionTicket,
         max_retries: u32,
     ) -> Result<(GossipSender, broadcast::Receiver<TerminalEvent>)> {
-        info!(
+        debug!(
             "Joining session with topic: {} (with retry)",
             ticket.topic_id
         );
@@ -356,19 +354,19 @@ impl P2PNetwork {
         let mut last_error = None;
 
         for attempt in 1..=max_retries {
-            info!("Connection attempt {} of {}", attempt, max_retries);
+            debug!("Connection attempt {} of {}", attempt, max_retries);
 
             match self.join_session(ticket.clone()).await {
                 Ok(result) => {
-                    info!("✅ Successfully joined session on attempt {}", attempt);
+                    debug!("✅ Successfully joined session on attempt {}", attempt);
                     return Ok(result);
                 }
                 Err(e) => {
-                    info!("Attempt {} failed: {}", attempt, e);
+                    debug!("Attempt {} failed: {}", attempt, e);
                     last_error = Some(e);
 
                     if attempt < max_retries {
-                        info!("Waiting before next attempt...");
+                        debug!("Waiting before next attempt...");
                         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     }
                 }
@@ -455,7 +453,7 @@ impl P2PNetwork {
         sender: &GossipSender,
         session_id: &str,
     ) -> Result<()> {
-        info!("Sending participant joined notification");
+        debug!("Sending participant joined notification");
         let key = self.get_session_key(session_id).await?;
         let body = TerminalMessageBody::ParticipantJoined {
             from: self.endpoint.node_id(),
@@ -475,7 +473,7 @@ impl P2PNetwork {
         session_info: SessionInfo,
         session_id: &str,
     ) -> Result<()> {
-        info!(
+        debug!(
             "Sending history data: {} logs, shell: {}, cwd: {}",
             session_info.logs.len(),
             session_info.shell,
@@ -495,7 +493,7 @@ impl P2PNetwork {
     }
 
     pub async fn end_session(&self, sender: &GossipSender, session_id: String) -> Result<()> {
-        info!("Ending session: {}", session_id);
+        debug!("Ending session: {}", session_id);
 
         // 获取会话密钥
         let key = self.get_session_key(&session_id).await?;
@@ -518,7 +516,6 @@ impl P2PNetwork {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, receiver), fields(session_id = %session_id))]
     async fn start_topic_listener(
         &self,
         mut receiver: GossipReceiver,
@@ -527,7 +524,7 @@ impl P2PNetwork {
         let network_clone = self.clone();
 
         tokio::spawn(async move {
-            info!("Starting gossip message listener");
+            debug!("Starting gossip message listener");
 
             loop {
                 match receiver.next().await {
@@ -560,14 +557,14 @@ impl P2PNetwork {
                         }
                     }
                     Some(Ok(Event::NeighborUp(peer_id))) => {
-                        info!(
+                        debug!(
                             "Peer connected: {} to session {}",
                             peer_id.fmt_short(),
                             session_id
                         );
                     }
                     Some(Ok(Event::NeighborDown(peer_id))) => {
-                        info!(
+                        debug!(
                             "Peer disconnected: {} from session {}",
                             peer_id.fmt_short(),
                             session_id
@@ -591,13 +588,12 @@ impl P2PNetwork {
                 }
             }
 
-            info!("Gossip listener for session {} has ended", session_id);
+            debug!("Gossip listener for session {} has ended", session_id);
         });
 
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, body), fields(session_id = %session_id))]
     async fn handle_gossip_message(
         &self,
         session_id: &str,
@@ -616,8 +612,8 @@ impl P2PNetwork {
                         event_type: crate::terminal::EventType::Output,
                         data,
                     };
-                    if let Err(e) = session.event_sender.send(event) {
-                        warn!("Failed to send output event to subscribers: {}", e);
+                    if let Err(_e) = session.event_sender.send(event) {
+                        warn!("Failed to send output event to subscribers");
                     }
                 }
                 TerminalMessageBody::Input {
@@ -654,8 +650,8 @@ impl P2PNetwork {
                         event_type: crate::terminal::EventType::Resize { width, height },
                         data: format!("{}x{}", width, height),
                     };
-                    if let Err(e) = session.event_sender.send(event) {
-                        warn!("Failed to send resize event to subscribers: {}", e);
+                    if let Err(_e) = session.event_sender.send(event) {
+                        warn!("Failed to send resize event to subscribers");
                     }
                 }
                 TerminalMessageBody::SessionEnd { from: _, timestamp } => {
@@ -664,19 +660,19 @@ impl P2PNetwork {
                         event_type: crate::terminal::EventType::End,
                         data: "Session ended".to_string(),
                     };
-                    if let Err(e) = session.event_sender.send(event) {
-                        warn!("Failed to send end event to subscribers: {}", e);
+                    if let Err(_e) = session.event_sender.send(event) {
+                        warn!("Failed to send end event to subscribers");
                     }
                 }
                 TerminalMessageBody::SessionInfo { from, header: _ } => {
-                    info!(
+                    debug!(
                         "Received session info from {} for session: {}",
                         from.fmt_short(),
                         session_id
                     );
                 }
                 TerminalMessageBody::ParticipantJoined { from, timestamp: _ } => {
-                    info!(
+                    debug!(
                         "New participant {} joined session {}",
                         from.fmt_short(),
                         session_id
@@ -684,7 +680,7 @@ impl P2PNetwork {
 
                     // 如果我们是主机，自动发送历史记录
                     if session.is_host {
-                        info!("We are the host, attempting to send history data");
+                        debug!("We are the host, attempting to send history data");
 
                         // 获取 gossip_sender 的克隆
                         let gossip_sender = session.gossip_sender.clone();
@@ -705,7 +701,7 @@ impl P2PNetwork {
                                 tokio::spawn(async move {
                                     match receiver.await {
                                         Ok(Some(session_info)) => {
-                                            info!("Got history data, sending to new participant");
+                                            debug!("Got history data, sending to new participant");
 
                                             if let Err(e) = network_clone
                                                 .send_history_data(
@@ -717,16 +713,16 @@ impl P2PNetwork {
                                             {
                                                 error!("Failed to send history data: {}", e);
                                             } else {
-                                                info!(
+                                                debug!(
                                                     "✅ Successfully sent history data to new participant"
                                                 );
                                             }
                                         }
                                         Ok(None) => {
-                                            info!("No history data available to send");
+                                            debug!("No history data available to send");
                                         }
-                                        Err(e) => {
-                                            error!("Failed to get history data: {}", e);
+                                        Err(_e) => {
+                                            error!("Failed to get history data");
                                         }
                                     }
                                 });
@@ -743,7 +739,7 @@ impl P2PNetwork {
                     session_info,
                     timestamp: _,
                 } => {
-                    info!(
+                    debug!(
                         "Received history data from {}: {} logs, shell: {}, cwd: {}",
                         from.fmt_short(),
                         session_info.logs.len(),
@@ -764,8 +760,8 @@ impl P2PNetwork {
                         ),
                     };
 
-                    if let Err(e) = session.event_sender.send(event) {
-                        warn!("Failed to send history event to subscribers: {}", e);
+                    if let Err(_e) = session.event_sender.send(event) {
+                        warn!("Failed to send history event to subscribers");
                     }
                 }
             }
@@ -778,7 +774,7 @@ impl P2PNetwork {
     }
 
     pub async fn get_node_addr(&self) -> Result<NodeAddr> {
-        info!("Getting node address...");
+        debug!("Getting node address...");
         let watcher = self.endpoint.node_addr();
         let mut stream = watcher.stream();
         let node_addr = stream
@@ -786,16 +782,16 @@ impl P2PNetwork {
             .await
             .flatten()
             .ok_or_else(|| anyhow::anyhow!("Node address not available from watcher"))?;
-        info!("Got node address: {:?}", node_addr);
+        debug!("Got node address: {:?}", node_addr);
         Ok(node_addr)
     }
 
     pub async fn connect_to_peer(&self, node_addr: NodeAddr) -> Result<()> {
-        info!("Connecting to peer: {}", node_addr.node_id);
+        debug!("Connecting to peer: {}", node_addr.node_id);
 
         // Add the peer to our endpoint
         self.endpoint.add_node_addr(node_addr.clone())?;
-        info!("Successfully added peer {} to endpoint", node_addr.node_id);
+        debug!("Successfully added peer {} to endpoint", node_addr.node_id);
 
         Ok(())
     }
@@ -889,15 +885,15 @@ impl P2PNetwork {
             // 等待历史记录数据
             match receiver.await {
                 Ok(Some(session_info)) => {
-                    info!("Auto-sending history data to new participant");
+                    debug!("Auto-sending history data to new participant");
                     self.send_history_data(sender, session_info, session_id)
                         .await?;
                 }
                 Ok(None) => {
-                    info!("No history data available to send");
+                    debug!("No history data available to send");
                 }
-                Err(e) => {
-                    error!("Failed to get history data: {}", e);
+                Err(_e) => {
+                    error!("Failed to get history data");
                 }
             }
         } else {
@@ -908,13 +904,13 @@ impl P2PNetwork {
     }
 
     pub async fn diagnose_connection(&self, ticket: &SessionTicket) -> Result<()> {
-        info!(
+        debug!(
             "Diagnosing connection to session with topic: {}",
             ticket.topic_id
         );
 
         for (i, node) in ticket.nodes.iter().enumerate() {
-            info!(
+            debug!(
                 "Testing connection to node {}/{}: {}",
                 i + 1,
                 ticket.nodes.len(),
@@ -923,11 +919,11 @@ impl P2PNetwork {
 
             // Test connection to each direct address
             if node.direct_addresses.is_empty() {
-                info!("Node has no direct addresses specified");
+                debug!("Node has no direct addresses specified");
             }
 
             for (j, addr) in node.direct_addresses.iter().enumerate() {
-                info!(
+                debug!(
                     "Testing direct address {}/{}: {}",
                     j + 1,
                     node.direct_addresses.len(),
@@ -937,17 +933,17 @@ impl P2PNetwork {
                 // Try to connect to the address
                 let result = tokio::net::TcpStream::connect(addr).await;
                 match result {
-                    Ok(_) => info!("✅ Successfully connected to {}", addr),
-                    Err(e) => info!("❌ Failed to connect to {}: {}", addr, e),
+                    Ok(_) => debug!("✅ Successfully connected to {}", addr),
+                    Err(e) => debug!("❌ Failed to connect to {}: {}", addr, e),
                 }
             }
 
             // Test connection through endpoint
-            info!("Adding node {} to endpoint", node.node_id);
+            debug!("Adding node {} to endpoint", node.node_id);
             if let Err(e) = self.endpoint.add_node_addr(node.clone()) {
-                info!("Failed to add node to endpoint: {}", e);
+                debug!("Failed to add node to endpoint: {}", e);
             } else {
-                info!("✅ Successfully added node to endpoint");
+                debug!("✅ Successfully added node to endpoint");
             }
         }
 

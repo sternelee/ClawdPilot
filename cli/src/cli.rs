@@ -279,8 +279,7 @@ impl CliApp {
             .network
             .create_session_ticket(topic_id, &session_id)
             .await?;
-        println!("🎫 Session Ticket: {}", ticket);
-        println!("💡 Others can join using: roterm join {}", ticket);
+        println!("💡 Join using: {}", ticket);
 
         // Display QR code for the ticket
         self.display_qr_code(&ticket.to_string());
