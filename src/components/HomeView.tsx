@@ -1,7 +1,5 @@
 import { createSignal, Show, For } from "solid-js";
-import {
-  TypingAnimation,
-} from "./ui/CyberEffects";
+import { TypingAnimation } from "./ui/CyberEffects";
 import { HistoryEntry } from "../hooks/useConnectionHistory";
 import { EnhancedButton, EnhancedInput } from "./ui/EnhancedComponents";
 import { getDeviceCapabilities } from "../utils/mobile";
@@ -46,13 +44,13 @@ export function HomeView(props: HomeViewProps) {
   const handleShowQRScanner = async () => {
     try {
       // 使用Tauri的条码扫描插件
-      const { scan } = await import('@tauri-apps/plugin-barcode-scanner');
+      const { scan } = await import("@tauri-apps/plugin-barcode-scanner");
       const result = await scan();
       if (result) {
         props.onTicketInput(result);
       }
     } catch (error) {
-      console.error('QR Scanner error:', error);
+      console.error("QR Scanner error:", error);
       // 回退到模拟扫描
       props.onTicketInput("demo-scanned-ticket-" + Date.now());
     }
@@ -72,9 +70,7 @@ export function HomeView(props: HomeViewProps) {
           <div class="text-center mb-6">
             <div class="w-12 h-1 bg-base-300 rounded-full mx-auto mb-4 md:hidden"></div>
             <h2 class="text-2xl font-bold mb-2">登录</h2>
-            <p class="text-sm opacity-70">
-              登录后解锁完整功能
-            </p>
+            <p class="text-sm opacity-70">登录后解锁完整功能</p>
           </div>
 
           <div class="space-y-4">
@@ -149,9 +145,7 @@ export function HomeView(props: HomeViewProps) {
           <div class="text-center mb-6">
             <div class="w-12 h-1 bg-base-300 rounded-full mx-auto mb-4 md:hidden"></div>
             <h2 class="text-2xl font-bold mb-2">历史连接</h2>
-            <p class="text-sm opacity-70">
-              选择一个历史连接来快速连接
-            </p>
+            <p class="text-sm opacity-70">选择一个历史连接来快速连接</p>
           </div>
 
           <div class="space-y-3">
@@ -177,8 +171,10 @@ export function HomeView(props: HomeViewProps) {
                   const diff = now.getTime() - date.getTime();
 
                   if (diff < 60000) return "刚才";
-                  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-                  if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+                  if (diff < 3600000)
+                    return `${Math.floor(diff / 60000)} 分钟前`;
+                  if (diff < 86400000)
+                    return `${Math.floor(diff / 3600000)} 小时前`;
                   return date.toLocaleDateString();
                 };
 
@@ -189,9 +185,7 @@ export function HomeView(props: HomeViewProps) {
                         {getConnectionStatusIcon(entry)}
                       </span>
                       <div class="flex-1 min-w-0">
-                        <div class="font-medium truncate">
-                          {entry.title}
-                        </div>
+                        <div class="font-medium truncate">{entry.title}</div>
                         <div class="text-xs opacity-70 font-mono truncate">
                           {entry.ticket.substring(0, 16)}...
                         </div>
@@ -301,7 +295,7 @@ export function HomeView(props: HomeViewProps) {
           haptic
           class="max-w-md"
         >
-          登录
+          帐号登录
         </EnhancedButton>
 
         {/* 历史连接按钮 */}

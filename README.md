@@ -21,6 +21,12 @@
 - 无需中央服务器，支持 NAT 穿透
 - 会话票据（Session Ticket）安全分发
 
+### 📱 多平台支持
+- **Web 应用**：基于 React 的现代化 Web 界面，支持响应式设计
+- **桌面应用**：基于 Tauri 的原生桌面应用，支持 Windows、macOS、Linux
+- **Android 应用**：原生 Android 应用，支持移动设备操作
+- **CLI 工具**：跨平台命令行工具，适用于服务器和自动化场景
+
 ### 🎯 易用性
 - 简单的命令行界面
 - QR 码分享会话票据
@@ -31,6 +37,8 @@
 
 ### 安装
 
+#### CLI 工具
+
 ```bash
 # 克隆项目
 git clone https://github.com/your-username/riterm.git
@@ -39,6 +47,31 @@ cd riterm
 # 编译 CLI 工具
 cd cli
 cargo build --release
+```
+
+#### Web 应用
+
+```bash
+# 安装依赖并启动开发服务器
+npm install
+npm run dev
+```
+
+#### Android 应用
+
+```bash
+# 构建 Android APK
+npm run tauri android build
+
+# 开发模式运行
+npm run tauri android dev
+```
+
+#### 桌面应用
+
+```bash
+# 构建桌面应用
+npm run tauri build
 ```
 
 ### 基本使用
@@ -109,20 +142,35 @@ riterm/
 │   │   ├── cli.rs         # 命令行界面
 │   │   ├── p2p.rs         # P2P 网络通信
 │   │   ├── terminal.rs    # 终端录制和回放
-│   │   └── shell.rs       # Shell 检测和配置
+│   │   ├── shell.rs       # Shell 检测和配置
+│   │   ├── host.rs        # 主机会话管理
+│   │   └── playback.rs    # 会话回放
 │   └── Cargo.toml
-├── app/                    # Tauri 桌面应用
+├── app/                    # Tauri 多平台应用
 │   ├── src/
 │   │   ├── main.rs        # Tauri 后端
+│   │   ├── lib.rs         # 库入口
 │   │   ├── p2p.rs         # P2P 集成
 │   │   └── terminal_events.rs
+│   ├── gen/               # 生成的移动端代码
+│   │   ├── android/       # Android 项目文件
+│   │   └── apple/         # iOS 项目文件
+│   ├── icons/            # 应用图标
+│   ├── capabilities/     # Tauri 权限配置
 │   └── Cargo.toml
 ├── src/                    # React 前端
 │   ├── components/        # UI 组件
+│   │   ├── ui/           # 基础 UI 组件
+│   │   ├── ConnectionView.tsx
+│   │   ├── TerminalView.tsx
+│   │   ├── HomeView.tsx
+│   │   └── SettingsModal.tsx
 │   ├── hooks/            # React Hooks
+│   ├── stores/           # 状态管理
 │   └── utils/            # 工具函数
 ├── examples/              # 使用示例
-└── logs/                 # 会话日志文件
+├── logs/                 # 会话日志文件
+└── dist/                 # 构建输出
 ```
 
 ## 🔧 技术架构
@@ -176,11 +224,15 @@ sequenceDiagram
 - [x] **会话管理**：创建、加入、列出、录制会话
 - [x] **QR 码分享**：便捷的会话票据分享
 - [x] **自动重连**：网络中断后自动重连
+- [x] **Web 界面**：基于 React 的响应式 Web 管理界面
+- [x] **Android 应用**：原生 Android 应用支持
+- [x] **移动优先设计**：针对移动设备优化的 UI/UX
+- [x] **自动发布**：CI/CD 自动化构建和发布流程
+- [x] **性能优化**：生产版本移除调试跟踪，提升性能
 
 ### 🔄 进行中功能
 
-- [ ] **Web 界面**：基于 React 的 Web 管理界面
-- [ ] **移动端支持**：iOS/Android 应用
+- [ ] **iOS 应用**：原生 iOS 应用开发
 - [ ] **会话权限管理**：只读/读写权限控制
 - [ ] **文件传输**：会话中的文件共享功能
 

@@ -1,4 +1,5 @@
 import { createSignal, Show, For } from "solid-js";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export interface NavigationItem {
   id: string;
@@ -26,24 +27,36 @@ export function MobileNavigation(props: MobileNavigationProps) {
   const getNetworkIcon = () => {
     if (!props.isConnected) return "📶";
     switch (props.networkStrength) {
-      case 0: return "📵";
-      case 1: return "📶";
-      case 2: return "📶";
-      case 3: return "📶";
-      case 4: return "📶";
-      default: return "📶";
+      case 0:
+        return "📵";
+      case 1:
+        return "📶";
+      case 2:
+        return "📶";
+      case 3:
+        return "📶";
+      case 4:
+        return "📶";
+      default:
+        return "📶";
     }
   };
 
   const getStatusColor = () => {
     if (!props.isConnected) return "text-base-content";
     switch (props.networkStrength) {
-      case 0: return "text-error";
-      case 1: return "text-warning";
-      case 2: return "text-warning";
-      case 3: return "text-success";
-      case 4: return "text-success";
-      default: return "text-base-content";
+      case 0:
+        return "text-error";
+      case 1:
+        return "text-warning";
+      case 2:
+        return "text-warning";
+      case 3:
+        return "text-success";
+      case 4:
+        return "text-success";
+      default:
+        return "text-base-content";
     }
   };
 
@@ -71,6 +84,9 @@ export function MobileNavigation(props: MobileNavigationProps) {
 
         <div class="navbar-end">
           <div class="flex items-center space-x-2">
+            {/* Theme Switcher */}
+            <ThemeSwitcher />
+
             <button
               class={`btn btn-ghost btn-sm ${getStatusColor()}`}
               onClick={() => setShowStatusPanel(!showStatusPanel())}
@@ -103,17 +119,20 @@ export function MobileNavigation(props: MobileNavigationProps) {
               <div class={`text-xs ${getStatusColor()}`}>{props.status}</div>
             </div>
             <div class="flex items-center space-x-2">
-              <div class={`badge badge-sm ${props.isConnected ? 'badge-success' : 'badge-neutral'}`}>
-                {props.isConnected ? 'Connected' : 'Offline'}
+              <div
+                class={`badge badge-sm ${props.isConnected ? "badge-success" : "badge-neutral"}`}
+              >
+                {props.isConnected ? "Connected" : "Offline"}
               </div>
               <div class="flex">
                 <For each={[1, 2, 3, 4]}>
                   {(level) => (
                     <div
-                      class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
-                        ? 'bg-success'
-                        : 'bg-base-300'
-                        }`}
+                      class={`w-1 h-3 mx-px rounded-sm ${
+                        level <= props.networkStrength
+                          ? "bg-success"
+                          : "bg-base-300"
+                      }`}
                     />
                   )}
                 </For>
@@ -128,24 +147,31 @@ export function MobileNavigation(props: MobileNavigationProps) {
         <label for="drawer-sidebar" class="drawer-overlay"></label>
         <aside class="w-64 min-h-full bg-base-200">
           <div class="p-4">
-            <div class="flex items-center space-x-3 mb-8">
-              <span class="text-2xl">⚡</span>
-              <h1 class="text-xl font-bold">RiTerm</h1>
+            <div class="flex items-center justify-between mb-8">
+              <div class="flex items-center space-x-3">
+                <span class="text-2xl">⚡</span>
+                <h1 class="text-xl font-bold">RiTerm</h1>
+              </div>
+              {/* Theme Switcher for Desktop */}
+              <ThemeSwitcher />
             </div>
 
             <div class="mt-8 p-4 bg-base-100 rounded-lg">
               <div class="text-sm">
                 <div class="font-medium mb-2">Status</div>
                 <div class="flex items-center justify-between">
-                  <span class={`text-xs ${getStatusColor()}`}>{props.status}</span>
+                  <span class={`text-xs ${getStatusColor()}`}>
+                    {props.status}
+                  </span>
                   <div class="flex">
                     <For each={[1, 2, 3, 4]}>
                       {(level) => (
                         <div
-                          class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
-                            ? 'bg-success'
-                            : 'bg-base-300'
-                            }`}
+                          class={`w-1 h-3 mx-px rounded-sm ${
+                            level <= props.networkStrength
+                              ? "bg-success"
+                              : "bg-base-300"
+                          }`}
                         />
                       )}
                     </For>
