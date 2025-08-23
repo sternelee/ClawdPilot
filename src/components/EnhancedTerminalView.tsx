@@ -16,6 +16,9 @@ interface EnhancedTerminalViewProps {
   isConnected?: boolean;
   onDisconnect?: () => void;
   onShowKeyboard?: () => void;
+  sessionTitle?: string;
+  terminalType?: string;
+  workingDirectory?: string;
 }
 
 // Terminal debugging utility
@@ -43,7 +46,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   const [isFullscreen, setIsFullscreen] = createSignal(false);
   const [fontSize, setFontSize] = createSignal(14);
   const [opacity, setOpacity] = createSignal(1);
-  const [isInitialized, setIsInitialized] = createSignal(false);
 
   let terminalElement: HTMLDivElement | undefined;
   let mobileKeyboardRef: HTMLDivElement | undefined;
@@ -174,7 +176,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       };
 
       window.addEventListener("resize", handleResize);
-      setIsInitialized(true);
       debugTerminal("Terminal initialized successfully", term);
 
       onCleanup(() => {
@@ -195,7 +196,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         setTerminal(null);
         setFitAddon(null);
         setSearchAddon(null);
-        setIsInitialized(false);
         debugTerminal("Terminal cleanup completed");
       });
     }
@@ -329,8 +329,41 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     <div
       class={`relative w-full h-full flex flex-col ${isFullscreen() ? "fixed inset-0 z-50 bg-black" : ""}`}
     >
-      {/* Terminal Header - Mobile Optimized */}
-      <div class="flex items-center justify-between p-2 bg-base-100 border-b border-base-300 shrink-0">
+      {/* Terminal Header - 显示标题和终端信息 */}
+      <div class="flex items-center justify-between p-3 bg-base-100 border-b border-base-300 shrink-0">
+        <div class="flex items-center space-x-3">
+          {/* 终端状态指示器 */}
+          <div class="flex items-center space-x-2">
+            <div class={`w-2 h-2 rounded-full ${props.isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <div class="font-medium text-sm">
+              {props.isConnected ? '已连接' : '未连接'}
+            </div>
+          </div>
+
+          {/* 分隔线 */}
+          <div class="w-px h-4 bg-base-300"></div>
+
+          {/* 会话信息 */}
+          <div class="flex items-center space-x-2 text-sm">
+            <Show when={props.sessionTitle} fallback="RiTerm">
+              <span class="font-medium">{props.sessionTitle}</span>
+            </Show>
+            <Show when={props.terminalType}>
+              <span class="opacity-60">({props.terminalType})</span>
+            </Show>
+          </div>
+
+          {/* 工作目录 */}
+          <Show when={props.workingDirectory}>
+            <>
+              <div class="w-px h-4 bg-base-300"></div>
+              <div class="text-xs opacity-50 font-mono hidden sm:block">
+                {props.workingDirectory}
+              </div>
+            </>
+          </Show>
+        </div>
+
         <div class="flex items-center space-x-2">
           <EnhancedButton
             variant="ghost"
@@ -338,7 +371,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             onClick={() => setShowTerminalActions(!showTerminalActions())}
             icon="⚙️"
           >
-            <span class="hidden sm:inline">Actions</span>
+            <span class="hidden sm:inline">操作</span>
           </EnhancedButton>
 
           <EnhancedButton
@@ -347,13 +380,11 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             onClick={() => setShowSearchBar(!showSearchBar())}
             icon="🔍"
           >
-            <span class="hidden sm:inline">Search</span>
+            <span class="hidden sm:inline">搜索</span>
           </EnhancedButton>
-        </div>
 
-        <div class="flex items-center space-x-2">
           <div class="text-xs opacity-70 hidden sm:block">
-            Font: {fontSize()}px
+            字体: {fontSize()}px
           </div>
 
           <EnhancedButton
@@ -363,7 +394,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             icon={isFullscreen() ? "🗗" : "⛶"}
           >
             <span class="hidden sm:inline">
-              {isFullscreen() ? "Exit" : "Fullscreen"}
+              {isFullscreen() ? "退出" : "全屏"}
             </span>
           </EnhancedButton>
         </div>
@@ -531,10 +562,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
               </EnhancedButton>
             ))}
           </div>
-
-          <div class="mt-3 text-xs opacity-70 text-center">
-            Swipe down on terminal to show • Swipe up to hide • Pinch to zoom
-          </div>
         </div>
       </Show>
 
@@ -547,45 +574,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
           variant="primary"
         />
       </Show>
-
-      <Show when={props.isConnected && !isFullscreen()}>
-        <FloatingActionButton
-          icon="🔌"
-          onClick={() => props.onDisconnect?.()}
-          position="bottom-left"
-          variant="secondary"
-        />
-      </Show>
-
-      {/* Connection Status Overlay */}
-      <Show when={!props.isConnected}>
-        <div class="absolute inset-0 bg-black/50 flex items-center justify-center">
-          <div class="bg-base-100 p-6 rounded-lg text-center max-w-sm mx-4">
-            <div class="text-4xl mb-2">📡</div>
-            <div class="font-medium mb-2">No Connection</div>
-            <div class="text-sm opacity-70 mb-4">
-              Terminal will display content when connected to a P2P session
-            </div>
-            <EnhancedButton
-              variant="primary"
-              onClick={() => window.history.back()}
-              icon="🏠"
-            >
-              Go to Connections
-            </EnhancedButton>
-          </div>
-        </div>
-      </Show>
-
-      {/* Touch Hints */}
-      <Show when={!showMobileKeyboard()}>
-        <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 opacity-30 pointer-events-none">
-          <div class="bg-black/70 text-white text-xs px-3 py-1 rounded-full">
-            Swipe down for keyboard • Pinch to zoom
-          </div>
-        </div>
-      </Show>
     </div>
   );
 }
-

@@ -501,4 +501,3 @@ export function initializeTheme(): void {
 
 // Export signals for reactive components
 export const themeSignals = themeManager.createSignals();
-

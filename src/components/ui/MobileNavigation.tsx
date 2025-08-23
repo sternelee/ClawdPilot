@@ -1,5 +1,4 @@
-import { createSignal, Show, For, createEffect } from "solid-js";
-import { settingsStore, t } from "../../stores/settingsStore";
+import { createSignal, Show, For } from "solid-js";
 
 export interface NavigationItem {
   id: string;
@@ -23,35 +22,6 @@ interface MobileNavigationProps {
 
 export function MobileNavigation(props: MobileNavigationProps) {
   const [showStatusPanel, setShowStatusPanel] = createSignal(false);
-
-  const navigationItems = (): NavigationItem[] => [
-    {
-      id: "home",
-      title: "Connections",
-      icon: "🏠",
-      active: props.currentView === "home",
-    },
-    {
-      id: "terminal",
-      title: "Terminal",
-      icon: "💻",
-      active: props.currentView === "terminal",
-      disabled: !props.isConnected,
-      badge: props.isConnected ? "●" : undefined,
-    },
-    {
-      id: "history",
-      title: "History",
-      icon: "📝",
-      active: props.currentView === "history",
-    },
-    {
-      id: "settings",
-      title: "Settings",
-      icon: "⚙️",
-      active: props.currentView === "settings",
-    },
-  ];
 
   const getNetworkIcon = () => {
     if (!props.isConnected) return "📶";
@@ -110,7 +80,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
                 <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
               </Show>
             </button>
-            
+
             <Show when={props.isConnected}>
               <button
                 class="btn btn-error btn-sm px-2"
@@ -140,11 +110,10 @@ export function MobileNavigation(props: MobileNavigationProps) {
                 <For each={[1, 2, 3, 4]}>
                   {(level) => (
                     <div
-                      class={`w-1 h-3 mx-px rounded-sm ${
-                        level <= props.networkStrength
-                          ? 'bg-success'
-                          : 'bg-base-300'
-                      }`}
+                      class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
+                        ? 'bg-success'
+                        : 'bg-base-300'
+                        }`}
                     />
                   )}
                 </For>
@@ -153,33 +122,6 @@ export function MobileNavigation(props: MobileNavigationProps) {
           </div>
         </div>
       </Show>
-
-      {/* Bottom Navigation - Mobile First */}
-      <div class="btm-nav btm-nav-lg bg-base-100 border-t border-base-300">
-        <For each={navigationItems()}>
-          {(item) => (
-            <button
-              class={`relative ${item.active ? 'active' : ''} ${item.disabled ? 'opacity-50' : ''}`}
-              disabled={item.disabled}
-              onClick={() => {
-                if (item.id === "settings") {
-                  props.onShowSettings?.();
-                } else {
-                  props.onViewChange(item.id);
-                }
-              }}
-            >
-              <span class="text-lg">{item.icon}</span>
-              <span class="btm-nav-label text-xs">{item.title}</span>
-              <Show when={item.badge}>
-                <div class="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full flex items-center justify-center">
-                  <span class="text-xs text-primary-content">{item.badge}</span>
-                </div>
-              </Show>
-            </button>
-          )}
-        </For>
-      </div>
 
       {/* Desktop Sidebar - Hidden on Mobile */}
       <div class="hidden lg:flex drawer-side">
@@ -191,32 +133,6 @@ export function MobileNavigation(props: MobileNavigationProps) {
               <h1 class="text-xl font-bold">RiTerm</h1>
             </div>
 
-            <ul class="menu w-full">
-              <For each={navigationItems()}>
-                {(item) => (
-                  <li>
-                    <button
-                      class={`flex items-center space-x-3 ${item.active ? 'active' : ''} ${item.disabled ? 'opacity-50' : ''}`}
-                      disabled={item.disabled}
-                      onClick={() => {
-                        if (item.id === "settings") {
-                          props.onShowSettings?.();
-                        } else {
-                          props.onViewChange(item.id);
-                        }
-                      }}
-                    >
-                      <span class="text-lg">{item.icon}</span>
-                      <span>{item.title}</span>
-                      <Show when={item.badge}>
-                        <span class="badge badge-primary badge-sm">{item.badge}</span>
-                      </Show>
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-
             <div class="mt-8 p-4 bg-base-100 rounded-lg">
               <div class="text-sm">
                 <div class="font-medium mb-2">Status</div>
@@ -226,11 +142,10 @@ export function MobileNavigation(props: MobileNavigationProps) {
                     <For each={[1, 2, 3, 4]}>
                       {(level) => (
                         <div
-                          class={`w-1 h-3 mx-px rounded-sm ${
-                            level <= props.networkStrength
-                              ? 'bg-success'
-                              : 'bg-base-300'
-                          }`}
+                          class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
+                            ? 'bg-success'
+                            : 'bg-base-300'
+                            }`}
                         />
                       )}
                     </For>

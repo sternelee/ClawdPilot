@@ -13,7 +13,7 @@ import { SettingsModal } from "./components/SettingsModal";
 import { HomeView } from "./components/HomeView";
 import { MobileNavigation } from "./components/ui/MobileNavigation";
 import { P2PBackground } from "./components/P2PBackground";
-import { settingsStore, t } from "./stores/settingsStore";
+import { t } from "./stores/settingsStore";
 
 function App() {
   const [sessionTicket, setSessionTicket] = createSignal("");
@@ -36,6 +36,12 @@ function App() {
       minute: "2-digit",
     }),
   );
+  // 终端信息状态
+  const [terminalInfo, setTerminalInfo] = createSignal<{
+    sessionTitle: string;
+    terminalType: string;
+    workingDirectory: string;
+  }>({ sessionTitle: "RiTerm", terminalType: "shell", workingDirectory: "~" });
 
   let sessionIdRef: string | null = null;
   let terminalInstance: Terminal | null = null;
@@ -186,6 +192,13 @@ function App() {
                 const historyData = JSON.parse(termEvent.data);
                 const { logs, shell, cwd } = historyData;
 
+                // 更新终端信息
+                setTerminalInfo({
+                  sessionTitle: `Remote Shell`,
+                  terminalType: shell || "shell",
+                  workingDirectory: cwd || "~"
+                });
+
                 // 在终端中显示历史记录
                 terminalInstance.writeln(
                   "\r\n\x1b[1;36m📜 Session History Received\x1b[0m",
@@ -287,6 +300,9 @@ function App() {
               onShowKeyboard={() => {
                 /* TODO: Implement mobile keyboard */
               }}
+              sessionTitle={terminalInfo().sessionTitle}
+              terminalType={terminalInfo().terminalType}
+              workingDirectory={terminalInfo().workingDirectory}
             />
           ) : (
             <HomeView

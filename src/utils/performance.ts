@@ -539,4 +539,3 @@ export function cleanupPerformanceOptimizations(): void {
   performanceMonitor.stop();
   memoryOptimizer.destroy();
 }
-

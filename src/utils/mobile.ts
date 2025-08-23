@@ -500,4 +500,3 @@ export function initializeMobileUtils(): void {
   );
   document.documentElement.classList.add(`screen-${capabilities.screenSize}`);
 }
-
