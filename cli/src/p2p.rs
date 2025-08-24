@@ -16,7 +16,7 @@ use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 use url::Url;
 
-use crate::terminal::{SessionHeader, SessionInfo, TerminalEvent};
+use crate::terminal::{SessionHeader, SessionInfo, ShellInfo, TerminalEvent};
 
 pub type EncryptionKey = [u8; 32];
 
@@ -109,6 +109,12 @@ pub enum TerminalMessageBody {
     HistoryData {
         from: NodeId,
         session_info: SessionInfo,
+        timestamp: u64,
+    },
+    /// Shell configuration information
+    ShellInfo {
+        from: NodeId,
+        shell_info: ShellInfo,
         timestamp: u64,
     },
 }
@@ -492,6 +498,30 @@ impl P2PNetwork {
         Ok(())
     }
 
+    /// 发送shell配置信息给参与者
+    pub async fn send_shell_info(
+        &self,
+        sender: &GossipSender,
+        shell_info: ShellInfo,
+        session_id: &str,
+    ) -> Result<()> {
+        debug!(
+            "Sending shell info: shell_type={}, working_dir={}",
+            shell_info.shell_type, shell_info.working_directory
+        );
+        let key = self.get_session_key(session_id).await?;
+        let body = TerminalMessageBody::ShellInfo {
+            from: self.endpoint.node_id(),
+            shell_info,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        Ok(())
+    }
+
     pub async fn end_session(&self, sender: &GossipSender, session_id: String) -> Result<()> {
         debug!("Ending session: {}", session_id);
 
@@ -706,7 +736,7 @@ impl P2PNetwork {
                                             if let Err(e) = network_clone
                                                 .send_history_data(
                                                     &sender,
-                                                    session_info,
+                                                    session_info.clone(),
                                                     &session_id_clone,
                                                 )
                                                 .await
@@ -716,6 +746,18 @@ impl P2PNetwork {
                                                 debug!(
                                                     "✅ Successfully sent history data to new participant"
                                                 );
+                                            }
+
+                                            // Also send shell info if available
+                                            if let Some(shell_info) = session_info.shell_info {
+                                                if let Err(e) = network_clone
+                                                    .send_shell_info(&sender, shell_info, &session_id_clone)
+                                                    .await
+                                                {
+                                                    error!("Failed to send shell info to new participant: {}", e);
+                                                } else {
+                                                    debug!("✅ Successfully sent shell info to new participant");
+                                                }
                                             }
                                         }
                                         Ok(None) => {
@@ -762,6 +804,75 @@ impl P2PNetwork {
 
                     if let Err(_e) = session.event_sender.send(event) {
                         warn!("Failed to send history event to subscribers");
+                    }
+                }
+                TerminalMessageBody::ShellInfo {
+                    from,
+                    shell_info,
+                    timestamp,
+                } => {
+                    debug!(
+                        "Received shell info from {}: shell_type={}, working_dir={}",
+                        from.fmt_short(),
+                        shell_info.shell_type,
+                        shell_info.working_directory
+                    );
+
+                    // 将shell信息作为输出事件发送给订阅者
+                    let mut shell_details = format!(
+                        "\r\n🐚 Shell Information\r\n  Type: {}\r\n  Path: {}\r\n  Working Directory: {}\r\n  Terminal Size: {}x{}\r\n",
+                        shell_info.shell_type,
+                        shell_info.shell_path,
+                        shell_info.working_directory,
+                        shell_info.terminal_cols,
+                        shell_info.terminal_rows
+                    );
+
+                    // 添加环境变量信息
+                    if !shell_info.environment_vars.is_empty() {
+                        shell_details.push_str("  Environment Variables:\r\n");
+                        for (key, value) in &shell_info.environment_vars {
+                            shell_details.push_str(&format!("    {}={}\r\n", key, value));
+                        }
+                    }
+
+                    // 添加zsh特有信息
+                    if let Some(has_oh_my_zsh) = shell_info.has_oh_my_zsh {
+                        if has_oh_my_zsh {
+                            shell_details.push_str("  Oh My Zsh: Enabled\r\n");
+                            if let Some(theme) = &shell_info.theme {
+                                shell_details.push_str(&format!("  Theme: {}\r\n", theme));
+                            }
+                            if !shell_info.plugins.is_empty() {
+                                shell_details.push_str(&format!(
+                                    "  Plugins: {}\r\n",
+                                    shell_info.plugins.join(", ")
+                                ));
+                            }
+                            if let Some(zdotdir) = &shell_info.zdotdir {
+                                shell_details.push_str(&format!("  ZDOTDIR: {}\r\n", zdotdir));
+                            }
+                        }
+                    }
+
+                    // 添加初始化命令信息
+                    if !shell_info.init_commands.is_empty() {
+                        shell_details.push_str("  Initialization Commands:\r\n");
+                        for cmd in &shell_info.init_commands {
+                            shell_details.push_str(&format!("    {}\r\n", cmd));
+                        }
+                    }
+
+                    shell_details.push_str("--- End of Shell Information ---\r\n");
+
+                    let event = TerminalEvent {
+                        timestamp: timestamp as f64,
+                        event_type: crate::terminal::EventType::Output,
+                        data: shell_details,
+                    };
+
+                    if let Err(_e) = session.event_sender.send(event) {
+                        warn!("Failed to send shell info event to subscribers");
                     }
                 }
             }

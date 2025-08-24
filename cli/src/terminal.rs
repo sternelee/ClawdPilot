@@ -11,7 +11,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::shell::ShellConfig;
+use crate::shell::{ShellConfig, ShellType, ZshConfig};
 
 /// 终端原始模式的 RAII 包装器，确保在离开作用域时恢复终端模式
 struct RawModeGuard;
@@ -124,12 +124,29 @@ pub struct SessionHeader {
     pub session_id: String,
 }
 
+/// Shell配置信息，用于传输给客户端
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellInfo {
+    pub shell_type: String,        // Shell类型 (zsh, bash, fish等)
+    pub shell_path: String,        // Shell可执行文件路径
+    pub working_directory: String, // 当前工作目录
+    pub environment_vars: std::collections::HashMap<String, String>, // 环境变量
+    pub init_commands: Vec<String>, // 初始化命令
+    pub has_oh_my_zsh: Option<bool>, // 是否有oh-my-zsh (仅zsh)
+    pub plugins: Vec<String>,      // 插件列表 (仅zsh)
+    pub theme: Option<String>,     // 主题 (仅zsh)
+    pub zdotdir: Option<String>,   // ZDOTDIR路径 (仅zsh)
+    pub terminal_cols: u16,        // 终端列数
+    pub terminal_rows: u16,        // 终端行数
+}
+
 /// 会话信息，包含日志、shell类型和当前工作目录
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub logs: String,
     pub shell: String,
     pub cwd: String,
+    pub shell_info: Option<ShellInfo>, // 添加详细shell信息
 }
 
 /// 日志记录器，用于记录终端输出到文件
@@ -242,6 +259,55 @@ impl TerminalRecorder {
         self.start_time.elapsed().unwrap_or_default().as_secs_f64()
     }
 
+    /// 收集当前shell的详细配置信息
+    async fn collect_shell_info(&self) -> ShellInfo {
+        // 获取终端大小
+        let (terminal_cols, terminal_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+        // 解析当前shell类型
+        let shell_type = ShellType::from_command(&self.shell_type);
+
+        // 获取环境变量
+        let environment_vars = shell_type.get_environment_variables();
+
+        // 获取初始化命令
+        let init_commands = shell_type.get_init_commands();
+
+        // 获取shell路径
+        let shell_path = shell_type.get_command_path().to_string();
+
+        // 根据shell类型获取特定配置
+        let (has_oh_my_zsh, plugins, theme, zdotdir) = match shell_type {
+            ShellType::Zsh => {
+                if let Some(zsh_config) = ZshConfig::detect() {
+                    (
+                        Some(zsh_config.has_oh_my_zsh),
+                        zsh_config.plugins,
+                        zsh_config.theme,
+                        Some(zsh_config.zdotdir.to_string_lossy().to_string()),
+                    )
+                } else {
+                    (None, Vec::new(), None, None)
+                }
+            }
+            _ => (None, Vec::new(), None, None),
+        };
+
+        ShellInfo {
+            shell_type: shell_type.get_display_name().to_string(),
+            shell_path,
+            working_directory: self.current_dir.clone(),
+            environment_vars,
+            init_commands,
+            has_oh_my_zsh,
+            plugins,
+            theme,
+            zdotdir,
+            terminal_cols,
+            terminal_rows,
+        }
+    }
+
     /// 获取会话信息，包含日志、shell类型和当前工作目录
     pub async fn get_session_info(&self) -> SessionInfo {
         let logs = {
@@ -249,10 +315,14 @@ impl TerminalRecorder {
             log_recorder.get_logs().to_string()
         };
 
+        // 收集shell配置信息
+        let shell_info = self.collect_shell_info().await;
+
         SessionInfo {
             logs,
             shell: self.shell_type.clone(),
             cwd: self.current_dir.clone(),
+            shell_info: Some(shell_info),
         }
     }
 

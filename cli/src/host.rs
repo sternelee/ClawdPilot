@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::p2p::P2PNetwork;
 use crate::shell::{ShellConfig, ShellDetector};
-use crate::terminal::{SessionHeader, TerminalRecorder};
+use crate::terminal::{SessionHeader, ShellInfo, TerminalRecorder};
 use crate::terminal_config::TerminalConfigDetector;
 
 pub struct HostSession {
@@ -55,6 +55,18 @@ impl HostSession {
 
         // Display QR code for the ticket
         self.display_qr_code(&ticket.to_string());
+
+        // Create and send shell information immediately after session creation
+        let shell_info = Self::collect_shell_info(&shell_config, width, height).await;
+        if let Err(e) = self
+            .network
+            .send_shell_info(&sender, shell_info, &session_id)
+            .await
+        {
+            warn!("Failed to send initial shell info: {}", e);
+        } else {
+            info!("✅ Initial shell information sent to session participants");
+        }
 
         let recorder = self
             .spawn_pty_tasks(
@@ -290,5 +302,58 @@ impl HostSession {
             }
         }
     }
-}
 
+    /// 收集shell配置信息用于传输
+    async fn collect_shell_info(shell_config: &ShellConfig, width: u16, height: u16) -> ShellInfo {
+        use crate::shell::{ShellType, ZshConfig};
+
+        // 解析shell类型
+        let shell_type = &shell_config.shell_type;
+
+        // 获取环境变量
+        let environment_vars = shell_config.environment_vars.clone();
+
+        // 获取初始化命令
+        let init_commands = shell_config.init_commands.clone();
+
+        // 获取shell路径
+        let shell_path = shell_type.get_command_path().to_string();
+
+        // 获取当前工作目录
+        let working_directory = std::env::current_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."))
+            .to_string_lossy()
+            .to_string();
+
+        // 根据shell类型获取特定配置
+        let (has_oh_my_zsh, plugins, theme, zdotdir) = match shell_type {
+            ShellType::Zsh => {
+                if let Some(zsh_config) = ZshConfig::detect() {
+                    (
+                        Some(zsh_config.has_oh_my_zsh),
+                        zsh_config.plugins,
+                        zsh_config.theme,
+                        Some(zsh_config.zdotdir.to_string_lossy().to_string()),
+                    )
+                } else {
+                    (None, Vec::new(), None, None)
+                }
+            }
+            _ => (None, Vec::new(), None, None),
+        };
+
+        ShellInfo {
+            shell_type: shell_type.get_display_name().to_string(),
+            shell_path,
+            working_directory,
+            environment_vars,
+            init_commands,
+            has_oh_my_zsh,
+            plugins,
+            theme,
+            zdotdir,
+            terminal_cols: width,
+            terminal_rows: height,
+        }
+    }
+}

@@ -177,6 +177,7 @@ function App() {
         `terminal-event-${actualSessionId}`,
         (event) => {
           const termEvent = event.payload;
+          console.log("📜 Received terminal event:", termEvent);
           if (terminalInstance) {
             if (termEvent.event_type === "Output") {
               terminalInstance.write(termEvent.data);
@@ -196,7 +197,7 @@ function App() {
                 setTerminalInfo({
                   sessionTitle: `Remote Shell`,
                   terminalType: shell || "shell",
-                  workingDirectory: cwd || "~"
+                  workingDirectory: cwd || "~",
                 });
 
                 // 在终端中显示历史记录

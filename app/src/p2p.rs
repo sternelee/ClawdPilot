@@ -44,6 +44,21 @@ pub struct SessionHeader {
 pub type EncryptionKey = [u8; 32];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellInfo {
+    pub shell_type: String,
+    pub shell_path: String,
+    pub working_directory: String,
+    pub environment_vars: std::collections::HashMap<String, String>,
+    pub init_commands: Vec<String>,
+    pub has_oh_my_zsh: Option<bool>,
+    pub plugins: Vec<String>,
+    pub theme: Option<String>,
+    pub zdotdir: Option<String>,
+    pub terminal_cols: u16,
+    pub terminal_rows: u16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TerminalMessageBody {
     /// Session metadata
     SessionInfo { from: NodeId, header: SessionHeader },
@@ -83,6 +98,12 @@ pub enum TerminalMessageBody {
         shell_type: String,
         working_dir: String,
         history: Vec<String>,
+        timestamp: u64,
+    },
+    /// Shell configuration information
+    ShellInfo {
+        from: NodeId,
+        shell_info: ShellInfo,
         timestamp: u64,
     },
 }
@@ -351,7 +372,18 @@ impl P2PNetwork {
         let (sender, receiver) = topic.split();
 
         // Start listening for messages on this topic
-        self.start_topic_listener(receiver, session_id).await?;
+        self.start_topic_listener(receiver, session_id.clone()).await?;
+
+        // Send participant joined notification to inform the host
+        let body = TerminalMessageBody::ParticipantJoined {
+            from: self.endpoint.node_id(),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &ticket.key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        info!("✅ Sent participant joined notification");
 
         Ok((sender, event_receiver))
     }
@@ -705,6 +737,63 @@ impl P2PNetwork {
                         };
                         if session.event_sender.send(separator_event).is_err() {
                             warn!("No active receivers for history separator event, skipping");
+                        }
+                    }
+                    TerminalMessageBody::ShellInfo {
+                        from,
+                        shell_info,
+                        timestamp,
+                    } => {
+                        info!("Received shell info from {}", from.fmt_short());
+
+                        // Send shell info event
+                        let mut shell_details = format!(
+                            "=== Shell Information ===\nType: {}\nPath: {}\nWorking Directory: {}\nTerminal Size: {}x{}\n",
+                            shell_info.shell_type, shell_info.shell_path, shell_info.working_directory,
+                            shell_info.terminal_cols, shell_info.terminal_rows
+                        );
+
+                        // Add environment variables
+                        if !shell_info.environment_vars.is_empty() {
+                            shell_details.push_str("Environment Variables:\n");
+                            for (key, value) in &shell_info.environment_vars {
+                                shell_details.push_str(&format!("  {}={}\n", key, value));
+                            }
+                        }
+
+                        // Add zsh-specific info
+                        if let Some(has_oh_my_zsh) = shell_info.has_oh_my_zsh {
+                            if has_oh_my_zsh {
+                                shell_details.push_str("Oh My Zsh: Enabled\n");
+                                if let Some(theme) = &shell_info.theme {
+                                    shell_details.push_str(&format!("Theme: {}\n", theme));
+                                }
+                                if !shell_info.plugins.is_empty() {
+                                    shell_details.push_str(&format!("Plugins: {}\n", shell_info.plugins.join(", ")));
+                                }
+                                if let Some(zdotdir) = &shell_info.zdotdir {
+                                    shell_details.push_str(&format!("ZDOTDIR: {}\n", zdotdir));
+                                }
+                            }
+                        }
+
+                        // Add init commands
+                        if !shell_info.init_commands.is_empty() {
+                            shell_details.push_str("Initialization Commands:\n");
+                            for cmd in &shell_info.init_commands {
+                                shell_details.push_str(&format!("  {}\n", cmd));
+                            }
+                        }
+
+                        shell_details.push_str("=== End of Shell Information ===\n");
+
+                        let info_event = TerminalEvent {
+                            timestamp: timestamp as f64,
+                            event_type: crate::terminal_events::EventType::Output,
+                            data: shell_details,
+                        };
+                        if session.event_sender.send(info_event).is_err() {
+                            warn!("No active receivers for shell info event, skipping");
                         }
                     }
                 }
