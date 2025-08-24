@@ -1,9 +1,9 @@
 import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
 import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "xterm-addon-fit";
-import { SearchAddon } from "xterm-addon-search";
-import { WebLinksAddon } from "xterm-addon-web-links";
-import "xterm/css/xterm.css";
+import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
 import {
   SwipeGesture,
   EnhancedButton,
@@ -61,10 +61,16 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   const [lastResizeTime, setLastResizeTime] = createSignal(0);
 
   // Enhanced mobile keyboard and input management
-  const [keyboardCleanup, setKeyboardCleanup] = createSignal<(() => void) | null>(null);
-  const [inputCleanup, setInputCleanup] = createSignal<(() => void) | null>(null);
-  const [fixedElementCleanup, setFixedElementCleanup] = createSignal<(() => void) | null>(null);
-  
+  const [keyboardCleanup, setKeyboardCleanup] = createSignal<
+    (() => void) | null
+  >(null);
+  const [inputCleanup, setInputCleanup] = createSignal<(() => void) | null>(
+    null,
+  );
+  const [fixedElementCleanup, setFixedElementCleanup] = createSignal<
+    (() => void) | null
+  >(null);
+
   // 响应外部键盘状态变化
   createEffect(() => {
     const isExternalKeyboardVisible = props.keyboardVisible;
@@ -118,29 +124,38 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     return Math.max(availableHeight, 200); // 最小高度200px
   };
 
-  // 监听高度变化并更新终端
+  // Optimized terminal height monitoring with better debouncing
   createEffect(() => {
     const calculatedHeight = calculateTerminalHeight();
     if (calculatedHeight && calculatedHeight !== terminalHeight()) {
       setTerminalHeight(calculatedHeight);
 
-      // 延迟调整终端尺寸，避免频繁resize
+      // Enhanced debouncing for smoother terminal resizing
       const now = Date.now();
-      if (now - lastResizeTime() > 100) {
+      const timeSinceLastResize = now - lastResizeTime();
+
+      if (timeSinceLastResize > 200) {
+        // Increased threshold for better stability
         const fit = fitAddon();
         if (fit && terminalInstance) {
-          setTimeout(() => {
-            try {
-              fit.fit();
-              terminalInstance?.focus();
-              setLastResizeTime(now);
-            } catch (error) {
-              console.warn(
-                "Failed to fit terminal after height change:",
-                error,
-              );
-            }
-          }, 150);
+          // Use requestAnimationFrame for smooth resizing
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              try {
+                fit.fit();
+                terminalInstance?.focus();
+                setLastResizeTime(now);
+                debugTerminal(
+                  `Terminal height adjusted to ${calculatedHeight}px`,
+                );
+              } catch (error) {
+                console.warn(
+                  "Failed to fit terminal after height change:",
+                  error,
+                );
+              }
+            }, 50); // Reduced timeout for responsiveness
+          });
         }
       }
     }
@@ -199,17 +214,32 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         convertEol: true,
         rightClickSelectsWord: true,
         macOptionIsMeta: true,
+        // Enhanced scrolling performance settings
         fastScrollModifier: "alt",
-        fastScrollSensitivity: 5,
-        scrollSensitivity: 3,
+        fastScrollSensitivity: 3, // Reduced for smoother scrolling
+        scrollSensitivity: 1, // Reduced for finer control
         minimumContrastRatio: 4.5,
         fontWeight: "normal",
         fontWeightBold: "bold",
         drawBoldTextInBrightColors: true,
-        // 移动端优化：保持远程内容宽度，但允许用户输入换行
+        // Mobile optimization settings
         cols: deviceCapabilities().isMobile ? 80 : undefined,
-        // 在移动端启用文本换行
         wordSeparator: deviceCapabilities().isMobile ? " \t\n\r\f" : undefined,
+        // Performance optimizations
+        disableStdin: false,
+        allowProposedApi: true, // Enable performance improvements
+        windowOptions: {
+          restoreWin: true,
+          minimizeWin: true,
+          setWinPosition: true,
+          setWinSizePixels: true,
+          raiseWin: true,
+          lowerWin: true,
+          refreshWin: true,
+          setWinSizeChars: true,
+          maximizeWin: true,
+          fullscreenWin: true,
+        },
       });
 
       // Load addons
@@ -254,12 +284,42 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         }
       }, 100);
 
-      // Add terminal-specific styling
+      // Enhanced terminal styling for smooth scrolling
       if (terminalElement) {
         terminalElement.style.background = "transparent";
+        // Hardware acceleration for the container
+        terminalElement.style.transform = "translateZ(0)";
+        terminalElement.style.backfaceVisibility = "hidden";
+        terminalElement.style.willChange = "scroll-position, transform";
+
         const terminalEl = terminalElement.querySelector(".terminal");
         if (terminalEl) {
-          (terminalEl as HTMLElement).style.background = "transparent";
+          const el = terminalEl as HTMLElement;
+          el.style.background = "transparent";
+          // Enhanced scrolling for xterm container
+          el.style.transform = "translateZ(0)";
+          el.style.backfaceVisibility = "hidden";
+          el.style.willChange = "scroll-position";
+        }
+
+        // Optimize xterm viewport
+        const viewport = terminalElement.querySelector(".xterm-viewport");
+        if (viewport) {
+          const el = viewport as HTMLElement;
+          (el.style as any).webkitOverflowScrolling = "touch";
+          el.style.scrollBehavior = "smooth";
+          el.style.overscrollBehavior = "contain";
+          // Hardware acceleration for viewport
+          el.style.transform = "translateZ(0)";
+          el.style.willChange = "scroll-position";
+        }
+
+        // Optimize xterm screen
+        const screen = terminalElement.querySelector(".xterm-screen");
+        if (screen) {
+          const el = screen as HTMLElement;
+          el.style.transform = "translateZ(0)";
+          el.style.backfaceVisibility = "hidden";
         }
       }
 
@@ -287,18 +347,24 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         props.onInput(data);
       });
 
-      // Handle resize
+      // Enhanced resize handling with debouncing
+      let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
       const handleResize = () => {
-        if (fit && terminalInstance) {
-          setTimeout(() => {
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+
+        resizeTimeout = setTimeout(() => {
+          if (fit && terminalInstance) {
             try {
               fit.fit();
               terminalInstance?.focus();
+              debugTerminal("Terminal resized and refitted successfully");
             } catch (error) {
               console.warn("Failed to fit terminal:", error);
             }
-          }, 100);
-        }
+          }
+        }, 150); // Increased debounce time for smoother performance
       };
 
       window.addEventListener("resize", handleResize);
@@ -306,11 +372,19 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
       onCleanup(() => {
         debugTerminal("Starting terminal cleanup...");
+
+        // Clear resize timeout
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+
         window.removeEventListener("resize", handleResize);
+
         if (onDataDispose) {
           onDataDispose.dispose();
           onDataDispose = null;
         }
+
         if (terminalInstance) {
           try {
             terminalInstance.dispose();
@@ -319,6 +393,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
           }
           terminalInstance = null;
         }
+
         setTerminal(null);
         setFitAddon(null);
         setSearchAddon(null);
@@ -331,7 +406,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   onMount(() => {
     // Delay initialization slightly to ensure DOM is ready
     setTimeout(initializeTerminal, 50);
-    
+
     // Enhanced mobile keyboard and input management setup
     if (deviceCapabilities().isMobile) {
       // Register terminal element for input focus management
@@ -339,7 +414,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         const cleanup = InputFocusManager.trackInput(terminalElement);
         setInputCleanup(() => cleanup);
       }
-      
+
       // Set up keyboard scroll adjustment callback
       const keyboardCleanupFn = MobileKeyboard.onScrollAdjustment(() => {
         // Force terminal to adjust when keyboard triggers scroll adjustments
@@ -350,30 +425,38 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
               fit.fit();
               terminalInstance?.focus();
             } catch (error) {
-              console.warn("Failed to adjust terminal for keyboard scroll:", error);
+              console.warn(
+                "Failed to adjust terminal for keyboard scroll:",
+                error,
+              );
             }
           }, 100);
         }
       });
       setKeyboardCleanup(() => keyboardCleanupFn);
-      
+
       // Register mobile keyboard as fixed element if it exists
       setTimeout(() => {
         if (mobileKeyboardRef) {
-          const fixedCleanup = KeyboardManager.registerFixedElement(mobileKeyboardRef, {
-            adjustWithKeyboard: true,
-            onKeyboardShow: (keyboardHeight) => {
-              console.log(`Mobile keyboard adjusted for keyboard height: ${keyboardHeight}px`);
+          const fixedCleanup = KeyboardManager.registerFixedElement(
+            mobileKeyboardRef,
+            {
+              adjustWithKeyboard: true,
+              onKeyboardShow: (keyboardHeight) => {
+                console.log(
+                  `Mobile keyboard adjusted for keyboard height: ${keyboardHeight}px`,
+                );
+              },
+              onKeyboardHide: () => {
+                console.log("Mobile keyboard restored to normal position");
+              },
             },
-            onKeyboardHide: () => {
-              console.log("Mobile keyboard restored to normal position");
-            }
-          });
+          );
           setFixedElementCleanup(() => fixedCleanup);
         }
       }, 100);
     }
-    
+
     // Enhanced cleanup
     onCleanup(() => {
       const inputCleanupFn = inputCleanup();
@@ -381,13 +464,13 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         inputCleanupFn();
         setInputCleanup(null);
       }
-      
+
       const keyboardCleanupFn = keyboardCleanup();
       if (keyboardCleanupFn) {
         keyboardCleanupFn();
         setKeyboardCleanup(null);
       }
-      
+
       const fixedCleanupFn = fixedElementCleanup();
       if (fixedCleanupFn) {
         fixedCleanupFn();
@@ -396,7 +479,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     });
   });
 
-  // Update font size and theme
+  // Enhanced font size and theme updates with performance optimization
   createEffect(() => {
     const currentFontSize = fontSize();
     const currentTerminal = terminal();
@@ -408,32 +491,35 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       currentTerminal.options.fontSize = currentFontSize;
       currentTerminal.options.theme = getTerminalTheme();
 
-      // Force terminal to refresh with new font size
-      const fit = fitAddon();
-      if (fit) {
-        // Use a longer timeout to ensure font changes are applied
-        setTimeout(() => {
-          try {
-            // Refresh the terminal to apply font changes
-            currentTerminal.refresh(0, currentTerminal.rows - 1);
-            // Then fit the terminal
-            fit.fit();
-            currentTerminal.focus();
+      // Use requestAnimationFrame for smoother updates
+      requestAnimationFrame(() => {
+        const fit = fitAddon();
+        if (fit && terminalInstance) {
+          // Use a timeout to ensure font changes are applied
+          setTimeout(() => {
+            try {
+              // Refresh the terminal to apply font changes
+              currentTerminal.refresh(0, currentTerminal.rows - 1);
+              // Then fit the terminal
+              fit.fit();
+              currentTerminal.focus();
 
-            debugTerminal(
-              `Font size updated successfully to ${currentFontSize}px`,
-            );
-          } catch (error) {
-            console.warn("Failed to update terminal font size:", error);
-          }
-        }, 200); // Increased timeout for better reliability
-      }
+              debugTerminal(
+                `Font size updated successfully to ${currentFontSize}px`,
+              );
+            } catch (error) {
+              console.warn("Failed to update terminal font size:", error);
+            }
+          }, 100); // Reduced timeout for better responsiveness
+        }
+      });
     }
   });
 
-  // Touch gesture handlers
+  // Enhanced touch gesture handlers with scroll optimization
   const handleTouchStart = (e: TouchEvent) => {
     if (e.touches.length === 2) {
+      // Only handle pinch gestures
       setIsPinching(true);
       const distance = getTouchDistance(e.touches[0], e.touches[1]);
       setLastPinchDistance(distance);
@@ -442,13 +528,14 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
   const handleTouchMove = (e: TouchEvent) => {
     if (isPinching() && e.touches.length === 2) {
+      // Only prevent default for pinch gestures, allow normal scrolling
       e.preventDefault();
       const distance = getTouchDistance(e.touches[0], e.touches[1]);
       const scale = distance / lastPinchDistance();
 
-      if (scale > 1.05) {
-        // Reduced threshold for more responsive scaling
-        // Zoom in
+      // Use more conservative thresholds to prevent accidental zooming during scrolling
+      if (scale > 1.1) {
+        // Zoom in - increased threshold for stability
         const newSize = Math.min(fontSize() + 1, 24);
         if (newSize !== fontSize()) {
           setFontSize(newSize);
@@ -460,9 +547,8 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             window.navigator.vibrate(10);
           }
         }
-      } else if (scale < 0.95) {
-        // Reduced threshold for more responsive scaling
-        // Zoom out
+      } else if (scale < 0.9) {
+        // Zoom out - increased threshold for stability
         const newSize = Math.max(fontSize() - 1, 8);
         if (newSize !== fontSize()) {
           setFontSize(newSize);
@@ -476,6 +562,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         }
       }
     }
+    // Allow single-touch scrolling to work normally by not preventing default
   };
 
   const handleTouchEnd = () => {
@@ -796,11 +883,21 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
               height: "100%",
               opacity: opacity(),
               background: "transparent",
-              // 移动端优化：允许水平滚动查看宽内容，但禁止垂直滚动
+              // Enhanced scrolling optimizations
               "overflow-x": deviceCapabilities().isMobile ? "auto" : "hidden",
               "overflow-y": "hidden",
-              // 保持最小宽度以显示完整的远程内容
               "min-width": deviceCapabilities().isMobile ? "640px" : "auto",
+              // Hardware acceleration for smooth scrolling
+              transform: "translateZ(0)",
+              "will-change": "scroll-position, transform",
+              "backface-visibility": "hidden",
+              // iOS Safari smooth scrolling optimization
+              "-webkit-overflow-scrolling": "touch",
+              "scroll-behavior": "smooth",
+              // Prevent scroll bouncing
+              "overscroll-behavior": "contain",
+              // Force GPU layer for better performance
+              contain: "layout style paint",
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}

@@ -6,7 +6,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "xterm-addon-fit";
+import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
@@ -48,13 +48,15 @@ function App() {
       minute: "2-digit",
     }),
   );
-  
+
   // Enhanced mobile keyboard state management
   const [keyboardVisible, setKeyboardVisible] = createSignal(false);
   const [keyboardHeight, setKeyboardHeight] = createSignal(0);
-  const [effectiveViewportHeight, setEffectiveViewportHeight] = createSignal(window.innerHeight);
+  const [effectiveViewportHeight, setEffectiveViewportHeight] = createSignal(
+    window.innerHeight,
+  );
   const [debugInfo, setDebugInfo] = createSignal("");
-  
+
   // Terminal information state
   const [terminalInfo, setTerminalInfo] = createSignal<{
     sessionTitle: string;
@@ -74,7 +76,7 @@ function App() {
   onMount(() => {
     // Initialize enhanced mobile utilities
     initializeMobileUtils();
-    
+
     // Time update timer
     const timer = setInterval(() => {
       setCurrentTime(
@@ -89,26 +91,26 @@ function App() {
     const unsubscribeKeyboard = MobileKeyboard.onVisibilityChange(
       (visible: boolean, keyboardInfo?: KeyboardInfo) => {
         setKeyboardVisible(visible);
-        
+
         if (keyboardInfo) {
           setKeyboardHeight(keyboardInfo.height);
           setEffectiveViewportHeight(
-            keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0)
+            keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0),
           );
-          
+
           // Enhanced debug info
           setDebugInfo(
-            `Keyboard: ${visible ? 'Visible' : 'Hidden'}, ` +
-            `Height: ${keyboardInfo.height}px, ` +
-            `Viewport: ${keyboardInfo.viewportHeight}px, ` +
-            `Effective: ${keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0)}px`
+            `Keyboard: ${visible ? "Visible" : "Hidden"}, ` +
+              `Height: ${keyboardInfo.height}px, ` +
+              `Viewport: ${keyboardInfo.viewportHeight}px, ` +
+              `Effective: ${keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0)}px`,
           );
         } else {
           setKeyboardHeight(0);
           setEffectiveViewportHeight(window.innerHeight);
           setDebugInfo("Keyboard: Hidden");
         }
-      }
+      },
     );
 
     onCleanup(() => {
@@ -234,8 +236,9 @@ function App() {
             if (termEvent.event_type === "Output") {
               terminalInstance.write(termEvent.data);
             } else if (termEvent.event_type === "End") {
-              terminalInstance.writeln("\r\n\r\n[Session Ended]");
-              handleDisconnect();
+              // INFO: 其他端退出不影响本端
+              // terminalInstance.writeln("\r\n\r\n[Session Ended]");
+              // handleDisconnect();
             } else if (termEvent.event_type === "HistoryData") {
               // 处理接收到的历史记录数据
               console.log("📜 Received session history:", termEvent.data);
@@ -329,7 +332,9 @@ function App() {
       data-theme="riterm-mobile"
       style={{
         height: keyboardVisible() ? `${effectiveViewportHeight()}px` : "100vh",
-        "max-height": keyboardVisible() ? `${effectiveViewportHeight()}px` : "100vh",
+        "max-height": keyboardVisible()
+          ? `${effectiveViewportHeight()}px`
+          : "100vh",
         "padding-top": "env(safe-area-inset-top)",
         "padding-bottom": keyboardVisible()
           ? "0px"
@@ -371,7 +376,8 @@ function App() {
         {window.location.hostname === "localhost" && (
           <div class="bg-yellow-100 text-black text-xs p-2 border-b shrink-0">
             Debug: {debugInfo()} | KB: {keyboardVisible() ? "Yes" : "No"} |
-            EffectiveVH: {effectiveViewportHeight()}px | KH: {keyboardHeight()}px
+            EffectiveVH: {effectiveViewportHeight()}px | KH: {keyboardHeight()}
+            px
           </div>
         )}
 

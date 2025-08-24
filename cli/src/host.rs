@@ -346,15 +346,11 @@ impl HostSession {
     }
 
     fn display_qr_code(&self, ticket: &str) {
-        use qrcode::QrCode;
+        use fast_qr::qr::QRBuilder;
 
-        match QrCode::new(ticket.as_bytes()) {
+        match QRBuilder::new(ticket.as_bytes()).build() {
             Ok(qr_code) => {
-                let qr_string = qr_code
-                    .render::<char>()
-                    .quiet_zone(true)
-                    .module_dimensions(2, 1)
-                    .build();
+                let qr_string = qr_code.to_str();
                 println!("🎫 Scan the QR code below to join this session:");
                 println!("\n{}\n", qr_string);
             }

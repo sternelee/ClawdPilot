@@ -21,9 +21,9 @@ futures = { workspace = true }
 rand = { workspace = true }
 data-encoding = "2.6"
 url = "2.5"
-qrcode = "0.14"
 tracing-appender.workspace = true
 bincode = { workspace = true }
 chacha20poly1305 = "0.10"
 aead = "0.5"
 reqwest = { version = "0.12", features = ["json"] }
+fast_qr = { workspace = true }
