@@ -10,6 +10,7 @@ use iroh_gossip::{
     proto::TopicId,
 };
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast, mpsc};
@@ -139,6 +140,12 @@ pub enum TerminalMessageBody {
     HistoryData {
         from: NodeId,
         session_info: SessionInfo,
+        timestamp: u64,
+    },
+    /// Terminal configuration broadcast
+    Configuration {
+        from: NodeId,
+        config_data: serde_json::Value,
         timestamp: u64,
     },
 }
@@ -522,6 +529,64 @@ impl P2PNetwork {
         Ok(())
     }
 
+    /// 发送终端配置信息给所有参与者
+    pub async fn send_terminal_configuration(
+        &self,
+        sender: &GossipSender,
+        config_data: serde_json::Value,
+        session_id: &str,
+    ) -> Result<()> {
+        debug!("Sending terminal configuration data");
+        let key = self.get_session_key(session_id).await?;
+        let body = TerminalMessageBody::Configuration {
+            from: self.endpoint.node_id(),
+            config_data,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        let message = EncryptedTerminalMessage::new(body, &key)?;
+        sender.broadcast(message.to_vec()?.into()).await?;
+        Ok(())
+    }
+
+    /// 发送终端配置信息给新加入的参与者
+    pub async fn send_terminal_config_to_new_participant(
+        &self,
+        sender: &GossipSender,
+        session_id: &str,
+    ) -> Result<()> {
+        use crate::terminal_config::TerminalConfigDetector;
+
+        debug!("Detecting and sending terminal configuration to new participant");
+
+        match TerminalConfigDetector::detect_full_config() {
+            Ok(config) => match serde_json::to_value(config) {
+                Ok(config_data) => {
+                    self.send_terminal_configuration(sender, config_data, session_id)
+                        .await?;
+                    debug!("✅ Terminal configuration sent to new participant");
+                }
+                Err(e) => {
+                    warn!("Failed to serialize terminal configuration: {}", e);
+                    return Err(anyhow::anyhow!(
+                        "Failed to serialize terminal configuration: {}",
+                        e
+                    ));
+                }
+            },
+            Err(e) => {
+                warn!("Failed to detect terminal configuration: {}", e);
+                return Err(anyhow::anyhow!(
+                    "Failed to detect terminal configuration: {}",
+                    e
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn end_session(&self, sender: &GossipSender, session_id: String) -> Result<()> {
         debug!("Ending session: {}", session_id);
 
@@ -733,6 +798,7 @@ impl P2PNetwork {
                                         Ok(Some(session_info)) => {
                                             debug!("Got history data, sending to new participant");
 
+                                            // 发送历史数据
                                             if let Err(e) = network_clone
                                                 .send_history_data(
                                                     &sender,
@@ -746,10 +812,46 @@ impl P2PNetwork {
                                                 debug!(
                                                     "✅ Successfully sent history data to new participant"
                                                 );
+
+                                                // 历史数据发送成功后，发送终端配置
+                                                if let Err(e) = network_clone
+                                                    .send_terminal_config_to_new_participant(
+                                                        &sender,
+                                                        &session_id_clone,
+                                                    )
+                                                    .await
+                                                {
+                                                    error!(
+                                                        "Failed to send terminal configuration: {}",
+                                                        e
+                                                    );
+                                                } else {
+                                                    debug!(
+                                                        "✅ Successfully sent terminal configuration to new participant"
+                                                    );
+                                                }
                                             }
                                         }
                                         Ok(None) => {
                                             debug!("No history data available to send");
+
+                                            // 即使没有历史数据，也要发送终端配置
+                                            if let Err(e) = network_clone
+                                                .send_terminal_config_to_new_participant(
+                                                    &sender,
+                                                    &session_id_clone,
+                                                )
+                                                .await
+                                            {
+                                                error!(
+                                                    "Failed to send terminal configuration: {}",
+                                                    e
+                                                );
+                                            } else {
+                                                debug!(
+                                                    "✅ Successfully sent terminal configuration to new participant"
+                                                );
+                                            }
                                         }
                                         Err(_e) => {
                                             error!("Failed to get history data");
@@ -792,6 +894,37 @@ impl P2PNetwork {
 
                     if let Err(_e) = session.event_sender.send(event) {
                         warn!("Failed to send history event to subscribers");
+                    }
+                }
+                TerminalMessageBody::Configuration {
+                    from,
+                    config_data,
+                    timestamp: _,
+                } => {
+                    debug!(
+                        "Received terminal configuration from {}: {:?}",
+                        from.fmt_short(),
+                        config_data
+                    );
+
+                    // 将配置信息转换为格式化字符串发送给订阅者
+                    if let Ok(config_str) = serde_json::to_string_pretty(&config_data) {
+                        let event = TerminalEvent {
+                            timestamp: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs() as f64,
+                            event_type: crate::terminal::EventType::Output,
+                            data: format!(
+                                "\r\n🔧 Terminal Configuration from {}\r\n{}\r\n--- End of Configuration ---\r\n",
+                                from.fmt_short(),
+                                config_str
+                            ),
+                        };
+
+                        if let Err(_e) = session.event_sender.send(event) {
+                            warn!("Failed to send configuration event to subscribers");
+                        }
                     }
                 }
             }

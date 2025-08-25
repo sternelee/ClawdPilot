@@ -102,7 +102,7 @@ impl HostSession {
             .await;
 
         info!(
-            "✅ History callback set successfully. New participants will receive session history automatically."
+            "✅ History callback set successfully. New participants will receive session history and terminal configuration automatically."
         );
 
         self.network
@@ -199,6 +199,8 @@ impl HostSession {
             }
         }
     }
+
+
 
     async fn spawn_pty_tasks(
         &self,
