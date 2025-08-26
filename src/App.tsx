@@ -4,6 +4,7 @@ import {
   onMount,
   createMemo,
   onCleanup,
+  For,
 } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -31,43 +32,60 @@ function App() {
   const [sessionTicket, setSessionTicket] = createSignal("");
   const [connecting, setConnecting] = createSignal(false);
   const [status, setStatus] = createSignal("Disconnected");
-  const [isConnected, setIsConnected] = createSignal(false);
   const [connectionError, setConnectionError] = createSignal<string | null>(
-    null,
+    null
   );
   const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
-  const [activeTicket, setActiveTicket] = createSignal<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = createSignal(false);
   const [networkStrength, setNetworkStrength] = createSignal(3);
   const [currentView, setCurrentView] = createSignal<"home" | "terminal">(
-    "home",
+    "home"
   );
+
+  // Multi-session state management
+  const [activeSessions, setActiveSessions] = createSignal<Map<string, {
+    sessionId: string;
+    ticket: string;
+    terminal: Terminal | null;
+    fitAddon: FitAddon | null;
+    unlisten: (() => void) | null;
+    terminalInfo: {
+      sessionTitle: string;
+      terminalType: string;
+      workingDirectory: string;
+    };
+  }>>(new Map());
+  const [currentSessionTicket, setCurrentSessionTicket] = createSignal<string | null>(null);
   const [currentTime, setCurrentTime] = createSignal(
     new Date().toLocaleTimeString("zh-CN", {
       hour: "2-digit",
       minute: "2-digit",
-    }),
+    })
   );
 
   // Enhanced mobile keyboard state management
   const [keyboardVisible, setKeyboardVisible] = createSignal(false);
   const [keyboardHeight, setKeyboardHeight] = createSignal(0);
   const [effectiveViewportHeight, setEffectiveViewportHeight] = createSignal(
-    window.innerHeight,
+    window.innerHeight
   );
   const [debugInfo, setDebugInfo] = createSignal("");
 
-  // Terminal information state
-  const [terminalInfo, setTerminalInfo] = createSignal<{
-    sessionTitle: string;
-    terminalType: string;
-    workingDirectory: string;
-  }>({ sessionTitle: "RiTerm", terminalType: "shell", workingDirectory: "~" });
-
-  let sessionIdRef: string | null = null;
-  let terminalInstance: Terminal | null = null;
-  let fitAddon: FitAddon | null = null;
-  let unlistenRef: (() => void) | null = null;
+  // Computed values for current session
+  const isConnected = createMemo(() => activeSessions().size > 0);
+  const activeTicket = createMemo(() => currentSessionTicket());
+  const currentSession = createMemo(() => {
+    const ticket = currentSessionTicket();
+    return ticket ? activeSessions().get(ticket) : null;
+  });
+  const terminalInfo = createMemo(() => {
+    const session = currentSession();
+    return session?.terminalInfo || {
+      sessionTitle: "RiTerm",
+      terminalType: "shell",
+      workingDirectory: "~"
+    };
+  });
 
   const { history, addHistoryEntry, updateHistoryEntry, deleteHistoryEntry } =
     createConnectionHistory();
@@ -83,7 +101,7 @@ function App() {
         new Date().toLocaleTimeString("zh-CN", {
           hour: "2-digit",
           minute: "2-digit",
-        }),
+        })
       );
     }, 1000);
 
@@ -95,7 +113,7 @@ function App() {
         if (keyboardInfo) {
           setKeyboardHeight(keyboardInfo.height);
           setEffectiveViewportHeight(
-            keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0),
+            keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0)
           );
 
           // Enhanced debug info
@@ -103,14 +121,16 @@ function App() {
             `Keyboard: ${visible ? "Visible" : "Hidden"}, ` +
             `Height: ${keyboardInfo.height}px, ` +
             `Viewport: ${keyboardInfo.viewportHeight}px, ` +
-            `Effective: ${keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0)}px`,
+            `Effective: ${keyboardInfo.viewportHeight -
+            (keyboardInfo.viewportOffsetTop || 0)
+            }px`
           );
         } else {
           setKeyboardHeight(0);
           setEffectiveViewportHeight(window.innerHeight);
           setDebugInfo("Keyboard: Hidden");
         }
-      },
+      }
     );
 
     onCleanup(() => {
@@ -131,63 +151,111 @@ function App() {
     }
   };
 
+  // Helper function to get session display info
+  const getSessionDisplayInfo = createMemo(() => {
+    const sessionCount = activeSessions().size;
+    if (sessionCount === 0) return { count: 0, status: "Disconnected" };
+    if (sessionCount === 1) return { count: 1, status: "Connected" };
+    return { count: sessionCount, status: `Connected to ${sessionCount} sessions` };
+  });
+
   onMount(() => {
     // 初始化网络
     initializeNetwork();
   });
 
   const handleTerminalReady = (term: Terminal, addon: FitAddon) => {
-    terminalInstance = term;
-    fitAddon = addon;
-    window.addEventListener("resize", () => addon.fit());
+    const ticket = currentSessionTicket();
+    if (ticket) {
+      const sessions = activeSessions();
+      const session = sessions.get(ticket);
+      if (session) {
+        session.terminal = term;
+        session.fitAddon = addon;
+        setActiveSessions(new Map(sessions));
+        window.addEventListener("resize", () => addon.fit());
+
+        // Initialize terminal with welcome message if it's a new connection
+        if (!session.terminal) {
+          term.clear();
+          term.writeln("\r\n\x1b[1;32m🚀 P2P Connection established!\x1b[0m");
+          term.focus();
+        }
+      }
+    }
   };
 
   const handleTerminalInput = (data: string) => {
-    if (isConnected() && sessionIdRef) {
+    const session = currentSession();
+    if (session?.sessionId) {
       invoke("send_terminal_input", {
-        sessionId: sessionIdRef,
+        sessionId: session.sessionId,
         input: data,
       }).catch((error) => {
         console.error("Failed to send input:", error);
-        terminalInstance?.writeln(`\r\n❌ Failed to send input: ${error}`);
+        session.terminal?.writeln(`\r\n❌ Failed to send input: ${error}`);
       });
     }
   };
 
-  const handleDisconnect = async () => {
-    if (terminalInstance) {
-      terminalInstance.writeln(
-        "\r\n\x1b[1;33m👋 Disconnected from session\x1b[0m",
-      );
-    }
+  const handleDisconnect = async (ticketToDisconnect?: string) => {
+    const ticket = ticketToDisconnect || currentSessionTicket();
+    if (!ticket) return;
 
-    const currentActiveTicket = activeTicket();
-    if (currentActiveTicket) {
-      updateHistoryEntry(currentActiveTicket, {
+    const sessions = activeSessions();
+    const session = sessions.get(ticket);
+
+    if (session) {
+      // Show disconnect message in terminal
+      if (session.terminal) {
+        session.terminal.writeln(
+          "\r\n\x1b[1;33m👋 Disconnected from session\x1b[0m"
+        );
+      }
+
+      // Update history
+      updateHistoryEntry(ticket, {
         status: "Completed",
         description: "Session ended by user.",
       });
-    }
 
-    if (sessionIdRef) {
-      try {
-        await invoke("disconnect_session", { sessionId: sessionIdRef });
-      } catch (error) {
-        console.error("Failed to disconnect:", error);
+      // Disconnect from backend
+      if (session.sessionId) {
+        try {
+          await invoke("disconnect_session", { sessionId: session.sessionId });
+        } catch (error) {
+          console.error("Failed to disconnect:", error);
+        }
+      }
+
+      // Clean up event listener
+      if (session.unlisten) {
+        session.unlisten();
+      }
+
+      // Remove session from active sessions
+      sessions.delete(ticket);
+      setActiveSessions(new Map(sessions));
+
+      // If this was the current session, switch to another or go home
+      if (currentSessionTicket() === ticket) {
+        const remainingSessions = Array.from(sessions.keys());
+        if (remainingSessions.length > 0) {
+          setCurrentSessionTicket(remainingSessions[0]);
+        } else {
+          setCurrentSessionTicket(null);
+          setCurrentView("home");
+        }
       }
     }
 
-    if (unlistenRef) {
-      unlistenRef();
-      unlistenRef = null;
+    // Update status based on remaining connections
+    if (activeSessions().size === 0) {
+      setStatus(t("connection.status.disconnected"));
+      setNetworkStrength(3);
+    } else {
+      setStatus(`Connected to ${activeSessions().size} session(s)`);
     }
-
-    setIsConnected(false);
-    sessionIdRef = null;
-    setActiveTicket(null);
-    setCurrentView("home");
-    setStatus(t("connection.status.disconnected"));
-    setNetworkStrength(3);
   };
 
   const handleConnect = async (ticketOverride?: string) => {
@@ -197,10 +265,21 @@ function App() {
       return;
     }
 
-    // If a new ticket is used, add it to history.
+    // Check if this ticket is already connected
+    const sessions = activeSessions();
+    if (sessions.has(ticket)) {
+      // Already connected to this ticket, just switch to it
+      setCurrentSessionTicket(ticket);
+      setCurrentView("terminal");
+      setConnectionError(null);
+      return;
+    }
+
+    // If a new ticket is used, add it to history
     if (!history().some((h) => h.ticket === ticket)) {
       addHistoryEntry(ticket);
     }
+
     setConnecting(true);
     setStatus(t("connection.status.connecting"));
     setConnectionError(null);
@@ -213,8 +292,8 @@ function App() {
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(
           () => reject(new Error("Connection timed out after 5 seconds")),
-          5000,
-        ),
+          5000
+        )
       );
 
       const actualSessionId = await Promise.race([
@@ -222,54 +301,66 @@ function App() {
         timeoutPromise,
       ]);
 
-      sessionIdRef = actualSessionId;
-      setActiveTicket(ticket);
-      setIsConnected(true);
-      setCurrentView("terminal");
-      updateHistoryEntry(ticket, { description: "Connection established." });
+      // Create new session entry
+      const newSession = {
+        sessionId: actualSessionId,
+        ticket: ticket,
+        terminal: null as Terminal | null,
+        fitAddon: null as FitAddon | null,
+        unlisten: null as (() => void) | null,
+        terminalInfo: {
+          sessionTitle: "RiTerm",
+          terminalType: "shell",
+          workingDirectory: "~",
+        },
+      };
 
+      // Set up event listener for this session
       const unlisten = await listen<any>(
         `terminal-event-${actualSessionId}`,
         (event) => {
           const termEvent = event.payload;
           console.log("📜 Received terminal event:", termEvent);
-          if (terminalInstance) {
+
+          const currentSessions = activeSessions();
+          const session = currentSessions.get(ticket);
+
+          if (session?.terminal) {
             if (termEvent.event_type === "Output") {
-              terminalInstance.write(termEvent.data);
+              session.terminal.write(termEvent.data);
             } else if (termEvent.event_type === "End") {
               // INFO: 其他端退出不影响本端
-              // terminalInstance.writeln("\r\n\r\n[Session Ended]");
-              // handleDisconnect();
+              // session.terminal.writeln("\r\n\r\n[Session Ended]");
+              // handleDisconnect(ticket);
             } else if (termEvent.event_type === "HistoryData") {
               // 处理接收到的历史记录数据
               console.log("📜 Received session history:", termEvent.data);
 
-              // 解析历史记录数据
               try {
                 const historyData = JSON.parse(termEvent.data);
                 const { logs, shell, cwd } = historyData;
 
                 // 更新终端信息
-                setTerminalInfo({
+                session.terminalInfo = {
                   sessionTitle: `Remote Shell`,
                   terminalType: shell || "shell",
                   workingDirectory: cwd || "~",
-                });
+                };
 
                 // 在终端中显示历史记录
-                terminalInstance.writeln(
-                  "\r\n\x1b[1;36m📜 Session History Received\x1b[0m",
+                session.terminal.writeln(
+                  "\r\n\x1b[1;36m📜 Session History Received\x1b[0m"
                 );
-                terminalInstance.writeln(`\x1b[1;33mShell:\x1b[0m ${shell}`);
-                terminalInstance.writeln(
-                  `\x1b[1;33mWorking Directory:\x1b[0m ${cwd}`,
+                session.terminal.writeln(`\x1b[1;33mShell:\x1b[0m ${shell}`);
+                session.terminal.writeln(
+                  `\x1b[1;33mWorking Directory:\x1b[0m ${cwd}`
                 );
-                terminalInstance.writeln(
-                  "\x1b[1;33m--- History Start ---\x1b[0m",
+                session.terminal.writeln(
+                  "\x1b[1;33m--- History Start ---\x1b[0m"
                 );
-                terminalInstance.write(logs);
-                terminalInstance.writeln(
-                  "\x1b[1;33m--- History End ---\x1b[0m\r\n",
+                session.terminal.write(logs);
+                session.terminal.writeln(
+                  "\x1b[1;33m--- History End ---\x1b[0m\r\n"
                 );
 
                 // 更新连接历史记录
@@ -277,28 +368,39 @@ function App() {
                   description: `Connected with history (Shell: ${shell}, CWD: ${cwd})`,
                 });
 
+                // Update sessions map
+                setActiveSessions(new Map(currentSessions));
+
                 console.log(
-                  `✅ History displayed: ${logs.length} characters, Shell: ${shell}, CWD: ${cwd}`,
+                  `✅ History displayed: ${logs.length} characters, Shell: ${shell}, CWD: ${cwd}`
                 );
               } catch (error) {
                 console.error("❌ Failed to parse history data:", error);
-                terminalInstance.writeln(
-                  "\r\n\x1b[1;31m❌ Failed to parse session history\x1b[0m\r\n",
+                session.terminal.writeln(
+                  "\r\n\x1b[1;31m❌ Failed to parse session history\x1b[0m\r\n"
                 );
               }
             }
           }
-        },
+        }
       );
 
-      unlistenRef = unlisten;
-      setStatus(t("connection.status.connected"));
+      newSession.unlisten = unlisten;
+
+      // Add session to active sessions
+      const updatedSessions = new Map(sessions);
+      updatedSessions.set(ticket, newSession);
+      setActiveSessions(updatedSessions);
+
+      // Set as current session and switch to terminal view
+      setCurrentSessionTicket(ticket);
+      setCurrentView("terminal");
+      updateHistoryEntry(ticket, { description: "Connection established." });
+
+      setStatus(`Connected to ${updatedSessions.size} session(s)`);
       setNetworkStrength(4);
-      terminalInstance?.clear();
-      terminalInstance?.writeln(
-        "\r\n\x1b[1;32m🚀 P2P Connection established!\x1b[0m",
-      );
-      terminalInstance?.focus();
+
+      console.log(`✅ Connected to session: ${ticket}`);
     } catch (error) {
       console.error("Connection failed:", error);
       setStatus(t("connection.status.failed"));
@@ -324,7 +426,7 @@ function App() {
   };
 
   const activeHistoryEntry = createMemo(() =>
-    history().find((entry) => entry.ticket === activeTicket()),
+    history().find((entry) => entry.ticket === activeTicket())
   );
 
   return (
@@ -367,9 +469,9 @@ function App() {
           onViewChange={setCurrentView}
           isConnected={isConnected()}
           networkStrength={networkStrength()}
-          status={status()}
+          status={getSessionDisplayInfo().status}
           currentTime={currentTime()}
-          onDisconnect={handleDisconnect}
+          onDisconnect={() => handleDisconnect()}
           onShowSettings={() => setIsSettingsOpen(true)}
         />
 
@@ -382,26 +484,54 @@ function App() {
         {/*   </div> */}
         {/* )} */}
 
+        {/* Session Tabs - Show when multiple sessions are active */}
+        {activeSessions().size > 1 && currentView() === "terminal" && (
+          <div class="bg-gray-800 border-b border-gray-700 px-2 py-1 flex gap-1 overflow-x-auto">
+            <For each={Array.from(activeSessions().entries())}>
+              {([ticket, session]) => (
+                <button
+                  class={`px-3 py-1 text-xs rounded-t-lg border-b-2 whitespace-nowrap flex items-center gap-2 ${currentSessionTicket() === ticket
+                    ? "bg-gray-700 border-blue-500 text-white"
+                    : "bg-gray-900 border-transparent text-gray-400 hover:text-white hover:bg-gray-800"
+                    }`}
+                  onClick={() => setCurrentSessionTicket(ticket)}
+                >
+                  <span>{session.terminalInfo.sessionTitle}</span>
+                  <button
+                    class="text-red-400 hover:text-red-300 ml-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDisconnect(ticket);
+                    }}
+                  >
+                    ×
+                  </button>
+                </button>
+              )}
+            </For>
+          </div>
+        )}
+
         {/* Main Content */}
         <div
           class="flex-1 overflow-hidden" // 改为overflow-hidden防止滚动问题
           style={{
             height: keyboardVisible()
-              ? `${effectiveViewportHeight() - 60}px` // 导航栏高度约60px
+              ? `${effectiveViewportHeight() - (activeSessions().size > 1 && currentView() === "terminal" ? 100 : 60)}px` // 导航栏高度约60px，标签栏40px
               : "auto",
             "max-height": keyboardVisible()
-              ? `${effectiveViewportHeight() - 60}px`
+              ? `${effectiveViewportHeight() - (activeSessions().size > 1 && currentView() === "terminal" ? 100 : 60)}px`
               : "none",
             transition:
               "height 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
-          {currentView() === "terminal" && isConnected() ? (
+          {currentView() === "terminal" && isConnected() && currentSession() ? (
             <EnhancedTerminalView
               onReady={handleTerminalReady}
               onInput={handleTerminalInput}
               isConnected={isConnected()}
-              onDisconnect={handleDisconnect}
+              onDisconnect={() => handleDisconnect()}
               onShowKeyboard={() => {
                 /* TODO: Implement mobile keyboard */
               }}
@@ -429,7 +559,13 @@ function App() {
               onSkipLogin={handleSkipLogin}
               isConnected={isConnected()}
               activeTicket={activeTicket()}
-              onReturnToSession={() => setCurrentView("terminal")}
+              onReturnToSession={() => {
+                if (activeSessions().size > 0) {
+                  const firstSession = Array.from(activeSessions().keys())[0];
+                  setCurrentSessionTicket(firstSession);
+                  setCurrentView("terminal");
+                }
+              }}
               onDeleteHistory={deleteHistoryEntry}
               onDisconnect={handleDisconnect}
             />
