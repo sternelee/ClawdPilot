@@ -63,15 +63,15 @@ export function MobileNavigation(props: MobileNavigationProps) {
   return (
     <>
       {/* Top Status Bar - Mobile First with Safe Area */}
-      <div class="navbar bg-base-100 border-b border-base-300 min-h-12 px-4 mobile-safe-top">
+      <div class="navbar bg-base-100 border-b border-base-300 min-h-10 px-4 mobile-safe-top">
         <div class="navbar-start">
           <div class="flex items-center space-x-2">
             <button
-              class="btn btn-ghost btn-sm px-2"
+              class="btn btn-ghost btn-sm px-2 py-1"
               onClick={() => setShowStatusPanel(!showStatusPanel())}
             >
-              <span class="text-lg">⚡</span>
-              <span class="font-bold hidden sm:inline">RiTerm</span>
+              <span class="text-lg hidden sm:inline">⚡</span>
+              <span class="font-bold">RiTerm</span>
             </button>
           </div>
         </div>
@@ -88,7 +88,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
             <ThemeSwitcher />
 
             <button
-              class={`btn btn-ghost btn-sm ${getStatusColor()}`}
+              class={`btn btn-ghost btn-sm py-1 ${getStatusColor()}`}
               onClick={() => setShowStatusPanel(!showStatusPanel())}
             >
               <span class="text-sm">{getNetworkIcon()}</span>
@@ -99,7 +99,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
 
             <Show when={props.isConnected}>
               <button
-                class="btn btn-error btn-sm px-2"
+                class="btn btn-error btn-sm px-2 py-1"
                 onClick={props.onDisconnect}
               >
                 <span class="text-xs">🔌</span>
@@ -128,11 +128,10 @@ export function MobileNavigation(props: MobileNavigationProps) {
                 <For each={[1, 2, 3, 4]}>
                   {(level) => (
                     <div
-                      class={`w-1 h-3 mx-px rounded-sm ${
-                        level <= props.networkStrength
-                          ? "bg-success"
-                          : "bg-base-300"
-                      }`}
+                      class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
+                        ? "bg-success"
+                        : "bg-base-300"
+                        }`}
                     />
                   )}
                 </For>
@@ -167,11 +166,10 @@ export function MobileNavigation(props: MobileNavigationProps) {
                     <For each={[1, 2, 3, 4]}>
                       {(level) => (
                         <div
-                          class={`w-1 h-3 mx-px rounded-sm ${
-                            level <= props.networkStrength
-                              ? "bg-success"
-                              : "bg-base-300"
-                          }`}
+                          class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
+                            ? "bg-success"
+                            : "bg-base-300"
+                            }`}
                         />
                       )}
                     </For>
