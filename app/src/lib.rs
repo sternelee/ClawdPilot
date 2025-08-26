@@ -150,6 +150,19 @@ async fn connect_to_peer(
         }
     });
 
+    // Send participant joined notification automatically after successful join
+    if let Err(e) = network
+        .send_participant_joined(&session_id, &sender)
+        .await
+    {
+        #[cfg(debug_assertions)]
+        eprintln!("Failed to send participant joined notification: {}", e);
+        // 不返回错误，因为连接已经成功，只是通知失败
+    } else {
+        #[cfg(debug_assertions)]
+        println!("Successfully sent participant joined notification for session: {}", session_id);
+    }
+
     Ok(session_id)
 }
 
@@ -226,6 +239,46 @@ async fn send_directed_message(
     {
         return Err(format!("Failed to send directed message: {}", e));
     }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_participant_joined(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    println!("send_participant_joined called for session_id: {}", session_id);
+    
+    // Clone the session sender to avoid holding the lock across await
+    let session_sender = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&session_id)
+            .map(|s| s.sender.clone())
+            .ok_or("Session not found")?
+    };
+
+    // Get network instance
+    let network = {
+        let network_guard = state.network.read().await;
+        match network_guard.as_ref() {
+            Some(n) => n.clone(),
+            None => return Err("Network not initialized".to_string()),
+        }
+    };
+
+    // Send participant joined notification
+    if let Err(e) = network
+        .send_participant_joined(&session_id, &session_sender)
+        .await
+    {
+        return Err(format!("Failed to send participant joined notification: {}", e));
+    }
+
+    #[cfg(debug_assertions)]
+    println!("Successfully sent participant joined notification for session: {}", session_id);
 
     Ok(())
 }
@@ -344,6 +397,7 @@ pub fn run() {
             connect_to_peer,
             send_terminal_input,
             send_directed_message,
+            send_participant_joined,
             execute_remote_command,
             disconnect_session,
             get_active_sessions,

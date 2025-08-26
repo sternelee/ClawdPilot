@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, Show, For } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -18,6 +18,15 @@ import {
   InputFocusManager,
 } from "../utils/mobile";
 
+interface SessionTab {
+  id: string;
+  ticket: string;
+  title: string;
+  terminalType: string;
+  workingDirectory: string;
+  isActive: boolean;
+}
+
 interface EnhancedTerminalViewProps {
   onReady: (terminal: Terminal, fitAddon: FitAddon) => void;
   onInput: (data: string) => void;
@@ -34,6 +43,12 @@ interface EnhancedTerminalViewProps {
   // 新增渲染性能选项
   preferredRenderer?: "webgl" | "canvas" | "dom";
   enablePerformanceMonitoring?: boolean;
+  // 新增多标签页支持
+  sessionTabs?: SessionTab[];
+  currentSessionId?: string;
+  onTabSwitch?: (sessionId: string) => void;
+  onTabClose?: (sessionId: string) => void;
+  enableTabSwitching?: boolean;
 }
 
 // 渲染器类型枚举
@@ -87,6 +102,9 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   const [deviceCapabilities] = createSignal(getDeviceCapabilities());
   const [terminalHeight, setTerminalHeight] = createSignal<number | null>(null);
   const [lastResizeTime, setLastResizeTime] = createSignal(0);
+  // 新增标签页相关状态
+  const [showTabSwitcher, setShowTabSwitcher] = createSignal(false);
+  const [tabKeySequence, setTabKeySequence] = createSignal("");
 
   // Enhanced mobile keyboard and input management
   const [keyboardCleanup, setKeyboardCleanup] = createSignal<
@@ -137,6 +155,11 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     // 减去固定UI元素的高度
     availableHeight -= 60; // 终端头部
 
+    // 考虑标签页高度
+    if (props.sessionTabs && props.sessionTabs.length > 1) {
+      availableHeight -= 40; // 标签页条高度
+    }
+
     if (showSearchBar()) {
       availableHeight -= 50; // 搜索栏
     }
@@ -150,6 +173,62 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     }
 
     return Math.max(availableHeight, 200); // 最小高度200px
+  };
+
+  // 标签页切换快捷键处理
+  const handleTabSwitching = (keySequence: string) => {
+    if (!props.enableTabSwitching || !props.sessionTabs || props.sessionTabs.length <= 1) {
+      return false;
+    }
+
+    const tabs = props.sessionTabs;
+    const currentIndex = tabs.findIndex(tab => tab.id === props.currentSessionId);
+    
+    if (currentIndex === -1) return false;
+
+    let newIndex = currentIndex;
+    
+    switch (keySequence) {
+      case "Ctrl+Tab":
+      case "Cmd+]":
+        // 下一个标签页
+        newIndex = (currentIndex + 1) % tabs.length;
+        break;
+      case "Ctrl+Shift+Tab":
+      case "Cmd+[":
+        // 上一个标签页
+        newIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
+        break;
+      case "Ctrl+1":
+      case "Ctrl+2":
+      case "Ctrl+3":
+      case "Ctrl+4":
+      case "Ctrl+5":
+      case "Ctrl+6":
+      case "Ctrl+7":
+      case "Ctrl+8":
+      case "Ctrl+9":
+        // 直接切换到指定标签页
+        const tabNumber = parseInt(keySequence.slice(-1));
+        if (tabNumber <= tabs.length) {
+          newIndex = tabNumber - 1;
+        }
+        break;
+      default:
+        return false;
+    }
+
+    if (newIndex !== currentIndex && newIndex >= 0 && newIndex < tabs.length) {
+      props.onTabSwitch?.(tabs[newIndex].id);
+      
+      // 显示标签页切换提示
+      setShowTabSwitcher(true);
+      setTimeout(() => setShowTabSwitcher(false), 1000);
+      
+      return true;
+    }
+    
+    return false;
   };
 
   // Optimized terminal height monitoring with better debouncing
@@ -633,6 +712,68 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         }
       });
 
+      // 添加键盘事件监听器以支持标签页切换
+      const handleKeyDown = (e: KeyboardEvent) => {
+        // 检查标签页切换快捷键
+        let keySequence = "";
+        if (e.ctrlKey && e.key === "Tab") {
+          keySequence = e.shiftKey ? "Ctrl+Shift+Tab" : "Ctrl+Tab";
+        } else if (e.metaKey && (e.key === "[" || e.key === "]")) {
+          keySequence = e.key === "[" ? "Cmd+[" : "Cmd+]";
+        } else if (e.ctrlKey && /^[1-9]$/.test(e.key)) {
+          keySequence = `Ctrl+${e.key}`;
+        }
+
+        if (keySequence && handleTabSwitching(keySequence)) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+
+        // 传统的终端快捷键处理
+        if (e.ctrlKey || e.metaKey) {
+          switch (e.key) {
+            case "=":
+            case "+":
+              e.preventDefault();
+              const newSizeUp = Math.min(fontSize() + 1, 24);
+              if (newSizeUp !== fontSize()) {
+                setFontSize(newSizeUp);
+                debugTerminal(`Font size increased to ${newSizeUp}px via keyboard`);
+              }
+              break;
+            case "-":
+              e.preventDefault();
+              const newSizeDown = Math.max(fontSize() - 1, 8);
+              if (newSizeDown !== fontSize()) {
+                setFontSize(newSizeDown);
+                debugTerminal(`Font size decreased to ${newSizeDown}px via keyboard`);
+              }
+              break;
+            case "0":
+              e.preventDefault();
+              setFontSize(14); // 重置为默认字体大小
+              debugTerminal("Font size reset to 14px via keyboard");
+              break;
+            case "f":
+              if (!e.shiftKey) {
+                e.preventDefault();
+                setShowSearchBar(!showSearchBar());
+              }
+              break;
+            case "k":
+              if (!e.shiftKey) {
+                e.preventDefault();
+                term.clear();
+              }
+              break;
+          }
+        }
+      };
+
+      // 添加全局键盘监听器
+      document.addEventListener("keydown", handleKeyDown);
+
       // 增强的缩放处理和防抖动
       let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
       const handleResize = () => {
@@ -661,6 +802,9 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
         // 停止性能监控
         stopPerformanceMonitoring();
+
+        // 移除键盘监听器
+        document.removeEventListener("keydown", handleKeyDown);
 
         // Clear resize timeout
         if (resizeTimeout) {
@@ -918,6 +1062,32 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       ]
       : []),
   ];
+
+  // 标签页切换快捷键（移动端）
+  const tabSwitchKeys = props.sessionTabs && props.sessionTabs.length > 1 ? [
+    { 
+      label: "下一个标签页", 
+      action: () => {
+        const tabs = props.sessionTabs!;
+        const currentIndex = tabs.findIndex(tab => tab.id === props.currentSessionId);
+        if (currentIndex !== -1) {
+          const nextIndex = (currentIndex + 1) % tabs.length;
+          props.onTabSwitch?.(tabs[nextIndex].id);
+        }
+      }
+    },
+    { 
+      label: "上一个标签页", 
+      action: () => {
+        const tabs = props.sessionTabs!;
+        const currentIndex = tabs.findIndex(tab => tab.id === props.currentSessionId);
+        if (currentIndex !== -1) {
+          const prevIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
+          props.onTabSwitch?.(tabs[prevIndex].id);
+        }
+      }
+    },
+  ] : [];
 
   const sendKey = (key: string) => {
     if (key) {
@@ -1316,6 +1486,67 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         </div>
       </Show>
 
+      {/* Tab Switcher Indicator - 标签页切换提示 */}
+      <Show when={showTabSwitcher() && props.sessionTabs && props.sessionTabs.length > 1}>
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-black bg-opacity-80 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          <div class="flex items-center space-x-2">
+            <span class="text-blue-400">⚙️</span>
+            <span>标签页切换</span>
+          </div>
+          <div class="text-xs opacity-75 mt-1">
+            {props.sessionTabs?.find(tab => tab.id === props.currentSessionId)?.title || "未知会话"}
+          </div>
+        </div>
+      </Show>
+
+      {/* Session Tabs - 标签页切换条 */}
+      <Show when={props.sessionTabs && props.sessionTabs.length > 1 && props.enableTabSwitching}>
+        <div class="bg-base-200 border-b border-base-300 px-2 py-1 shrink-0">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium">会话标签页</span>
+            <div class="text-xs opacity-60">
+              Ctrl+Tab 切换 | Ctrl+1-9 直接跳转
+            </div>
+          </div>
+          
+          <div class="flex space-x-1 overflow-x-auto">
+            <For each={props.sessionTabs}>
+              {(tab, index) => (
+                <EnhancedButton
+                  variant={tab.id === props.currentSessionId ? "primary" : "outline"}
+                  size="sm"
+                  onClick={() => props.onTabSwitch?.(tab.id)}
+                  class={`min-w-0 max-w-48 flex items-center space-x-2 ${
+                    tab.id === props.currentSessionId 
+                      ? "ring-2 ring-primary ring-opacity-50" 
+                      : ""
+                  }`}
+                >
+                  <div class="flex items-center space-x-2 min-w-0">
+                    <span class="text-xs opacity-60 shrink-0">{index() + 1}</span>
+                    <div class="min-w-0">
+                      <div class="text-xs font-medium truncate">{tab.title}</div>
+                      <div class="text-xs opacity-50 truncate">{tab.terminalType} | {tab.workingDirectory}</div>
+                    </div>
+                  </div>
+                  <Show when={props.sessionTabs!.length > 1}>
+                    <button
+                      class="text-red-400 hover:text-red-300 ml-1 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onTabClose?.(tab.id);
+                      }}
+                    >
+                      ×
+                    </button>
+                  </Show>
+                </EnhancedButton>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+
       {/* Terminal Container with Touch Support and Mobile Optimizations */}
       <div
         class="flex-1 relative overflow-hidden terminal-container"
@@ -1404,6 +1635,26 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
               </EnhancedButton>
             ))}
           </div>
+
+          {/* 标签页切换按钮（移动端） */}
+          <Show when={tabSwitchKeys.length > 0}>
+            <div class="mt-3 pt-3 border-t border-base-300">
+              <div class="text-xs opacity-60 mb-2">标签页切换</div>
+              <div class="grid grid-cols-2 gap-2">
+                {tabSwitchKeys.map((tabKey) => (
+                  <EnhancedButton
+                    variant="secondary"
+                    size="sm"
+                    onClick={tabKey.action}
+                    haptic
+                    class="text-xs"
+                  >
+                    {tabKey.label}
+                  </EnhancedButton>
+                ))}
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
 

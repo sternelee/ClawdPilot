@@ -28,10 +28,10 @@ async fn main() -> Result<()> {
         .with_ansi(false) // Disable ANSI colors for file output
         .with_filter(EnvFilter::new("debug")); // Log everything to file
 
-    // Create console layer with filtering - only show info and above by default
+    // Create console layer with filtering - only show warn and above by default
     let console_layer = tracing_subscriber::fmt::layer().with_filter(
         EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "info,netwatch::netmon::bsd=error".into()),
+            .unwrap_or_else(|_| "warn,iroh=error,netwatch::netmon::bsd=error".into()),
     );
 
     tracing_subscriber::registry()
