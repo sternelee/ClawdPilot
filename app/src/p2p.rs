@@ -149,8 +149,6 @@ pub enum TerminalMessageBody {
         data: String,
         timestamp: u64,
     },
-    /// Participant joined notification
-    ParticipantJoined { from: NodeId, timestamp: u64 },
     /// History data message (using SessionInfo structure like CLI)
     HistoryData {
         from: NodeId,
@@ -498,49 +496,6 @@ impl P2PNetwork {
         Ok(())
     }
 
-    pub async fn send_participant_joined(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-    ) -> Result<()> {
-        info!(
-            "📢 APP sending participant joined notification for session: {}",
-            session_id
-        );
-        let sessions = self.sessions.read().await;
-        let session = sessions.get(session_id).ok_or_else(|| {
-            anyhow::anyhow!("Session not found for participant joined: {}", session_id)
-        })?;
-
-        info!("🔑 Using encryption key for session: {}", session_id);
-        let my_node_id = self.endpoint.node_id();
-        info!(
-            "🏷️  Sending ParticipantJoined from node: {}",
-            my_node_id.fmt_short()
-        );
-
-        let body = TerminalMessageBody::ParticipantJoined {
-            from: my_node_id,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        let message_bytes = message.to_vec()?;
-        info!(
-            "📦 Created encrypted ParticipantJoined message: {} bytes",
-            message_bytes.len()
-        );
-
-        sender.broadcast(message_bytes.into()).await?;
-        info!(
-            "✅ Successfully broadcast ParticipantJoined notification from: {} for session: {}",
-            my_node_id.fmt_short(),
-            session_id
-        );
-        Ok(())
-    }
-
     async fn start_topic_listener(
         &self,
         mut receiver: GossipReceiver,
@@ -671,17 +626,6 @@ impl P2PNetwork {
                         if let Some(session) = sessions_write.get_mut(session_id) {
                             session.participants.push(from.to_string());
                             session.header = header;
-                        }
-                    }
-                    TerminalMessageBody::ParticipantJoined { from, timestamp } => {
-                        info!("Participant {} joined session", from.fmt_short());
-                        let event = TerminalEvent {
-                            timestamp: timestamp as f64,
-                            event_type: crate::terminal_events::EventType::Output,
-                            data: format!("Participant {} joined the session", from.fmt_short()),
-                        };
-                        if session.event_sender.send(event).is_err() {
-                            warn!("No active receivers for participant joined event, skipping");
                         }
                     }
                     TerminalMessageBody::HistoryData {

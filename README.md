@@ -5,29 +5,34 @@
 ## ✨ 核心功能
 
 ### 🔄 实时终端共享
+
 - 多人实时共享同一个终端会话
 - 支持所有主流 Shell（zsh, bash, fish, nushell, powershell）
 - 跨平台支持（Windows, macOS, Linux）
 
 ### 📜 智能历史记录
+
 - **自动日志记录**：所有终端输出自动保存到 `logs/{session_id}.log`
 - **历史消息发送**：新参与者加入时自动接收完整会话历史
 - **会话信息完整**：包含 Shell 类型、工作目录、完整输出历史
 - **格式化显示**：`{logs: xxx, shell: zsh, cwd: ~/project}`
 
 ### 🔐 安全 P2P 通信
+
 - 基于 iroh 的去中心化 P2P 网络
 - ChaCha20Poly1305 端到端加密
 - 无需中央服务器，支持 NAT 穿透
 - 会话票据（Session Ticket）安全分发
 
 ### 📱 多平台支持
+
 - **Web 应用**：基于 React 的现代化 Web 界面，支持响应式设计
 - **桌面应用**：基于 Tauri 的原生桌面应用，支持 Windows、macOS、Linux
 - **Android 应用**：原生 Android 应用，支持移动设备操作
 - **CLI 工具**：跨平台命令行工具，适用于服务器和自动化场景
 
 ### 🎯 易用性
+
 - 简单的命令行界面
 - QR 码分享会话票据
 - 自动 Shell 检测
@@ -90,6 +95,7 @@ npm run tauri build
 ```
 
 输出示例：
+
 ```
 🚀 Starting shared terminal session...
 📋 Session ID: 550e8400-e29b-41d4-a716-446655440000
@@ -108,6 +114,7 @@ npm run tauri build
 ```
 
 新参与者会自动接收完整的会话历史：
+
 ```
 📜 Session History (Shell: zsh, CWD: ~/project)
 $ pwd
@@ -178,18 +185,21 @@ riterm/
 ### 核心组件
 
 #### 1. P2P 网络层 (`cli/src/p2p.rs`)
+
 - **P2PNetwork**：管理 P2P 连接和消息路由
 - **EncryptedTerminalMessage**：加密消息传输
 - **SessionTicket**：会话票据生成和解析
 - **历史记录回调**：自动发送历史给新参与者
 
 #### 2. 终端管理 (`cli/src/terminal.rs`)
+
 - **TerminalRecorder**：终端会话录制和管理
 - **LogRecorder**：日志文件记录
 - **SessionInfo**：会话信息（logs, shell, cwd）
 - **TerminalPlayer**：会话回放
 
 #### 3. Shell 支持 (`cli/src/shell.rs`)
+
 - **ShellDetector**：自动检测可用 Shell
 - **ShellConfig**：各种 Shell 的配置管理
 - 支持：Zsh, Bash, Fish, Nushell, PowerShell
@@ -204,7 +214,6 @@ sequenceDiagram
 
     Host->>Network: 创建会话
     Host->>Host: 开始记录日志
-    Client->>Network: 发送 ParticipantJoined
     Network->>Host: 转发加入通知
     Host->>Host: 获取历史记录
     Host->>Network: 发送 HistoryData
@@ -300,3 +309,4 @@ cd cli && cargo test
 ---
 
 **riterm** - 让终端协作变得简单！ 🚀
+

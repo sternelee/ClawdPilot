@@ -24,6 +24,7 @@
 ```
 
 输出示例：
+
 ```
 🚀 Starting shared terminal session...
 📋 Session ID: 550e8400-e29b-41d4-a716-446655440000
@@ -90,14 +91,16 @@ Mon Jan 21 11:15:30 CST 2025
 ### 消息流程
 
 1. **参与者加入**：
-   - 新参与者发送 `ParticipantJoined` 消息
+
    - 主机接收到加入通知
 
 2. **历史记录获取**：
+
    - 主机通过回调函数获取当前会话的历史记录
    - 历史记录包括：logs、shell 类型、当前工作目录
 
 3. **历史数据发送**：
+
    - 主机发送 `HistoryData` 消息给新参与者
    - 消息经过加密传输
 
@@ -164,11 +167,13 @@ pub struct SessionInfo {
 ### 常见问题
 
 1. **历史记录未接收**：
+
    - 检查网络连接
    - 确认 ticket 正确
    - 查看日志文件是否存在
 
 2. **连接失败**：
+
    - 检查防火墙设置
    - 尝试使用自定义中继服务器：`--relay https://your-relay.com`
 
@@ -199,3 +204,4 @@ RUST_LOG=debug ./cli/target/release/cli host --shell zsh
 - 智能锁管理，避免死锁
 - 内存缓冲 + 文件持久化
 - 增量消息传输，减少网络开销
+

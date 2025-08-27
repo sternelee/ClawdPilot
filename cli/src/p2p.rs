@@ -135,8 +135,6 @@ pub enum TerminalMessageBody {
     },
     /// Session ended
     SessionEnd { from: NodeId, timestamp: u64 },
-    /// New participant joined, request history
-    ParticipantJoined { from: NodeId, timestamp: u64 },
     /// History data sent to new participant
     HistoryData {
         from: NodeId,
@@ -817,57 +815,6 @@ impl P2PNetwork {
                         from.fmt_short(),
                         session_id
                     );
-                }
-                TerminalMessageBody::ParticipantJoined { from, timestamp: _ } => {
-                    info!(
-                        "🎉 CLI Processing ParticipantJoined message: participant {} joined session {}",
-                        from.fmt_short(),
-                        session_id
-                    );
-
-                    // 如果我们是主机，自动发送完整的上下文信息
-                    if session.is_host {
-                        info!(
-                            "✅ We are the host, sending complete context to new participant {}",
-                            from.fmt_short()
-                        );
-
-                        // 获取 gossip_sender 的克隆
-                        let gossip_sender = session.gossip_sender.clone();
-                        drop(sessions_guard); // 释放锁
-
-                        if let Some(sender) = gossip_sender {
-                            let network_clone = self.clone();
-                            let session_id_clone = session_id.to_string();
-
-                            // 使用优化后的方法处理新参与者加入
-                            tokio::spawn(async move {
-                                info!(
-                                    "🚀 Starting context sync for new participant {} in session: {}",
-                                    from.fmt_short(),
-                                    session_id_clone
-                                );
-                                if let Err(e) = network_clone
-                                    .handle_new_participant_joined(&sender, &session_id_clone)
-                                    .await
-                                {
-                                    error!("❌ Failed to handle new participant joined: {}", e);
-                                } else {
-                                    info!(
-                                        "✅ Successfully sent context to new participant {}",
-                                        from.fmt_short()
-                                    );
-                                }
-                            });
-                        } else {
-                            warn!("❌ No gossip sender available for new participant context sync");
-                        }
-                    } else {
-                        info!(
-                            "ℹ️  We are not the host, so we won't send context information to {}",
-                            from.fmt_short()
-                        );
-                    }
                 }
                 TerminalMessageBody::HistoryData {
                     from,
