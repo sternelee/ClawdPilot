@@ -15,9 +15,7 @@ mkdir -p logs/
 
 # 编译项目
 echo "🔨 Building the project..."
-cd cli
-cargo build --release
-cd ..
+cargo build --release --package cli
 
 echo ""
 echo "📋 Test Plan:"
@@ -47,7 +45,7 @@ echo "   This will create a session and generate some output"
 echo "   The session ticket will be saved to ticket.txt"
 
 # 启动主机会话（在后台运行，但输出到前台）
-timeout 10s ./cli/target/release/cli host --shell bash 2>&1 | tee host_output.log &
+timeout 10s ./target/release/cli host --shell bash 2>&1 | tee host_output.log &
 HOST_PID=$!
 
 # 等待主机启动
@@ -56,7 +54,7 @@ sleep 3
 # 检查是否有ticket生成
 if [ -f "host_output.log" ]; then
     # 从输出中提取ticket
-    TICKET=$(grep "Session Ticket:" host_output.log | cut -d' ' -f3- | head -1)
+    TICKET=$(grep "Join using:" host_output.log | cut -d' ' -f3- | head -1)
     if [ -n "$TICKET" ]; then
         echo "✅ Found session ticket: $TICKET"
         echo "$TICKET" > ticket.txt
@@ -67,7 +65,7 @@ if [ -f "host_output.log" ]; then
         
         # 启动客户端会话
         echo "Starting client session to join and receive history..."
-        timeout 5s ./cli/target/release/cli join "$TICKET" 2>&1 | tee client_output.log || true
+        timeout 5s ./target/release/cli join "$TICKET" 2>&1 | tee client_output.log || true
         
         echo ""
         echo "📊 Test Results:"

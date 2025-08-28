@@ -15,7 +15,7 @@ mod ansi_filter_tests {
                 [0-9]*;[0-9]*c        | # Device Status Report response (e.g., 1;2c from vim)
                 [0-9]*;[0-9]*R        | # Cursor Position Report response
                 \?[0-9]+[hl]          | # Private mode set/reset
-                [0-9]*;?[0-9]*;?[0-9]*[ABCDEFGHJKSTfmsu] | # Other CSI sequences
+                [0-9]*;?[0-9]*;?[0-9]*[ABCDEFGHJKSTfsu] | # Other CSI sequences
                 [0-9]*[ABCDEFGHJKST]    # Simple cursor movement, etc.
             )
             |

@@ -781,6 +781,26 @@ impl P2PNetwork {
                             peer_id.fmt_short(),
                             session_id
                         );
+
+                        // If we are the host, send history to the new peer
+                        let network_clone_for_history = network_clone.clone();
+                        let session_id_for_history = session_id.clone();
+                        tokio::spawn(async move {
+                            if network_clone_for_history.is_session_host(&session_id_for_history).await {
+                                info!("New peer joined, sending session history and configuration...");
+                                let sessions = network_clone_for_history.sessions.read().await;
+                                if let Some(session) = sessions.get(&session_id_for_history) {
+                                    if let Some(sender) = &session.gossip_sender {
+                                        if let Err(e) = network_clone_for_history
+                                            .handle_new_participant_joined(sender, &session_id_for_history)
+                                            .await
+                                        {
+                                            error!("Failed to send history to new participant: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                        });
                     }
                     Some(Ok(Event::NeighborDown(peer_id))) => {
                         debug!(

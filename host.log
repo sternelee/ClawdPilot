@@ -1,0 +1,81 @@
+[2J[1;1H[38;5;12m╭─────────────────────────────────────────────╮
+│           🌐 Iroh Code Remote              │
+│      P2P Terminal Session Sharing          │
+╰─────────────────────────────────────────────╯
+[0m
+🚀 Starting shared terminal session...
+📋 Session ID: 73577d2f-2a1d-48a1-a679-3fdae0db7cc6
+🐚 Shell: Bash (bash)
+📏 Size: 80x24
+
+[2m2025-08-28T08:46:43.279503Z[0m [32m INFO[0m [2mcli::terminal_config[0m[2m:[0m Detecting full terminal configuration...
+🔧 Terminal Config: Tmux-Bash-Linux-80x24
+   Shell: Bash (/usr/bin/bash)
+   Terminal: Tmux (80x24)
+   OS: Linux (x86_64)
+
+🌐 Node ID: b21fda91395475dc3223e35b6cc37f45771c83a7d44f2f6ba72a0dd6aa4f4bdd
+📍 Node Address: NodeAddr { node_id: PublicKey(b21fda91395475dc3223e35b6cc37f45771c83a7d44f2f6ba72a0dd6aa4f4bdd), relay_url: None, direct_addresses: {172.17.0.1:38217, 192.168.0.2:38217} }
+[2m2025-08-28T08:46:43.291806Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 🚀 Creating shared session with original ID: 73577d2f-2a1d-48a1-a679-3fdae0db7cc6
+[2m2025-08-28T08:46:43.291820Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 🎯 Created topic_id: b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d with encryption key
+[2m2025-08-28T08:46:43.291830Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 📝 Using consistent session_id format: session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d (was: 73577d2f-2a1d-48a1-a679-3fdae0db7cc6)
+[2m2025-08-28T08:46:43.292558Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 📡 Successfully subscribed to gossip topic: b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d
+[2m2025-08-28T08:46:43.292576Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m ✅ Session session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d added to sessions map as host
+[2m2025-08-28T08:46:43.292614Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 🎧 Starting gossip message listener for session: session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d
+[2m2025-08-28T08:46:43.292640Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 👂 Started gossip listener for session: session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d
+[2m2025-08-28T08:46:43.293018Z[0m [32m INFO[0m [2mcli::p2p[0m[2m:[0m 📤 Sent initial SessionInfo message for session: session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d
+🔗 Using session_id: session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d (derived from topic: b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d)
+💡 Join using: CT_G9cA-MVA2xz3GBO0F_XXlggltNRSACAQuXjQtxi0m32smZnznjFHPIiPlCFhNisoMywnz4-23COGws0rdH6a-KZJ-FOmZrVe76CfcNL5gnsy_RKEexscr2n12NsABqjnCANIcR0AADzqALDiui_5OsLreUVKwiHpTRddry6phbPHefYbKNY8thtM6VBP8_1-AQ
+🔧 Ticket Compression Analysis:
+   ✅ Using compressed ticket format
+   📊 Original (decompressed): 216 bytes
+   📊 Compressed: 197 bytes
+   📊 Compression ratio: 8.8% reduction
+   🔍 Standard compression would be: 198 bytes
+   🔍 Hybrid compression achieved: 194 bytes (current method)
+   📏 Final ticket length: 197 characters
+   📱 Mobile QR compatibility: Fair (shorter is better for scanning)
+
+🎫 Scan the QR code below to join this session:
+
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+█ ▄▄▄▄▄ █▀█ ▀▄██   ███  ▀█▀  ▄█▀ ██▄█▄▄█▄▀ █▀▄██ █▄█▀▄▀█▄▀█ ▄▄▄▄▄ █
+█ █   █ █▄ ██ █ ▄▀▀  ▄  ▄  ▄▄ █▀ ▀▄██▀ ▄█▄█▄▀█▀▄▀▀ █▀█▀ ▀▄█ █   █ █
+█ █▄▄▄█ ████ ▀ ▄ ▀█▄ ▀█▄ ▄█▄▄▄█ ▄▄▄  ▀  █  ▀██▄▀█▄  ▄▀▄▀█▄█ █▄▄▄█ █
+█▄▄▄▄▄▄▄█▄▀ ▀▄▀ █▄█ █ ▀▄█▄▀▄▀ ▀ █▄█ ▀▄█ ▀▄▀▄▀ ▀ █▄▀▄█▄█ ▀ █▄▄▄▄▄▄▄█
+██  ▄▀ ▄▀▀▀█▀ ▄▀▀ █▀█ ▀▀▄▄█▄▀▀▄▄  ▄ ▄▀▀▄█▄ ▀▀█▄▄ ▀█▄▄ ▀  ▄███▀▀▄ ▀█
+█▀█ ▀▄▀▄▀ ▄▄▄▄ ▀▀▀██▄██ ▄█▄█▀ ▀▀▀▄▄█ █▀▄█▀▀█  █▀▄▄ █▄▄▄██▀▀▀█▀▄█▄▀█
+█▀▀▀██ ▄▄   ▄▀█▀█▄  ▀██ █▄▀▄ ▄█▀▀   ██▀ ▀▀██ ▀██  ▀▀▀▀▄█▄  █     ▀█
+█ █ ▀▀ ▄█▄▄  ▄█▀██▄▀▄▄  ▄ ▄▀▀▀▄▄▀█   ▄███▀▀█▄▄ ██▄▄ █ ██▀▀  █▀█▄▄▄█
+█▄███  ▄ ▀▀ ▄▄█▄  ▄██ █ ▄▄█▀  █ █▀▄█▄▄▄█ ███▄   ▀▀█▄▄▀▀███▀▀▀█ ██▀█
+██ ▀▄▀▀▄▄  ▀█▄██▀▄ ▀  ▄▄▄██ ▄ ▄▀▄▀▀▄ ▀█ ▄▄▄▀█ ▄▀▄  ██  █▀██▀█ ▀ ███
+█▄▄ ██▀▄▄ ██▄ ▀█▀██▀▀▄██▀▀▀█▄ █▀█▄ ▀▀▀▀█ ▄  █▀██▄█▀██▄▀ █▄ ▄▀▀▄ ▀▄█
+█▀ █▀  ▄██▄▄█▀▄ ▄ ▀▄▀ ▀███▀█▄ ▄▄▄▀▄▀▀▄█▄▀█ ▄  ▀▄▀▄█▄▀█▀▄▄█  ▄▀██▄ █
+█▄▄   ▀▄▀ ▄█▄█▀▄  ▀▄▄▀   ▀▀▀▀██▀▄  ▀▀   ██▄▄█▀ ▄  ▀▀▄███ ▀ ▄▄ ▄  ▀█
+█▀  █▄ ▄ ▀▄ █ ▄▄▄ █▄▀█▀ ██ ▄▀▀▄███ ▀▄▀  █▀█ ██ ▀█▀ ▀█ ██ ▄▀█▀█ █ ▄█
+██▄▄▀▄█▄█▀▄ ▄▄ ▄█▀█▄█ ▀▄▀▀█▄▄▄ ▀▄▀▄ █▀██▄█▀▄  █ █▀▄▄▄█▀█▄█▀▀ ▀▄▄▀▄█
+█ ▄▄▄ ▄▄▄ █▄█▄▀▄█▄██ ▄██▀ ▄▄▄▄▄ ▄▄▄ ▀▄ █▄▄▄▄█      █▀████ ▄▄▄ ▀▀███
+█▀▄▀█ █▄█ █▄██▀ ▄▀▄▀▀▄▄█▀█▄█▀▀▄ █▄█ ▄█  ▄  ▀▀▀▄█▀▀▀█▄▄  █ █▄█  ▄█▀█
+█ █    ▄ ▄▀█▀▄█▀ █   ▄▄█▄     ▄    ▄█▀█▄█▀█▀█ ▄▀ █▄▀▀▄▄▄█  ▄▄▄▄▄▄▀█
+██▀█▀▄▄▄▄ ▀▄█▄▀▀▄▀ ▄▀▄ ▀▀▀███▀▄▄ ▀ ██ ▀ ██▄▄▄▀▀█   ▀█▀ ████▀█▄▀▀▀▀█
+█▀▀▄▄ █▄  ▀▄▀ ▀██▄█▀█ ▄▀ ▄▀▀▄█▄ ▀ █▀▄█▄▄█▄█ ▄▄█ ▀█ ▀▀ ▄▄    ▄  ▄▀ █
+██ ▄█▀▄▄ ██▄▀█▀ ▄█ ██▀▄▄█▀▄ ▀▀▄▀▀▀█▀  ▄█ ▀███▄▀▀▀▀██ ▀▀██ ██ ▄▄▄▀██
+█▀▀▀██ ▄▀▄▄▄▄█ ▀  █▄█▄██▄▄ ▀ ▀█▀▄██▀▄ ▄ ██ ▄███  █▄▄█▀ ▀▄███▀ ▀▀ ██
+██▄▀▀ █▄ ▀█▄ ▀▄   ▄ ▀ █▀█▀   ▄█ ▀▀█▀ ▀▀█▄   ▀██▄▄█ ▄  █▀ ▄ █ ▀▀  ▄█
+█▄█ ▀█▀▄▀▀█▄  ██▀▀▄▀█▀▀▀▀▀▀▄ █▄█ ▀█▄▀ ▀ ▄▀▄█  █ ▀ ██▄█▀ █ ▄▀▀ █▄ ██
+██▀▄▀  ▄▀▄▄ ▄  ▀▀█▄█▀▄▄▄▀▄   ▀█▄█ ▄    ▀█ ▄▄▄█▀█▄  ▀▀▀▀▄▀▀██▄▄▀▀▀▄█
+█ ▄ █▄█▄▄▀▄  ▄  ▀▄▀ █▀ ▄▄  ▄▀▄ █ █▀  █▄▀ █▄▄▄█ ▄▀▀▄▀█ ▄ ▄▀  ▄ ▀▄▄▄█
+█ █▄██▀▄██▄█▄▀ ▀██▄██▀▀ ▄▄▀▄▀█▀ ▀▄▀██▀ ▄▄█ █  ▀ ▀▀█▄▄█▀█▀▄  ▀▄▄█▀ █
+█▀█▄ █▄▄  ▄ ▀ █▄ ▀▄ ▀▀▀ ▄█▄▄██▀█  ▀█▄▀▄ ▄█ ▄▄ █▄█▀▀▄▄▀█▄ █ ▀▀ ▀ █▀█
+██▄▄█▄█▄▄▀███▄ ▀▀ ▀▀█▄▀██ ▄ ▀██ ▄▄▄  ███  █ █▀▄▄ ▀█▄▄  ▀▄ ▄▄▄  ▀█▀█
+█ ▄▄▄▄▄ █▀ █▀ ▀ ▄▀ ▄█ ▄▀▀  █▀█▀ █▄█  ▄▄  █▀ ▀▄▀█▄ ▄▀▄▀▄ ▀ █▄█ ▀█▀██
+█ █   █ █▀▀▀██▄▀▀▄ ▀▀▄██▄█▀▄█▀     ▄█▄ ▀▄▀▄▄ ▀ ▄   ▀▀▀ ▄█▄  ▄▄▄ █▄█
+█ █▄▄▄█ █ ▄▀▀ ▄▄▀ ▀█  █▄ ▄█▀▄▀███▀  ▄▄ ▄█  ▀▀ ▀▀▀ ▀▀█▄▄ ██▄█▄▀▀█▀▄█
+█▄▄▄▄▄▄▄██████▄▄█▄█▄▄▄██▄▄▄█▄▄▄█▄█▄▄██▄▄▄████▄█▄████▄█▄▄███████▄▄██
+
+[2m2025-08-28T08:46:43.307077Z[0m [32m INFO[0m [2mcli::host[0m[2m:[0m Starting remote input handler for session: session_b7503bfa1b792749457c31cfce1b47068e9df00a045c5f6f84e2d47ed1d2363d
+✅ Starting terminal session. Press Ctrl+C to exit.
+[2m2025-08-28T08:46:43.307106Z[0m [32m INFO[0m [2mcli::terminal[0m[2m:[0m Starting terminal session with Bash: bash -i
+
+[?2004h]0;jules@devbox: ~[01;32mjules@devbox[00m:[01;34m~[00m$
+[?2004l[?2004h]0;jules@devbox: ~[01;32mjules@devbox[00m:[01;34m~[00m$
