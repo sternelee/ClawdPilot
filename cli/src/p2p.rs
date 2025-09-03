@@ -9,7 +9,6 @@ use iroh_gossip::{
     net::Gossip,
     proto::TopicId,
 };
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -377,25 +376,12 @@ impl P2PNetwork {
         ticket: SessionTicket,
         max_retries: u32,
     ) -> Result<(GossipSender, broadcast::Receiver<TerminalEvent>)> {
-        self.join_session_with_exponential_backoff(ticket, max_retries)
-            .await
-    }
-
-    /// Join session with exponential backoff retry strategy
-    pub async fn join_session_with_exponential_backoff(
-        &self,
-        ticket: SessionTicket,
-        max_retries: u32,
-    ) -> Result<(GossipSender, broadcast::Receiver<TerminalEvent>)> {
         debug!(
-            "Joining session with topic: {} (with exponential backoff retry)",
+            "Joining session with topic: {} (with retry)",
             ticket.topic_id
         );
 
         let mut last_error = None;
-        let mut backoff = std::time::Duration::from_millis(500); // Start with 500ms
-        const MAX_BACKOFF: std::time::Duration = std::time::Duration::from_secs(30); // Cap at 30s
-        const BACKOFF_MULTIPLIER: u32 = 2;
 
         for attempt in 1..=max_retries {
             debug!("Connection attempt {} of {}", attempt, max_retries);
@@ -410,24 +396,15 @@ impl P2PNetwork {
                     last_error = Some(e);
 
                     if attempt < max_retries {
-                        debug!("Waiting {:?} before next attempt...", backoff);
-                        tokio::time::sleep(backoff).await;
-
-                        // Exponential backoff with jitter to avoid thundering herd
-                        let jitter =
-                            std::time::Duration::from_millis(rand::rng().random_range(0..=100));
-                        backoff = std::cmp::min(backoff * BACKOFF_MULTIPLIER + jitter, MAX_BACKOFF);
+                        debug!("Waiting before next attempt...");
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                     }
                 }
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            anyhow::anyhow!(
-                "Failed to join session after {} attempts with exponential backoff",
-                max_retries
-            )
-        }))
+        Err(last_error
+            .unwrap_or_else(|| anyhow::anyhow!("Failed to join session after multiple attempts")))
     }
 
     pub async fn send_terminal_output(
