@@ -9,7 +9,6 @@ use tracing::{debug, info, warn};
 #[derive(Debug, Clone)]
 pub struct ZshConfig {
     pub zdotdir: PathBuf,
-    pub zshrc_path: PathBuf,
     pub has_oh_my_zsh: bool,
     pub oh_my_zsh_path: Option<PathBuf>,
     pub plugins: Vec<String>,
@@ -19,17 +18,14 @@ pub struct ZshConfig {
 #[derive(Debug, Clone)]
 pub struct FishConfig {
     pub config_dir: PathBuf,
-    pub config_file: PathBuf,
     pub functions_dir: Option<PathBuf>,
     pub completions_dir: Option<PathBuf>,
-    pub conf_d_dir: Option<PathBuf>,
     pub variables: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct NushellConfig {
     pub config_dir: PathBuf,
-    pub config_file: PathBuf,
     pub env_file: Option<PathBuf>,
     pub startup_commands: Vec<String>,
 }
@@ -38,7 +34,6 @@ pub struct NushellConfig {
 pub struct PowerShellConfig {
     pub profile_path: Option<PathBuf>,
     pub config_dir: Option<PathBuf>,
-    pub modules: Vec<String>,
 }
 
 impl ZshConfig {
@@ -71,7 +66,6 @@ impl ZshConfig {
 
         Some(ZshConfig {
             zdotdir,
-            zshrc_path,
             has_oh_my_zsh,
             oh_my_zsh_path,
             plugins,
@@ -197,7 +191,7 @@ impl FishConfig {
 
         let functions_dir = config_dir.join("functions");
         let completions_dir = config_dir.join("completions");
-        let conf_d_dir = config_dir.join("conf.d");
+        let _conf_d_dir = config_dir.join("conf.d");
 
         // Read fish variables if available
         let mut variables = HashMap::new();
@@ -216,7 +210,6 @@ impl FishConfig {
 
         Some(FishConfig {
             config_dir,
-            config_file,
             functions_dir: if functions_dir.exists() {
                 Some(functions_dir)
             } else {
@@ -224,11 +217,6 @@ impl FishConfig {
             },
             completions_dir: if completions_dir.exists() {
                 Some(completions_dir)
-            } else {
-                None
-            },
-            conf_d_dir: if conf_d_dir.exists() {
-                Some(conf_d_dir)
             } else {
                 None
             },
@@ -289,7 +277,6 @@ impl NushellConfig {
 
         Some(NushellConfig {
             config_dir,
-            config_file,
             env_file,
             startup_commands,
         })
@@ -342,7 +329,6 @@ impl PowerShellConfig {
         Some(PowerShellConfig {
             profile_path,
             config_dir,
-            modules: Vec::new(), // TODO: Parse modules from profile
         })
     }
 

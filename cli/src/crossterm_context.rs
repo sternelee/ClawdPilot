@@ -1,13 +1,9 @@
 use anyhow::Result;
 use crossterm::{
-    cursor,
-    event::{self, Event, KeyEvent},
-    style::{self, Color},
-    terminal::{self, size},
+    terminal::size,
 };
 use serde::{Deserialize, Serialize};
-use std::io;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Crossterm终端上下文信息
 #[derive(Debug, Clone, Serialize, Deserialize)]

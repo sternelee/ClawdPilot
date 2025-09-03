@@ -204,8 +204,6 @@ impl EncryptedTerminalMessage {
 
 #[derive(Debug)]
 pub struct SharedSession {
-    pub header: SessionHeader,
-    pub participants: Vec<String>,
     pub is_host: bool,
     pub event_sender: broadcast::Sender<TerminalEvent>,
     pub input_sender: Option<mpsc::UnboundedSender<String>>,
@@ -316,8 +314,6 @@ impl P2PNetwork {
         info!("📡 Successfully subscribed to gossip topic: {}", topic_id);
 
         let session = SharedSession {
-            header: header.clone(),
-            participants: vec![self.endpoint.node_id().to_string()],
             is_host: true,
             event_sender: event_sender.clone(),
             input_sender: Some(input_sender),
@@ -375,18 +371,6 @@ impl P2PNetwork {
 
         // Create session entry for this joined session
         let session = SharedSession {
-            header: SessionHeader {
-                version: 2,
-                width: 80,
-                height: 24,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)?
-                    .as_secs(),
-                title: None,
-                command: None,
-                session_id: session_id.clone(),
-            },
-            participants: vec![],
             is_host: false,
             event_sender: event_sender.clone(),
             input_sender: None, // Joining sessions don't need to handle input this way
