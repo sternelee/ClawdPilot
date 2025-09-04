@@ -7,6 +7,14 @@ mod shell_manager;
 mod string_compressor;
 mod terminal;
 mod terminal_config;
+mod terminal_optimized;
+mod resource_manager;
+mod network_optimizer;
+mod error_recovery;
+mod p2p_buffer_manager;
+mod p2p_terminal_session;
+mod performance_monitor;
+mod optimized_terminal_integration;
 
 use anyhow::Result;
 use clap::Parser;
