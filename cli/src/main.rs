@@ -1,9 +1,7 @@
 mod cli;
 mod host;
-mod p2p;
 mod shell;
 mod shell_manager;
-mod string_compressor;
 mod terminal;
 mod terminal_config;
 

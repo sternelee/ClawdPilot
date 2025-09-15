@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 use crate::host::HostSession;
-use riterm_shared::P2PNetwork;
 use crate::shell_manager::ShellManager;
+use riterm_shared::P2PNetwork;
 
 #[derive(Parser)]
 #[command(name = "iroh-code-remote")]

@@ -9,7 +9,6 @@ use iroh_gossip::{
     net::Gossip,
     proto::TopicId,
 };
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -18,70 +17,6 @@ use tracing::{debug, error, info, warn};
 use url::Url;
 
 use crate::string_compressor::StringCompressor;
-
-/// Filter out problematic ANSI escape sequences from terminal output
-fn filter_ansi_sequences(input: &str) -> String {
-    // Quick check for escape sequences
-    if !input.contains('\x1B') {
-        return input.to_string();
-    }
-
-    // Create regex for problematic sequences
-    let ansi_regex = Regex::new(
-        r"(?x)
-        \x1B\[                    # Start with ESC[
-        (?:
-            [0-9]*;[0-9]*c        | # Device Status Report response (e.g., 1;2c from vim)
-            [0-9]*;[0-9]*R        | # Cursor Position Report response
-            \?[0-9]+[hl]          | # Private mode set/reset
-            [0-9]*;?[0-9]*;?[0-9]*[ABCDEFGHJKSTfmsu] | # Other CSI sequences
-            [0-9]*[ABCDEFGHJKST]    # Simple cursor movement, etc.
-        )
-        |
-        \x1B\]0;[^\x07\x1B]*[\x07\x1B\\] | # Window title sequences
-        \x1B[()>][0-9AB]          | # Character set selection
-        \x1B[?0-9]*[hl]           | # Mode queries and responses
-        \x1B>[0-9]*c              | # Secondary Device Attribute responses
-        \x1B\[[>0-9;]*c            # Primary Device Attribute responses
-    ",
-    )
-    .unwrap_or_else(|_| Regex::new("").unwrap());
-
-    let mut filtered = ansi_regex.replace_all(input, "").to_string();
-
-    // Additional cleanup for vim-specific sequences
-    let vim_sequences = &[
-        "\x1B[?1000h",
-        "\x1B[?1000l", // Mouse tracking
-        "\x1B[?1002h",
-        "\x1B[?1002l", // Cell motion mouse tracking
-        "\x1B[?1006h",
-        "\x1B[?1006l", // SGR mouse mode
-        "\x1B[?2004h",
-        "\x1B[?2004l", // Bracketed paste mode
-        "\x1B[?25h",
-        "\x1B[?25l", // Show/hide cursor
-        "\x1B[?1049h",
-        "\x1B[?1049l", // Alternative buffer
-        "\x1B[?47h",
-        "\x1B[?47l", // Alternative buffer (legacy)
-        "\x1B[c",
-        "\x1B[>c",
-        "\x1B[6n", // Device queries
-    ];
-
-    for seq in vim_sequences {
-        filtered = filtered.replace(seq, "");
-    }
-
-    filtered
-}
-
-/// Check if a string contains only ANSI escape sequences (no visible content)
-fn is_only_ansi_sequences(input: &str) -> bool {
-    let filtered = filter_ansi_sequences(input);
-    filtered.trim().is_empty()
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionHeader {
@@ -756,19 +691,13 @@ impl P2PNetwork {
                     data,
                     timestamp,
                 } => {
-                    // Filter ANSI sequences before creating terminal event
-                    if !is_only_ansi_sequences(&data) {
-                        let filtered_data = filter_ansi_sequences(&data);
-                        if !filtered_data.trim().is_empty() {
-                            let event = TerminalEvent {
-                                timestamp: timestamp as f64,
-                                event_type: EventType::Output,
-                                data: filtered_data,
-                            };
-                            if session.event_sender.send(event).is_err() {
-                                warn!("No active receivers for output event, skipping");
-                            }
-                        }
+                    let event = TerminalEvent {
+                        timestamp: timestamp as f64,
+                        event_type: EventType::Output,
+                        data,
+                    };
+                    if session.event_sender.send(event).is_err() {
+                        warn!("No active receivers for output event, skipping");
                     }
                 }
                 TerminalMessageBody::Input {
@@ -892,7 +821,11 @@ impl P2PNetwork {
                                                     &sender,
                                                     session_info.shell,
                                                     session_info.cwd,
-                                                    session_info.logs.lines().map(|s| s.to_string()).collect(),
+                                                    session_info
+                                                        .logs
+                                                        .lines()
+                                                        .map(|s| s.to_string())
+                                                        .collect(),
                                                 )
                                                 .await
                                             {
@@ -1032,16 +965,6 @@ impl P2PNetwork {
         self.router.shutdown().await.map_err(Into::into)
     }
 
-    /// 优化的会话密钥获取方法，使用作用域减少锁的持有时间
-    async fn get_session_key(&self, session_id: &str) -> Result<EncryptionKey> {
-        let key = {
-            let sessions = self.sessions.read().await;
-            sessions.get(session_id).map(|s| s.key)
-        };
-
-        key.ok_or_else(|| anyhow::anyhow!("Session not found"))
-    }
-
     /// 设置历史记录获取回调函数
     pub async fn set_history_callback<F>(&self, callback: F)
     where
@@ -1051,3 +974,4 @@ impl P2PNetwork {
         *history_callback = Some(Box::new(callback));
     }
 }
+

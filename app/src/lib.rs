@@ -1,21 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use tauri::Manager;
 use tauri::{Emitter, State};
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
 
-mod crossterm_context;
-mod p2p;
-mod string_compressor;
-mod terminal_events;
-
 use iroh_gossip::api::GossipSender;
-use riterm_shared::{P2PNetwork, SessionTicket};
-use terminal_events::{EventType, TerminalEvent};
+use riterm_shared::{EventType, P2PNetwork, SessionTicket, TerminalEvent};
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
 const MAX_CONCURRENT_SESSIONS: usize = 50;
@@ -481,71 +475,6 @@ async fn start_cleanup_task(state: &State<'_, AppState>) {
     );
 }
 
-/// Clean up inactive sessions and enforce memory limits
-async fn cleanup_inactive_sessions(state: &AppState) {
-    let mut sessions_to_remove = Vec::new();
-    let now = Instant::now();
-
-    {
-        let sessions = state.sessions.read().await;
-        for (session_id, session) in sessions.iter() {
-            let last_activity = session.last_activity.read().await;
-            let inactive_duration = now.duration_since(*last_activity);
-
-            // Check for timeout
-            if inactive_duration > Duration::from_secs(SESSION_TIMEOUT_SECS) {
-                sessions_to_remove.push(session_id.clone());
-                #[cfg(debug_assertions)]
-                println!(
-                    "Session {} marked for cleanup: inactive for {:?}",
-                    session_id, inactive_duration
-                );
-                continue;
-            }
-
-            // Check for event count limit
-            let event_count = session
-                .event_count
-                .load(std::sync::atomic::Ordering::Relaxed);
-            if event_count >= MAX_EVENTS_PER_SESSION {
-                sessions_to_remove.push(session_id.clone());
-                #[cfg(debug_assertions)]
-                println!(
-                    "Session {} marked for cleanup: event limit reached ({}/{})",
-                    session_id, event_count, MAX_EVENTS_PER_SESSION
-                );
-            }
-        }
-    }
-
-    // Remove inactive sessions
-    if !sessions_to_remove.is_empty() {
-        let mut sessions = state.sessions.write().await;
-        for session_id in &sessions_to_remove {
-            if let Some(session) = sessions.remove(session_id) {
-                session.cancellation_token.cancel();
-                #[cfg(debug_assertions)]
-                println!("Cleaned up session: {}", session_id);
-            }
-        }
-    }
-
-    // Log current session statistics
-    let session_count = {
-        let sessions = state.sessions.read().await;
-        sessions.len()
-    };
-
-    #[cfg(debug_assertions)]
-    if session_count > 0 || !sessions_to_remove.is_empty() {
-        println!(
-            "Session cleanup: {} active sessions, {} removed",
-            session_count,
-            sessions_to_remove.len()
-        );
-    }
-}
-
 /// Get session statistics for monitoring
 #[tauri::command]
 async fn get_session_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
@@ -622,3 +551,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

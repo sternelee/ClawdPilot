@@ -3,10 +3,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use riterm_shared::{P2PNetwork, SessionHeader};
 use crate::shell::{ShellConfig, ShellDetector};
-use crate::terminal::{TerminalRecorder};
+use crate::terminal::TerminalRecorder;
 use crate::terminal_config::TerminalConfigDetector;
+use riterm_shared::{P2PNetwork, SessionHeader};
 
 pub struct HostSession {
     network: P2PNetwork,
@@ -105,9 +105,7 @@ impl HostSession {
             "✅ History callback set successfully. New participants will receive session history automatically."
         );
 
-        self.network
-            .end_session(&session_id, &sender)
-            .await?;
+        self.network.end_session(&session_id, &sender).await?;
 
         // Delete ticket from API if auth was used
         if let (Some(ticket), Some(auth_token)) = (&self.ticket, &self.auth_token) {
@@ -342,8 +340,8 @@ impl HostSession {
     }
 
     fn display_qr_code(&self, ticket: &str) {
-        use crate::string_compressor::StringCompressor;
         use fast_qr::qr::QRBuilder;
+        use riterm_shared::StringCompressor;
 
         // Show compression statistics
         println!("🔧 Ticket Compression Analysis:");
