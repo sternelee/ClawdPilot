@@ -33,3 +33,7 @@ hex = { workspace = true }
 regex = "1.10"
 lazy_static = "1.5"
 riterm-shared = { path = "../shared" }
+
+[features]
+default = []
+release-logging = []

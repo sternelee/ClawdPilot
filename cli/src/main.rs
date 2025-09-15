@@ -25,11 +25,16 @@ async fn main() -> Result<()> {
         .with_ansi(false) // Disable ANSI colors for file output
         .with_filter(EnvFilter::new("debug")); // Log everything to file
 
-    // Create console layer with filtering - only show info and above by default
-    let console_layer = tracing_subscriber::fmt::layer().with_filter(
-        EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "info,netwatch::netmon::bsd=error".into()),
-    );
+    // Create console layer with conditional filtering based on build profile
+    #[cfg(all(not(debug_assertions), feature = "release-logging"))]
+    let console_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "error,netwatch::netmon::bsd=error".into());
+
+    #[cfg(not(all(not(debug_assertions), feature = "release-logging")))]
+    let console_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info,netwatch::netmon::bsd=error".into());
+
+    let console_layer = tracing_subscriber::fmt::layer().with_filter(console_filter);
 
     tracing_subscriber::registry()
         .with(file_layer)

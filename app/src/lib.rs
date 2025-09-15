@@ -7,6 +7,7 @@ use tauri::Manager;
 use tauri::{Emitter, State};
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
+use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 use iroh_gossip::api::GossipSender;
 use riterm_shared::{EventType, P2PNetwork, SessionTicket, TerminalEvent};
@@ -176,8 +177,8 @@ async fn connect_to_peer(
 
                             // Check if we're approaching event limit and warn
                             if current_count > MAX_EVENTS_PER_SESSION * 9 / 10 {
-                                #[cfg(debug_assertions)]
-                                println!("Session {} approaching event limit: {}/{}",
+                                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                                tracing::warn!("Session {} approaching event limit: {}/{}",
                                     session_id_clone_events, current_count, MAX_EVENTS_PER_SESSION);
                             }
 
@@ -187,15 +188,15 @@ async fn connect_to_peer(
                             let _ = app_handle_clone.emit(&event_name, &event);
                         }
                         Err(_) => {
-                            #[cfg(debug_assertions)]
-                            println!("Event receiver closed for session: {}", session_id_clone_events);
+                            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                            tracing::info!("Event receiver closed for session: {}", session_id_clone_events);
                             break;
                         }
                     }
                 }
                 _ = cancellation_token_events.cancelled() => {
-                    #[cfg(debug_assertions)]
-                    println!("Event handling task cancelled for session: {}", session_id_clone_events);
+                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                    tracing::info!("Event handling task cancelled for session: {}", session_id_clone_events);
                     break;
                 }
             }
@@ -226,21 +227,21 @@ async fn connect_to_peer(
                                     .send_input(&session_id_clone_input, &sender_clone, event.data)
                                     .await
                                 {
-                                    #[cfg(debug_assertions)]
-                                    eprintln!("Failed to send input: {}", e);
+                                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                                    tracing::error!("Failed to send input: {}", e);
                                 }
                             }
                         }
                         None => {
-                            #[cfg(debug_assertions)]
-                            println!("Input receiver closed for session: {}", session_id_clone_input);
+                            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                            tracing::info!("Input receiver closed for session: {}", session_id_clone_input);
                             break;
                         }
                     }
                 }
                 _ = cancellation_token_input.cancelled() => {
-                    #[cfg(debug_assertions)]
-                    println!("Input handling task cancelled for session: {}", session_id_clone_input);
+                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                    tracing::info!("Input handling task cancelled for session: {}", session_id_clone_input);
                     break;
                 }
             }
@@ -256,8 +257,8 @@ async fn send_terminal_input(
     input: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    #[cfg(debug_assertions)]
-    println!(
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::debug!(
         "send_terminal_input called with session_id: {}, input: {:?}",
         session_id, input
     );
@@ -305,8 +306,8 @@ async fn send_terminal_input(
         data: input.clone(), // Clone for logging
     };
 
-    #[cfg(debug_assertions)]
-    println!("Sending event: {:?}", event);
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::debug!("Sending event: {:?}", event);
     session
         .event_sender
         .send(event)
@@ -387,8 +388,8 @@ async fn execute_remote_command(
 
 #[tauri::command]
 async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    #[cfg(debug_assertions)]
-    println!("Disconnecting session: {}", session_id);
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::info!("Disconnecting session: {}", session_id);
 
     let session = {
         let mut sessions = state.sessions.write().await;
@@ -399,8 +400,8 @@ async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> R
         // Cancel all async tasks for this session
         session.cancellation_token.cancel();
 
-        #[cfg(debug_assertions)]
-        println!("Cancelled async tasks for session: {}", session_id);
+        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+        tracing::info!("Cancelled async tasks for session: {}", session_id);
 
         let network = {
             let network_guard = state.network.read().await;
@@ -409,16 +410,16 @@ async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> R
 
         if let Some(network) = network {
             if let Err(e) = network.end_session(&session_id, &session.sender).await {
-                #[cfg(debug_assertions)]
-                eprintln!("Failed to end P2P session gracefully: {}", e);
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::error!("Failed to end P2P session gracefully: {}", e);
             }
         }
 
-        #[cfg(debug_assertions)]
-        println!("Session {} disconnected successfully", session_id);
+        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+        tracing::info!("Session {} disconnected successfully", session_id);
     } else {
-        #[cfg(debug_assertions)]
-        println!("Session {} not found during disconnect", session_id);
+        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+        tracing::info!("Session {} not found during disconnect", session_id);
     }
 
     Ok(())
@@ -468,8 +469,8 @@ async fn start_cleanup_task(state: &State<'_, AppState>) {
         *cleanup_guard = Some(token.clone());
     }
 
-    #[cfg(debug_assertions)]
-    println!(
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::info!(
         "Starting session cleanup task with interval: {}s",
         CLEANUP_INTERVAL_SECS
     );
@@ -507,8 +508,27 @@ async fn get_session_stats(state: State<'_, AppState>) -> Result<serde_json::Val
     }))
 }
 
+/// Initialize tracing with conditional log levels based on build configuration
+fn init_tracing() {
+    // Set different log levels based on build profile and features
+    #[cfg(all(not(debug_assertions), feature = "release-logging"))]
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "error".into());
+
+    #[cfg(not(all(not(debug_assertions), feature = "release-logging")))]
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "info".into());
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(filter))
+        .init();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize tracing based on build configuration
+    init_tracing();
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_http::init())
@@ -519,7 +539,7 @@ pub fn run() {
     {
         builder = builder
             // .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 let _ = app
                     .get_webview_window("main")
                     .expect("no main window")
@@ -547,7 +567,7 @@ pub fn run() {
             parse_session_ticket,
             get_session_stats
         ])
-        .setup(|app| Ok(()))
+        .setup(|_app| Ok(()))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

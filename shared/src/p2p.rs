@@ -715,12 +715,12 @@ impl P2PNetwork {
                     if session.is_host {
                         if let Some(input_sender) = &session.input_sender {
                             if input_sender.send(data).is_err() {
-                                warn!("Failed to send input to terminal");
+                                // warn!("Failed to send input to terminal");
                             }
                         }
                     }
                     if session.event_sender.send(event).is_err() {
-                        warn!("Failed to broadcast input event");
+                        // warn!("Failed to broadcast input event");
                     }
                 }
                 TerminalMessageBody::Resize {
@@ -974,4 +974,3 @@ impl P2PNetwork {
         *history_callback = Some(Box::new(callback));
     }
 }
-
