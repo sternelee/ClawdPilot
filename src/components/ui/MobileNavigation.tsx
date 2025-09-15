@@ -1,5 +1,4 @@
 import { createSignal, Show, For } from "solid-js";
-import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export interface NavigationItem {
   id: string;
@@ -84,16 +83,13 @@ export function MobileNavigation(props: MobileNavigationProps) {
 
         <div class="navbar-end">
           <div class="flex items-center space-x-2">
-            {/* Theme Switcher */}
-            <ThemeSwitcher />
-
             <button
               class={`btn btn-ghost btn-sm py-1 ${getStatusColor()}`}
               onClick={() => setShowStatusPanel(!showStatusPanel())}
             >
               <span class="text-sm">{getNetworkIcon()}</span>
               <Show when={props.isConnected}>
-                <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                <div class="w-2 h-2 bg-success rounded-full"></div>
               </Show>
             </button>
 
@@ -103,9 +99,15 @@ export function MobileNavigation(props: MobileNavigationProps) {
                 onClick={props.onDisconnect}
               >
                 <span class="text-xs">🔌</span>
-                <span class="hidden sm:inline text-xs">Disconnect</span>
               </button>
             </Show>
+
+            <button
+              class="btn btn-ghost btn-sm px-2 py-1"
+              onClick={props.onShowSettings}
+            >
+              <span class="text-xs">⚙️</span>
+            </button>
           </div>
         </div>
       </div>
@@ -141,45 +143,6 @@ export function MobileNavigation(props: MobileNavigationProps) {
         </div>
       </Show>
 
-      {/* Desktop Sidebar - Hidden on Mobile */}
-      <div class="hidden lg:flex drawer-side">
-        <label for="drawer-sidebar" class="drawer-overlay"></label>
-        <aside class="w-64 min-h-full bg-base-200">
-          <div class="p-4">
-            <div class="flex items-center justify-between mb-8">
-              <div class="flex items-center space-x-3">
-                <span class="text-2xl">⚡</span>
-                <h1 class="text-xl font-bold">RiTerm</h1>
-              </div>
-              {/* Theme Switcher for Desktop */}
-              <ThemeSwitcher />
-            </div>
-
-            <div class="mt-8 p-4 bg-base-100 rounded-lg">
-              <div class="text-sm">
-                <div class="font-medium mb-2">Status</div>
-                <div class="flex items-center justify-between">
-                  <span class={`text-xs ${getStatusColor()}`}>
-                    {props.status}
-                  </span>
-                  <div class="flex">
-                    <For each={[1, 2, 3, 4]}>
-                      {(level) => (
-                        <div
-                          class={`w-1 h-3 mx-px rounded-sm ${level <= props.networkStrength
-                            ? "bg-success"
-                            : "bg-base-300"
-                            }`}
-                        />
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-      </div>
     </>
   );
 }

@@ -1,7 +1,5 @@
 import { createSignal, Show, For } from "solid-js";
-import { TypingAnimation } from "./ui/CyberEffects";
 import { HistoryEntry } from "../hooks/useConnectionHistory";
-import { EnhancedButton, EnhancedInput } from "./ui/EnhancedComponents";
 import { getDeviceCapabilities } from "../utils/mobile";
 
 interface HomeViewProps {
@@ -109,16 +107,13 @@ export function HomeView(props: HomeViewProps) {
             </div>
 
             <div class="flex space-x-3 mt-6">
-              <EnhancedButton
-                variant="primary"
-                fullWidth
+              <button
+                class="btn btn-primary flex-1"
                 onClick={handleLogin}
                 disabled={!username().trim() || !password().trim()}
-                icon="🔑"
-                haptic
               >
-                登录
-              </EnhancedButton>
+                🔑 登录
+              </button>
             </div>
 
             <div class="text-center text-xs opacity-50 mt-4">
@@ -194,25 +189,22 @@ export function HomeView(props: HomeViewProps) {
                       </div>
                     </div>
                     <div class="flex space-x-2">
-                      <EnhancedButton
-                        variant="primary"
-                        size="sm"
+                      <button
+                        class="btn btn-primary btn-sm"
                         onClick={() => {
                           handleQuickConnect(entry.ticket);
                           setShowHistoryModal(false);
                         }}
                         disabled={props.connecting}
-                        haptic
                       >
                         连接
-                      </EnhancedButton>
-                      <EnhancedButton
-                        variant="ghost"
-                        size="sm"
+                      </button>
+                      <button
+                        class="btn btn-ghost btn-sm"
                         onClick={() => props.onDeleteHistory(entry.ticket)}
-                        icon="🗑️"
-                        haptic
-                      />
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
                 );
@@ -221,32 +213,30 @@ export function HomeView(props: HomeViewProps) {
           </div>
 
           <div class="mt-6 pt-4 border-t border-base-300">
-            <EnhancedButton
-              variant="ghost"
-              fullWidth
+            <button
+              class="btn btn-ghost w-full"
               onClick={() => setShowHistoryModal(false)}
-              icon="✖️"
             >
-              关闭
-            </EnhancedButton>
+              ✖️ 关闭
+            </button>
           </div>
         </div>
       </div>
     </Show>
   );
 
-  // 主页渲染 - 移动端优先设计
+  // 主页渲染 - 简洁设计
   const renderMainView = () => (
-    <div class="min-h-screen bg-gradient-to-br from-primary/5 to-secondary/5 flex flex-col">
+    <div class="min-h-screen bg-base-100 flex flex-col">
       {/* 主内容区域 - Logo 和 Slogan */}
       <div class="flex-1 flex flex-col items-center justify-center p-6">
         {/* Logo */}
         <div class="text-center mb-12">
-          <div class="text-8xl text-primary mb-6 animate-bounce">⚡</div>
-          <h1 class="text-5xl font-bold mb-3">
-            <TypingAnimation text="RiTerm" speed={100} />
+          <div class="text-6xl text-primary mb-6">⚡</div>
+          <h1 class="text-4xl font-bold mb-3">
+            RiTerm
           </h1>
-          <p class="text-lg opacity-70 font-mono max-w-sm">
+          <p class="text-lg text-base-content/70 max-w-sm">
             P2P 终端远程连接工具
           </p>
         </div>
@@ -255,30 +245,31 @@ export function HomeView(props: HomeViewProps) {
         <div class="w-full max-w-md mb-4">
           <div class="flex items-center space-x-2">
             <div class="flex-1">
-              <EnhancedInput
+              <input
+                type="text"
                 value={props.sessionTicket}
-                onInput={props.onTicketInput}
+                onInput={(e) => props.onTicketInput(e.currentTarget.value)}
                 placeholder="输入会话票据..."
-                icon="🎫"
-                class="text-center"
-                error={props.connectionError || undefined}
-                onEnter={() => {
-                  if (props.sessionTicket.trim()) {
+                class="input input-bordered w-full"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && props.sessionTicket.trim()) {
                     props.onConnect();
                   }
                 }}
                 autoFocus
               />
+              {props.connectionError && (
+                <div class="text-error text-sm mt-1">{props.connectionError}</div>
+              )}
             </div>
             {/* 扫码按钮 - 仅移动端显示 */}
             <Show when={isMobile}>
-              <EnhancedButton
-                variant="outline"
+              <button
+                class="btn btn-outline"
                 onClick={handleShowQRScanner}
-                icon="📷"
-                haptic
-                class="shrink-0"
-              />
+              >
+                📷
+              </button>
             </Show>
           </div>
         </div>
@@ -298,15 +289,12 @@ export function HomeView(props: HomeViewProps) {
 
         {/* 历史连接按钮 */}
         <Show when={props.history.length > 0}>
-          <EnhancedButton
-            variant="ghost"
-            fullWidth
+          <button
+            class="btn btn-ghost w-full max-w-md md:mt-4"
             onClick={() => setShowHistoryModal(true)}
-            icon="📚"
-            class="max-w-md md:mt-4"
           >
-            历史连接
-          </EnhancedButton>
+            📚 历史连接
+          </button>
         </Show>
       </div>
     </div>

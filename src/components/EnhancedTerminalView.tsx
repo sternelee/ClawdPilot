@@ -6,8 +6,6 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import {
   SwipeGesture,
-  EnhancedButton,
-  FloatingActionButton,
 } from "./ui/EnhancedComponents";
 import {
   getDeviceCapabilities,
@@ -29,6 +27,7 @@ interface EnhancedTerminalViewProps {
   keyboardVisible?: boolean;
   safeViewportHeight?: number;
   onKeyboardToggle?: (visible: boolean) => void;
+  onShowSettings?: () => void;
 }
 
 // Terminal debugging utility
@@ -107,7 +106,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     let availableHeight = baseHeight;
 
     // 减去固定UI元素的高度
-    availableHeight -= 60; // 终端头部
+    availableHeight -= 44; // 终端头部
 
     if (showSearchBar()) {
       availableHeight -= 50; // 搜索栏
@@ -591,13 +590,13 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     // 移动端额外按键
     ...(deviceCapabilities().isMobile
       ? [
-          { label: "Home", key: "\x1b[H" },
-          { label: "End", key: "\x1b[F" },
-          { label: "PgUp", key: "\x1b[5~" },
-          { label: "PgDn", key: "\x1b[6~" },
-          { label: "Ctrl+Z", key: "\x1a" },
-          { label: "Ctrl+X", key: "\x18" },
-        ]
+        { label: "Home", key: "\x1b[H" },
+        { label: "End", key: "\x1b[F" },
+        { label: "PgUp", key: "\x1b[5~" },
+        { label: "PgDn", key: "\x1b[6~" },
+        { label: "Ctrl+Z", key: "\x1a" },
+        { label: "Ctrl+X", key: "\x18" },
+      ]
       : []),
   ];
 
@@ -643,7 +642,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       class={`relative w-full h-full flex flex-col ${isFullscreen() ? "fixed inset-0 z-50 bg-black" : ""}`}
     >
       {/* Terminal Header - 显示标题和终端信息 */}
-      <div class="flex items-center justify-between p-3 bg-base-100 border-b border-base-300 shrink-0">
+      <div class="flex items-center justify-between px-3 py-2 bg-base-100 border-b border-base-300 shrink-0">
         <div class="flex items-center space-x-3">
           {/* 终端状态指示器 */}
           <div class="flex items-center space-x-2">
@@ -680,38 +679,41 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         </div>
 
         <div class="flex items-center space-x-2">
-          <EnhancedButton
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowTerminalActions(!showTerminalActions())}
-            icon="⚙️"
-          >
-            <span class="hidden sm:inline">操作</span>
-          </EnhancedButton>
-
-          <EnhancedButton
-            variant="ghost"
-            size="sm"
+          <button
+            class="btn btn-ghost btn-xs"
             onClick={() => setShowSearchBar(!showSearchBar())}
-            icon="🔍"
           >
-            <span class="hidden sm:inline">搜索</span>
-          </EnhancedButton>
+            🔍
+          </button>
 
-          <div class="text-xs opacity-70 hidden sm:block">
-            字体: {fontSize()}px
-          </div>
-
-          <EnhancedButton
-            variant="ghost"
-            size="sm"
+          <button
+            class="btn btn-ghost btn-xs"
             onClick={toggleFullscreen}
-            icon={isFullscreen() ? "🗗" : "⛶"}
           >
-            <span class="hidden sm:inline">
-              {isFullscreen() ? "退出" : "全屏"}
-            </span>
-          </EnhancedButton>
+            {isFullscreen() ? "🗗" : "⛶"}
+          </button>
+
+          <Show when={props.isConnected && props.onDisconnect}>
+            <button
+              class="btn btn-error btn-xs"
+              onClick={props.onDisconnect}
+            >
+              🔌
+            </button>
+          </Show>
+
+          <button
+            class="btn btn-ghost btn-xs"
+            onClick={() => {
+              if (props.onShowSettings) {
+                props.onShowSettings();
+              } else {
+                setShowTerminalActions(!showTerminalActions());
+              }
+            }}
+          >
+            ⚙️
+          </button>
         </div>
       </div>
 
@@ -731,122 +733,98 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
                 }
               }}
             />
-            <EnhancedButton
-              variant="primary"
-              size="sm"
+            <button
+              class="btn btn-primary btn-xs"
               onClick={() => handleSearch(searchQuery())}
-              icon="⬇️"
             >
-              Next
-            </EnhancedButton>
-            <EnhancedButton
-              variant="secondary"
-              size="sm"
+              下一个
+            </button>
+            <button
+              class="btn btn-secondary btn-xs"
               onClick={() => handleSearch(searchQuery(), "previous")}
-              icon="⬆️"
             >
-              Prev
-            </EnhancedButton>
+              上一个
+            </button>
           </div>
-          <EnhancedButton
-            variant="ghost"
-            size="sm"
+          <button
+            class="btn btn-ghost btn-xs"
             onClick={() => setShowSearchBar(false)}
-            icon="✕"
           >
-            Close
-          </EnhancedButton>
+            ✕
+          </button>
         </div>
       </Show>
 
       {/* Terminal Actions Panel */}
       <Show when={showTerminalActions()}>
         <div class="p-3 bg-base-200 border-b border-base-300">
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-            <EnhancedButton
-              variant="outline"
-              size="sm"
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            <button
+              class="btn btn-outline btn-xs"
               onClick={() => terminal()?.clear()}
-              icon="🗑️"
             >
-              Clear
-            </EnhancedButton>
+              🗑️ 清空
+            </button>
 
-            <EnhancedButton
-              variant="outline"
-              size="sm"
+            <button
+              class="btn btn-outline btn-xs"
               onClick={() => terminal()?.selectAll()}
-              icon="📋"
             >
-              Select All
-            </EnhancedButton>
+              📋 全选
+            </button>
 
-            <EnhancedButton
-              variant="outline"
-              size="sm"
+            <button
+              class="btn btn-outline btn-xs"
               onClick={() => setShowMobileKeyboard(!showMobileKeyboard())}
-              icon="⌨️"
             >
-              Keyboard
-            </EnhancedButton>
+              ⌨️ 键盘
+            </button>
 
-            <EnhancedButton
-              variant="outline"
-              size="sm"
+            <button
+              class="btn btn-outline btn-xs"
               onClick={() => {
                 const currentTerminal = terminal();
                 if (currentTerminal) {
                   currentTerminal.reset();
-                  // Also reset font size to default
                   setFontSize(14);
-                  debugTerminal("Terminal reset with default font size 14px");
                 }
               }}
-              icon="🔄"
             >
-              Reset
-            </EnhancedButton>
+              🔄 重置
+            </button>
           </div>
 
           {/* Font Size Control */}
           <div class="flex items-center justify-between">
-            <span class="text-sm">Font Size:</span>
+            <span class="text-sm">字体大小:</span>
             <div class="flex items-center space-x-2">
-              <EnhancedButton
-                variant="ghost"
-                size="xs"
+              <button
+                class="btn btn-ghost btn-xs"
                 onClick={() => {
                   const newSize = Math.max(fontSize() - 1, 8);
                   if (newSize !== fontSize()) {
                     setFontSize(newSize);
-                    debugTerminal(
-                      `Font size decreased to ${newSize}px via button`,
-                    );
                   }
                 }}
                 disabled={fontSize() <= 8}
               >
                 A-
-              </EnhancedButton>
+              </button>
               <span class="text-sm w-12 text-center font-mono bg-base-300 px-2 py-1 rounded">
                 {fontSize()}px
               </span>
-              <EnhancedButton
-                variant="ghost"
-                size="xs"
+              <button
+                class="btn btn-ghost btn-xs"
                 onClick={() => {
                   const newSize = Math.min(fontSize() + 1, 24);
                   if (newSize !== fontSize()) {
                     setFontSize(newSize);
-                    debugTerminal(
-                      `Font size increased to ${newSize}px via button`,
-                    );
                   }
                 }}
                 disabled={fontSize() >= 24}
               >
                 A+
-              </EnhancedButton>
+              </button>
             </div>
           </div>
         </div>
@@ -916,48 +894,43 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
           }}
         >
           <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-medium">Terminal Keys</span>
-            <EnhancedButton
-              variant="ghost"
-              size="xs"
+            <span class="text-sm font-medium">终端按键</span>
+            <button
+              class="btn btn-ghost btn-xs"
               onClick={() => setShowMobileKeyboard(false)}
-              icon="✕"
             >
-              Close
-            </EnhancedButton>
+              ✕
+            </button>
           </div>
 
           <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
             {commonKeys.map((keyDef) => (
-              <EnhancedButton
-                variant="outline"
-                size="sm"
+              <button
+                class="btn btn-outline btn-xs text-xs"
                 onClick={() => sendKey(keyDef.key)}
-                haptic
-                class={`text-xs ${deviceCapabilities().isMobile ? "min-h-[40px]" : ""}`}
               >
                 {keyDef.label}
-              </EnhancedButton>
+              </button>
             ))}
           </div>
         </div>
       </Show>
 
-      {/* Floating Action Buttons */}
+      {/* Floating Action Button */}
       <Show
         when={
           !showMobileKeyboard() && !isFullscreen() && !props.keyboardVisible
         }
       >
-        <FloatingActionButton
-          icon="⌨️"
+        <button
+          class="btn btn-primary btn-circle fixed bottom-4 right-4 z-40"
           onClick={() => {
             setShowMobileKeyboard(true);
             props.onKeyboardToggle?.(true);
           }}
-          position="bottom-right"
-          variant="primary"
-        />
+        >
+          ⌨️
+        </button>
       </Show>
     </div>
   );

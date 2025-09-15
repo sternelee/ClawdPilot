@@ -17,7 +17,6 @@ import {
 import { EnhancedTerminalView } from "./components/EnhancedTerminalView";
 import { SettingsModal } from "./components/SettingsModal";
 import { HomeView } from "./components/HomeView";
-import { MobileNavigation } from "./components/ui/MobileNavigation";
 import { P2PBackground } from "./components/P2PBackground";
 import { t } from "./stores/settingsStore";
 import {
@@ -190,6 +189,29 @@ function App() {
     setNetworkStrength(3);
   };
 
+  // 处理会话清理
+  const cleanupSession = async () => {
+    if (sessionIdRef) {
+      try {
+        await invoke("disconnect_session", { sessionId: sessionIdRef });
+      } catch (error) {
+        console.error("Failed to disconnect session during cleanup:", error);
+      }
+      sessionIdRef = null;
+    }
+
+    if (unlistenRef) {
+      unlistenRef();
+      unlistenRef = null;
+    }
+
+    setIsConnected(false);
+    setActiveTicket(null);
+    setCurrentView("home");
+    setStatus(t("connection.status.disconnected"));
+    setNetworkStrength(3);
+  };
+
   const handleConnect = async (ticketOverride?: string) => {
     const ticket = (ticketOverride || sessionTicket()).trim();
     if (!ticket) {
@@ -300,12 +322,15 @@ function App() {
       terminalInstance?.focus();
     } catch (error) {
       console.error("Connection failed:", error);
+      const errorMessage = String(error);
+
+      // 其他错误正常处理
       setStatus(t("connection.status.failed"));
       updateHistoryEntry(ticket, {
         status: "Failed",
-        description: String(error),
+        description: errorMessage,
       });
-      setConnectionError(String(error));
+      setConnectionError(errorMessage);
       setNetworkStrength(1);
     } finally {
       setConnecting(false);
@@ -339,9 +364,7 @@ function App() {
         "padding-bottom": keyboardVisible()
           ? "0px"
           : "env(safe-area-inset-bottom)",
-        transition:
-          "height 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-        overflow: "hidden", // 防止滚动
+        overflow: "hidden",
         position: "relative",
       }}
     >
@@ -356,21 +379,8 @@ function App() {
           "max-height": keyboardVisible()
             ? `${effectiveViewportHeight()}px`
             : "100%",
-          transition:
-            "height 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
-        {/* Mobile Navigation */}
-        <MobileNavigation
-          currentView={currentView()}
-          onViewChange={setCurrentView}
-          isConnected={isConnected()}
-          networkStrength={networkStrength()}
-          status={status()}
-          currentTime={currentTime()}
-          onDisconnect={handleDisconnect}
-          onShowSettings={() => setIsSettingsOpen(true)}
-        />
 
         {/* Debug Info - 开发时显示 */}
         {/* {window.location.hostname === "localhost" && ( */}
@@ -383,16 +393,14 @@ function App() {
 
         {/* Main Content */}
         <div
-          class="flex-1 overflow-hidden" // 改为overflow-hidden防止滚动问题
+          class="flex-1 overflow-hidden"
           style={{
             height: keyboardVisible()
-              ? `${effectiveViewportHeight() - 60}px` // 导航栏高度约60px
+              ? `${effectiveViewportHeight() - 48}px` // 终端头部高度约48px
               : "auto",
             "max-height": keyboardVisible()
-              ? `${effectiveViewportHeight() - 60}px`
+              ? `${effectiveViewportHeight() - 48}px`
               : "none",
-            transition:
-              "height 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
           {currentView() === "terminal" && isConnected() ? (
@@ -413,6 +421,7 @@ function App() {
                 // 处理内部移动键盘状态变化
                 console.log("Terminal internal keyboard toggled:", visible);
               }}
+              onShowSettings={() => setIsSettingsOpen(true)}
             />
           ) : (
             <HomeView

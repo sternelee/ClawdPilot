@@ -197,45 +197,14 @@ export function ModernToggle(props: {
 // 简单的背景组件
 export function SubtleBackground() {
   return (
-    <div class="fixed inset-0 pointer-events-none z-0 bg-gradient-to-br from-base-100 to-base-200" />
+    <div class="fixed inset-0 pointer-events-none z-0 bg-base-100" />
   );
 }
 
-// 打字动画组件
-export function TypingAnimation(props: {
-  text: string;
-  speed?: number;
-  onComplete?: () => void;
-  class?: string;
-}) {
-  const [displayText, setDisplayText] = createSignal('');
-  const [isComplete, setIsComplete] = createSignal(false);
-
-  onMount(() => {
-    const speed = props.speed || 80;
-    let index = 0;
-    
-    const typeInterval = setInterval(() => {
-      if (index < props.text.length) {
-        setDisplayText(props.text.slice(0, index + 1));
-        index++;
-      } else {
-        clearInterval(typeInterval);
-        setIsComplete(true);
-        props.onComplete?.();
-      }
-    }, speed);
-
-    onCleanup(() => clearInterval(typeInterval));
-  });
-
+// 简化的背景组件
+export function SubtleBackground() {
   return (
-    <span class={`font-mono ${props.class || ''}`}>
-      {displayText()}
-      {!isComplete() && (
-        <span class="animate-pulse">|</span>
-      )}
-    </span>
+    <div class="fixed inset-0 pointer-events-none z-0 bg-base-100" />
   );
 }
 

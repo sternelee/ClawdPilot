@@ -124,9 +124,39 @@ async fn connect_to_peer(
             ));
         }
 
-        // Check if session already exists
+        // Check if session already exists and clean it up
         if sessions.contains_key(&session_id) {
-            return Err("Session already exists. Please disconnect first.".to_string());
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::info!(
+                "Session {} already exists, cleaning up and reconnecting...",
+                session_id
+            );
+            // Remove the existing session to allow reconnection
+            drop(sessions); // Drop the read lock before acquiring write lock
+            let mut sessions = state.sessions.write().await;
+            if let Some(existing_session) = sessions.remove(&session_id) {
+                // Cancel all async tasks for the existing session
+                existing_session.cancellation_token.cancel();
+
+                // End the P2P session
+                if let Some(network) = &*state.network.read().await {
+                    if let Err(e) = network
+                        .end_session(&session_id, &existing_session.sender)
+                        .await
+                    {
+                        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                        tracing::error!("Failed to end existing P2P session: {}", e);
+                    }
+                }
+
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::info!("Cleaned up existing session: {}", session_id);
+            }
+            // Release write lock before continuing
+            drop(sessions);
+
+            // Wait a moment to ensure cleanup is complete
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
 
@@ -260,7 +290,8 @@ async fn send_terminal_input(
     #[cfg(any(debug_assertions, not(feature = "release-logging")))]
     tracing::debug!(
         "send_terminal_input called with session_id: {}, input: {:?}",
-        session_id, input
+        session_id,
+        input
     );
 
     // Update activity and check session limits
@@ -512,12 +543,10 @@ async fn get_session_stats(state: State<'_, AppState>) -> Result<serde_json::Val
 fn init_tracing() {
     // Set different log levels based on build profile and features
     #[cfg(all(not(debug_assertions), feature = "release-logging"))]
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "error".into());
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "error".into());
 
     #[cfg(not(all(not(debug_assertions), feature = "release-logging")))]
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "info".into());
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(filter))

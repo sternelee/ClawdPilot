@@ -749,7 +749,7 @@ impl TerminalRecorder {
                         }
                     } => {
                         if let Some(input_data) = remote_data {
-                            info!("Terminal received remote input in PTY writer task: {:?}", input_data);
+                            // info!("Terminal received remote input in PTY writer task: {:?}", input_data);
                             if let Err(e) = writer.write(input_data.as_bytes()) {
                                 error!("Failed to write remote input to PTY: {}", e);
                                 break;
@@ -758,7 +758,7 @@ impl TerminalRecorder {
                                 error!("Failed to flush remote input to PTY: {}", e);
                                 break;
                             }
-                            info!("Successfully wrote remote input to PTY");
+                            // info!("Successfully wrote remote input to PTY");
 
                             // Record the input event but don't send it back to network
                             // to avoid infinite loop

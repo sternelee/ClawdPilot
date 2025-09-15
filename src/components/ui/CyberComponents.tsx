@@ -1,25 +1,17 @@
-import { JSX, children, createSignal } from 'solid-js';
+import { JSX } from 'solid-js';
 
-// Terminal Button Component
-export interface CyberButtonProps {
+// 简化的按钮组件
+export interface SimpleButtonProps {
   variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'error' | 'warning';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   disabled?: boolean;
-  glow?: boolean;
   onClick?: () => void;
   class?: string;
   children: JSX.Element;
 }
 
-export function CyberButton(props: CyberButtonProps) {
-  const [isPressed, setIsPressed] = createSignal(false);
-  
-  const handleMouseDown = () => setIsPressed(true);
-  const handleMouseUp = () => setIsPressed(false);
-  const handleMouseLeave = () => setIsPressed(false);
-  
-  const baseClasses = 'btn btn-cyber font-mono relative overflow-hidden transition-all duration-300';
+export function SimpleButton(props: SimpleButtonProps) {
   const variantClasses = {
     primary: 'btn-primary',
     secondary: 'btn-secondary', 
@@ -29,36 +21,26 @@ export function CyberButton(props: CyberButtonProps) {
     warning: 'btn-warning'
   };
   
-  const sizeClasses = {
-    sm: 'btn-sm px-3 py-1 text-xs',
-    md: 'btn-md px-4 py-2 text-sm', 
-    lg: 'btn-lg px-6 py-3 text-base'
-  };
-  
-  const glowClass = props.glow ? 'animate-glow-pulse' : '';
-  const pressedClass = isPressed() ? 'scale-95 brightness-110' : '';
-  
   return (
     <button
-      class={`${baseClasses} ${variantClasses[props.variant || 'primary']} ${sizeClasses[props.size || 'md']} ${glowClass} ${pressedClass} ${props.class || ''}`}
+      class={`btn btn-${props.size || 'md'} ${variantClasses[props.variant || 'primary']} ${props.class || ''}`}
       classList={{
         'loading': props.loading,
         'btn-disabled': props.disabled
       }}
       disabled={props.disabled || props.loading}
       onClick={props.onClick}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseLeave}
     >
-      {props.loading && <span class="loading loading-spinner loading-sm mr-2"></span>}
       {props.children}
     </button>
   );
 }
 
-// Terminal Input Component
-export interface CyberInputProps {
+// 兼容性别名
+export const CyberButton = SimpleButton;
+
+// 简化的输入框组件
+export interface SimpleInputProps {
   type?: 'text' | 'password' | 'email' | 'url';
   placeholder?: string;
   value?: string;
@@ -66,97 +48,61 @@ export interface CyberInputProps {
   disabled?: boolean;
   error?: string;
   success?: string;
-  prefix?: JSX.Element;
-  suffix?: JSX.Element;
-  glow?: boolean;
   class?: string;
 }
 
-export function CyberInput(props: CyberInputProps) {
-  const [focused, setFocused] = createSignal(false);
-  
-  const baseClasses = 'input input-cyber w-full font-mono transition-all duration-300';
-  const glowClass = props.glow ? 'terminal-glow' : '';
-  const focusClass = focused() ? 'ring-2 ring-current ring-opacity-50' : '';
-  const errorClass = props.error ? 'border-error text-error' : '';
-  const successClass = props.success ? 'border-success text-success' : '';
-  
+export function SimpleInput(props: SimpleInputProps) {
   return (
     <div class="form-control w-full">
-      <div class="relative">
-        {props.prefix && (
-          <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-current opacity-70">
-            {props.prefix}
-          </div>
-        )}
-        <input
-          type={props.type || 'text'}
-          placeholder={props.placeholder}
-          value={props.value || ''}
-          onInput={(e) => props.onInput?.(e.currentTarget.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          disabled={props.disabled}
-          class={`${baseClasses} ${glowClass} ${focusClass} ${errorClass} ${successClass} ${props.class || ''} ${props.prefix ? 'pl-10' : ''} ${props.suffix ? 'pr-10' : ''}`}
-        />
-        {props.suffix && (
-          <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-current opacity-70">
-            {props.suffix}
-          </div>
-        )}
-      </div>
+      <input
+        type={props.type || 'text'}
+        placeholder={props.placeholder}
+        value={props.value || ''}
+        onInput={(e) => props.onInput?.(e.currentTarget.value)}
+        disabled={props.disabled}
+        class={`input input-bordered w-full ${props.class || ''}`}
+      />
       {props.error && (
         <label class="label">
-          <span class="label-text-alt text-error font-mono">⚠ {props.error}</span>
+          <span class="label-text-alt text-error">{props.error}</span>
         </label>
       )}
       {props.success && (
         <label class="label">
-          <span class="label-text-alt text-success font-mono">✓ {props.success}</span>
+          <span class="label-text-alt text-success">{props.success}</span>
         </label>
       )}
     </div>
   );
 }
 
-// Terminal Card Component  
-export interface CyberCardProps {
+// 兼容性别名
+export const CyberInput = SimpleInput;
+
+// 简化的卡片组件  
+export interface SimpleCardProps {
   title?: string;
   subtitle?: string;
   children: JSX.Element;
   actions?: JSX.Element;
-  glow?: boolean;
-  scan?: boolean;
   class?: string;
 }
 
-export function CyberCard(props: CyberCardProps) {
-  const baseClasses = 'card card-cyber font-mono';
-  const glowClass = props.glow ? 'animate-glow-pulse' : '';
-  const scanClass = props.scan ? 'progressive-scan' : '';
-  
+export function SimpleCard(props: SimpleCardProps) {
   return (
-    <div class={`${baseClasses} ${glowClass} ${scanClass} ${props.class || ''}`}>
+    <div class={`card bg-base-100 shadow-md ${props.class || ''}`}>
       <div class="card-body">
-        {(props.title || props.subtitle) && (
-          <div class="card-title-section mb-4">
-            {props.title && (
-              <h2 class="card-title text-current font-mono text-lg terminal-glow">
-                {props.title}
-              </h2>
-            )}
-            {props.subtitle && (
-              <p class="text-current opacity-70 text-sm font-mono">
-                {props.subtitle}
-              </p>
-            )}
-          </div>
+        {props.title && (
+          <h2 class="card-title">{props.title}</h2>
         )}
-        <div class="card-content">
+        {props.subtitle && (
+          <p class="text-sm text-base-content opacity-70">{props.subtitle}</p>
+        )}
+        <div class="mt-4">
           {props.children}
         </div>
         {props.actions && (
-          <div class="card-actions justify-end mt-4 pt-4 border-t border-current border-opacity-20">
+          <div class="card-actions justify-end mt-4">
             {props.actions}
           </div>
         )}
@@ -165,31 +111,32 @@ export function CyberCard(props: CyberCardProps) {
   );
 }
 
-// Terminal Select Component
-export interface CyberSelectProps {
+// 兼容性别名
+export const CyberCard = SimpleCard;
+
+// 简化的选择框组件
+export interface SimpleSelectProps {
   options: { value: string; label: string }[];
   value?: string;
   placeholder?: string;
-  onSelect?: (value: string) => void;
+  onChange?: (value: string) => void;
   disabled?: boolean;
   class?: string;
 }
 
-export function CyberSelect(props: CyberSelectProps) {
-  const baseClasses = 'select select-bordered w-full font-mono bg-transparent border-current';
-  
+export function SimpleSelect(props: SimpleSelectProps) {
   return (
     <select
-      class={`${baseClasses} ${props.class || ''}`}
+      class={`select select-bordered w-full ${props.class || ''}`}
       value={props.value || ''}
-      onChange={(e) => props.onSelect?.(e.currentTarget.value)}
+      onChange={(e) => props.onChange?.(e.currentTarget.value)}
       disabled={props.disabled}
     >
       {props.placeholder && (
         <option disabled value="">{props.placeholder}</option>
       )}
       {props.options.map(option => (
-        <option value={option.value} class="bg-base-100">
+        <option value={option.value}>
           {option.label}
         </option>
       ))}
@@ -197,37 +144,30 @@ export function CyberSelect(props: CyberSelectProps) {
   );
 }
 
-// Terminal Toggle Component
-export interface CyberToggleProps {
+// 兼容性别名
+export const CyberSelect = SimpleSelect;
+
+// 简化的切换组件
+export interface SimpleToggleProps {
   checked?: boolean;
-  onToggle?: (checked: boolean) => void;
+  onChange?: (checked: boolean) => void;
   disabled?: boolean;
   label?: string;
-  description?: string;
   class?: string;
 }
 
-export function CyberToggle(props: CyberToggleProps) {
-  const baseClasses = 'toggle toggle-primary';
-  
+export function SimpleToggle(props: SimpleToggleProps) {
   return (
     <div class={`form-control ${props.class || ''}`}>
       <label class="label cursor-pointer">
-        <div class="flex-1">
-          {props.label && (
-            <span class="label-text font-mono text-current">{props.label}</span>
-          )}
-          {props.description && (
-            <div class="text-xs font-mono text-current opacity-70 mt-1">
-              {props.description}
-            </div>
-          )}
-        </div>
+        {props.label && (
+          <span class="label-text">{props.label}</span>
+        )}
         <input
           type="checkbox"
-          class={baseClasses}
+          class="toggle toggle-primary"
           checked={props.checked || false}
-          onChange={(e) => props.onToggle?.(e.currentTarget.checked)}
+          onChange={(e) => props.onChange?.(e.currentTarget.checked)}
           disabled={props.disabled}
         />
       </label>
@@ -235,17 +175,18 @@ export function CyberToggle(props: CyberToggleProps) {
   );
 }
 
-// Terminal Progress Bar
-export interface CyberProgressProps {
+// 兼容性别名
+export const CyberToggle = SimpleToggle;
+
+// 简化的进度条组件
+export interface SimpleProgressProps {
   value: number; // 0-100
   label?: string;
   color?: 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'error';
-  animated?: boolean;
   class?: string;
 }
 
-export function CyberProgress(props: CyberProgressProps) {
-  const baseClasses = 'progress font-mono';
+export function SimpleProgress(props: SimpleProgressProps) {
   const colorClasses = {
     primary: 'progress-primary',
     secondary: 'progress-secondary',
@@ -256,18 +197,17 @@ export function CyberProgress(props: CyberProgressProps) {
   };
   
   const colorClass = colorClasses[props.color || 'primary'];
-  const animatedClass = props.animated ? 'animate-pulse' : '';
   
   return (
     <div class={props.class}>
       {props.label && (
-        <div class="flex justify-between text-sm font-mono mb-1">
+        <div class="flex justify-between text-sm mb-1">
           <span>{props.label}</span>
           <span>{props.value}%</span>
         </div>
       )}
       <progress 
-        class={`${baseClasses} ${colorClass} ${animatedClass} w-full terminal-glow`}
+        class={`progress w-full ${colorClass}`}
         value={props.value} 
         max="100"
       />
@@ -275,61 +215,35 @@ export function CyberProgress(props: CyberProgressProps) {
   );
 }
 
-// Terminal Alert/Notification
-export interface CyberAlertProps {
+// 兼容性别名
+export const CyberProgress = SimpleProgress;
+
+// 简化的警告组件
+export interface SimpleAlertProps {
   type: 'info' | 'success' | 'warning' | 'error';
-  title?: string;
   message: string;
-  dismissible?: boolean;
-  onDismiss?: () => void;
   class?: string;
 }
 
-export function CyberAlert(props: CyberAlertProps) {
-  const baseClasses = 'alert font-mono border-current terminal-glow';
-  const typeClasses = {
-    info: 'alert-info',
-    success: 'alert-success', 
-    warning: 'alert-warning',
-    error: 'alert-error'
-  };
-  
-  const icons = {
-    info: '🛈',
-    success: '✓',
-    warning: '⚠',
-    error: '✗'
-  };
-  
+export function SimpleAlert(props: SimpleAlertProps) {
   return (
-    <div class={`${baseClasses} ${typeClasses[props.type]} ${props.class || ''}`}>
-      <span class="text-xl">{icons[props.type]}</span>
-      <div class="flex-1">
-        {props.title && (
-          <div class="font-bold">{props.title}</div>
-        )}
-        <div class="text-sm">{props.message}</div>
-      </div>
-      {props.dismissible && (
-        <button 
-          class="btn btn-ghost btn-sm"
-          onClick={props.onDismiss}
-        >
-          ✕
-        </button>
-      )}
+    <div class={`alert alert-${props.type} ${props.class || ''}`}>
+      <span>{props.message}</span>
     </div>
   );
 }
 
-// Terminal Loading Spinner
-export interface CyberSpinnerProps {
+// 兼容性别名
+export const CyberAlert = SimpleAlert;
+
+// 简化的加载组件
+export interface SimpleSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
   label?: string;
   class?: string;
 }
 
-export function CyberSpinner(props: CyberSpinnerProps) {
+export function SimpleSpinner(props: SimpleSpinnerProps) {
   const sizeClasses = {
     sm: 'loading-sm',
     md: 'loading-md',
@@ -342,14 +256,17 @@ export function CyberSpinner(props: CyberSpinnerProps) {
     <div class={`flex items-center gap-3 ${props.class || ''}`}>
       <span class={`loading loading-spinner ${sizeClass} text-primary`}></span>
       {props.label && (
-        <span class="font-mono text-current">{props.label}</span>
+        <span>{props.label}</span>
       )}
     </div>
   );
 }
 
-// Terminal Modal/Dialog
-export interface CyberModalProps {
+// 兼容性别名
+export const CyberSpinner = SimpleSpinner;
+
+// 简化的模态框组件
+export interface SimpleModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
@@ -359,7 +276,7 @@ export interface CyberModalProps {
   class?: string;
 }
 
-export function CyberModal(props: CyberModalProps) {
+export function SimpleModal(props: SimpleModalProps) {
   const sizeClasses = {
     sm: 'max-w-sm',
     md: 'max-w-md',
@@ -376,10 +293,10 @@ export function CyberModal(props: CyberModalProps) {
         }
       }}
     >
-      <div class={`modal-box card-cyber ${sizeClasses[props.size || 'md']} ${props.class || ''}`}>
+      <div class={`modal-box ${sizeClasses[props.size || 'md']} ${props.class || ''}`}>
         <div class="flex items-center justify-between mb-4">
           {props.title && (
-            <h3 class="font-bold text-lg font-mono terminal-glow">
+            <h3 class="font-bold text-lg">
               {props.title}
             </h3>
           )}
@@ -391,7 +308,7 @@ export function CyberModal(props: CyberModalProps) {
           </button>
         </div>
         
-        <div class="modal-content">
+        <div class="modal-content py-4">
           {props.children}
         </div>
         
@@ -404,3 +321,6 @@ export function CyberModal(props: CyberModalProps) {
     </div>
   );
 }
+
+// 兼容性别名
+export const CyberModal = SimpleModal;
