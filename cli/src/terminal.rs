@@ -18,6 +18,12 @@ const MAX_EVENTS_BUFFER: usize = 10000;
 /// When buffer is full, remove this many oldest events to make room
 const BUFFER_CLEANUP_SIZE: usize = 2500;
 
+/// Filter out unwanted terminal output strings
+fn filter_terminal_output(data: &str) -> String {
+    // Remove "1;2c" string from terminal output
+    data.replace("1;2c", "")
+}
+
 /// 终端原始模式的 RAII 包装器，确保在离开作用域时恢复终端模式
 struct RawModeGuard;
 
@@ -256,17 +262,25 @@ impl TerminalRecorder {
     pub fn record_output(&self, data: &[u8]) -> Result<()> {
         let data_str = String::from_utf8_lossy(data).to_string();
 
+        // Filter unwanted terminal output strings
+        let filtered_data = filter_terminal_output(&data_str);
+
+        // Skip if filtered data is empty
+        if filtered_data.is_empty() {
+            return Ok(());
+        }
+
         let event = TerminalEvent {
             timestamp: self.get_relative_timestamp(),
             event_type: EventType::Output,
-            data: data_str.clone(),
+            data: filtered_data.clone(),
         };
 
         self.add_event_with_limit(event.clone())?;
 
         // 异步记录到日志文件
         let log_recorder = self.log_recorder.clone();
-        let data_for_log = data_str.clone();
+        let data_for_log = filtered_data.clone();
         tokio::spawn(async move {
             if let Ok(mut recorder) = log_recorder.try_lock() {
                 if let Err(e) = recorder.write_log(&data_for_log).await {
@@ -422,9 +436,13 @@ impl TerminalRecorder {
                     Ok(n) => {
                         let data = &buffer[..n];
 
-                        // 直接写入 stdout 以立即显示
+                        // Filter the output before writing to stdout
+                        let data_str = String::from_utf8_lossy(data);
+                        let filtered_data = filter_terminal_output(&data_str);
+
+                        // Write filtered data to stdout
                         let mut stdout = tokio::io::stdout();
-                        if let Err(e) = stdout.write_all(data).await {
+                        if let Err(e) = stdout.write_all(filtered_data.as_bytes()).await {
                             error!("Failed to write to stdout: {}", e);
                             break;
                         }
@@ -433,7 +451,7 @@ impl TerminalRecorder {
                             break;
                         }
 
-                        // 记录和共享输出事件
+                        // Record and share filtered output event (use original data for accurate recording)
                         if let Err(e) = recorder_clone.record_output(data) {
                             error!("Failed to record output: {}", e);
                         }
@@ -625,8 +643,13 @@ impl TerminalRecorder {
                     }
                     Ok(n) => {
                         let data = &buffer[..n];
+
+                        // Filter the output before writing to stdout
+                        let data_str = String::from_utf8_lossy(data);
+                        let filtered_data = filter_terminal_output(&data_str);
+
                         let mut stdout = tokio::io::stdout();
-                        if let Err(e) = stdout.write_all(data).await {
+                        if let Err(e) = stdout.write_all(filtered_data.as_bytes()).await {
                             error!("Failed to write to stdout: {}", e);
                             break;
                         }
@@ -641,11 +664,14 @@ impl TerminalRecorder {
                                 .unwrap_or_default()
                                 .as_secs_f64(),
                             event_type: EventType::Output,
-                            data: String::from_utf8_lossy(data).to_string(),
+                            data: filtered_data.clone(),
                         };
 
-                        if event_sender.send(output_event).is_err() {
-                            break;
+                        // Only send event if filtered data is not empty
+                        if !filtered_data.is_empty() {
+                            if event_sender.send(output_event).is_err() {
+                                break;
+                            }
                         }
                     }
                     Err(e) => {
@@ -811,14 +837,18 @@ impl TerminalRecorder {
                     Ok(n) => {
                         let data = &buffer[..n];
 
-                        // Write directly to stdout for immediate display
-                        if let Err(e) = std::io::stdout().write_all(data) {
+                        // Filter the output before writing to stdout
+                        let data_str = String::from_utf8_lossy(data);
+                        let filtered_data = filter_terminal_output(&data_str);
+
+                        // Write filtered data to stdout for immediate display
+                        if let Err(e) = std::io::stdout().write_all(filtered_data.as_bytes()) {
                             error!("Failed to write to stdout: {}", e);
                             break;
                         }
                         std::io::stdout().flush().ok();
 
-                        // Record and share the output event
+                        // Record and share the output event (use original data for accurate recording)
                         if let Err(e) = recorder_clone.record_output(data) {
                             error!("Failed to record output: {}", e);
                         }
@@ -935,7 +965,12 @@ impl TerminalRecorder {
                     }
                     Ok(n) => {
                         let data = &buffer[..n];
-                        if let Err(e) = std::io::stdout().write_all(data) {
+
+                        // Filter the output before writing to stdout
+                        let data_str = String::from_utf8_lossy(data);
+                        let filtered_data = filter_terminal_output(&data_str);
+
+                        if let Err(e) = std::io::stdout().write_all(filtered_data.as_bytes()) {
                             error!("Failed to write to stdout: {}", e);
                             break;
                         }
@@ -947,11 +982,14 @@ impl TerminalRecorder {
                                 .unwrap_or_default()
                                 .as_secs_f64(),
                             event_type: EventType::Output,
-                            data: String::from_utf8_lossy(data).to_string(),
+                            data: filtered_data.clone(),
                         };
 
-                        if event_sender.send(output_event).is_err() {
-                            break;
+                        // Only send event if filtered data is not empty
+                        if !filtered_data.is_empty() {
+                            if event_sender.send(output_event).is_err() {
+                                break;
+                            }
                         }
                     }
                     Err(e) => {
@@ -1001,5 +1039,40 @@ impl TerminalRecorder {
         });
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::filter_terminal_output;
+
+    #[test]
+    fn test_filter_terminal_output() {
+        // Test basic filtering
+        assert_eq!(filter_terminal_output("hello1;2cworld"), "helloworld");
+
+        // Test multiple occurrences
+        assert_eq!(filter_terminal_output("1;2cfoo1;2cbar1;2c"), "foobar");
+
+        // Test no filtering needed
+        assert_eq!(filter_terminal_output("normal text"), "normal text");
+
+        // Test empty string
+        assert_eq!(filter_terminal_output(""), "");
+
+        // Test just the filter string (results in empty string)
+        assert_eq!(filter_terminal_output("1;2c"), "");
+
+        // Test multiple filter strings only (results in empty string)
+        assert_eq!(filter_terminal_output("1;2c1;2c1;2c"), "");
+
+        // Test with ANSI escape sequences and the filter string
+        assert_eq!(
+            filter_terminal_output("\x1b[31mred1;2ctext\x1b[0m"),
+            "\x1b[31mredtext\x1b[0m"
+        );
+
+        // Test whitespace and filter string combination
+        assert_eq!(filter_terminal_output("   1;2c   "), "      ");
     }
 }
