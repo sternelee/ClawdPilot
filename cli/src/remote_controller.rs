@@ -1,16 +1,16 @@
 use anyhow::Result;
-use tracing::error;
 use crossterm::{
+    cursor::{Hide, MoveTo, Show},
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
     execute,
     style::{Color, Print, ResetColor, SetForegroundColor},
-    terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType},
-    cursor::{MoveTo, Show, Hide},
+    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode},
 };
 use std::io::{self, Write};
 use tokio::sync::mpsc;
+use tracing::error;
 
-use riterm_shared::p2p::{P2PNetwork, GossipSender};
+use riterm_shared::p2p::{GossipSender, P2PNetwork};
 
 /// 远程终端控制器
 pub struct RemoteTerminalController {
@@ -28,7 +28,9 @@ pub enum ControllerCommand {
         working_dir: Option<String>,
         size: Option<(u16, u16)>,
     },
-    StopTerminal { terminal_id: String },
+    StopTerminal {
+        terminal_id: String,
+    },
     ListTerminals,
     CreateWebShare {
         local_port: u16,
@@ -36,7 +38,9 @@ pub enum ControllerCommand {
         service_name: String,
         terminal_id: Option<String>,
     },
-    StopWebShare { public_port: u16 },
+    StopWebShare {
+        public_port: u16,
+    },
     ListWebShares,
     ShowStats,
     Help,
@@ -44,7 +48,11 @@ pub enum ControllerCommand {
 }
 
 impl RemoteTerminalController {
-    pub fn new(network: P2PNetwork, session_id: String, sender: GossipSender) -> (Self, mpsc::UnboundedReceiver<ControllerCommand>) {
+    pub fn new(
+        network: P2PNetwork,
+        session_id: String,
+        sender: GossipSender,
+    ) -> (Self, mpsc::UnboundedReceiver<ControllerCommand>) {
         let (command_sender, command_receiver) = mpsc::unbounded_channel();
 
         let controller = Self {
@@ -115,7 +123,10 @@ impl RemoteTerminalController {
         )?;
 
         println!("🎯 Connected to session: {}", &self.session_id[..16]);
-        println!("🔗 Your Node ID: {}", &self.network.get_node_id().await[..16]);
+        println!(
+            "🔗 Your Node ID: {}",
+            &self.network.get_node_id().await[..16]
+        );
         println!();
         println!("💡 Available Commands:");
         println!("   help     - Show this help message");
@@ -171,15 +182,24 @@ impl RemoteTerminalController {
 
     async fn execute_command(&mut self, command: ControllerCommand) -> Result<()> {
         match command {
-            ControllerCommand::CreateTerminal { name, shell, working_dir, size } => {
-                if let Err(e) = self.network.send_terminal_create(
-                    &self.session_id,
-                    &self.sender,
-                    name,
-                    shell,
-                    working_dir,
-                    size,
-                ).await {
+            ControllerCommand::CreateTerminal {
+                name,
+                shell,
+                working_dir,
+                size,
+            } => {
+                if let Err(e) = self
+                    .network
+                    .send_terminal_create(
+                        &self.session_id,
+                        &self.sender,
+                        name,
+                        shell,
+                        working_dir,
+                        size,
+                    )
+                    .await
+                {
                     eprintln!("Failed to send terminal create command: {}", e);
                 } else {
                     println!("✅ Terminal creation command sent");
@@ -187,11 +207,11 @@ impl RemoteTerminalController {
             }
 
             ControllerCommand::StopTerminal { terminal_id } => {
-                if let Err(e) = self.network.send_terminal_stop(
-                    &self.session_id,
-                    &self.sender,
-                    terminal_id,
-                ).await {
+                if let Err(e) = self
+                    .network
+                    .send_terminal_stop(&self.session_id, &self.sender, terminal_id)
+                    .await
+                {
                     eprintln!("Failed to send terminal stop command: {}", e);
                 } else {
                     println!("✅ Terminal stop command sent");
@@ -199,25 +219,35 @@ impl RemoteTerminalController {
             }
 
             ControllerCommand::ListTerminals => {
-                if let Err(e) = self.network.send_terminal_list_request(
-                    &self.session_id,
-                    &self.sender,
-                ).await {
+                if let Err(e) = self
+                    .network
+                    .send_terminal_list_request(&self.session_id, &self.sender)
+                    .await
+                {
                     eprintln!("Failed to send terminal list request: {}", e);
                 } else {
                     println!("📋 Terminal list request sent");
                 }
             }
 
-            ControllerCommand::CreateWebShare { local_port, public_port, service_name, terminal_id } => {
-                if let Err(e) = self.network.send_webshare_create(
-                    &self.session_id,
-                    &self.sender,
-                    local_port,
-                    public_port,
-                    service_name,
-                    terminal_id,
-                ).await {
+            ControllerCommand::CreateWebShare {
+                local_port,
+                public_port,
+                service_name,
+                terminal_id,
+            } => {
+                if let Err(e) = self
+                    .network
+                    .send_webshare_create(
+                        &self.session_id,
+                        &self.sender,
+                        local_port,
+                        public_port,
+                        service_name,
+                        terminal_id,
+                    )
+                    .await
+                {
                     eprintln!("Failed to send WebShare create command: {}", e);
                 } else {
                     println!("✅ WebShare creation command sent");
@@ -225,11 +255,11 @@ impl RemoteTerminalController {
             }
 
             ControllerCommand::StopWebShare { public_port } => {
-                if let Err(e) = self.network.send_webshare_stop(
-                    &self.session_id,
-                    &self.sender,
-                    public_port,
-                ).await {
+                if let Err(e) = self
+                    .network
+                    .send_webshare_stop(&self.session_id, &self.sender, public_port)
+                    .await
+                {
                     eprintln!("Failed to send WebShare stop command: {}", e);
                 } else {
                     println!("✅ WebShare stop command sent");
@@ -237,10 +267,11 @@ impl RemoteTerminalController {
             }
 
             ControllerCommand::ListWebShares => {
-                if let Err(e) = self.network.send_webshare_list_request(
-                    &self.session_id,
-                    &self.sender,
-                ).await {
+                if let Err(e) = self
+                    .network
+                    .send_webshare_list_request(&self.session_id, &self.sender)
+                    .await
+                {
                     eprintln!("Failed to send WebShare list request: {}", e);
                 } else {
                     println!("📋 WebShare list request sent");
@@ -248,10 +279,11 @@ impl RemoteTerminalController {
             }
 
             ControllerCommand::ShowStats => {
-                if let Err(e) = self.network.send_stats_request(
-                    &self.session_id,
-                    &self.sender,
-                ).await {
+                if let Err(e) = self
+                    .network
+                    .send_stats_request(&self.session_id, &self.sender)
+                    .await
+                {
                     eprintln!("Failed to send stats request: {}", e);
                 } else {
                     println!("📊 Statistics request sent");
@@ -264,7 +296,9 @@ impl RemoteTerminalController {
         Ok(())
     }
 
-    async fn handle_user_input(command_sender: &mut mpsc::UnboundedSender<ControllerCommand>) -> Result<()> {
+    async fn handle_user_input(
+        command_sender: &mut mpsc::UnboundedSender<ControllerCommand>,
+    ) -> Result<()> {
         enable_raw_mode()?;
         execute!(io::stdout(), EnableMouseCapture, Hide)?;
 
@@ -395,12 +429,7 @@ impl RemoteTerminalController {
     }
 
     fn cleanup_terminal() -> Result<()> {
-        execute!(
-            io::stdout(),
-            DisableMouseCapture,
-            Show,
-            ResetColor
-        )?;
+        execute!(io::stdout(), DisableMouseCapture, Show, ResetColor)?;
         disable_raw_mode()?;
         Ok(())
     }

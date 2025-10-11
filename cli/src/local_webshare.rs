@@ -1,10 +1,5 @@
 use anyhow::Result;
-use crossterm::{
-    execute,
-    style::{Color, Print, ResetColor, SetForegroundColor},
-};
 use std::collections::HashMap;
-use std::io;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
@@ -42,56 +37,6 @@ impl LocalWebShareManager {
             proxies: Arc::new(RwLock::new(HashMap::new())),
             terminal_ports: Arc::new(RwLock::new(HashMap::new())),
         }
-    }
-
-    /// 列出所有活跃的WebShare
-    pub async fn list_webshares(&self) -> Result<()> {
-        println!("🌐 Active WebShares:");
-        println!();
-
-        let proxies = self.proxies.read().await;
-
-        if proxies.is_empty() {
-            println!("❌ No active WebShares found");
-            return Ok(());
-        }
-
-        for (public_port, info) in proxies.iter() {
-            let status_color = match info.status {
-                WebShareStatus::Active => Color::Green,
-                WebShareStatus::Starting => Color::Yellow,
-                WebShareStatus::Error(_) => Color::Red,
-                WebShareStatus::Stopped => Color::DarkGrey,
-            };
-
-            let status_text = match &info.status {
-                WebShareStatus::Active => "🟢 Active",
-                WebShareStatus::Starting => "🟡 Starting",
-                WebShareStatus::Error(msg) => &format!("🔴 Error: {}", msg),
-                WebShareStatus::Stopped => "⚫ Stopped",
-            };
-
-            let terminal_info = info
-                .terminal_id
-                .as_ref()
-                .map(|id| format!(" (Terminal: {})", id))
-                .unwrap_or_default();
-
-            execute!(
-                io::stdout(),
-                SetForegroundColor(status_color),
-                Print(format!(
-                    "📡 Port {} → {} | {} | {}{}\n",
-                    public_port, info.local_port, info.service_name, status_text, terminal_info
-                )),
-                ResetColor
-            )?;
-        }
-
-        println!();
-        println!("💡 Use --webshare <local_port>:<public_port> to create a new WebShare");
-
-        Ok(())
     }
 
     /// 创建新的WebShare
@@ -179,17 +124,6 @@ impl LocalWebShareManager {
                 public_port
             ))
         }
-    }
-
-    /// 停止所有WebShare
-    pub async fn stop_all_webshares(&self) -> Result<()> {
-        let ports: Vec<u16> = self.proxies.read().await.keys().cloned().collect();
-
-        for port in ports {
-            self.stop_webshare(port).await?;
-        }
-
-        Ok(())
     }
 
     /// 停止特定终端的所有WebShare
@@ -290,77 +224,3 @@ pub struct WebShareStats {
     pub stopped: usize,
 }
 
-impl std::fmt::Display for WebShareStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Total: {}, Active: {}, Errors: {}, Stopped: {}",
-            self.total, self.active, self.errors, self.stopped
-        )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_webshare_creation_and_listing() {
-        let manager = LocalWebShareManager::new();
-
-        // 创建WebShare
-        manager
-            .create_webshare(
-                3000,
-                8080,
-                "Test Service".to_string(),
-                Some("terminal-1".to_string()),
-            )
-            .await
-            .unwrap();
-
-        // 列出WebShare
-        manager.list_webshares().await.unwrap();
-
-        // 获取统计信息
-        let stats = manager.get_stats().await;
-        assert_eq!(stats.total, 1);
-        assert_eq!(stats.active, 1);
-    }
-
-    #[tokio::test]
-    async fn test_terminal_webshare_mapping() {
-        let manager = LocalWebShareManager::new();
-
-        // 为终端创建多个WebShare
-        manager
-            .create_webshare(
-                3000,
-                8080,
-                "Web Server".to_string(),
-                Some("terminal-1".to_string()),
-            )
-            .await
-            .unwrap();
-
-        manager
-            .create_webshare(
-                5000,
-                9090,
-                "API Server".to_string(),
-                Some("terminal-1".to_string()),
-            )
-            .await
-            .unwrap();
-
-        // 获取终端的WebShare
-        let webshares = manager.get_terminal_webshares("terminal-1").await;
-        assert_eq!(webshares.len(), 2);
-
-        // 停止终端的所有WebShare
-        manager.stop_terminal_webshares("terminal-1").await.unwrap();
-
-        let webshares = manager.get_terminal_webshares("terminal-1").await;
-        assert_eq!(webshares.len(), 0);
-    }
-}

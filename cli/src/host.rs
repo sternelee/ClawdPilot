@@ -3,10 +3,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::remote_controller::RemoteTerminalController;
 use crate::shell::{ShellConfig, ShellDetector};
 use crate::terminal::TerminalRecorder;
 use crate::terminal_config::TerminalConfigDetector;
-use crate::remote_controller::RemoteTerminalController;
 use riterm_shared::{P2PNetwork, SessionHeader};
 
 pub struct HostSession {
@@ -121,7 +121,7 @@ impl HostSession {
             let (mut controller, _command_receiver) = RemoteTerminalController::new(
                 self.network.clone(),
                 session_id.clone(),
-                sender.clone()
+                sender.clone(),
             );
 
             // 在后台启动控制器
@@ -135,7 +135,10 @@ impl HostSession {
                 }
 
                 // 控制器结束后，正常结束会话
-                if let Err(e) = network_clone.end_session(&session_id_clone, &sender_clone).await {
+                if let Err(e) = network_clone
+                    .end_session(&session_id_clone, &sender_clone)
+                    .await
+                {
                     error!("Failed to end session: {}", e);
                 }
             });
@@ -257,7 +260,12 @@ impl HostSession {
                 match event.event_type {
                     riterm_shared::EventType::Output => {
                         if let Err(e) = network_clone
-                            .send_terminal_output(&session_id_clone_for_events, &sender, session_id_clone_for_events.clone(), event.data)
+                            .send_terminal_output(
+                                &session_id_clone_for_events,
+                                &sender,
+                                session_id_clone_for_events.clone(),
+                                event.data,
+                            )
                             .await
                         {
                             error!("Failed to send terminal output: {}", e);

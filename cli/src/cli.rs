@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 
 use crate::local_terminal_manager::LocalTerminalManager;
 use riterm_shared::P2PNetwork;
 
 #[derive(Parser)]
 #[command(name = "iroh-code-remote")]
-#[command(about = "A terminal agent for remote P2P management")]
+#[command(about = "A terminal host for remote P2P management")]
 pub struct Cli {
     #[arg(
         long,
@@ -16,18 +16,6 @@ pub struct Cli {
 
     #[arg(long, help = "Authentication token for ticket submission")]
     pub auth: Option<String>,
-
-    #[command(subcommand)]
-    pub command: Commands,
-}
-
-#[derive(Subcommand)]
-pub enum Commands {
-    #[command(about = "Start terminal agent mode to receive remote P2P commands")]
-    Agent {
-        #[arg(help = "Session ticket to join")]
-        ticket: String,
-    },
 }
 
 pub struct CliApp {
@@ -49,93 +37,103 @@ impl CliApp {
         })
     }
 
-    pub async fn run(&mut self, cli: Cli) -> Result<()> {
-        match cli.command {
-            Commands::Agent { ticket } => {
-                self.start_terminal_agent(ticket).await
-            }
-        }
+    pub async fn run(&mut self, _cli: Cli) -> Result<()> {
+        self.start_terminal_host().await
     }
 
-    /// 启动终端代理模式 - 接收远程P2P指令来管理本地终端
-    async fn start_terminal_agent(&mut self, ticket: String) -> Result<()> {
-        use riterm_shared::SessionTicket;
-        use std::str::FromStr;
+    /// 启动终端主机模式 - 创建P2P会话并管理本地终端
+    async fn start_terminal_host(&mut self) -> Result<()> {
+        use riterm_shared::SessionHeader;
         use tracing::info;
 
-        println!("🚀 Starting Terminal Agent Mode...");
-        println!("📋 Parsing session ticket...");
+        println!("🚀 Starting Terminal Host Mode...");
+        println!("📡 Creating P2P session...");
 
-        let session_ticket = SessionTicket::from_str(&ticket)
-            .context("Failed to parse session ticket")?;
+        // 创建会话头信息
+        let header = SessionHeader {
+            version: 2,
+            width: 80,
+            height: 24,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            title: Some("Riterm Terminal Host".to_string()),
+            command: None,
+            session_id: format!("host_{}", uuid::Uuid::new_v4()),
+        };
 
-        println!("✅ Session ticket parsed successfully");
-        println!("🌐 Joining remote session...");
-
-        let (sender, event_receiver) = self.network
-            .join_session(session_ticket)
+        // 创建共享会话
+        let (topic_id, sender, input_receiver) = self
+            .network
+            .create_shared_session(header.clone())
             .await
-            .context("Failed to join session")?;
+            .context("Failed to create shared session")?;
 
-        // 设置终端管理器的P2P会话
-        let session_id = format!("agent_{}", self.network.get_node_id().await);
-        self.terminal_manager.set_p2p_session(
-            self.network.clone(),
-            session_id.clone(),
-            sender.clone()
-        ).await;
+        println!("✅ P2P session created successfully");
+        println!("🎫 Generating session ticket...");
 
-        println!("✅ Joined session successfully");
-        println!("🤖 Terminal Agent is now active and ready to receive remote commands");
+        // 创建会话票据
+        let ticket = self
+            .network
+            .create_session_ticket(topic_id, &header.session_id)
+            .await
+            .context("Failed to create session ticket")?;
+
+        println!("✅ Session ticket generated successfully");
         println!();
-        println!("📊 Agent Status:");
+        println!("📊 Host Status:");
         println!("   🔗 Node ID: {}", &self.network.get_node_id().await[..16]);
-        println!("   📡 Listening for remote terminal management commands...");
+        println!("   📡 Session ID: {}", header.session_id);
         println!("   🛠️  Local terminal management capabilities enabled");
         println!();
-        println!("💡 Remote users can now:");
-        println!("   • Create terminals on this machine");
-        println!("   • Manage terminal sessions");
-        println!("   • Create WebShares for local services");
-        println!("   • View system statistics");
-        println!();
-        println!("⚠️  Press Ctrl+C to stop the agent");
 
-        // 启动P2P消息处理器来处理远程指令
-        let _network_clone = self.network.clone();
-        let _terminal_manager_clone = self.terminal_manager.clone();
-        let _session_id_clone = session_id.clone();
-        let _sender_clone = sender.clone();
+        // 显示ticket信息
+        println!("🎫 === SESSION TICKET ===");
+        println!("{}", ticket);
+        println!("========================");
+        println!();
+        println!("💡 Share this ticket with remote users to allow them to connect");
+        println!("💡 Remote users can scan the QR code or copy the ticket text");
+        println!("⚠️  Press Ctrl+C to stop the host");
+
+        // 设置终端管理器的P2P会话
+        self.terminal_manager
+            .set_p2p_session(
+                self.network.clone(),
+                header.session_id.clone(),
+                sender.clone(),
+            )
+            .await;
+
+        // 启动消息处理器来处理远程指令
+        let session_id_clone = header.session_id.clone();
 
         tokio::spawn(async move {
-            let mut receiver = event_receiver;
-            while let Ok(event) = receiver.recv().await {
-                match event.event_type {
-                    riterm_shared::EventType::Output => {
-                        // 检查是否为终端管理指令
-                        if event.data.starts_with("[Terminal") || event.data.starts_with("[WebShare") || event.data.starts_with("[Stats") {
-                            info!("Received potential management command: {}", event.data);
-                            // 这些消息会通过P2P消息处理器自动处理
-                        }
-                    }
-                    riterm_shared::EventType::End => {
-                        info!("Remote session ended");
-                        break;
-                    }
-                    _ => {}
-                }
+            let mut receiver = input_receiver;
+            while let Some(input) = receiver.recv().await {
+                info!("Received input: {}", input);
+                // 处理来自远程端的输入
+                // 这里可以扩展为处理终端管理指令
             }
         });
 
-        // 保持代理运行直到用户中断
+        // 启动P2P消息处理器
+        tokio::spawn(async move {
+            // 这里可以添加更复杂的消息处理逻辑
+            info!(
+                "P2P message handler started for session: {}",
+                session_id_clone
+            );
+        });
+
+        // 保持主机运行直到用户中断
         tokio::signal::ctrl_c().await?;
-        println!("\n👋 Terminal Agent stopped");
+        println!("\n👋 Terminal Host stopped");
 
         Ok(())
     }
 
-    
-    
     pub fn print_banner() {
         use crossterm::{
             cursor, execute,
@@ -150,7 +148,7 @@ impl CliApp {
             cursor::MoveTo(0, 0),
             SetForegroundColor(Color::Blue),
             Print("╭─────────────────────────────────────────────╮\n"),
-            Print("│         🤖 Terminal Agent Mode              │\n"),
+            Print("│         🖥️  Riterm Terminal Manager            │\n"),
             Print("│     P2P Remote Terminal Management          │\n"),
             Print("╰─────────────────────────────────────────────╯\n"),
             ResetColor,
