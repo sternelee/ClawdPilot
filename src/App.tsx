@@ -17,6 +17,7 @@ import {
 import { EnhancedTerminalView } from "./components/EnhancedTerminalView";
 import { SettingsModal } from "./components/SettingsModal";
 import { HomeView } from "./components/HomeView";
+import { RemoteSessionView } from "./components/RemoteSessionView";
 import { P2PBackground } from "./components/P2PBackground";
 import { t } from "./stores/settingsStore";
 import {
@@ -38,7 +39,7 @@ function App() {
   const [activeTicket, setActiveTicket] = createSignal<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = createSignal(false);
   const [networkStrength, setNetworkStrength] = createSignal(3);
-  const [currentView, setCurrentView] = createSignal<"home" | "terminal">(
+  const [currentView, setCurrentView] = createSignal<"home" | "remote" | "terminal">(
     "home",
   );
   const [currentTime, setCurrentTime] = createSignal(
@@ -263,8 +264,8 @@ function App() {
       sessionIdRef = actualSessionId;
       setActiveTicket(ticket);
       setIsConnected(true);
-      setCurrentView("terminal");
-      updateHistoryEntry(ticket, { description: "Connection established." });
+      setCurrentView("remote");
+      updateHistoryEntry(ticket, { description: "Connected to remote CLI host." });
 
       const unlisten = await listen<any>(
         `terminal-event-${actualSessionId}`,
@@ -432,7 +433,35 @@ function App() {
               : "none",
           }}
         >
-          {currentView() === "terminal" && isConnected() ? (
+          {currentView() === "home" && (
+            <HomeView
+              sessionTicket={sessionTicket()}
+              onTicketInput={setSessionTicket}
+              onConnect={handleConnect}
+              onShowSettings={() => setIsSettingsOpen(true)}
+              connecting={connecting()}
+              connectionError={connectionError()}
+              history={history()}
+              isLoggedIn={isLoggedIn()}
+              onLogin={handleLogin}
+              onSkipLogin={handleSkipLogin}
+              isConnected={isConnected()}
+              activeTicket={activeTicket()}
+              onReturnToSession={() => setCurrentView("remote")}
+              onDeleteHistory={deleteHistoryEntry}
+              onDisconnect={handleDisconnect}
+            />
+          )}
+
+          {currentView() === "remote" && isConnected() && sessionIdRef && (
+            <RemoteSessionView
+              sessionId={sessionIdRef}
+              onDisconnect={handleDisconnect}
+              onBack={() => setCurrentView("home")}
+            />
+          )}
+
+          {currentView() === "terminal" && isConnected() && (
             <EnhancedTerminalView
               onReady={handleTerminalReady}
               onInput={handleTerminalInput}
@@ -452,24 +481,6 @@ function App() {
               }}
               onShowSettings={() => setIsSettingsOpen(true)}
               sessionId={sessionIdRef}
-            />
-          ) : (
-            <HomeView
-              sessionTicket={sessionTicket()}
-              onTicketInput={setSessionTicket}
-              onConnect={handleConnect}
-              onShowSettings={() => setIsSettingsOpen(true)}
-              connecting={connecting()}
-              connectionError={connectionError()}
-              history={history()}
-              isLoggedIn={isLoggedIn()}
-              onLogin={handleLogin}
-              onSkipLogin={handleSkipLogin}
-              isConnected={isConnected()}
-              activeTicket={activeTicket()}
-              onReturnToSession={() => setCurrentView("terminal")}
-              onDeleteHistory={deleteHistoryEntry}
-              onDisconnect={handleDisconnect}
             />
           )}
         </div>

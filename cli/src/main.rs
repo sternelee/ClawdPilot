@@ -3,6 +3,8 @@ mod local_terminal_manager;
 mod local_webshare;
 mod shell;
 mod terminal;
+mod terminal_driver;
+mod terminal_session;
 
 use anyhow::Result;
 use clap::Parser;

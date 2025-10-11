@@ -339,6 +339,22 @@ pub struct P2PNetwork {
             >,
         >,
     >,
+    // 终端输入处理回调
+    terminal_input_callback: Arc<
+        RwLock<
+            Option<
+                Box<
+                    dyn Fn(
+                            String,
+                            String,
+                        )
+                            -> tokio::task::JoinHandle<anyhow::Result<Option<String>>>
+                        + Send
+                        + Sync,
+                >,
+            >,
+        >,
+    >,
 }
 
 impl Clone for P2PNetwork {
@@ -349,6 +365,7 @@ impl Clone for P2PNetwork {
             router: self.router.clone(),
             sessions: Arc::clone(&self.sessions),
             history_callback: self.history_callback.clone(),
+            terminal_input_callback: self.terminal_input_callback.clone(),
         }
     }
 }
@@ -358,10 +375,38 @@ impl Clone for P2PNetwork {
 pub enum EventType {
     Output,
     Input,
-    Resize { width: u16, height: u16 },
+    Resize {
+        width: u16,
+        height: u16,
+    },
     Start,
     End,
     HistoryData,
+    TerminalList(Vec<TerminalInfo>),
+    TerminalOutput {
+        terminal_id: String,
+        data: String,
+    },
+    TerminalInput {
+        terminal_id: String,
+        data: String,
+    },
+    TerminalResize {
+        terminal_id: String,
+        rows: u16,
+        cols: u16,
+    },
+    WebShareCreate {
+        local_port: u16,
+        public_port: u16,
+        service_name: String,
+        terminal_id: Option<String>,
+    },
+    WebShareList(Vec<WebShareInfo>),
+    Stats {
+        terminal_stats: TerminalStats,
+        webshare_stats: WebShareStats,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -476,6 +521,7 @@ impl P2PNetwork {
             router,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             history_callback: Arc::new(RwLock::new(None)),
+            terminal_input_callback: Arc::new(RwLock::new(None)),
         };
 
         Ok(network)
@@ -1093,8 +1139,8 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Output,
-                        data: format!("[Terminal Output: {}] {}", terminal_id, data),
+                        event_type: EventType::TerminalOutput { terminal_id, data },
+                        data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for terminal output event, skipping");
@@ -1111,13 +1157,121 @@ impl P2PNetwork {
                         from.fmt_short(),
                         terminal_id
                     );
+
+                    // Clone values before moving them into the closure
+                    let terminal_id_clone = terminal_id.clone();
+                    let data_clone = data.clone();
+
+                    // 如果我们是主机，处理终端输入并发送输出响应
+                    if session.is_host {
+                        // 获取 gossip_sender 的克隆
+                        let gossip_sender = session.gossip_sender.clone();
+
+                        // 获取终端输入处理回调
+                        let input_callback = {
+                            let callback_guard = self.terminal_input_callback.read().await;
+                            callback_guard
+                                .as_ref()
+                                .map(|cb| cb(terminal_id_clone.clone(), data_clone.clone()))
+                        };
+
+                        drop(sessions_guard); // 释放锁
+
+                        if let Some(input_handler) = input_callback {
+                            // 使用回调处理终端输入
+                            let network_clone = self.clone();
+                            let session_id_clone = session_id.to_string();
+                            let terminal_id_for_output = terminal_id_clone.clone();
+                            let gossip_sender_clone = gossip_sender.clone();
+
+                            tokio::spawn(async move {
+                                // 等待输入处理完成
+                                match input_handler.await {
+                                    Ok(Ok(Some(response_data))) => {
+                                        // 发送终端输出响应
+                                        if let Some(sender) = &gossip_sender_clone {
+                                            if let Err(e) = network_clone
+                                                .send_terminal_output(
+                                                    &session_id_clone,
+                                                    sender,
+                                                    terminal_id_for_output,
+                                                    response_data,
+                                                )
+                                                .await
+                                            {
+                                                error!(
+                                                    "Failed to send terminal output response: {}",
+                                                    e
+                                                );
+                                            }
+                                        } else {
+                                            error!(
+                                                "No gossip sender available for terminal output response"
+                                            );
+                                        }
+                                    }
+                                    Ok(Ok(None)) => {
+                                        // 没有输出数据，这是正常的，终端输出将通过其他方式发送
+                                        debug!("Terminal input processed, no immediate output");
+                                    }
+                                    Ok(Err(e)) => {
+                                        error!("Terminal input processing failed: {}", e);
+                                    }
+                                    Err(e) => {
+                                        error!("Terminal input handler join error: {}", e);
+                                    }
+                                }
+                            });
+                        } else if let Some(sender) = gossip_sender {
+                            // 没有设置回调，使用模拟输出（向后兼容）
+                            warn!("No terminal input callback set, using simulated output");
+                            let network_clone = self.clone();
+                            let session_id_clone = session_id.to_string();
+
+                            tokio::spawn(async move {
+                                // 这里应该将输入发送到对应的终端实例
+                                // 由于我们使用虚拟终端，暂时模拟终端输出
+                                let response_data = if data_clone == "\r" {
+                                    // 模拟回车符的响应
+                                    format!("\r\n[Terminal Output: {}] $ ", terminal_id_clone)
+                                } else {
+                                    // 模拟普通输入的回显
+                                    format!(
+                                        "[Terminal Output: {}] {}",
+                                        terminal_id_clone, data_clone
+                                    )
+                                };
+
+                                // 发送终端输出响应
+                                if let Err(e) = network_clone
+                                    .send_terminal_output(
+                                        &session_id_clone,
+                                        &sender,
+                                        terminal_id_clone,
+                                        response_data,
+                                    )
+                                    .await
+                                {
+                                    error!("Failed to send terminal output response: {}", e);
+                                }
+                            });
+                        }
+                    } else {
+                        drop(sessions_guard); // 释放锁
+                    }
+
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Input,
-                        data: format!("[Terminal Input: {}] {}", terminal_id, data),
+                        event_type: EventType::TerminalInput { terminal_id, data },
+                        data: String::new(),
                     };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal input event, skipping");
+                    // 重新获取会话来发送事件
+                    let network_clone = self.clone();
+                    let sessions_guard = network_clone.sessions.read().await;
+                    if let Some(session) = sessions_guard.get(session_id) {
+                        if session.event_sender.send(event).is_err() {
+                            warn!("No active receivers for terminal input event, skipping");
+                        }
                     }
                 }
                 TerminalMessageBody::TerminalResize {
@@ -1134,11 +1288,12 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Resize {
-                            width: cols,
-                            height: rows,
+                        event_type: EventType::TerminalResize {
+                            terminal_id,
+                            rows,
+                            cols,
                         },
-                        data: format!("[Terminal Resize: {}] {}x{}", terminal_id, cols, rows),
+                        data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for terminal resize event, skipping");
@@ -1206,12 +1361,8 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Output,
-                        data: format!(
-                            "[Terminal List Response: {} terminals] {}",
-                            terminals.len(),
-                            serde_json::to_string(&terminals).unwrap_or_default()
-                        ),
+                        event_type: EventType::TerminalList(terminals),
+                        data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for terminal list response event, skipping");
@@ -1234,14 +1385,13 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Output,
-                        data: format!(
-                            "[WebShare Create Request] {}:{} ({}) Terminal: {:?}",
-                            public_port.unwrap_or(0),
+                        event_type: EventType::WebShareCreate {
                             local_port,
+                            public_port: public_port.unwrap_or(0),
                             service_name,
-                            terminal_id
-                        ),
+                            terminal_id,
+                        },
+                        data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for webshare create event, skipping");
@@ -1309,12 +1459,8 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Output,
-                        data: format!(
-                            "[WebShare List Response: {} webshares] {}",
-                            webshares.len(),
-                            serde_json::to_string(&webshares).unwrap_or_default()
-                        ),
+                        event_type: EventType::WebShareList(webshares),
+                        data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for webshare list response event, skipping");
@@ -1345,13 +1491,11 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp: timestamp as f64,
-                        event_type: EventType::Output,
-                        data: format!(
-                            "[Stats Response: {}] Terminals: {}, WebShares: {}",
-                            &node_id[..16],
-                            terminal_stats.total,
-                            webshare_stats.total
-                        ),
+                        event_type: EventType::Stats {
+                            terminal_stats,
+                            webshare_stats,
+                        },
+                        data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for stats response event, skipping");
@@ -1414,6 +1558,15 @@ impl P2PNetwork {
         self.sessions.read().await.keys().cloned().collect()
     }
 
+    /// 为指定会话创建新的事件接收器
+    pub async fn create_event_receiver(
+        &self,
+        session_id: &str,
+    ) -> Option<broadcast::Receiver<TerminalEvent>> {
+        let sessions = self.sessions.read().await;
+        sessions.get(session_id).map(|s| s.event_sender.subscribe())
+    }
+
     pub async fn is_session_host(&self, session_id: &str) -> bool {
         if let Some(session) = self.sessions.read().await.get(session_id) {
             session.is_host
@@ -1433,6 +1586,18 @@ impl P2PNetwork {
     {
         let mut history_callback = self.history_callback.write().await;
         *history_callback = Some(Box::new(callback));
+    }
+
+    /// 设置终端输入处理回调函数
+    pub async fn set_terminal_input_callback<F>(&self, callback: F)
+    where
+        F: Fn(String, String) -> tokio::task::JoinHandle<anyhow::Result<Option<String>>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let mut terminal_input_callback = self.terminal_input_callback.write().await;
+        *terminal_input_callback = Some(Box::new(callback));
     }
 
     // === Terminal Management Methods ===

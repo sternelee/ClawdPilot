@@ -57,6 +57,33 @@ impl ShellConfig {
             env_vars: HashMap::new(),
         }
     }
+
+    /// Create ShellConfig from shell path string
+    pub fn from_shell_type(shell_path: &str) -> Self {
+        let shell_type = if shell_path.contains("zsh") {
+            ShellType::Zsh
+        } else if shell_path.contains("bash") {
+            ShellType::Bash
+        } else if shell_path.contains("fish") {
+            ShellType::Fish
+        } else if shell_path.contains("nu") {
+            ShellType::Nushell
+        } else if shell_path.contains("pwsh") || shell_path.contains("powershell") {
+            ShellType::PowerShell
+        } else if shell_path.contains("cmd") {
+            ShellType::Cmd
+        } else {
+            ShellType::Unknown(shell_path.to_string())
+        };
+
+        Self::new(shell_type)
+    }
+}
+
+impl std::fmt::Display for ShellType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.get_display_name())
+    }
 }
 
 /// Shell detector for finding available shells

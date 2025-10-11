@@ -979,6 +979,60 @@ async fn get_system_stats(request: StatsRequest, state: State<'_, AppState>) -> 
     Ok(())
 }
 
+#[tauri::command]
+async fn get_terminal_list(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    list_terminals(session_id, state).await
+}
+
+#[tauri::command]
+async fn get_webshare_list(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    list_webshares(session_id, state).await
+}
+
+#[tauri::command]
+async fn connect_to_terminal(
+    session_id: String,
+    terminal_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // This command tells the remote CLI that we want to connect to a specific terminal
+    let session_sender = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&session_id)
+            .map(|s| s.sender.clone())
+            .ok_or("Session not found")?
+    };
+
+    let network = {
+        let network_guard = state.network.read().await;
+        match network_guard.as_ref() {
+            Some(n) => n.clone(),
+            None => return Err("Network not initialized".to_string()),
+        }
+    };
+
+    // Send a directed message to connect to the specific terminal
+    // This is a placeholder - the actual implementation depends on how the CLI handles terminal selection
+    let connect_message = format!("CONNECT_TO_TERMINAL:{}", terminal_id);
+
+    network
+        .send_directed_message(
+            &session_id,
+            &session_sender,
+            network
+                .get_node_id()
+                .await
+                .parse()
+                .map_err(|e| format!("Failed to parse node ID: {}", e))?,
+            connect_message,
+        )
+        .await
+        .map_err(|e| format!("Failed to connect to terminal: {}", e))?;
+
+    Ok(())
+}
+
 /// Get session statistics for monitoring
 #[tauri::command]
 async fn get_session_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
@@ -1071,12 +1125,15 @@ pub fn run() {
             create_terminal,
             stop_terminal,
             list_terminals,
+            get_terminal_list,
             send_terminal_input_to_terminal,
             resize_terminal,
+            connect_to_terminal,
             // WebShare Management
             create_webshare,
             stop_webshare,
             list_webshares,
+            get_webshare_list,
             get_system_stats
         ])
         .setup(|_app| Ok(()))

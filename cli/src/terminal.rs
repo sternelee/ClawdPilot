@@ -27,14 +27,14 @@ impl Drop for RawModeGuard {
 }
 
 /// PTY resources RAII wrapper
-struct PtyResources {
-    reader: Box<dyn std::io::Read + Send>,
-    writer: Box<dyn std::io::Write + Send>,
-    _pty_pair: portable_pty::PtyPair,
+pub struct PtyResources {
+    pub reader: Box<dyn std::io::Read + Send>,
+    pub writer: Box<dyn std::io::Write + Send>,
+    pub _pty_pair: portable_pty::PtyPair,
 }
 
 impl PtyResources {
-    fn new(
+    pub fn new(
         shell_config: &crate::shell::ShellConfig,
         width: u16,
         height: u16,
