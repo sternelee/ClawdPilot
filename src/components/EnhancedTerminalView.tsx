@@ -13,6 +13,9 @@ import {
   KeyboardManager,
   InputFocusManager,
 } from "../utils/mobile";
+import { TerminalManager } from "./TerminalManager";
+import { WebShareManager } from "./WebShareManager";
+import { SystemMonitor } from "./SystemMonitor";
 
 interface EnhancedTerminalViewProps {
   onReady: (terminal: Terminal, fitAddon: FitAddon) => void;
@@ -28,6 +31,8 @@ interface EnhancedTerminalViewProps {
   safeViewportHeight?: number;
   onKeyboardToggle?: (visible: boolean) => void;
   onShowSettings?: () => void;
+  // P2P session management
+  sessionId?: string;
 }
 
 // Terminal debugging utility
@@ -58,6 +63,11 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   const [deviceCapabilities] = createSignal(getDeviceCapabilities());
   const [terminalHeight, setTerminalHeight] = createSignal<number | null>(null);
   const [lastResizeTime, setLastResizeTime] = createSignal(0);
+
+  // Management modal states
+  const [showTerminalManager, setShowTerminalManager] = createSignal(false);
+  const [showWebShareManager, setShowWebShareManager] = createSignal(false);
+  const [showSystemMonitor, setShowSystemMonitor] = createSignal(false);
 
   // Enhanced mobile keyboard and input management
   const [keyboardCleanup, setKeyboardCleanup] = createSignal<
@@ -698,6 +708,32 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             🔍
           </button>
 
+          <Show when={props.sessionId}>
+            <button
+              class="btn btn-ghost btn-xs"
+              onClick={() => setShowTerminalManager(!showTerminalManager())}
+              title="Terminal Manager"
+            >
+              💻
+            </button>
+
+            <button
+              class="btn btn-ghost btn-xs"
+              onClick={() => setShowWebShareManager(!showWebShareManager())}
+              title="WebShare Manager"
+            >
+              🌐
+            </button>
+
+            <button
+              class="btn btn-ghost btn-xs"
+              onClick={() => setShowSystemMonitor(!showSystemMonitor())}
+              title="System Monitor"
+            >
+              📊
+            </button>
+          </Show>
+
           <button
             class="btn btn-ghost btn-xs"
             onClick={toggleFullscreen}
@@ -943,6 +979,29 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         >
           ⌨️
         </button>
+      </Show>
+
+      {/* Management Modals */}
+      <Show when={showTerminalManager() && props.sessionId}>
+        <TerminalManager
+          sessionId={props.sessionId!}
+          onClose={() => setShowTerminalManager(false)}
+        />
+      </Show>
+
+      <Show when={showWebShareManager() && props.sessionId}>
+        <WebShareManager
+          sessionId={props.sessionId!}
+          availableTerminals={[]} // TODO: Get actual terminals from backend
+          onClose={() => setShowWebShareManager(false)}
+        />
+      </Show>
+
+      <Show when={showSystemMonitor() && props.sessionId}>
+        <SystemMonitor
+          sessionId={props.sessionId!}
+          onClose={() => setShowSystemMonitor(false)}
+        />
       </Show>
     </div>
   );

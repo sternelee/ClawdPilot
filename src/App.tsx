@@ -451,6 +451,7 @@ function App() {
                 console.log("Terminal internal keyboard toggled:", visible);
               }}
               onShowSettings={() => setIsSettingsOpen(true)}
+              sessionId={sessionIdRef}
             />
           ) : (
             <HomeView
