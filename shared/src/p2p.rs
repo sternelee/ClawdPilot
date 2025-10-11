@@ -32,31 +32,18 @@ pub struct SessionHeader {
 
 pub type EncryptionKey = [u8; 32];
 
+// === Network Layer Messages ===
+// These are encrypted and transmitted over P2P network
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TerminalMessageBody {
-    /// Session metadata
+pub enum NetworkMessage {
+    // === Session Management ===
+    /// Session metadata when joining or creating session
     SessionInfo { from: NodeId, header: SessionHeader },
-    /// Terminal output data
-    Output {
-        from: NodeId,
-        data: String,
-        timestamp: u64,
-    },
-    /// User input data
-    Input {
-        from: NodeId,
-        data: String,
-        timestamp: u64,
-    },
-    /// Resize event
-    Resize {
-        from: NodeId,
-        width: u16,
-        height: u16,
-        timestamp: u64,
-    },
-    /// Session ended
+    /// Session ended notification
     SessionEnd { from: NodeId, timestamp: u64 },
+    /// Participant joined notification
+    ParticipantJoined { from: NodeId, timestamp: u64 },
     /// Directed message to specific node
     DirectedMessage {
         from: NodeId,
@@ -64,9 +51,30 @@ pub enum TerminalMessageBody {
         data: String,
         timestamp: u64,
     },
-    /// Participant joined notification
-    ParticipantJoined { from: NodeId, timestamp: u64 },
-    /// History data message
+
+    // === Terminal I/O (Virtual Terminals) ===
+    /// Terminal output data (for virtual terminals)
+    Output {
+        from: NodeId,
+        data: String,
+        timestamp: u64,
+    },
+    /// User input data (for virtual terminals)
+    Input {
+        from: NodeId,
+        data: String,
+        timestamp: u64,
+    },
+    /// Terminal resize (for virtual terminals)
+    Resize {
+        from: NodeId,
+        width: u16,
+        height: u16,
+        timestamp: u64,
+    },
+
+    // === Session History ===
+    /// Session history data
     HistoryData {
         from: NodeId,
         shell_type: String,
@@ -75,14 +83,36 @@ pub enum TerminalMessageBody {
         timestamp: u64,
     },
 
-    // === Terminal Management Messages ===
-    /// Create a new local terminal
+    // === Terminal Management (Real Terminals) ===
+    /// Create a new local terminal request
     TerminalCreate {
         from: NodeId,
         name: Option<String>,
         shell_path: Option<String>,
         working_dir: Option<String>,
         size: Option<(u16, u16)>,
+        timestamp: u64,
+    },
+    /// Terminal output data (from real terminal)
+    TerminalOutput {
+        from: NodeId,
+        terminal_id: String,
+        data: String,
+        timestamp: u64,
+    },
+    /// Terminal input data (to real terminal)
+    TerminalInput {
+        from: NodeId,
+        terminal_id: String,
+        data: String,
+        timestamp: u64,
+    },
+    /// Terminal resize request
+    TerminalResize {
+        from: NodeId,
+        terminal_id: String,
+        rows: u16,
+        cols: u16,
         timestamp: u64,
     },
     /// Terminal status update
@@ -92,52 +122,30 @@ pub enum TerminalMessageBody {
         status: TerminalStatus,
         timestamp: u64,
     },
-    /// Terminal output data (for local terminal management)
-    TerminalOutput {
-        from: NodeId,
-        terminal_id: String,
-        data: String,
-        timestamp: u64,
-    },
-    /// Terminal input data
-    TerminalInput {
-        from: NodeId,
-        terminal_id: String,
-        data: String,
-        timestamp: u64,
-    },
-    /// Terminal resize
-    TerminalResize {
-        from: NodeId,
-        terminal_id: String,
-        rows: u16,
-        cols: u16,
-        timestamp: u64,
-    },
-    /// Terminal directory change
+    /// Terminal directory change notification
     TerminalDirectoryChanged {
         from: NodeId,
         terminal_id: String,
         new_dir: String,
         timestamp: u64,
     },
-    /// Stop terminal
+    /// Stop terminal request
     TerminalStop {
         from: NodeId,
         terminal_id: String,
         timestamp: u64,
     },
-    /// List all terminals request
+    /// List terminals request
     TerminalListRequest { from: NodeId, timestamp: u64 },
-    /// List all terminals response
+    /// List terminals response
     TerminalListResponse {
         from: NodeId,
         terminals: Vec<TerminalInfo>,
         timestamp: u64,
     },
 
-    // === WebShare Management Messages ===
-    /// Create a new WebShare
+    // === WebShare Management ===
+    /// Create WebShare request
     WebShareCreate {
         from: NodeId,
         local_port: u16,
@@ -153,23 +161,25 @@ pub enum TerminalMessageBody {
         status: WebShareStatus,
         timestamp: u64,
     },
-    /// Stop WebShare
+    /// Stop WebShare request
     WebShareStop {
         from: NodeId,
         public_port: u16,
         timestamp: u64,
     },
-    /// List all WebShares request
+    /// List WebShares request
     WebShareListRequest { from: NodeId, timestamp: u64 },
-    /// List all WebShares response
+    /// List WebShares response
     WebShareListResponse {
         from: NodeId,
         webshares: Vec<WebShareInfo>,
         timestamp: u64,
     },
-    /// System statistics request
+
+    // === System Statistics ===
+    /// Stats request
     StatsRequest { from: NodeId, timestamp: u64 },
-    /// System statistics response
+    /// Stats response
     StatsResponse {
         from: NodeId,
         terminal_stats: TerminalStats,
@@ -186,7 +196,7 @@ pub struct EncryptedTerminalMessage {
 }
 
 impl EncryptedTerminalMessage {
-    pub fn new(body: TerminalMessageBody, key: &EncryptionKey) -> Result<Self> {
+    pub fn new(body: NetworkMessage, key: &EncryptionKey) -> Result<Self> {
         let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
         let nonce_bytes: [u8; 12] = rand::random();
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -202,7 +212,7 @@ impl EncryptedTerminalMessage {
         })
     }
 
-    pub fn decrypt(&self, key: &EncryptionKey) -> Result<TerminalMessageBody> {
+    pub fn decrypt(&self, key: &EncryptionKey) -> Result<NetworkMessage> {
         let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
         let nonce = Nonce::from_slice(&self.nonce);
 
@@ -210,7 +220,7 @@ impl EncryptedTerminalMessage {
             .decrypt(nonce, self.ciphertext.as_ref())
             .map_err(|e| anyhow::anyhow!("Decryption failed: {}", e))?;
 
-        let body: TerminalMessageBody = bincode::deserialize(&plaintext)?;
+        let body: NetworkMessage = bincode::deserialize(&plaintext)?;
         Ok(body)
     }
 
@@ -370,51 +380,72 @@ impl Clone for P2PNetwork {
     }
 }
 
-// Terminal event types that are shared between cli and app
+// === Frontend Event System ===
+// These are used for communication with the Tauri frontend
+
+/// Clean, structured event types for frontend communication
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EventType {
+    // === Virtual Terminal Events ===
+    /// Terminal output (for virtual terminals)
     Output,
+    /// User input (for virtual terminals)
     Input,
-    Resize {
-        width: u16,
-        height: u16,
-    },
+    /// Terminal resize (for virtual terminals)
+    Resize { width: u16, height: u16 },
+    /// Session started
     Start,
+    /// Session ended
     End,
+    /// History data
     HistoryData,
+
+    // === Real Terminal Management Events ===
+    /// Terminal list updated
     TerminalList(Vec<TerminalInfo>),
-    TerminalOutput {
-        terminal_id: String,
-        data: String,
-    },
-    TerminalInput {
-        terminal_id: String,
-        data: String,
-    },
+    /// Terminal output received
+    TerminalOutput { terminal_id: String, data: String },
+    /// Terminal input sent
+    TerminalInput { terminal_id: String, data: String },
+    /// Terminal resized
     TerminalResize {
         terminal_id: String,
         rows: u16,
         cols: u16,
     },
+
+    // === WebShare Management Events ===
+    /// WebShare created
     WebShareCreate {
         local_port: u16,
         public_port: u16,
         service_name: String,
         terminal_id: Option<String>,
     },
+    /// WebShare list updated
     WebShareList(Vec<WebShareInfo>),
+
+    // === System Events ===
+    /// System statistics
     Stats {
         terminal_stats: TerminalStats,
         webshare_stats: WebShareStats,
     },
 }
 
+/// Frontend event with timestamp, event type, and optional data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalEvent {
-    pub timestamp: f64,
+    pub timestamp: u64,
     pub event_type: EventType,
+    /// Data field used for simple events (Output, Input, HistoryData)
+    /// For structured events, this is typically empty
     pub data: String,
 }
+
+// === Type Aliases for Backward Compatibility ===
+// Provide aliases for the old names during transition
+pub type TerminalMessageBody = NetworkMessage;
 
 // Session info for history data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -879,7 +910,7 @@ impl P2PNetwork {
                     timestamp,
                 } => {
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data,
                     };
@@ -894,7 +925,7 @@ impl P2PNetwork {
                 } => {
                     debug!("Received input event from {}: {:?}", from.fmt_short(), data);
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Input,
                         data: data.clone(),
                     };
@@ -917,7 +948,7 @@ impl P2PNetwork {
                     timestamp,
                 } => {
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Resize { width, height },
                         data: format!("{}x{}", width, height),
                     };
@@ -927,7 +958,7 @@ impl P2PNetwork {
                 }
                 TerminalMessageBody::SessionEnd { from: _, timestamp } => {
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::End,
                         data: "Session ended".to_string(),
                     };
@@ -944,7 +975,7 @@ impl P2PNetwork {
                     let my_node_id = self.endpoint.node_id();
                     if to == my_node_id {
                         let event = TerminalEvent {
-                            timestamp: timestamp as f64,
+                            timestamp,
                             event_type: EventType::Output,
                             data: format!("[DM from {}] {}", from.fmt_short(), data),
                         };
@@ -969,7 +1000,7 @@ impl P2PNetwork {
                 TerminalMessageBody::ParticipantJoined { from, timestamp } => {
                     info!("Participant {} joined session", from.fmt_short());
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!("Participant {} joined the session", from.fmt_short()),
                     };
@@ -1050,7 +1081,7 @@ impl P2PNetwork {
 
                     // Send session info event
                     let info_event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!(
                             "=== Session History ===\nShell: {}\nWorking Directory: {}\n",
@@ -1064,7 +1095,7 @@ impl P2PNetwork {
                     // Send each history line as a separate event
                     for (i, line) in history.iter().enumerate() {
                         let history_event = TerminalEvent {
-                            timestamp: (timestamp as f64) + (i as f64 * 0.001), // Slight time offset for ordering
+                            timestamp: timestamp + (i as u64), // Slight time offset for ordering
                             event_type: EventType::HistoryData,
                             data: line.clone(),
                         };
@@ -1075,7 +1106,7 @@ impl P2PNetwork {
 
                     // Send separator
                     let separator_event = TerminalEvent {
-                        timestamp: (timestamp as f64) + (history.len() as f64 * 0.001) + 0.001,
+                        timestamp: timestamp + (history.len() as u64) + 1,
                         event_type: EventType::Output,
                         data: "=== End of History ===\n".to_string(),
                     };
@@ -1095,7 +1126,7 @@ impl P2PNetwork {
                 } => {
                     info!("Received terminal create request from {}", from.fmt_short());
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!(
                             "[Terminal Create Request] Name: {:?}, Shell: {:?}, Dir: {:?}, Size: {:?}",
@@ -1118,7 +1149,7 @@ impl P2PNetwork {
                         terminal_id
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!("[Terminal Status Update] {}: {:?}", terminal_id, status),
                     };
@@ -1138,7 +1169,7 @@ impl P2PNetwork {
                         terminal_id
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::TerminalOutput { terminal_id, data },
                         data: String::new(),
                     };
@@ -1261,7 +1292,7 @@ impl P2PNetwork {
                     }
 
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::TerminalInput { terminal_id, data },
                         data: String::new(),
                     };
@@ -1287,7 +1318,7 @@ impl P2PNetwork {
                         terminal_id
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::TerminalResize {
                             terminal_id,
                             rows,
@@ -1311,7 +1342,7 @@ impl P2PNetwork {
                         terminal_id
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!("[Terminal Directory Change: {}] {}", terminal_id, new_dir),
                     };
@@ -1330,7 +1361,7 @@ impl P2PNetwork {
                         terminal_id
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!("[Terminal Stop Request] {}", terminal_id),
                     };
@@ -1341,7 +1372,7 @@ impl P2PNetwork {
                 TerminalMessageBody::TerminalListRequest { from, timestamp } => {
                     info!("Received terminal list request from {}", from.fmt_short());
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: "[Terminal List Request]".to_string(),
                     };
@@ -1360,7 +1391,7 @@ impl P2PNetwork {
                         terminals.len()
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::TerminalList(terminals),
                         data: String::new(),
                     };
@@ -1384,7 +1415,7 @@ impl P2PNetwork {
                         local_port
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::WebShareCreate {
                             local_port,
                             public_port: public_port.unwrap_or(0),
@@ -1409,7 +1440,7 @@ impl P2PNetwork {
                         public_port
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!("[WebShare Status Update: {}] {:?}", public_port, status),
                     };
@@ -1428,7 +1459,7 @@ impl P2PNetwork {
                         public_port
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: format!("[WebShare Stop Request] {}", public_port),
                     };
@@ -1439,7 +1470,7 @@ impl P2PNetwork {
                 TerminalMessageBody::WebShareListRequest { from, timestamp } => {
                     info!("Received webshare list request from {}", from.fmt_short());
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: "[WebShare List Request]".to_string(),
                     };
@@ -1458,7 +1489,7 @@ impl P2PNetwork {
                         webshares.len()
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::WebShareList(webshares),
                         data: String::new(),
                     };
@@ -1469,7 +1500,7 @@ impl P2PNetwork {
                 TerminalMessageBody::StatsRequest { from, timestamp } => {
                     info!("Received stats request from {}", from.fmt_short());
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Output,
                         data: "[Stats Request]".to_string(),
                     };
@@ -1490,7 +1521,7 @@ impl P2PNetwork {
                         &node_id[..16]
                     );
                     let event = TerminalEvent {
-                        timestamp: timestamp as f64,
+                        timestamp,
                         event_type: EventType::Stats {
                             terminal_stats,
                             webshare_stats,
