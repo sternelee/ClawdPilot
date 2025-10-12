@@ -20,21 +20,54 @@ use tracing::{instrument, trace};
 
 /// Returns the default shell on this system.
 pub async fn get_default_shell() -> String {
+    // First try SHELL environment variable (user's current shell)
     if let Ok(shell) = env::var("SHELL") {
-        if !shell.is_empty() {
+        if !shell.is_empty() && fs::metadata(&shell).await.is_ok() {
+            trace!("Using shell from SHELL environment variable: {}", shell);
             return shell;
         }
     }
-    for shell in [
-        "/bin/bash",
-        "/bin/sh",
+
+    // Try to detect current user's preferred shell from /etc/passwd
+    if let Ok(username) = env::var("USER").or_else(|_| env::var("USERNAME")) {
+        if let Ok(content) = tokio::fs::read_to_string("/etc/passwd").await {
+            for line in content.lines() {
+                if let Some(fields) = line.split(':').collect::<Vec<_>>().get(6) {
+                    if fields.starts_with('/') && fields.ends_with("sh") {
+                        if fs::metadata(fields).await.is_ok() {
+                            trace!(
+                                "Using shell from /etc/passwd for user {}: {}",
+                                username, fields
+                            );
+                            return fields.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to common shell locations in order of preference
+    let shell_preferences = [
+        "/bin/zsh",  // zsh - often preferred by developers
+        "/bin/bash", // bash - very common
+        "/bin/fish", // fish - modern shell
+        "/bin/sh",   // sh - POSIX shell
+        "/usr/local/bin/zsh",
         "/usr/local/bin/bash",
+        "/usr/local/bin/fish",
         "/usr/local/bin/sh",
-    ] {
+    ];
+
+    for shell in shell_preferences {
         if fs::metadata(shell).await.is_ok() {
+            trace!("Using fallback shell: {}", shell);
             return shell.to_string();
         }
     }
+
+    // Last resort
+    trace!("Using last resort shell: sh");
     String::from("sh")
 }
 

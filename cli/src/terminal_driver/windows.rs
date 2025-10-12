@@ -11,21 +11,64 @@ use tracing::instrument;
 
 /// Returns the default shell on this system.
 ///
-/// For Windows, this is implemented currently to just look for shells at a
-/// couple locations. If it fails, it returns `cmd.exe`.
-///
-/// Note: I can't get `powershell.exe` to work with ConPTY, since it returns
-/// error 8009001d. There's some magic environment variables that need to be set
-/// for Powershell to launch. This is why I don't typically use Windows!
+/// For Windows, this tries to detect the user's preferred shell by checking
+/// COMSPEC and common shell locations.
 pub async fn get_default_shell() -> String {
-    for shell in [
-        "C:\\Program Files\\Git\\bin\\bash.exe",
-        "C:\\Windows\\System32\\cmd.exe",
-    ] {
+    use std::env;
+
+    // First try COMSPEC environment variable (Windows system shell)
+    if let Ok(comspec) = env::var("COMSPEC") {
+        if !comspec.is_empty() && fs::metadata(&comspec).await.is_ok() {
+            tracing::trace!("Using shell from COMSPEC: {}", comspec);
+            return comspec;
+        }
+    }
+
+    // Try to detect PowerShell first (more modern)
+    let power_shell_paths = [
+        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "powershell.exe",
+    ];
+
+    for shell in power_shell_paths {
         if fs::metadata(shell).await.is_ok() {
+            tracing::trace!("Using PowerShell: {}", shell);
             return shell.to_string();
         }
     }
+
+    // Try Git Bash (common for developers)
+    let git_bash_paths = [
+        "C:\\Program Files\\Git\\bin\\bash.exe",
+        "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+        "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+        "C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe",
+    ];
+
+    for shell in git_bash_paths {
+        if fs::metadata(shell).await.is_ok() {
+            tracing::trace!("Using Git Bash: {}", shell);
+            return shell.to_string();
+        }
+    }
+
+    // Fallback to cmd.exe
+    let cmd_paths = [
+        "C:\\Windows\\System32\\cmd.exe",
+        "C:\\Windows\\SysWOW64\\cmd.exe",
+        "cmd.exe",
+    ];
+
+    for shell in cmd_paths {
+        if fs::metadata(shell).await.is_ok() {
+            tracing::trace!("Using cmd.exe: {}", shell);
+            return shell.to_string();
+        }
+    }
+
+    // Last resort
+    tracing::trace!("Using last resort shell: cmd.exe");
     String::from("cmd.exe")
 }
 

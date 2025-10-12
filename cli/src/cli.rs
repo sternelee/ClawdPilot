@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use tracing::{error, info, warn};
 
-use crate::local_terminal_manager::LocalTerminalManager;
+use crate::terminal_manager::TerminalManager;
 use riterm_shared::P2PNetwork;
 
 #[derive(Parser)]
@@ -21,7 +21,7 @@ pub struct Cli {
 
 pub struct CliApp {
     network: P2PNetwork,
-    terminal_manager: LocalTerminalManager,
+    terminal_manager: TerminalManager,
 }
 
 impl CliApp {
@@ -30,7 +30,7 @@ impl CliApp {
             .await
             .context("Failed to initialize P2P network")?;
 
-        let terminal_manager = LocalTerminalManager::new();
+        let terminal_manager = TerminalManager::new();
 
         Ok(Self {
             network,
@@ -97,15 +97,6 @@ impl CliApp {
         println!("💡 Share this ticket with remote users to allow them to connect");
         println!("💡 Remote users can scan the QR code or copy the ticket text");
         println!("⚠️  Press Ctrl+C to stop the host");
-
-        // 设置终端管理器的P2P会话
-        self.terminal_manager
-            .set_p2p_session(
-                self.network.clone(),
-                header.session_id.clone(),
-                sender.clone(),
-            )
-            .await;
 
         // 设置终端输入处理器回调
         let terminal_manager_for_input = self.terminal_manager.clone();
@@ -218,7 +209,7 @@ impl CliApp {
             if let Ok(terminal_id) = terminal_manager_task
                 .create_terminal(
                     Some("Default Terminal".to_string()),
-                    "bash".to_string(),
+                    None, // Use system default shell
                     Some(
                         std::env::current_dir()
                             .unwrap_or_default()
@@ -305,8 +296,15 @@ impl CliApp {
                                     "Detected terminal create request in event, creating terminal..."
                                 );
 
-                                // 解析事件数据来提取参数
-                                let shell_path = "bash".to_string();
+                                // 解析事件数据来提取参数 - 使用系统默认 shell
+                                let shell_path = std::env::var("SHELL").unwrap_or_else(|_| {
+                                    // 如果 SHELL 环境变量不存在，使用默认路径
+                                    if cfg!(unix) {
+                                        "/bin/bash".to_string()
+                                    } else {
+                                        "cmd.exe".to_string()
+                                    }
+                                });
                                 let working_dir = std::env::current_dir()
                                     .unwrap_or_default()
                                     .to_string_lossy()
@@ -316,7 +314,7 @@ impl CliApp {
                                 if let Ok(terminal_id) = terminal_manager_for_events
                                     .create_terminal(
                                         None, // name
-                                        shell_path,
+                                        Some(shell_path),
                                         Some(working_dir),
                                         size,
                                     )
@@ -329,7 +327,7 @@ impl CliApp {
 
                                     // 获取终端列表并发送响应给前端
                                     let terminal_list =
-                                        terminal_manager_for_events.get_terminal_list().await;
+                                        terminal_manager_for_events.list_terminals().await;
                                     info!(
                                         "📋 Sending terminal list with {} terminals to frontend",
                                         terminal_list.len()

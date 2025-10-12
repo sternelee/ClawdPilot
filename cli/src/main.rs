@@ -1,10 +1,9 @@
 mod cli;
-mod local_terminal_manager;
-mod local_webshare;
 mod shell;
 mod terminal;
 mod terminal_driver;
-mod terminal_session;
+mod terminal_manager;
+mod terminal_runner;
 
 use anyhow::Result;
 use clap::Parser;
