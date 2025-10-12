@@ -113,32 +113,48 @@ impl CliApp {
         let network_for_input = self.network.clone();
 
         // 创建终端输入处理器回调
-        let input_processor = move |terminal_id: String, data: String| -> tokio::task::JoinHandle<anyhow::Result<Option<String>>> {
-            let terminal_manager = terminal_manager_for_input.clone();
-            let session_id = session_id_for_input.clone();
-            let network = network_for_input.clone();
+        let input_processor =
+            move |terminal_id: String,
+                  data: String|
+                  -> tokio::task::JoinHandle<anyhow::Result<Option<String>>> {
+                let terminal_manager = terminal_manager_for_input.clone();
+                let session_id = session_id_for_input.clone();
+                let network = network_for_input.clone();
 
-            tokio::spawn(async move {
-                info!("🔥 RECEIVED TERMINAL INPUT: terminal_id={}, data='{}'", terminal_id, data);
+                tokio::spawn(async move {
+                    info!(
+                        "🔥 RECEIVED TERMINAL INPUT: terminal_id={}, data='{}'",
+                        terminal_id, data
+                    );
 
-                // 将输入发送到实际的终端会话
-                let data_clone = data.clone();
-                if let Err(e) = terminal_manager.send_input(&terminal_id, data.into_bytes()).await {
-                    error!("Failed to send input to terminal {}: {}", terminal_id, e);
-                    return Ok(None);
-                }
+                    // 将输入发送到实际的终端会话
+                    let data_clone = data.clone();
+                    if let Err(e) = terminal_manager
+                        .send_input(&terminal_id, data.into_bytes())
+                        .await
+                    {
+                        error!("Failed to send input to terminal {}: {}", terminal_id, e);
+                        return Ok(None);
+                    }
 
-                info!("✅ Successfully sent input '{}' to terminal {}", data_clone, terminal_id);
+                    info!(
+                        "✅ Successfully sent input '{}' to terminal {}",
+                        data_clone, terminal_id
+                    );
 
-                // 这里暂时返回 None，实际的输出将由终端会话通过其他方式发送
-                // 未来可以在这里等待终端的输出响应
-                info!("⏭️ Terminal input callback returning None (output will be sent via callback chain)");
-                Ok(None)
-            })
-        };
+                    // 这里暂时返回 None，实际的输出将由终端会话通过其他方式发送
+                    // 未来可以在这里等待终端的输出响应
+                    info!(
+                        "⏭️ Terminal input callback returning None (output will be sent via callback chain)"
+                    );
+                    Ok(None)
+                })
+            };
 
         // 设置终端输入处理回调
-        self.network.set_terminal_input_callback(input_processor).await;
+        self.network
+            .set_terminal_input_callback(input_processor)
+            .await;
 
         // 保存gossip sender的引用用于后续发送响应
         let gossip_sender_for_responses = sender.clone();
@@ -155,25 +171,36 @@ impl CliApp {
             let network = network_for_output.clone();
             let gossip_sender = gossip_sender_for_output.clone();
 
-            info!("🔥 RECEIVED TERMINAL OUTPUT: terminal_id={}, data='{}'", terminal_id, data);
+            info!(
+                "🔥 RECEIVED TERMINAL OUTPUT: terminal_id={}, data='{}'",
+                terminal_id, data
+            );
 
             tokio::spawn(async move {
                 // 使用保存的 gossip sender 发送终端输出
-                if let Err(e) = network.send_terminal_output(
-                    &session_id,
-                    &gossip_sender,
-                    terminal_id.clone(),
-                    data.clone(),
-                ).await {
+                if let Err(e) = network
+                    .send_terminal_output(
+                        &session_id,
+                        &gossip_sender,
+                        terminal_id.clone(),
+                        data.clone(),
+                    )
+                    .await
+                {
                     error!("Failed to send terminal output to P2P network: {}", e);
                 } else {
-                    info!("✅ Successfully sent terminal output from {} to P2P network: '{}'", terminal_id, data);
+                    info!(
+                        "✅ Successfully sent terminal output from {} to P2P network: '{}'",
+                        terminal_id, data
+                    );
                 }
             });
         };
 
         // 设置终端输出处理回调
-        self.terminal_manager.set_output_callback(output_processor).await;
+        self.terminal_manager
+            .set_output_callback(output_processor)
+            .await;
 
         // 设置终端管理消息处理器
         let terminal_manager = self.terminal_manager.clone();

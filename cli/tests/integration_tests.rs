@@ -45,4 +45,3 @@ mod tests {
         assert!(remaining_after_cleanup >= MAX_EVENTS_BUFFER / 2); // At least half remaining
     }
 }
-

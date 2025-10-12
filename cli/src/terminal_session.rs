@@ -7,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 
-use crate::terminal_driver::{get_default_shell, Terminal};
+use crate::terminal_driver::{Terminal, get_default_shell};
 
 const BUFFER_SIZE: usize = 4096;
 const CONTENT_ROLLING_BYTES: usize = 8 << 20; // 8MB
@@ -47,7 +47,9 @@ impl TerminalSession {
 
         info!(
             "Creating terminal session '{}' ({}) with shell: {}",
-            session_id, name.as_deref().unwrap_or("unnamed"), shell
+            session_id,
+            name.as_deref().unwrap_or("unnamed"),
+            shell
         );
 
         let mut terminal = Terminal::new(&shell)
@@ -63,10 +65,12 @@ impl TerminalSession {
         // Get actual terminal size
         let actual_size = terminal.get_winsize().unwrap_or(size);
 
-        let current_dir = working_dir.unwrap_or_else(|| std::env::current_dir()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string());
+        let current_dir = working_dir.unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        });
 
         let shell_type = extract_shell_type(&shell);
 
@@ -193,28 +197,47 @@ impl TerminalSession {
 
         // Update sequence to track processed data
         let total_content_len = (self.content_offset + self.content.len()) as u64;
-        info!("🔥 OUTPUT PROCESSING: session_id={}, total_content_len={}, sequence={}", self.session_id, total_content_len, self.sequence);
+        info!(
+            "🔥 OUTPUT PROCESSING: session_id={}, total_content_len={}, sequence={}",
+            self.session_id, total_content_len, self.sequence
+        );
 
         if total_content_len > self.sequence {
             let start_offset = (self.sequence - self.content_offset as u64) as usize;
             let start = self.prev_char_boundary(start_offset);
             let end = self.prev_char_boundary((start + BUFFER_SIZE).min(self.content.len()));
 
-            info!("🔥 OUTPUT PROCESSING DETAILS: session_id={}, start_offset={}, start={}, end={}, content_len={}",
-                  self.session_id, start_offset, start, end, self.content.len());
+            info!(
+                "🔥 OUTPUT PROCESSING DETAILS: session_id={}, start_offset={}, start={}, end={}, content_len={}",
+                self.session_id,
+                start_offset,
+                start,
+                end,
+                self.content.len()
+            );
 
             if start < end {
                 // Get the new output data
                 let output_data = &self.content[start..end];
 
-                info!("🔥 SENDING OUTPUT DATA: session_id={}, data='{}'", self.session_id, output_data);
+                info!(
+                    "🔥 SENDING OUTPUT DATA: session_id={}, data='{}'",
+                    self.session_id, output_data
+                );
 
                 // Send output via callback if available
                 if let Some(ref callback) = self.output_callback {
-                    tracing::info!("🔥 TERMINAL SESSION PRODUCING OUTPUT: session_id={}, data='{}'", self.session_id, output_data);
+                    tracing::info!(
+                        "🔥 TERMINAL SESSION PRODUCING OUTPUT: session_id={}, data='{}'",
+                        self.session_id,
+                        output_data
+                    );
                     callback(self.session_id.clone(), output_data.to_string());
                 } else {
-                    tracing::warn!("⚠️ No output callback set for terminal session {}", self.session_id);
+                    tracing::warn!(
+                        "⚠️ No output callback set for terminal session {}",
+                        self.session_id
+                    );
                 }
 
                 self.sequence = (self.content_offset + end) as u64;
@@ -222,7 +245,10 @@ impl TerminalSession {
                 info!("🔥 NO NEW OUTPUT TO SEND: start={}, end={}", start, end);
             }
         } else {
-            info!("🔥 NO NEW CONTENT: total_content_len={} <= sequence={}", total_content_len, self.sequence);
+            info!(
+                "🔥 NO NEW CONTENT: total_content_len={} <= sequence={}",
+                total_content_len, self.sequence
+            );
         }
 
         // Prune old content to prevent memory growth

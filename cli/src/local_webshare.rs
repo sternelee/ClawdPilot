@@ -223,4 +223,3 @@ pub struct WebShareStats {
     pub errors: usize,
     pub stopped: usize,
 }
-

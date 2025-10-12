@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 
 use crate::local_webshare::LocalWebShareManager;
@@ -26,7 +26,6 @@ pub struct LocalTerminalInfo {
     pub process_id: Option<u32>,
     pub associated_webshares: Vec<u16>,
 }
-
 
 impl From<LocalTerminalInfo> for TerminalInfo {
     fn from(local: LocalTerminalInfo) -> Self {
@@ -266,7 +265,8 @@ impl LocalTerminalManager {
             Some(shell_path.clone()),
             working_dir.clone(),
             size,
-        ).await?;
+        )
+        .await?;
 
         // 设置输出回调
         if let Some(callback) = output_callback {
@@ -274,11 +274,18 @@ impl LocalTerminalManager {
             // Convert Arc<dyn Fn> to a concrete closure by cloning the Arc
             let callback_clone = callback.clone();
             terminal_session.set_output_callback(move |session_id: String, data: String| {
-                tracing::info!("🔥 OUTPUT CALLBACK CALLED: session_id={}, data='{}'", session_id, data);
+                tracing::info!(
+                    "🔥 OUTPUT CALLBACK CALLED: session_id={}, data='{}'",
+                    session_id,
+                    data
+                );
                 callback_clone(session_id, data);
             });
         } else {
-            warn!("⚠️ NO OUTPUT CALLBACK AVAILABLE when creating terminal {}", terminal_id);
+            warn!(
+                "⚠️ NO OUTPUT CALLBACK AVAILABLE when creating terminal {}",
+                terminal_id
+            );
         }
 
         // 获取终端信息
@@ -302,8 +309,10 @@ impl LocalTerminalManager {
             shell_type: terminal_info.shell_type.clone(),
             current_dir: terminal_info.current_dir.clone(),
             status: terminal_info.status.clone(),
-            created_at: std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(terminal_info.created_at),
-            last_activity: std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(terminal_info.last_activity),
+            created_at: std::time::SystemTime::UNIX_EPOCH
+                + std::time::Duration::from_secs(terminal_info.created_at),
+            last_activity: std::time::SystemTime::UNIX_EPOCH
+                + std::time::Duration::from_secs(terminal_info.last_activity),
             size: terminal_info.size,
             process_id: terminal_info.process_id,
             associated_webshares: terminal_info.associated_webshares,
@@ -328,7 +337,9 @@ impl LocalTerminalManager {
         size: Option<(u16, u16)>,
     ) -> Result<String> {
         let shell_path = shell_path.unwrap_or_else(|| "bash".to_string());
-        let terminal_id = self.create_terminal(name, shell_path, working_dir, size).await?;
+        let terminal_id = self
+            .create_terminal(name, shell_path, working_dir, size)
+            .await?;
         info!("Created terminal via P2P request: {}", terminal_id);
         Ok(terminal_id)
     }
@@ -345,11 +356,13 @@ impl LocalTerminalManager {
                 shell_type: session_info.shell_type.clone(),
                 current_dir: session_info.current_dir.clone(),
                 status: session_info.status.clone(),
-                created_at: session_info.created_at
+                created_at: session_info
+                    .created_at
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
-                last_activity: session_info.last_activity
+                last_activity: session_info
+                    .last_activity
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
@@ -378,15 +391,29 @@ impl LocalTerminalManager {
 
     /// 向终端发送输入
     pub async fn send_input(&self, terminal_id: &str, data: Vec<u8>) -> Result<()> {
-        info!("🔥 TERMINAL MANAGER SEND_INPUT: terminal_id={}, data={:?}", terminal_id, String::from_utf8_lossy(&data));
+        info!(
+            "🔥 TERMINAL MANAGER SEND_INPUT: terminal_id={}, data={:?}",
+            terminal_id,
+            String::from_utf8_lossy(&data)
+        );
         let sessions = self.sessions.read().await;
         if let Some(session_info) = sessions.get(terminal_id) {
-            session_info.sender.send(TerminalCommand::Input(data)).await
+            session_info
+                .sender
+                .send(TerminalCommand::Input(data))
+                .await
                 .context("Failed to send input to terminal")?;
-            info!("✅ Successfully sent input to terminal session {}", terminal_id);
+            info!(
+                "✅ Successfully sent input to terminal session {}",
+                terminal_id
+            );
             Ok(())
         } else {
-            error!("❌ Terminal {} not found in {} sessions", terminal_id, sessions.len());
+            error!(
+                "❌ Terminal {} not found in {} sessions",
+                terminal_id,
+                sessions.len()
+            );
             Err(anyhow::anyhow!("Terminal {} not found", terminal_id))
         }
     }
@@ -395,7 +422,10 @@ impl LocalTerminalManager {
     pub async fn resize_terminal(&self, terminal_id: &str, rows: u16, cols: u16) -> Result<()> {
         let sessions = self.sessions.read().await;
         if let Some(session_info) = sessions.get(terminal_id) {
-            session_info.sender.send(TerminalCommand::Resize(rows, cols)).await
+            session_info
+                .sender
+                .send(TerminalCommand::Resize(rows, cols))
+                .await
                 .context("Failed to resize terminal")?;
             Ok(())
         } else {
@@ -407,7 +437,10 @@ impl LocalTerminalManager {
     pub async fn rename_terminal(&self, terminal_id: &str, new_name: Option<String>) -> Result<()> {
         let sessions = self.sessions.read().await;
         if let Some(session_info) = sessions.get(terminal_id) {
-            session_info.sender.send(TerminalCommand::Rename(new_name.clone())).await
+            session_info
+                .sender
+                .send(TerminalCommand::Rename(new_name.clone()))
+                .await
                 .context("Failed to rename terminal")?;
 
             // 更新本地存储的名称
@@ -422,4 +455,3 @@ impl LocalTerminalManager {
         }
     }
 }
-

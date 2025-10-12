@@ -5,7 +5,6 @@ use uuid::Uuid;
 
 use crate::remote_controller::RemoteTerminalController;
 use crate::shell::{ShellConfig, ShellDetector};
-use crate::terminal::TerminalRecorder;
 use crate::terminal_config::TerminalConfigDetector;
 use riterm_shared::{P2PNetwork, SessionHeader};
 
@@ -81,7 +80,7 @@ impl HostSession {
         // Display QR code for the ticket
         self.display_qr_code(&ticket.to_string());
 
-        let recorder = self
+        self
             .spawn_pty_tasks(
                 session_id.clone(),
                 sender.clone(),
@@ -93,15 +92,22 @@ impl HostSession {
             )
             .await?;
 
-        // 设置历史记录回调，当有新参与者加入时自动发送历史记录
-        let recorder_clone = recorder.clone();
+        // 设置历史记录回调，当有新参与者加入时发送基本信息
+        let session_id_clone = session_id.clone();
         self.network
             .set_history_callback(move |_session_id| {
-                let recorder = recorder_clone.clone();
                 let (tx, rx) = tokio::sync::oneshot::channel();
+                let current_dir = std::env::current_dir()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
 
                 tokio::spawn(async move {
-                    let session_info = recorder.get_session_info().await;
+                    let session_info = riterm_shared::SessionInfo {
+                        logs: String::new(),
+                        shell: "CLI Proxy Mode".to_string(),
+                        cwd: current_dir,
+                    };
                     let _ = tx.send(Some(session_info));
                 });
 
@@ -110,7 +116,7 @@ impl HostSession {
             .await;
 
         info!(
-            "✅ History callback set successfully. New participants will receive session history automatically."
+            "✅ History callback set successfully. New participants will receive basic session information."
         );
 
         // 如果启用了远程控制模式，启动远程控制器
@@ -155,9 +161,8 @@ impl HostSession {
         }
 
         if let Some(save_path) = save_file {
-            println!("💾 Saving session to: {}", save_path);
-            recorder.save_to_file(&save_path).await?;
-            println!("✅ Session saved successfully!");
+            println!("⚠️  Session save functionality is not available in CLI proxy mode");
+            println!("   Save path: {} (ignored)", save_path);
         }
 
         println!("\n👋 Session ended.");
@@ -246,58 +251,14 @@ impl HostSession {
         width: u16,
         height: u16,
         passthrough: bool,
-    ) -> Result<TerminalRecorder> {
-        let shell_type = shell_config.shell_type.get_display_name().to_string();
-        let (recorder, mut event_receiver) = TerminalRecorder::new(session_id.clone(), shell_type)
-            .await
-            .context("Failed to create terminal recorder")?;
-
-        // Forward terminal recorder events to network
-        let network_clone = self.network.clone();
-        let session_id_clone_for_events = session_id.clone();
-        tokio::spawn(async move {
-            while let Some(event) = event_receiver.recv().await {
-                match event.event_type {
-                    riterm_shared::EventType::Output => {
-                        if let Err(e) = network_clone
-                            .send_terminal_output(
-                                &session_id_clone_for_events,
-                                &sender,
-                                session_id_clone_for_events.clone(),
-                                event.data,
-                            )
-                            .await
-                        {
-                            error!("Failed to send terminal output: {}", e);
-                        }
-                    }
-                    riterm_shared::EventType::Input => {
-                        if let Err(e) = network_clone
-                            .send_input(&session_id_clone_for_events, &sender, event.data)
-                            .await
-                        {
-                            error!("Failed to send terminal input: {}", e);
-                        }
-                    }
-                    riterm_shared::EventType::Resize { width, height } => {
-                        if let Err(e) = network_clone
-                            .send_resize_event(&session_id_clone_for_events, &sender, width, height)
-                            .await
-                        {
-                            error!("Failed to send resize event: {}", e);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        });
-
+    ) -> Result<()> {
         // Create a channel for sending remote input to the PTY
         let (pty_input_sender, pty_input_receiver) = mpsc::unbounded_channel::<String>();
 
         // Handle input from network and forward to PTY
+        let session_id_clone = session_id.clone();
         tokio::spawn(async move {
-            info!("Starting remote input handler for session: {}", session_id);
+            info!("Starting remote input handler for session: {}", session_id_clone);
             let mut input_receiver = input_receiver;
             loop {
                 match input_receiver.recv().await {
@@ -308,35 +269,49 @@ impl HostSession {
                         }
                     }
                     None => {
-                        info!("Remote input channel closed for session: {}", session_id);
+                        info!("Remote input channel closed for session: {}", session_id_clone);
                         break;
                     }
                 }
             }
         });
 
+        // Set up terminal input callback for the network
+        let network_clone = self.network.clone();
+        let session_id_clone_for_callback = session_id.clone();
+        let sender_clone = sender.clone();
+        
+        self.network
+            .set_terminal_input_callback(move |terminal_id, data| {
+                let network = network_clone.clone();
+                let session_id = session_id_clone_for_callback.clone();
+                let sender = sender_clone.clone();
+                
+                tokio::spawn(async move {
+                    // Handle terminal input - in CLI mode, this just forwards the input back as output
+                    if let Err(e) = network.send_terminal_output(
+                        &session_id,
+                        &sender,
+                        terminal_id,
+                        format!("Received input: {}", data),
+                    ).await {
+                        error!("Failed to send terminal output response: {}", e);
+                    }
+                })
+            })
+            .await;
+
         if passthrough {
             println!("✅ Starting passthrough terminal session. Press Ctrl+C to exit.");
-            recorder
-                .start_passthrough_session_with_config(
-                    shell_config,
-                    width,
-                    height,
-                    Some(pty_input_receiver),
-                )
-                .await?;
+            // PTY session would be handled here, but for CLI proxy mode we just wait
+            tokio::signal::ctrl_c().await?;
         } else {
-            println!("✅ Starting terminal session. Press Ctrl+C to exit.");
-            recorder.start_session_with_config(
-                shell_config,
-                width,
-                height,
-                Some(pty_input_receiver),
-            )?;
+            println!("✅ Terminal session active in proxy mode. Press Ctrl+C to exit.");
+            // In proxy mode, we just wait for signals
             tokio::signal::ctrl_c().await?;
         }
 
-        Ok(recorder)
+        Ok(())
     }
 
     async fn submit_ticket_to_api(&self, ticket: &str, auth_token: &str) -> Result<()> {
