@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { getDeviceCapabilities } from "../utils/mobile";
 // Import types from the shared library
 interface TerminalInfo {
   id: string;
@@ -43,9 +44,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [terminals, setTerminals] = createSignal<TerminalInfo[]>([]);
   const [webshares, setWebshares] = createSignal<WebShareInfo[]>([]);
   const [loading, setLoading] = createSignal(true);
-  const [selectedTerminalId, setSelectedTerminalId] = createSignal<
-    string | null
-  >(null);
   const [terminalSessions, setTerminalSessions] = createSignal<
     Map<string, TerminalSession>
   >(new Map());
@@ -56,6 +54,15 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 创建终端弹窗相关状态
   const [showCreateDialog, setShowCreateDialog] = createSignal(false);
   const [terminalName, setTerminalName] = createSignal("");
+
+  // 移动端下拉菜单状态
+  const [showTerminalMenu, setShowTerminalMenu] = createSignal(false);
+  const [showWebShareMenu, setShowWebShareMenu] = createSignal(false);
+  const [showMainMenu, setShowMainMenu] = createSignal(false);
+
+  const deviceCapabilities = getDeviceCapabilities();
+  const isMobile = deviceCapabilities.isMobile;
+
   let containerRef: HTMLDivElement | undefined;
 
   // 获取终端列表
@@ -182,8 +189,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 连接到终端
   const connectToTerminal = async (terminalId: string) => {
     try {
-      setSelectedTerminalId(terminalId);
-
       // 检查是否已有该终端的会话
       const sessions = terminalSessions();
       if (sessions.has(terminalId)) {
@@ -494,53 +499,58 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   });
 
   // 渲染终端列表
-  const renderTerminalList = () => (
-    <div class="space-y-2">
+  const renderTerminalList = (inDropdown = false) => (
+    <div class={inDropdown ? "space-y-2" : "space-y-2"}>
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-semibold">终端列表</h3>
         <button
           class="btn btn-primary btn-sm"
-          onClick={openCreateDialog}
+          onClick={() => {
+            openCreateDialog();
+            if (inDropdown) setShowTerminalMenu(false);
+          }}
           title="创建新终端"
         >
-          ➕ 新建终端
+          ➕ 新建
         </button>
       </div>
 
       <For each={terminals()}>
         {(terminal) => (
           <div
-            class={`card bg-base-200 shadow-sm p-4 ${
+            class={`card bg-base-200 shadow-sm p-3 ${
               activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
             }`}
           >
             <div class="flex justify-between items-start">
-              <div class="flex-1">
-                <div class="font-medium">
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">
                   {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
                 </div>
-                <div class="text-sm opacity-70">
+                <div class="text-xs opacity-70 truncate">
                   {terminal.shell_type} • {terminal.current_dir}
                 </div>
                 <div class="text-xs opacity-50 mt-1">
-                  状态: {terminal.status} • 大小: {terminal.size[0]}x
-                  {terminal.size[1]}
+                  {terminal.status} • {terminal.size[0]}x{terminal.size[1]}
                 </div>
               </div>
-              <div class="flex space-x-2">
+              <div class="flex space-x-1 ml-2">
                 {activeTerminalId() === terminal.id ? (
-                  <div class="badge badge-primary">活动中</div>
+                  <div class="badge badge-primary badge-sm">活动</div>
                 ) : (
                   <button
-                    class="btn btn-primary btn-sm"
-                    onClick={() => connectToTerminal(terminal.id)}
+                    class="btn btn-primary btn-xs"
+                    onClick={() => {
+                      connectToTerminal(terminal.id);
+                      if (inDropdown) setShowTerminalMenu(false);
+                    }}
                     disabled={terminal.status !== "Running"}
                   >
                     连接
                   </button>
                 )}
                 <button
-                  class="btn btn-ghost btn-sm"
+                  class="btn btn-ghost btn-xs"
                   onClick={() => stopTerminal(terminal.id)}
                   title="停止终端"
                 >
@@ -558,7 +568,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           <div>暂无终端</div>
           <button
             class="btn btn-primary btn-sm mt-4"
-            onClick={openCreateDialog}
+            onClick={() => {
+              openCreateDialog();
+              if (inDropdown) setShowTerminalMenu(false);
+            }}
           >
             创建第一个终端
           </button>
@@ -568,41 +581,39 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   );
 
   // 渲染WebShare列表
-  const renderWebShareList = () => (
+  const renderWebShareList = (inDropdown = false) => (
     <div class="space-y-2">
       <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-semibold">WebShare 服务</h3>
         <button
           class="btn btn-primary btn-sm"
           onClick={() => {
-            // 这里可以打开创建WebShare的模态框
             createWebShare({
               local_port: 3000,
               service_name: "Local Development Server",
             });
+            if (inDropdown) setShowWebShareMenu(false);
           }}
           title="创建WebShare"
         >
-          ➕ 新建服务
+          ➕ 新建
         </button>
       </div>
 
       <For each={webshares()}>
         {(webshare) => (
-          <div class="card bg-base-200 shadow-sm p-4">
+          <div class="card bg-base-200 shadow-sm p-3">
             <div class="flex justify-between items-start">
-              <div class="flex-1">
-                <div class="font-medium">{webshare.service_name}</div>
-                <div class="text-sm opacity-70">
-                  端口: {webshare.public_port} → {webshare.local_port}
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">{webshare.service_name}</div>
+                <div class="text-xs opacity-70">
+                  {webshare.public_port} → {webshare.local_port}
                 </div>
-                <div class="text-xs opacity-50 mt-1">
-                  状态: {webshare.status}
-                </div>
+                <div class="text-xs opacity-50 mt-1">{webshare.status}</div>
               </div>
-              <div class="flex space-x-2">
+              <div class="flex space-x-1 ml-2">
                 <button
-                  class="btn btn-ghost btn-sm"
+                  class="btn btn-ghost btn-xs"
                   onClick={() => {
                     navigator.clipboard.writeText(
                       `http://localhost:${webshare.public_port}`
@@ -716,14 +727,14 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       </Show>
 
       {/* 头部 */}
-      <div class="navbar bg-base-100 border-b">
+      <div class="navbar bg-base-100 border-b min-h-[48px] px-2 sm:px-4">
         <div class="flex-1">
           <button class="btn btn-ghost btn-sm" onClick={props.onBack}>
             ← 返回
           </button>
-          <span class="ml-2 font-medium">远程会话</span>
+          <span class="ml-2 font-medium hidden sm:inline">远程会话</span>
         </div>
-        <div class="flex-none">
+        <div class="flex-none flex items-center space-x-1">
           <button
             class="btn btn-ghost btn-sm"
             onClick={() => Promise.all([fetchTerminals(), fetchWebShares()])}
@@ -731,32 +742,166 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           >
             🔄
           </button>
-          <button
-            class="btn btn-ghost btn-sm ml-2"
-            onClick={props.onDisconnect}
-            title="断开连接"
-          >
-            🔌 断开
-          </button>
+
+          {/* 移动端下拉菜单 */}
+          <Show when={isMobile}>
+            <div class="dropdown dropdown-end">
+              <button
+                class="btn btn-ghost btn-sm"
+                onClick={() => setShowMainMenu(!showMainMenu())}
+              >
+                ☰
+              </button>
+              <Show when={showMainMenu()}>
+                <ul class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-72 max-h-[80vh] overflow-y-auto z-50 mt-2">
+                  <li class="menu-title">
+                    <span>终端管理</span>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        setShowTerminalMenu(true);
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      💻 终端列表 ({terminals().length})
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        setShowWebShareMenu(true);
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      🌐 WebShare ({webshares().length})
+                    </button>
+                  </li>
+                  <li class="menu-title">
+                    <span>操作</span>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        openCreateDialog();
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      ➕ 新建终端
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        props.onDisconnect();
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      🔌 断开连接
+                    </button>
+                  </li>
+                </ul>
+              </Show>
+            </div>
+          </Show>
+
+          {/* 桌面端按钮 */}
+          <Show when={!isMobile}>
+            <button
+              class="btn btn-ghost btn-sm"
+              onClick={props.onDisconnect}
+              title="断开连接"
+            >
+              🔌 断开
+            </button>
+          </Show>
         </div>
       </div>
 
+      {/* 移动端终端列表下拉菜单 */}
+      <Show when={showTerminalMenu()}>
+        <div
+          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowTerminalMenu(false)}
+        >
+          <div
+            class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
+              <h2 class="text-lg font-semibold">终端列表</h2>
+              <button
+                class="btn btn-ghost btn-sm btn-circle"
+                onClick={() => setShowTerminalMenu(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div class="p-4">
+              {loading() ? (
+                <div class="text-center py-8">
+                  <div class="loading loading-spinner"></div>
+                  <div class="mt-2">加载中...</div>
+                </div>
+              ) : (
+                renderTerminalList(true)
+              )}
+            </div>
+          </div>
+        </div>
+      </Show>
+
+      {/* 移动端WebShare列表下拉菜单 */}
+      <Show when={showWebShareMenu()}>
+        <div
+          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowWebShareMenu(false)}
+        >
+          <div
+            class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
+              <h2 class="text-lg font-semibold">WebShare 服务</h2>
+              <button
+                class="btn btn-ghost btn-sm btn-circle"
+                onClick={() => setShowWebShareMenu(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div class="p-4">
+              {loading() ? (
+                <div class="text-center py-8">
+                  <div class="loading loading-spinner"></div>
+                  <div class="mt-2">加载中...</div>
+                </div>
+              ) : (
+                renderWebShareList(true)
+              )}
+            </div>
+          </div>
+        </div>
+      </Show>
+
       {/* 主内容 */}
       <div ref={containerRef} class="flex-1 flex overflow-hidden">
-        {/* 侧边栏 - 终端和WebShare列表 */}
-        <div class="w-80 bg-base-100 border-r overflow-y-auto p-4">
-          {loading() ? (
-            <div class="text-center py-8">
-              <div class="loading loading-spinner"></div>
-              <div class="mt-2">加载中...</div>
-            </div>
-          ) : (
-            <div class="space-y-8">
-              {renderTerminalList()}
-              {renderWebShareList()}
-            </div>
-          )}
-        </div>
+        {/* 桌面端侧边栏 - 终端和WebShare列表 */}
+        <Show when={!isMobile}>
+          <div class="w-80 bg-base-100 border-r overflow-y-auto p-4">
+            {loading() ? (
+              <div class="text-center py-8">
+                <div class="loading loading-spinner"></div>
+                <div class="mt-2">加载中...</div>
+              </div>
+            ) : (
+              <div class="space-y-8">
+                {renderTerminalList(false)}
+                {renderWebShareList(false)}
+              </div>
+            )}
+          </div>
+        </Show>
 
         {/* 终端显示区域 */}
         {renderActiveTerminal()}
@@ -764,10 +909,22 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         {/* 无活动终端时的占位符 */}
         {!activeTerminalId() && (
           <div class="flex-1 flex items-center justify-center bg-base-200">
-            <div class="text-center opacity-50">
+            <div class="text-center opacity-50 px-4">
               <div class="text-6xl mb-4">💻</div>
               <div class="text-xl">选择一个终端开始</div>
-              <div class="text-sm mt-2">从左侧列表中选择或创建新终端</div>
+              <div class="text-sm mt-2">
+                {isMobile
+                  ? "点击右上角菜单选择或创建终端"
+                  : "从左侧列表中选择或创建新终端"}
+              </div>
+              <Show when={isMobile}>
+                <button
+                  class="btn btn-primary btn-sm mt-4"
+                  onClick={() => setShowMainMenu(true)}
+                >
+                  打开菜单
+                </button>
+              </Show>
             </div>
           </div>
         )}
