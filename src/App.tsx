@@ -26,6 +26,9 @@ import {
   MobileKeyboard,
   KeyboardInfo,
 } from "./utils/mobile";
+import { getViewportManager } from "./utils/mobile/ViewportManager";
+import { getLayoutCalculator } from "./utils/mobile/LayoutCalculator";
+import type { ViewportDimensions } from "./utils/mobile/ViewportManager";
 
 function App() {
   const [sessionTicket, setSessionTicket] = createSignal("");
@@ -74,9 +77,6 @@ function App() {
 
   // Enhanced mobile initialization and keyboard state management
   onMount(() => {
-    // Initialize enhanced mobile utilities
-    initializeMobileUtils();
-
     // Time update timer
     const timer = setInterval(() => {
       setCurrentTime(
@@ -87,34 +87,39 @@ function App() {
       );
     }, 1000);
 
-    // Enhanced keyboard visibility tracking with the new mobile utilities
+    // Get ViewportManager instance
+    const viewportManager = getViewportManager();
+
+    // Subscribe to viewport changes (includes keyboard state)
+    const unsubscribeViewport = viewportManager.onViewportChange(
+      (dimensions: ViewportDimensions) => {
+        setKeyboardHeight(dimensions.keyboardHeight);
+        setEffectiveViewportHeight(dimensions.effectiveHeight);
+        setKeyboardVisible(dimensions.keyboardHeight > 0);
+
+        // Enhanced debug info
+        setDebugInfo(
+          `Keyboard: ${dimensions.keyboardHeight > 0 ? "Visible" : "Hidden"}, ` +
+          `Height: ${dimensions.keyboardHeight}px, ` +
+          `Viewport: ${dimensions.height}px, ` +
+          `Effective: ${dimensions.effectiveHeight}px`,
+        );
+      },
+    );
+
+    // Also keep the original MobileKeyboard subscription for backward compatibility
     const unsubscribeKeyboard = MobileKeyboard.onVisibilityChange(
       (visible: boolean, keyboardInfo?: KeyboardInfo) => {
-        setKeyboardVisible(visible);
-
+        // Update ViewportManager with keyboard info
         if (keyboardInfo) {
-          setKeyboardHeight(keyboardInfo.height);
-          setEffectiveViewportHeight(
-            keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0),
-          );
-
-          // Enhanced debug info
-          setDebugInfo(
-            `Keyboard: ${visible ? "Visible" : "Hidden"}, ` +
-            `Height: ${keyboardInfo.height}px, ` +
-            `Viewport: ${keyboardInfo.viewportHeight}px, ` +
-            `Effective: ${keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0)}px`,
-          );
-        } else {
-          setKeyboardHeight(0);
-          setEffectiveViewportHeight(window.innerHeight);
-          setDebugInfo("Keyboard: Hidden");
+          viewportManager.updateKeyboardState(keyboardInfo);
         }
       },
     );
 
     onCleanup(() => {
       clearInterval(timer);
+      unsubscribeViewport();
       unsubscribeKeyboard();
     });
   });

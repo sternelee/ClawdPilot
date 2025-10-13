@@ -8,6 +8,8 @@ import {
   SwipeGesture,
   PullToRefresh,
 } from "./ui/EnhancedComponents";
+import { getDeviceCapabilities, HapticFeedback } from "../utils/mobile";
+import { KeyboardAwareContainer, KeyboardAwareInput, KeyboardAwareButton } from "./ui/KeyboardAwareContainer";
 
 interface ConnectionInterfaceProps {
   sessionTicket: string;
@@ -30,9 +32,13 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
   );
   const [showAdvanced, setShowAdvanced] = createSignal(false);
   const [ticketError, setTicketError] = createSignal<string | null>(null);
+  const [showConnectionModal, setShowConnectionModal] = createSignal(false);
 
   // QR Code scanner state
   const [scanningQR, setScanningQR] = createSignal(false);
+
+  const deviceCapabilities = getDeviceCapabilities();
+  const isMobile = deviceCapabilities.isMobile;
 
   // Validate session ticket format
   const validateTicket = (ticket: string): boolean => {
@@ -53,14 +59,17 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
   const handleConnect = () => {
     if (!validateTicket(props.sessionTicket)) {
       setTicketError("Please enter a valid session ticket");
+      HapticFeedback.error();
       return;
     }
     setTicketError(null);
+    HapticFeedback.success();
     props.onConnect();
   };
 
   const handleScanQR = async () => {
     setScanningQR(true);
+    HapticFeedback.light();
     try {
       // Implement QR code scanning with Tauri plugin
       // const result = await invoke("scan_qr_code");
@@ -70,9 +79,11 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
         setScanningQR(false);
         // Simulate scanned ticket
         props.onTicketInput("demo-scanned-ticket-12345");
+        HapticFeedback.success();
       }, 2000);
     } catch (error) {
       console.error("QR scan failed:", error);
+      HapticFeedback.error();
       setScanningQR(false);
     }
   };
@@ -105,6 +116,21 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
   const refreshConnections = async () => {
     // Simulate refreshing connection history
     await new Promise((resolve) => setTimeout(resolve, 1000));
+  };
+
+  const handleQuickConnectMobile = (ticket: string) => {
+    HapticFeedback.light();
+    props.onQuickConnect(ticket);
+  };
+
+  const handleShowConnectionModal = () => {
+    HapticFeedback.light();
+    setShowConnectionModal(true);
+  };
+
+  const handleCloseConnectionModal = () => {
+    HapticFeedback.light();
+    setShowConnectionModal(false);
   };
 
   return (
@@ -144,8 +170,20 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
         </EnhancedCard>
       </Show>
 
-      {/* Connection Methods */}
-      <Show when={!props.isConnected}>
+      {/* Mobile Quick Action Button */}
+      <Show when={isMobile && !props.isConnected}>
+        <div class="fixed bottom-6 right-6 z-50">
+          <button
+            class="btn btn-primary btn-circle btn-lg shadow-lg"
+            onClick={handleShowConnectionModal}
+          >
+            <span class="text-xl">🔗</span>
+          </button>
+        </div>
+      </Show>
+
+      {/* Connection Methods - Desktop/Tablet Layout */}
+      <Show when={!props.isConnected && !isMobile}>
         <EnhancedCard title="Connect to Terminal" icon="🔗" class="mb-6">
           {/* Method Selection */}
           <div class="tabs tabs-boxed mb-6">
@@ -239,83 +277,85 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
 
           {/* Manual Entry Mode */}
           <Show when={viewMode() === "manual"}>
-            <div class="space-y-4">
-              <EnhancedInput
-                value={props.sessionTicket}
-                onInput={handleTicketInput}
-                placeholder="Enter session ticket..."
-                label="Session Ticket"
-                icon="🎫"
-                error={ticketError() || props.connectionError || undefined}
-                onEnter={handleConnect}
-                autoFocus
-              />
+            <KeyboardAwareContainer adjustHeight={true} preserveContent={true}>
+              <div class="space-y-4">
+                <EnhancedInput
+                  value={props.sessionTicket}
+                  onInput={handleTicketInput}
+                  placeholder="Enter session ticket..."
+                  label="Session Ticket"
+                  icon="🎫"
+                  error={ticketError() || props.connectionError || undefined}
+                  onEnter={handleConnect}
+                  autoFocus
+                />
 
-              <div class="flex space-x-2">
-                <EnhancedButton
-                  variant="primary"
-                  fullWidth
-                  loading={props.connecting}
-                  disabled={!props.sessionTicket.trim()}
-                  onClick={handleConnect}
-                  icon="🚀"
-                  haptic
-                >
-                  {props.connecting ? "Connecting..." : "Connect"}
-                </EnhancedButton>
-              </div>
-
-              <button
-                class="btn btn-ghost btn-sm w-full"
-                onClick={() => setShowAdvanced(!showAdvanced())}
-              >
-                {showAdvanced() ? "Hide" : "Show"} Advanced Options
-              </button>
-
-              <Show when={showAdvanced()}>
-                <div class="bg-base-200 p-4 rounded-lg space-y-3">
-                  <div class="text-sm font-medium">Connection Options</div>
-
-                  <div class="form-control">
-                    <label class="label cursor-pointer">
-                      <span class="label-text">Auto-reconnect</span>
-                      <input
-                        type="checkbox"
-                        class="toggle toggle-primary"
-                        checked
-                      />
-                    </label>
-                  </div>
-
-                  <div class="form-control">
-                    <label class="label cursor-pointer">
-                      <span class="label-text">Save to history</span>
-                      <input
-                        type="checkbox"
-                        class="toggle toggle-primary"
-                        checked
-                      />
-                    </label>
-                  </div>
-
-                  <div class="form-control">
-                    <label class="label">
-                      <span class="label-text">
-                        Connection timeout (seconds)
-                      </span>
-                    </label>
-                    <input
-                      type="range"
-                      min="5"
-                      max="30"
-                      value="10"
-                      class="range range-primary"
-                    />
-                    <div class="text-xs opacity-70 mt-1">10 seconds</div>
-                  </div>
+                <div class="flex space-x-2">
+                  <EnhancedButton
+                    variant="primary"
+                    fullWidth
+                    loading={props.connecting}
+                    disabled={!props.sessionTicket.trim()}
+                    onClick={handleConnect}
+                    icon="🚀"
+                    haptic
+                  >
+                    {props.connecting ? "Connecting..." : "Connect"}
+                  </EnhancedButton>
                 </div>
-              </Show>
-            </div>
+
+                <button
+                  class="btn btn-ghost btn-sm w-full"
+                  onClick={() => setShowAdvanced(!showAdvanced())}
+                >
+                  {showAdvanced() ? "Hide" : "Show"} Advanced Options
+                </button>
+
+                <Show when={showAdvanced()}>
+                  <div class="bg-base-200 p-4 rounded-lg space-y-3">
+                    <div class="text-sm font-medium">Connection Options</div>
+
+                    <div class="form-control">
+                      <label class="label cursor-pointer">
+                        <span class="label-text">Auto-reconnect</span>
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-primary"
+                          checked
+                        />
+                      </label>
+                    </div>
+
+                    <div class="form-control">
+                      <label class="label cursor-pointer">
+                        <span class="label-text">Save to history</span>
+                        <input
+                          type="checkbox"
+                          class="toggle toggle-primary"
+                          checked
+                        />
+                      </label>
+                    </div>
+
+                    <div class="form-control">
+                      <label class="label">
+                        <span class="label-text">
+                          Connection timeout (seconds)
+                        </span>
+                      </label>
+                      <input
+                        type="range"
+                        min="5"
+                        max="30"
+                        value="10"
+                        class="range range-primary"
+                      />
+                      <div class="text-xs opacity-70 mt-1">10 seconds</div>
+                    </div>
+                  </div>
+                </Show>
+              </div>
+            </KeyboardAwareContainer>
           </Show>
 
           {/* QR Code Mode */}
@@ -366,6 +406,90 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
         </EnhancedCard>
       </Show>
 
+      {/* Mobile Connection Modal */}
+      <Show when={showConnectionModal()}>
+        <div class="fixed inset-0 bg-black/50 z-50 flex items-end justify-center md:items-center">
+          <div class="bg-base-100 w-full max-w-md rounded-t-3xl md:rounded-2xl p-6 transform transition-transform animate-slide-up">
+            <div class="text-center mb-6">
+              <div class="w-12 h-1 bg-base-300 rounded-full mx-auto mb-4 md:hidden"></div>
+              <h2 class="text-2xl font-bold mb-2">Connect to Terminal</h2>
+              <p class="text-sm opacity-70">Choose your connection method</p>
+            </div>
+
+            <div class="space-y-4">
+              {/* Quick Connect Button */}
+              <Show when={props.history.length > 0}>
+                <KeyboardAwareButton
+                  variant="primary"
+                  fullWidth
+                  onClick={() => {
+                    handleQuickConnectMobile(props.history[0].ticket);
+                    handleCloseConnectionModal();
+                  }}
+                  icon="🚀"
+                  haptic
+                >
+                  Quick Connect ({props.history[0].title})
+                </KeyboardAwareButton>
+              </Show>
+
+              {/* Manual Connect Button */}
+              <KeyboardAwareButton
+                variant="secondary"
+                fullWidth
+                onClick={() => {
+                  setViewMode("manual");
+                  handleCloseConnectionModal();
+                  // Focus will be handled by autoFocus in the manual mode
+                }}
+                icon="⌨️"
+                haptic
+              >
+                Enter Ticket Manually
+              </KeyboardAwareButton>
+
+              {/* QR Code Button */}
+              <KeyboardAwareButton
+                variant="accent"
+                fullWidth
+                onClick={() => {
+                  setViewMode("qr");
+                  handleCloseConnectionModal();
+                }}
+                icon="📷"
+                haptic
+              >
+                Scan QR Code
+              </KeyboardAwareButton>
+
+              {/* History Button */}
+              <KeyboardAwareButton
+                variant="ghost"
+                fullWidth
+                onClick={() => {
+                  props.onShowHistory?.();
+                  handleCloseConnectionModal();
+                }}
+                icon="📚"
+                haptic
+              >
+                View History
+              </KeyboardAwareButton>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-base-300">
+              <KeyboardAwareButton
+                variant="ghost"
+                fullWidth
+                onClick={handleCloseConnectionModal}
+              >
+                ✖️ Cancel
+              </KeyboardAwareButton>
+            </div>
+          </div>
+        </div>
+      </Show>
+
       {/* Help Card */}
       <EnhancedCard variant="minimal" title="Need Help?" icon="💡">
         <div class="space-y-2 text-sm opacity-70">
@@ -381,6 +505,11 @@ export function ConnectionInterface(props: ConnectionInterfaceProps) {
           <div>
             • <strong>Pull down</strong> to refresh connection history
           </div>
+          <Show when={isMobile}>
+            <div>
+              • <strong>Tap the floating button</strong> for quick connection options
+            </div>
+          </Show>
         </div>
       </EnhancedCard>
     </div>

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, onCleanup, Show } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, Show, createMemo, JSX, For } from "solid-js";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -12,7 +12,16 @@ import {
   MobileKeyboard,
   KeyboardManager,
   InputFocusManager,
+  HapticFeedback,
+  GestureRecognizer,
 } from "../utils/mobile";
+import { getOcclusionPrevention } from "../utils/mobile/OcclusionPrevention";
+import { createTerminalGestureController } from "../utils/mobile/TerminalGestureController";
+import type { TerminalGestureController } from "../utils/mobile/TerminalGestureController";
+import { getAdaptiveLayoutManager } from "../utils/mobile/AdaptiveLayoutManager";
+import type { LayoutConfig } from "../utils/mobile/AdaptiveLayoutManager";
+import { QuickAccessToolbar } from "./ui/QuickAccessToolbar";
+import "./ui/QuickAccessToolbar.css";
 import { TerminalManager } from "./TerminalManager";
 import { WebShareManager } from "./WebShareManager";
 import { SystemMonitor } from "./SystemMonitor";
@@ -63,6 +72,10 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   const [deviceCapabilities] = createSignal(getDeviceCapabilities());
   const [terminalHeight, setTerminalHeight] = createSignal<number | null>(null);
   const [lastResizeTime, setLastResizeTime] = createSignal(0);
+  const [gestureRecognizer, setGestureRecognizer] = createSignal<GestureRecognizer | null>(null);
+  const [terminalGestureController, setTerminalGestureController] = createSignal<TerminalGestureController | null>(null);
+  const [isGestureMode, setIsGestureMode] = createSignal(false);
+  const [gestureHints, setGestureHints] = createSignal<string[]>([]);
 
   // Management modal states
   const [showTerminalManager, setShowTerminalManager] = createSignal(false);
@@ -79,6 +92,18 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   const [fixedElementCleanup, setFixedElementCleanup] = createSignal<
     (() => void) | null
   >(null);
+
+  // Occlusion prevention state
+  const [occlusionCleanup, setOcclusionCleanup] = createSignal<
+    (() => void) | null
+  >(null);
+
+  // Quick access toolbar state
+  const [showQuickAccess, setShowQuickAccess] = createSignal(true);
+
+  // Adaptive layout state
+  const [layoutConfig, setLayoutConfig] = createSignal<LayoutConfig | null>(null);
+  const [layoutCleanup, setLayoutCleanup] = createSignal<(() => void) | null>(null);
 
   // 响应外部键盘状态变化
   createEffect(() => {
@@ -173,12 +198,15 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
   // Touch gesture state
   const [isPinching, setIsPinching] = createSignal(false);
   const [lastPinchDistance, setLastPinchDistance] = createSignal(0);
+  const [showGestureHint, setShowGestureHint] = createSignal(false);
+  const [lastGestureTime, setLastGestureTime] = createSignal(0);
 
   let terminalInstance: Terminal | null = null;
   let onDataDispose: { dispose: () => void } | null = null;
   let terminalElement: HTMLDivElement | undefined;
   let mobileKeyboardRef: HTMLDivElement | undefined;
   let resizeTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let gestureContainerRef: HTMLDivElement | undefined;
 
   // Get terminal theme similar to original TerminalView
   const getTerminalTheme = () => ({
@@ -203,6 +231,86 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     brightMagenta: "#A78BFA",
     brightCyan: "#67E8F9",
     brightWhite: "#FFFFFF",
+  });
+
+  // Enhanced gesture setup for mobile terminal with TerminalGestureController
+  const setupGestureRecognition = () => {
+    if (!terminalElement || !deviceCapabilities().isMobile) return;
+
+    const controller = createTerminalGestureController(terminalElement);
+
+    // Subscribe to show keyboard gesture
+    controller.onGesture('show-keyboard', (state, action) => {
+      if (!props.keyboardVisible && !showMobileKeyboard()) {
+        setShowMobileKeyboard(true);
+        props.onKeyboardToggle?.(true);
+      }
+    });
+
+    // Subscribe to hide keyboard gesture
+    controller.onGesture('hide-keyboard', (state, action) => {
+      if (showMobileKeyboard()) {
+        setShowMobileKeyboard(false);
+        props.onKeyboardToggle?.(false);
+      }
+    });
+
+    // Subscribe to quick actions gesture
+    controller.onGesture('quick-actions', (state, action) => {
+      setShowTerminalActions(!showTerminalActions());
+    });
+
+    // Subscribe to zoom gestures
+    controller.onGesture('zoom-in', (state, action) => {
+      const now = Date.now();
+      if (now - lastGestureTime() < 100) return; // Debounce
+      
+      setLastGestureTime(now);
+      const newSize = Math.min(fontSize() + 1, 24);
+      if (newSize !== fontSize()) {
+        setFontSize(newSize);
+      }
+    });
+
+    controller.onGesture('zoom-out', (state, action) => {
+      const now = Date.now();
+      if (now - lastGestureTime() < 100) return; // Debounce
+      
+      setLastGestureTime(now);
+      const newSize = Math.max(fontSize() - 1, 8);
+      if (newSize !== fontSize()) {
+        setFontSize(newSize);
+      }
+    });
+
+    // Subscribe to context menu gesture
+    controller.onGesture('context-menu', (state, action) => {
+      setIsGestureMode(!isGestureMode());
+    });
+
+    setTerminalGestureController(controller);
+
+    // Update gesture hints from controller
+    setGestureHints(controller.getGestureHints());
+
+    // Show gesture hints on first load
+    setTimeout(() => {
+      controller.showGestureHints(3000);
+      setIsGestureMode(true);
+      setTimeout(() => setIsGestureMode(false), 3000);
+    }, 2000);
+  };
+
+  // Update gesture hints based on current state
+  const updateGestureHints = () => {
+    const controller = terminalGestureController();
+    if (controller) {
+      setGestureHints(controller.getGestureHints());
+    }
+  };
+
+  createEffect(() => {
+    updateGestureHints();
   });
 
   const initializeTerminal = () => {
@@ -234,6 +342,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         // Mobile optimization settings
         cols: deviceCapabilities().isMobile ? 80 : undefined,
         wordSeparator: deviceCapabilities().isMobile ? " \t\n\r\f" : undefined,
+
         // Performance optimizations
         disableStdin: false,
         allowProposedApi: true, // Enable performance improvements
@@ -366,6 +475,16 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       onDataDispose = term.onData((data) => {
         debugTerminal(`Terminal input: ${data}`);
         props.onInput(data);
+        
+        // Track cursor position for occlusion prevention
+        if (deviceCapabilities().isMobile && terminalElement) {
+          const occlusionPrevention = getOcclusionPrevention();
+          const cursorY = term.buffer.active.cursorY;
+          const lineHeight = term.options.fontSize! * (term.options.lineHeight || 1.2);
+          const absoluteY = cursorY * lineHeight;
+          
+          occlusionPrevention.updateCursorPosition(terminalElement, absoluteY);
+        }
       });
 
       // Enhanced resize handling with debouncing
@@ -428,12 +547,111 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     // Delay initialization slightly to ensure DOM is ready
     setTimeout(initializeTerminal, 50);
 
+    // Setup gesture recognition for mobile
+    setTimeout(setupGestureRecognition, 100);
+
+    // Setup adaptive layout manager
+    const layoutManager = getAdaptiveLayoutManager();
+    const unsubscribeLayout = layoutManager.onLayoutChange((config) => {
+      setLayoutConfig(config);
+      
+      // Adjust terminal on layout change
+      const fit = fitAddon();
+      if (fit && terminalInstance) {
+        setTimeout(() => {
+          try {
+            fit.fit();
+            terminalInstance?.focus();
+            console.log('[EnhancedTerminalView] Terminal adjusted for layout change:', config);
+          } catch (error) {
+            console.warn('Failed to adjust terminal for layout change:', error);
+          }
+        }, 150);
+      }
+    });
+    
+    setLayoutCleanup(() => unsubscribeLayout);
+
     // Enhanced mobile keyboard and input management setup
     if (deviceCapabilities().isMobile) {
       // Register terminal element for input focus management
       if (terminalElement) {
         const cleanup = InputFocusManager.trackInput(terminalElement);
         setInputCleanup(() => cleanup);
+      }
+
+      // Setup gesture recognition for terminal
+      if (gestureContainerRef) {
+        const recognizer = new GestureRecognizer(gestureContainerRef);
+
+        // Three-finger tap to show keyboard
+        recognizer.onTap((state) => {
+          if (state.startPoints.length >= 2) { // Multi-finger tap
+            setShowMobileKeyboard(true);
+            props.onKeyboardToggle?.(true);
+            HapticFeedback.light();
+          }
+        });
+
+        // Two-finger swipe down to hide keyboard
+        recognizer.onSwipeDown((state) => {
+          if (state.startPoints.length >= 2) {
+            setShowMobileKeyboard(false);
+            props.onKeyboardToggle?.(false);
+            HapticFeedback.medium();
+          }
+        });
+
+        // Pinch to zoom terminal font
+        recognizer.onPinch((state) => {
+          const now = Date.now();
+          if (now - lastGestureTime() < 100) return; // Debounce
+
+          setLastGestureTime(now);
+
+          if (state.scale > 1.1) {
+            const newSize = Math.min(fontSize() + 1, 24);
+            if (newSize !== fontSize()) {
+              setFontSize(newSize);
+              HapticFeedback.light();
+            }
+          } else if (state.scale < 0.9) {
+            const newSize = Math.max(fontSize() - 1, 8);
+            if (newSize !== fontSize()) {
+              setFontSize(newSize);
+              HapticFeedback.light();
+            }
+          }
+        });
+
+        // Swipe left/right for terminal navigation
+        recognizer.onSwipeLeft(() => {
+          // Could implement terminal history navigation
+          if (terminalInstance && !(terminalInstance as any)._isDisposed) {
+            terminalInstance.write("\x1b[D"); // Left arrow
+          }
+        });
+
+        recognizer.onSwipeRight(() => {
+          // Could implement terminal history navigation
+          if (terminalInstance && !(terminalInstance as any)._isDisposed) {
+            terminalInstance.write("\x1b[C"); // Right arrow
+          }
+        });
+
+        // Long press for context menu
+        recognizer.onLongPress((state) => {
+          setShowTerminalActions(!showTerminalActions());
+          HapticFeedback.medium();
+        });
+
+        setGestureRecognizer(recognizer);
+
+        // Show gesture hints on first load
+        setTimeout(() => {
+          setShowGestureHint(true);
+          setTimeout(() => setShowGestureHint(false), 3000);
+        }, 2000);
       }
 
       // Set up keyboard scroll adjustment callback
@@ -455,6 +673,44 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         }
       });
       setKeyboardCleanup(() => keyboardCleanupFn);
+
+      // Setup occlusion prevention
+      const occlusionPrevention = getOcclusionPrevention();
+      
+      // Track terminal element for occlusion
+      if (terminalElement) {
+        const trackCleanup = occlusionPrevention.trackElement(terminalElement);
+        
+        // Subscribe to occlusion events
+        const occlusionCallback = occlusionPrevention.onOcclusionDetected((status) => {
+          console.log('[EnhancedTerminalView] Occlusion detected:', status);
+          
+          // Adjust terminal if needed
+          const fit = fitAddon();
+          if (fit && terminalInstance && status.isOccluded) {
+            setTimeout(() => {
+              try {
+                fit.fit();
+                terminalInstance?.focus();
+              } catch (error) {
+                console.warn('Failed to adjust terminal for occlusion:', error);
+              }
+            }, 100);
+          }
+        });
+        
+        // Subscribe to scroll adjustments
+        const scrollCallback = occlusionPrevention.onScrollAdjusted((adjustment) => {
+          console.log('[EnhancedTerminalView] Scroll adjusted:', adjustment);
+        });
+        
+        // Combine cleanup functions
+        setOcclusionCleanup(() => () => {
+          trackCleanup();
+          occlusionCallback();
+          scrollCallback();
+        });
+      }
 
       // Register mobile keyboard as fixed element if it exists
       setTimeout(() => {
@@ -496,6 +752,30 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       if (fixedCleanupFn) {
         fixedCleanupFn();
         setFixedElementCleanup(null);
+      }
+
+      const gestureRecognizerInstance = gestureRecognizer();
+      if (gestureRecognizerInstance) {
+        gestureRecognizerInstance.destroy();
+        setGestureRecognizer(null);
+      }
+
+      const terminalGestureControllerInstance = terminalGestureController();
+      if (terminalGestureControllerInstance) {
+        terminalGestureControllerInstance.destroy();
+        setTerminalGestureController(null);
+      }
+
+      const occlusionCleanupFn = occlusionCleanup();
+      if (occlusionCleanupFn) {
+        occlusionCleanupFn();
+        setOcclusionCleanup(null);
+      }
+
+      const layoutCleanupFn = layoutCleanup();
+      if (layoutCleanupFn) {
+        layoutCleanupFn();
+        setLayoutCleanup(null);
       }
     });
   });
@@ -597,30 +877,38 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  // Mobile keyboard actions - 优化移动端按键布局
-  const commonKeys = [
-    { label: "Tab", key: "\t" },
-    { label: "Ctrl+C", key: "\x03" },
-    { label: "Ctrl+D", key: "\x04" },
-    { label: "Ctrl+L", key: "\x0c" },
-    { label: "Esc", key: "\x1b" },
-    { label: "Enter", key: "\r" },
-    { label: "←", key: "\x1b[D" },
-    { label: "→", key: "\x1b[C" },
-    { label: "↑", key: "\x1b[A" },
-    { label: "↓", key: "\x1b[B" },
-    // 移动端额外按键
-    ...(deviceCapabilities().isMobile
+  // Enhanced mobile keyboard actions with better layout
+  const commonKeys = createMemo(() => {
+    const isMobileDevice = deviceCapabilities().isMobile;
+    const baseKeys = [
+      { label: "Tab", key: "\t" },
+      { label: "Ctrl+C", key: "\x03" },
+      { label: "Ctrl+D", key: "\x04" },
+      { label: "Ctrl+L", key: "\x0c" },
+      { label: "Esc", key: "\x1b" },
+      { label: "Enter", key: "\r" },
+    ];
+
+    const navigationKeys = [
+      { label: "←", key: "\x1b[D" },
+      { label: "→", key: "\x1b[C" },
+      { label: "↑", key: "\x1b[A" },
+      { label: "↓", key: "\x1b[B" },
+    ];
+
+    const advancedKeys = isMobileDevice
       ? [
-        { label: "Home", key: "\x1b[H" },
-        { label: "End", key: "\x1b[F" },
-        { label: "PgUp", key: "\x1b[5~" },
-        { label: "PgDn", key: "\x1b[6~" },
-        { label: "Ctrl+Z", key: "\x1a" },
-        { label: "Ctrl+X", key: "\x18" },
-      ]
-      : []),
-  ];
+          { label: "Home", key: "\x1b[H" },
+          { label: "End", key: "\x1b[F" },
+          { label: "PgUp", key: "\x1b[5~" },
+          { label: "PgDn", key: "\x1b[6~" },
+          { label: "Ctrl+Z", key: "\x1a" },
+          { label: "Ctrl+X", key: "\x18" },
+        ]
+      : [];
+
+    return [...baseKeys, ...navigationKeys, ...advancedKeys];
+  });
 
   const sendKey = (key: string) => {
     if (key) {
@@ -659,10 +947,37 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     }
   };
 
+  // Render gesture hints
+  const renderGestureHints = () => {
+    if (!deviceCapabilities().isMobile || !isGestureMode() || gestureHints().length === 0) {
+      return null;
+    }
+
+    return (
+      <div class="absolute top-2 right-2 z-30 bg-base-100/90 backdrop-blur-sm rounded-lg p-3 max-w-xs">
+        <div class="text-xs text-base-content/80 space-y-1">
+          <div class="font-medium mb-2">📱 Mobile Gestures</div>
+          <For each={gestureHints()}>
+            {(hint) => <div>• {hint}</div>}
+          </For>
+          <button
+            class="btn btn-ghost btn-xs mt-2 w-full"
+            onClick={() => setIsGestureMode(false)}
+          >
+            Hide hints
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       class={`relative w-full h-full flex flex-col ${isFullscreen() ? "fixed inset-0 z-50 bg-black" : ""}`}
     >
+      {/* Gesture hints overlay */}
+      {renderGestureHints()}
+
       {/* Terminal Header - 显示标题和终端信息 */}
       <div class="flex items-center justify-between px-3 py-2 bg-base-100 border-b border-base-300 shrink-0">
         <div class="flex items-center space-x-3">
@@ -880,6 +1195,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
       {/* Terminal Container with Touch Support and Mobile Optimizations */}
       <div
+        ref={gestureContainerRef}
         class="flex-1 relative overflow-hidden terminal-container"
         style={{
           height: terminalHeight() ? `${terminalHeight()}px` : "100%",
@@ -888,6 +1204,28 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             "height 0.2s cubic-bezier(0.4, 0, 0.2, 1), max-height 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
+        {/* Gesture Hint Overlay */}
+        <Show when={showGestureHint() && deviceCapabilities().isMobile}>
+          <div class="absolute top-4 left-4 right-4 z-30 bg-base-100/90 backdrop-blur-sm rounded-lg p-3 animate-fade-in">
+            <div class="flex items-center justify-between">
+              <div class="text-sm">
+                <div class="font-medium mb-1">📱 Mobile Gestures</div>
+                <div class="text-xs opacity-70">
+                  • Two-finger swipe: show/hide keyboard<br/>
+                  • Pinch: zoom terminal<br/>
+                  • Long press: show controls
+                </div>
+              </div>
+              <button
+                class="btn btn-ghost btn-xs"
+                onClick={() => setShowGestureHint(false)}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </Show>
+
         <SwipeGesture
           onSwipeDown={() => {
             if (!props.keyboardVisible) {
@@ -932,7 +1270,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         </SwipeGesture>
       </div>
 
-      {/* Mobile Keyboard */}
+      {/* Mobile Keyboard - Enhanced Layout */}
       <Show when={showMobileKeyboard() && !props.keyboardVisible}>
         <div
           ref={mobileKeyboardRef}
@@ -942,24 +1280,69 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
           }}
         >
           <div class="flex items-center justify-between mb-3">
-            <span class="text-sm font-medium">终端按键</span>
-            <button
-              class="btn btn-ghost btn-xs"
-              onClick={() => setShowMobileKeyboard(false)}
-            >
-              ✕
-            </button>
+            <span class="text-sm font-medium">Terminal Controls</span>
+            <div class="flex space-x-2">
+              <button
+                class="btn btn-ghost btn-xs"
+                onClick={() => setShowTerminalActions(!showTerminalActions())}
+                title="Toggle Actions Panel"
+              >
+                ⚙️
+              </button>
+              <button
+                class="btn btn-ghost btn-xs"
+                onClick={() => setShowMobileKeyboard(false)}
+                title="Hide Keyboard"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
-            {commonKeys.map((keyDef) => (
+          {/* Primary Controls Row */}
+          <div class="grid grid-cols-4 gap-2 mb-3">
+            {commonKeys().slice(0, 4).map((keyDef) => (
               <button
-                class="btn btn-outline btn-xs text-xs"
+                class="btn btn-outline btn-xs text-xs h-10"
                 onClick={() => sendKey(keyDef.key)}
+                title={keyDef.label}
               >
                 {keyDef.label}
               </button>
             ))}
+          </div>
+
+          {/* Navigation Row */}
+          <div class="grid grid-cols-4 gap-2 mb-3">
+            {commonKeys().slice(4, 8).map((keyDef) => (
+              <button
+                class="btn btn-outline btn-xs text-xs h-10"
+                onClick={() => sendKey(keyDef.key)}
+                title={keyDef.label}
+              >
+                {keyDef.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Advanced Controls Row (Mobile Only) */}
+          <Show when={deviceCapabilities().isMobile && commonKeys().length > 8}>
+            <div class="grid grid-cols-4 gap-2">
+              {commonKeys().slice(8).map((keyDef) => (
+                <button
+                  class="btn btn-outline btn-xs text-xs h-10"
+                  onClick={() => sendKey(keyDef.key)}
+                  title={keyDef.label}
+                >
+                  {keyDef.label}
+                </button>
+              ))}
+            </div>
+          </Show>
+
+          {/* Gesture Hint */}
+          <div class="mt-3 text-xs text-center opacity-60">
+            💡 Two-finger swipe: show/hide • Pinch: zoom • Long press: controls
           </div>
         </div>
       </Show>
@@ -1001,6 +1384,21 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         <SystemMonitor
           sessionId={props.sessionId!}
           onClose={() => setShowSystemMonitor(false)}
+        />
+      </Show>
+
+      {/* Quick Access Toolbar */}
+      <Show when={deviceCapabilities().isMobile && showQuickAccess()}>
+        <QuickAccessToolbar
+          onKeyPress={(keySequence) => {
+            if (terminalInstance && !(terminalInstance as any)._isDisposed) {
+              terminalInstance.write(keySequence);
+              props.onInput(keySequence);
+            }
+          }}
+          layout="auto"
+          position="bottom"
+          visible={!showMobileKeyboard()}
         />
       </Show>
     </div>

@@ -1,4 +1,4 @@
-// Mobile-specific utilities and features
+// Mobile-specific utilities and features - Enhanced for mobile-first UI
 
 export interface FixedElementConfig {
   adjustWithKeyboard: boolean;
@@ -124,18 +124,23 @@ export class HapticFeedback {
   }
 }
 
-// Advanced gesture recognition
+// Enhanced gesture recognition with mobile-first optimizations
 export class GestureRecognizer {
   private gestureCallbacks: Map<string, (state: GestureState) => void> =
     new Map();
   private currentGesture: GestureState | null = null;
   private element: HTMLElement;
   private threshold = {
-    tap: 150, // ms
-    swipe: 50, // px
-    pinch: 1.1, // scale
-    rotate: 15, // degrees
+    tap: 150, // ms - reduced for better responsiveness
+    swipe: 30, // px - reduced for easier triggering
+    pinch: 1.05, // scale - more sensitive
+    rotate: 10, // degrees - more sensitive
+    longPress: 500, // ms - for long press detection
+    doubleTap: 300, // ms - for double tap detection
   };
+  private lastTapTime = 0;
+  private lastTapPoint: TouchPoint | null = null;
+  private longPressTimeout: number | null = null;
 
   constructor(element: HTMLElement) {
     this.element = element;
@@ -154,6 +159,9 @@ export class GestureRecognizer {
       { passive: false },
     );
     this.element.addEventListener("touchend", this.handleTouchEnd.bind(this), {
+      passive: false,
+    });
+    this.element.addEventListener("touchcancel", this.handleTouchCancel.bind(this), {
       passive: false,
     });
   }
@@ -177,6 +185,29 @@ export class GestureRecognizer {
       scale: 1,
       rotation: 0,
     };
+
+    // Setup long press detection
+    if (touches.length === 1) {
+      this.longPressTimeout = window.setTimeout(() => {
+        if (this.currentGesture && this.currentGesture.startPoints.length === 1) {
+          this.triggerCallback("longPress", this.currentGesture);
+        }
+      }, this.threshold.longPress);
+    }
+
+    // Check for double tap
+    const now = Date.now();
+    if (this.lastTapPoint && 
+        now - this.lastTapTime < this.threshold.doubleTap &&
+        touches.length === 1) {
+      const distance = this.getDistance(this.lastTapPoint, touchPoints[0]);
+      if (distance < 50) { // Within 50px
+        this.triggerCallback("doubleTap", this.currentGesture);
+        this.lastTapPoint = null;
+        this.lastTapTime = 0;
+        return;
+      }
+    }
   }
 
   private handleTouchMove(event: TouchEvent): void {
@@ -192,6 +223,12 @@ export class GestureRecognizer {
 
     this.updateGestureState(touchPoints);
 
+    // Cancel long press if moving
+    if (this.longPressTimeout && this.currentGesture.distance > 10) {
+      clearTimeout(this.longPressTimeout);
+      this.longPressTimeout = null;
+    }
+
     // Prevent default scrolling for multi-touch gestures
     if (touches.length > 1) {
       event.preventDefault();
@@ -201,8 +238,20 @@ export class GestureRecognizer {
   private handleTouchEnd(event: TouchEvent): void {
     if (!this.currentGesture) return;
 
+    // Clear long press timeout
+    if (this.longPressTimeout) {
+      clearTimeout(this.longPressTimeout);
+      this.longPressTimeout = null;
+    }
+
     const gesture = this.currentGesture;
     const duration = Date.now() - gesture.startTime;
+
+    // Store tap info for double tap detection
+    if (gesture.startPoints.length === 1 && duration < this.threshold.tap) {
+      this.lastTapTime = Date.now();
+      this.lastTapPoint = gesture.startPoints[0];
+    }
 
     // Determine gesture type and trigger appropriate callback
     if (gesture.startPoints.length === 1 && duration < this.threshold.tap) {
@@ -222,6 +271,15 @@ export class GestureRecognizer {
       }
     }
 
+    this.currentGesture = null;
+  }
+
+  private handleTouchCancel(event: TouchEvent): void {
+    // Clear long press timeout
+    if (this.longPressTimeout) {
+      clearTimeout(this.longPressTimeout);
+      this.longPressTimeout = null;
+    }
     this.currentGesture = null;
   }
 
@@ -288,13 +346,32 @@ export class GestureRecognizer {
     const callback = this.gestureCallbacks.get(gestureType);
     if (callback) {
       callback(state);
+      // Add haptic feedback for better mobile experience
+      this.triggerHapticFeedback(gestureType);
+    }
+  }
+
+  private triggerHapticFeedback(gestureType: string): void {
+    switch (gestureType) {
+      case "tap":
+      case "doubleTap":
+        HapticFeedback.light();
+        break;
+      case "swipe":
+      case "longPress":
+        HapticFeedback.medium();
+        break;
+      case "pinch":
+      case "rotate":
+        HapticFeedback.heavy();
+        break;
     }
   }
 
   private triggerDirectionalSwipe(gesture: GestureState): void {
     const angle = gesture.angle;
 
-    // Convert angle to direction
+    // Convert angle to direction with 45-degree sectors
     if (angle >= -45 && angle <= 45) {
       this.triggerCallback("swipeRight", gesture);
     } else if (angle >= 45 && angle <= 135) {
@@ -309,6 +386,14 @@ export class GestureRecognizer {
   // Public API
   onTap(callback: (state: GestureState) => void): void {
     this.gestureCallbacks.set("tap", callback);
+  }
+
+  onDoubleTap(callback: (state: GestureState) => void): void {
+    this.gestureCallbacks.set("doubleTap", callback);
+  }
+
+  onLongPress(callback: (state: GestureState) => void): void {
+    this.gestureCallbacks.set("longPress", callback);
   }
 
   onSwipe(callback: (state: GestureState) => void): void {
@@ -343,7 +428,11 @@ export class GestureRecognizer {
     this.element.removeEventListener("touchstart", this.handleTouchStart);
     this.element.removeEventListener("touchmove", this.handleTouchMove);
     this.element.removeEventListener("touchend", this.handleTouchEnd);
+    this.element.removeEventListener("touchcancel", this.handleTouchCancel);
     this.gestureCallbacks.clear();
+    if (this.longPressTimeout) {
+      clearTimeout(this.longPressTimeout);
+    }
   }
 }
 
@@ -357,11 +446,13 @@ export class MobileKeyboard {
   private static keyboardHeight = 0;
   private static adjustmentCallbacks: Array<() => void> = [];
   private static debounceTimeout: ReturnType<typeof setTimeout> | null = null;
+  private static viewportManagerIntegration = false;
   
-  static init(): void {
+  static init(integrateWithViewportManager: boolean = false): void {
     // Store initial heights for accurate comparison
     this.initialVisualViewportHeight = window.visualViewport?.height || window.innerHeight;
     this.initialWindowHeight = window.innerHeight;
+    this.viewportManagerIntegration = integrateWithViewportManager;
     
     // Set up input focus tracking
     this.setupInputTracking();
@@ -378,6 +469,11 @@ export class MobileKeyboard {
     window.addEventListener("load", () => {
       this.initialVisualViewportHeight = window.visualViewport?.height || window.innerHeight;
       this.initialWindowHeight = window.innerHeight;
+    });
+
+    console.log('[MobileKeyboard] Initialized', {
+      visualViewportSupported: "visualViewport" in window,
+      viewportManagerIntegration: this.viewportManagerIntegration
     });
   }
   
@@ -648,7 +744,7 @@ export class InputFocusManager {
     const handleBlur = () => {
       // Optionally restore scroll position
       setTimeout(() => {
-        if (!MobileKeyboard.isKeyboardVisible() && this.scrollHistory.length > 0) {
+        if (!MobileKeyboard.isKeyboardVisible() && this.activeInputs.size === 0) {
           // Only restore if no other inputs are focused and keyboard is hidden
           if (this.activeInputs.size === 0) {
             // this.restoreScrollPosition(); // Uncomment if needed
@@ -687,14 +783,14 @@ export class InputFocusManager {
       // Input bottom is too close to or below keyboard
       input.scrollIntoView({
         behavior: 'smooth',
-        block: 'end',
+        block: 'end', // Align bottom of input with bottom of visible area
         inline: 'nearest'
       });
       
       // Fine-tune positioning after scroll
       setTimeout(() => {
         const newRect = input.getBoundingClientRect();
-        const overflow = newRect.bottom - (visibleBottom - buffer);
+        const overflow = (newRect.bottom - viewportTop) - (visibleBottom - buffer);
         if (overflow > 0) {
           window.scrollBy({
             top: overflow,
@@ -820,8 +916,10 @@ export class ScreenOrientation {
 }
 
 // Enhanced mobile utilities initialization
-export function initializeMobileUtils(): void {
-  MobileKeyboard.init();
+export function initializeMobileUtils(options: { integrateViewportManager?: boolean } = {}): void {
+  const integrateViewportManager = options.integrateViewportManager ?? false;
+  
+  MobileKeyboard.init(integrateViewportManager);
 
   // Add mobile-specific CSS classes
   const capabilities = getDeviceCapabilities();
@@ -871,7 +969,7 @@ export function initializeMobileUtils(): void {
         input[type="email"],
         input[type="password"],
         textarea {
-          font-size: 16px !important;
+          font-size: 16px !important; /* Prevent zoom */
           transform: translateZ(0);
         }
       }
