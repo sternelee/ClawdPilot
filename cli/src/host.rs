@@ -360,58 +360,10 @@ impl HostSession {
 
     fn display_qr_code(&self, ticket: &str) {
         use fast_qr::qr::QRBuilder;
-        use riterm_shared::StringCompressor;
 
-        // Show compression statistics
-        println!("🔧 Ticket Compression Analysis:");
-
-        // For display purposes, if this is already a compressed ticket (CT_ prefix),
-        // try to show the compression ratio by decompressing and recompressing
-        if ticket.starts_with("CT_") {
-            println!("   ✅ Using compressed ticket format");
-            if let Ok(decompressed) = StringCompressor::decompress(&ticket[3..]) {
-                println!(
-                    "   📊 Original (decompressed): {} bytes",
-                    decompressed.len()
-                );
-                println!("   📊 Compressed: {} bytes", ticket.len());
-                let compression_ratio =
-                    (1.0 - (ticket.len() as f64 / decompressed.len() as f64)) * 100.0;
-                println!(
-                    "   📊 Compression ratio: {:.1}% reduction",
-                    compression_ratio
-                );
-
-                // Test different compression methods for comparison
-                if let Ok(standard_compressed) = StringCompressor::compress(&decompressed) {
-                    println!(
-                        "   🔍 Standard compression would be: {} bytes",
-                        standard_compressed.len()
-                    );
-                }
-                if let Ok(hybrid_compressed) = StringCompressor::compress_hybrid(&decompressed) {
-                    println!(
-                        "   🔍 Hybrid compression achieved: {} bytes (current method)",
-                        hybrid_compressed.len()
-                    );
-                }
-            }
-        } else {
-            // This shouldn't happen with new tickets, but handle legacy format
-            println!("   ⚠️  Using uncompressed ticket format");
-            if let Ok(compressed) = StringCompressor::compress_hybrid(ticket) {
-                let compression_ratio =
-                    (1.0 - (compressed.len() as f64 / ticket.len() as f64)) * 100.0;
-                println!(
-                    "   📊 Could compress from {} to {} bytes ({:.1}% reduction)",
-                    ticket.len(),
-                    compressed.len(),
-                    compression_ratio
-                );
-            }
-        }
-
-        println!("   📏 Final ticket length: {} characters", ticket.len());
+        // Show ticket information
+        println!("🎫 Ticket Information:");
+        println!("   📏 Ticket length: {} characters", ticket.len());
 
         // Calculate QR code data density
         let qr_efficiency = if ticket.len() < 100 {

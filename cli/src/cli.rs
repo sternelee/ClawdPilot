@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::{error, info, warn};
 use tokio::sync::mpsc;
+use tracing::{error, info, warn};
 
 use crate::terminal_manager::TerminalManager;
 use riterm_shared::{P2PNetwork, p2p::NetworkMessage};
@@ -419,7 +419,12 @@ impl CliApp {
     }
 
     /// 启动 TCP 转发模式 (like dumbpipe listen-tcp)
-    async fn start_tcp_forward(&mut self, local_port: u16, remote_port: u16, service_name: String) -> Result<()> {
+    async fn start_tcp_forward(
+        &mut self,
+        local_port: u16,
+        remote_port: u16,
+        service_name: String,
+    ) -> Result<()> {
         use riterm_shared::SessionHeader;
 
         println!("🌐 Starting TCP Forward Mode...");
@@ -440,7 +445,8 @@ impl CliApp {
             session_id: format!("tcp_forward_{}_{}", local_port, remote_port),
         };
 
-        let (ticket, _connection_sender, mut _event_receiver) = self.network
+        let (ticket, _connection_sender, mut _event_receiver) = self
+            .network
             .create_shared_session(header.clone())
             .await
             .context("Failed to create TCP forwarding session")?;
@@ -461,7 +467,9 @@ impl CliApp {
         let tcp_manager = riterm_shared::TcpForwardManager::new(config);
 
         // Start TCP forwarding
-        tcp_manager.start().await
+        tcp_manager
+            .start()
+            .await
             .context("Failed to start TCP forwarding")?;
 
         self.tcp_forward_manager = Some(tcp_manager);
@@ -483,7 +491,9 @@ impl CliApp {
     /// 设置TCP转发消息处理器
     async fn setup_tcp_forward_message_handler(&mut self) -> Result<()> {
         let network = self.network.clone();
-        let mut message_receiver = network.get_message_receiver().await
+        let mut message_receiver = network
+            .get_message_receiver()
+            .await
             .context("Failed to get message receiver")?;
 
         // 启动TCP转发消息处理任务
@@ -492,9 +502,17 @@ impl CliApp {
 
             while let Some(message) = message_receiver.recv().await {
                 match message {
-                    NetworkMessage::TcpForwardCreate { session_id, local_port, remote_port, service_name, .. } => {
-                        info!("Received TCP forward create request: {}:{}:{} for session {}",
-                              local_port, remote_port, service_name, session_id);
+                    NetworkMessage::TcpForwardCreate {
+                        session_id,
+                        local_port,
+                        remote_port,
+                        service_name,
+                        ..
+                    } => {
+                        info!(
+                            "Received TCP forward create request: {}:{}:{} for session {}",
+                            local_port, remote_port, service_name, session_id
+                        );
 
                         // 创建TCP转发配置
                         let (tcp_sender, tcp_receiver) = mpsc::unbounded_channel();
@@ -513,7 +531,10 @@ impl CliApp {
                             continue;
                         }
 
-                        info!("TCP forwarding started for {} ({} -> {})", service_name, local_port, remote_port);
+                        info!(
+                            "TCP forwarding started for {} ({} -> {})",
+                            service_name, local_port, remote_port
+                        );
 
                         // 启动消息转发任务
                         let network_clone = network.clone();
@@ -523,8 +544,9 @@ impl CliApp {
                                 network_clone,
                                 session_id_clone,
                                 tcp_manager,
-                                tcp_receiver
-                            ).await;
+                                tcp_receiver,
+                            )
+                            .await;
                         });
                     }
                     _ => {
@@ -546,19 +568,28 @@ impl CliApp {
         tcp_manager: riterm_shared::TcpForwardManager,
         mut message_receiver: mpsc::UnboundedReceiver<NetworkMessage>,
     ) {
-        info!("Starting TCP forward message handler for session: {}", session_id);
+        info!(
+            "Starting TCP forward message handler for session: {}",
+            session_id
+        );
 
         while let Some(message) = message_receiver.recv().await {
             match message {
-                NetworkMessage::TcpForwardData { session_id: msg_session_id, data, remote_port, .. }
-                    if msg_session_id == session_id => {
+                NetworkMessage::TcpForwardData {
+                    session_id: msg_session_id,
+                    data,
+                    remote_port,
+                    ..
+                } if msg_session_id == session_id => {
                     // 将接收到的数据转发到本地TCP连接
                     if let Err(e) = tcp_manager.forward_data(&data).await {
                         error!("Failed to forward TCP data: {}", e);
                     }
                 }
-                NetworkMessage::TcpForwardStopped { session_id: msg_session_id, .. }
-                    if msg_session_id == session_id => {
+                NetworkMessage::TcpForwardStopped {
+                    session_id: msg_session_id,
+                    ..
+                } if msg_session_id == session_id => {
                     info!("TCP forward stopped for session: {}", session_id);
                     if let Err(e) = tcp_manager.stop().await {
                         error!("Failed to stop TCP forwarding: {}", e);
@@ -571,6 +602,9 @@ impl CliApp {
             }
         }
 
-        info!("TCP forward message handler ended for session: {}", session_id);
+        info!(
+            "TCP forward message handler ended for session: {}",
+            session_id
+        );
     }
 }

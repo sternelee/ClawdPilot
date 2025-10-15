@@ -1,14 +1,14 @@
 use anyhow::Result;
+use base64::Engine;
 use iroh::{Endpoint, NodeAddr, NodeId};
 use iroh_base::ticket::NodeTicket;
 use iroh_gossip::api::GossipSender; // Keep for backward compatibility
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, broadcast, mpsc};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
-use base64::Engine;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionHeader {
@@ -473,7 +473,11 @@ impl P2PNetwork {
     pub async fn create_shared_session(
         &self,
         header: SessionHeader,
-    ) -> Result<(NodeTicket, mpsc::UnboundedSender<NetworkMessage>, mpsc::UnboundedReceiver<String>)> {
+    ) -> Result<(
+        NodeTicket,
+        mpsc::UnboundedSender<NetworkMessage>,
+        mpsc::UnboundedReceiver<String>,
+    )> {
         let session_id = header.session_id.clone();
         info!("Creating shared session: {}", session_id);
 
@@ -521,7 +525,10 @@ impl P2PNetwork {
     pub async fn join_session(
         &self,
         ticket: NodeTicket,
-    ) -> Result<(mpsc::UnboundedSender<NetworkMessage>, broadcast::Receiver<TerminalEvent>)> {
+    ) -> Result<(
+        mpsc::UnboundedSender<NetworkMessage>,
+        broadcast::Receiver<TerminalEvent>,
+    )> {
         info!("Joining session with node: {}", ticket.node_addr().node_id);
 
         let session_id = format!("session_{}", uuid::Uuid::new_v4());
@@ -561,7 +568,8 @@ impl P2PNetwork {
             .insert(session_id.clone(), connection_sender_clone);
 
         // Connect to the host
-        self.connect_to_host(ticket.node_addr().clone(), session_id.clone()).await?;
+        self.connect_to_host(ticket.node_addr().clone(), session_id.clone())
+            .await?;
 
         // Start handling incoming messages
         let network_clone = self.clone();
@@ -601,7 +609,9 @@ impl P2PNetwork {
             let network_clone = self.clone();
             let session_id_clone = session_id.clone();
             tokio::spawn(async move {
-                network_clone.handle_connection(connection, session_id_clone).await;
+                network_clone
+                    .handle_connection(connection, session_id_clone)
+                    .await;
             });
         }
     }
@@ -639,7 +649,9 @@ impl P2PNetwork {
         let network_clone = self.clone();
         let session_id_clone = session_id.clone();
         tokio::spawn(async move {
-            network_clone.handle_message_exchange(send, recv, session_id_clone).await;
+            network_clone
+                .handle_message_exchange(send, recv, session_id_clone)
+                .await;
         });
     }
 
@@ -668,7 +680,9 @@ impl P2PNetwork {
         let network_clone = self.clone();
         let session_id_clone = session_id.clone();
         tokio::spawn(async move {
-            network_clone.handle_message_exchange(send, recv, session_id_clone).await;
+            network_clone
+                .handle_message_exchange(send, recv, session_id_clone)
+                .await;
         });
 
         Ok(())
@@ -697,7 +711,7 @@ impl P2PNetwork {
                 // Read message length
                 let mut len_buf = [0u8; 4];
                 match recv.read_exact(&mut len_buf).await {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
                         debug!("Connection closed: {}", e);
                         break;
@@ -709,7 +723,7 @@ impl P2PNetwork {
 
                 // Read message data
                 match recv.read_exact(&mut data).await {
-                    Ok(_) => {},
+                    Ok(_) => {}
                     Err(e) => {
                         warn!("Error reading message data: {}", e);
                         break;
@@ -719,7 +733,10 @@ impl P2PNetwork {
                 // Parse message
                 match P2PMessage::from_bytes(&data) {
                     Ok(p2p_msg) => {
-                        if let Err(e) = network_clone.handle_network_message(&session_id, p2p_msg.body).await {
+                        if let Err(e) = network_clone
+                            .handle_network_message(&session_id, p2p_msg.body)
+                            .await
+                        {
                             error!("Error handling network message: {}", e);
                         }
                     }
@@ -732,7 +749,11 @@ impl P2PNetwork {
     }
 
     /// Handle incoming messages from connection queue
-    async fn handle_connection_messages(&self, session_id: String, mut receiver: mpsc::UnboundedReceiver<NetworkMessage>) {
+    async fn handle_connection_messages(
+        &self,
+        session_id: String,
+        mut receiver: mpsc::UnboundedReceiver<NetworkMessage>,
+    ) {
         while let Some(message) = receiver.recv().await {
             if let Err(e) = self.handle_network_message(&session_id, message).await {
                 error!("Error handling connection message: {}", e);
@@ -741,15 +762,13 @@ impl P2PNetwork {
     }
 
     /// Send a message over the P2P connection
-    pub async fn send_message(
-        &self,
-        session_id: &str,
-        message: NetworkMessage,
-    ) -> Result<()> {
+    pub async fn send_message(&self, session_id: &str, message: NetworkMessage) -> Result<()> {
         let connections = self.active_connections.read().await;
         if let Some(sender) = connections.get(session_id) {
             if let Err(_) = sender.send(message) {
-                return Err(anyhow::anyhow!("Failed to send message - connection closed"));
+                return Err(anyhow::anyhow!(
+                    "Failed to send message - connection closed"
+                ));
             }
         } else {
             return Err(anyhow::anyhow!("No active connection for session"));
@@ -812,7 +831,11 @@ impl P2PNetwork {
         self.send_message(session_id, message).await
     }
 
-    pub async fn end_session(&self, session_id: &str, _sender: &mpsc::UnboundedSender<NetworkMessage>) -> Result<()> {
+    pub async fn end_session(
+        &self,
+        session_id: &str,
+        _sender: &mpsc::UnboundedSender<NetworkMessage>,
+    ) -> Result<()> {
         info!("Ending session: {}", session_id);
         let message = NetworkMessage::SessionEnd {
             from: self.endpoint.node_id(),
@@ -868,20 +891,12 @@ impl P2PNetwork {
     }
 
     /// Handle network messages (replaces gossip message handling)
-    async fn handle_network_message(
-        &self,
-        session_id: &str,
-        body: NetworkMessage,
-    ) -> Result<()> {
+    async fn handle_network_message(&self, session_id: &str, body: NetworkMessage) -> Result<()> {
         // Use the existing gossip message handler logic but without encryption
         self.handle_gossip_message(session_id, body).await
     }
 
-    async fn handle_gossip_message(
-        &self,
-        session_id: &str,
-        body: NetworkMessage,
-    ) -> Result<()> {
+    async fn handle_gossip_message(&self, session_id: &str, body: NetworkMessage) -> Result<()> {
         let sessions_guard = self.sessions.read().await;
         if let Some(session) = sessions_guard.get(session_id) {
             match body {
@@ -1961,7 +1976,10 @@ impl P2PNetwork {
         remote_port: u16,
         service_name: String,
     ) -> Result<()> {
-        debug!("Creating TCP forward from port {} to remote port {}", local_port, remote_port);
+        debug!(
+            "Creating TCP forward from port {} to remote port {}",
+            local_port, remote_port
+        );
         let message = NetworkMessage::TcpForwardCreate {
             from: self.endpoint.node_id(),
             session_id: session_id.to_string(),
@@ -1980,7 +1998,10 @@ impl P2PNetwork {
         session_id: &str,
         remote_port: u16,
     ) -> Result<()> {
-        debug!("Notifying TCP forward connected for remote port {}", remote_port);
+        debug!(
+            "Notifying TCP forward connected for remote port {}",
+            remote_port
+        );
         let message = NetworkMessage::TcpForwardConnected {
             from: self.endpoint.node_id(),
             session_id: session_id.to_string(),
@@ -1998,7 +2019,11 @@ impl P2PNetwork {
         remote_port: u16,
         data: Vec<u8>,
     ) -> Result<()> {
-        debug!("Sending TCP forward data for remote port {} ({} bytes)", remote_port, data.len());
+        debug!(
+            "Sending TCP forward data for remote port {} ({} bytes)",
+            remote_port,
+            data.len()
+        );
         let message = NetworkMessage::TcpForwardData {
             from: self.endpoint.node_id(),
             session_id: session_id.to_string(),
@@ -2011,12 +2036,11 @@ impl P2PNetwork {
         self.send_message(session_id, message).await
     }
 
-    pub async fn send_tcp_forward_stopped(
-        &self,
-        session_id: &str,
-        remote_port: u16,
-    ) -> Result<()> {
-        debug!("Notifying TCP forward stopped for remote port {}", remote_port);
+    pub async fn send_tcp_forward_stopped(&self, session_id: &str, remote_port: u16) -> Result<()> {
+        debug!(
+            "Notifying TCP forward stopped for remote port {}",
+            remote_port
+        );
         let message = NetworkMessage::TcpForwardStopped {
             from: self.endpoint.node_id(),
             session_id: session_id.to_string(),
