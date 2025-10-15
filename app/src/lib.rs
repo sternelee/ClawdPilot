@@ -444,6 +444,27 @@ async fn connect_to_peer(
 
                             // Parse structured events for terminal and WebShare management
                             if let Ok(structured_event) = parse_structured_event(&event.data) {
+                                // Handle TCP forwarding events - emit to frontend for processing
+                                if let Some(event_type) = structured_event.get("type").and_then(|v| v.as_str()) {
+                                    match event_type {
+                                        "tcp_forward_connected" => {
+                                            info!("TCP forward connected event for session {}", session_id_clone_events);
+                                            let _ = app_handle_clone.emit("tcp-forward-connected", &structured_event);
+                                        }
+                                        "tcp_forward_data" => {
+                                            info!("TCP forward data event for session {}", session_id_clone_events);
+                                            let _ = app_handle_clone.emit("tcp-forward-data", &structured_event);
+                                        }
+                                        "tcp_forward_stopped" => {
+                                            info!("TCP forward stopped event for session {}", session_id_clone_events);
+                                            let _ = app_handle_clone.emit("tcp-forward-stopped", &structured_event);
+                                        }
+                                        _ => {
+                                            // Other structured events
+                                        }
+                                    }
+                                }
+
                                 let structured_event_name = format!("structured-event-{}", session_id_clone_events);
                                 let _ = app_handle_clone.emit(&structured_event_name, &structured_event);
                             }
@@ -1206,34 +1227,9 @@ async fn create_tcp_forward(
         return Err(format!("Failed to create TCP forward: {}", e));
     }
 
-    // Start TCP forward client
-    let client_clone = client.clone();
-    let session_id_clone = session_id.clone();
-    let network_clone = network.clone();
-    let state_clone = state.inner().clone();
-
-    tokio::spawn(async move {
-        if let Err(e) = client_clone.start().await {
-            error!("TCP forward client error: {}", e);
-            return;
-        }
-
-        info!("TCP forward client started successfully for session {}", session_id_clone);
-
-        // Monitor for incoming data from P2P network and forward to local TCP connections
-        // This is a simplified approach - in a real implementation, we'd need to properly
-        // integrate with the P2P message handling system
-        let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
-
-        loop {
-            interval.tick().await;
-
-            // This is a placeholder for receiving P2P messages
-            // In a proper implementation, we'd receive actual TcpForwardData messages
-            // from the network and forward them to the client
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        }
-    });
+    // Don't start the TCP client immediately
+    // Wait for CLI to send TcpForwardConnected notification
+    info!("TCP forward client created for session {}, waiting for CLI confirmation", session_id);
 
     Ok(())
 }
@@ -1245,10 +1241,28 @@ async fn handle_tcp_forward_connected(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // This would be called when the TCP forward connection is established
-    // For now, we just log the event
     info!("TCP forward connected on port {} for session {}", remote_port, session_id);
-    Ok(())
+
+    // Get the TCP client for this session and start it
+    let tcp_clients = state.tcp_clients.read().await;
+    if let Some(client) = tcp_clients.get(&session_id) {
+        let client_clone = client.clone();
+        let session_id_clone = session_id.clone();
+
+        // Start the TCP forward client to listen for local connections
+        tokio::spawn(async move {
+            info!("Starting TCP forward client for session {} on local port", session_id_clone);
+            if let Err(e) = client_clone.start().await {
+                error!("TCP forward client error for session {}: {}", session_id_clone, e);
+            } else {
+                info!("TCP forward client started successfully for session {}", session_id_clone);
+            }
+        });
+
+        Ok(())
+    } else {
+        Err(format!("No TCP client found for session {}", session_id))
+    }
 }
 
 /// Handle TCP forward data event
