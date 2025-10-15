@@ -263,6 +263,8 @@ pub struct P2PNetwork {
     endpoint: Endpoint,
     sessions: Arc<RwLock<HashMap<String, SharedSession>>>,
     active_connections: Arc<RwLock<HashMap<String, mpsc::UnboundedSender<NetworkMessage>>>>,
+    // Session remapping tracking
+    session_mappings: Arc<RwLock<HashMap<String, String>>>, // temp_id -> host_id
     // 历史记录发送回调
     history_callback: Arc<
         RwLock<
@@ -299,6 +301,7 @@ impl Clone for P2PNetwork {
             endpoint: self.endpoint.clone(),
             sessions: Arc::clone(&self.sessions),
             active_connections: Arc::clone(&self.active_connections),
+            session_mappings: Arc::clone(&self.session_mappings),
             history_callback: self.history_callback.clone(),
             terminal_input_callback: self.terminal_input_callback.clone(),
         }
@@ -462,6 +465,7 @@ impl P2PNetwork {
             endpoint,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_connections: Arc::new(RwLock::new(HashMap::new())),
+            session_mappings: Arc::new(RwLock::new(HashMap::new())),
             history_callback: Arc::new(RwLock::new(None)),
             terminal_input_callback: Arc::new(RwLock::new(None)),
         };
@@ -531,11 +535,12 @@ impl P2PNetwork {
     )> {
         info!("Joining session with node: {}", ticket.node_addr().node_id);
 
-        let session_id = format!("session_{}", uuid::Uuid::new_v4());
+        // Create a temporary session ID that will be replaced when we receive SessionInfo from host
+        let temp_session_id = format!("session_{}", uuid::Uuid::new_v4());
         let (event_sender, event_receiver) = broadcast::channel(1000);
         let (connection_sender, _connection_receiver) = mpsc::unbounded_channel();
 
-        // Create session entry for this joined session
+        // Create session entry for this joined session with temporary session_id
         let session = SharedSession {
             header: SessionHeader {
                 version: 2,
@@ -546,7 +551,7 @@ impl P2PNetwork {
                     .as_secs(),
                 title: None,
                 command: None,
-                session_id: session_id.clone(),
+                session_id: temp_session_id.clone(),
             },
             participants: vec![],
             is_host: false,
@@ -559,21 +564,26 @@ impl P2PNetwork {
         self.sessions
             .write()
             .await
-            .insert(session_id.clone(), session);
+            .insert(temp_session_id.clone(), session);
 
         let connection_sender_clone = connection_sender.clone();
         self.active_connections
             .write()
             .await
-            .insert(session_id.clone(), connection_sender_clone);
+            .insert(temp_session_id.clone(), connection_sender_clone);
 
         // Connect to the host
-        self.connect_to_host(ticket.node_addr().clone(), session_id.clone())
+        self.connect_to_host(ticket.node_addr().clone(), temp_session_id.clone())
             .await?;
+
+        // Send ParticipantJoined message to host
+        info!("Sending ParticipantJoined message to host for session: {}", temp_session_id);
+        self.send_participant_joined(&temp_session_id, &connection_sender).await?;
+        info!("✅ ParticipantJoined message sent successfully");
 
         // Start handling incoming messages
         let network_clone = self.clone();
-        let session_id_clone = session_id.clone();
+        let session_id_clone = temp_session_id.clone();
         tokio::spawn(async move {
             // TODO: Implement connection message handling
         });
@@ -688,24 +698,73 @@ impl P2PNetwork {
         Ok(())
     }
 
+    /// Resolve the actual session ID (handles session remapping)
+    pub async fn resolve_session_id(&self, session_id: &str) -> String {
+        let mappings = self.session_mappings.read().await;
+        if let Some(mapped_id) = mappings.get(session_id) {
+            mapped_id.clone()
+        } else {
+            session_id.to_string()
+        }
+    }
+
+    /// Get the remapped session ID for a temporary session ID (if any)
+    pub async fn get_remapped_session_id(&self, temp_session_id: &str) -> Option<String> {
+        let mappings = self.session_mappings.read().await;
+        mappings.get(temp_session_id).cloned()
+    }
+
     /// Handle message exchange for a connection
     async fn handle_message_exchange(
         &self,
-        _send: iroh::endpoint::SendStream,
-        mut recv: iroh::endpoint::RecvStream,
+        send: iroh::endpoint::SendStream,
+        recv: iroh::endpoint::RecvStream,
         session_id: String,
     ) {
         let network_clone = self.clone();
 
-        // Handle outgoing messages - simplified for now
-        let _network_clone = network_clone.clone();
+        // Create a channel for outgoing messages
+        let (outgoing_tx, mut outgoing_rx) = mpsc::unbounded_channel::<NetworkMessage>();
+
+        // Store the outgoing sender for this session
+        let mut connections = self.active_connections.write().await;
+        connections.insert(session_id.clone(), outgoing_tx.clone());
+        drop(connections);
+
+        // Handle outgoing messages in a separate task
+        let mut send = send;
         tokio::spawn(async move {
-            // TODO: Implement proper message sending
-            // For now, messages will be handled via direct calls
+            while let Some(message) = outgoing_rx.recv().await {
+                // Serialize the message
+                match P2PMessage::new(message).to_bytes() {
+                    Ok(data) => {
+                        // Send message length first
+                        let len = data.len() as u32;
+                        if let Err(e) = send.write_all(&len.to_be_bytes()).await {
+                            warn!("Failed to send message length: {}", e);
+                            break;
+                        }
+
+                        // Send message data
+                        if let Err(e) = send.write_all(&data).await {
+                            warn!("Failed to send message data: {}", e);
+                            break;
+                        }
+
+                        if let Err(e) = send.flush().await {
+                            warn!("Failed to flush message: {}", e);
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to serialize message: {}", e);
+                    }
+                }
+            }
         });
 
         // Handle incoming messages
-        let network_clone = self.clone();
+        let mut recv = recv;
         tokio::spawn(async move {
             loop {
                 // Read message length
@@ -713,12 +772,17 @@ impl P2PNetwork {
                 match recv.read_exact(&mut len_buf).await {
                     Ok(_) => {}
                     Err(e) => {
-                        debug!("Connection closed: {}", e);
+                        debug!("Connection closed while reading message length: {}", e);
                         break;
                     }
                 }
 
                 let len = u32::from_be_bytes(len_buf) as usize;
+                if len > 10 * 1024 * 1024 { // 10MB limit
+                    warn!("Message too large: {} bytes", len);
+                    break;
+                }
+
                 let mut data = vec![0u8; len];
 
                 // Read message data
@@ -730,11 +794,14 @@ impl P2PNetwork {
                     }
                 }
 
-                // Parse message
+                // Resolve the actual session ID (in case of remapping)
+                let actual_session_id = network_clone.resolve_session_id(&session_id).await;
+
+                // Parse and handle message
                 match P2PMessage::from_bytes(&data) {
                     Ok(p2p_msg) => {
                         if let Err(e) = network_clone
-                            .handle_network_message(&session_id, p2p_msg.body)
+                            .handle_network_message(&actual_session_id, p2p_msg.body)
                             .await
                         {
                             error!("Error handling network message: {}", e);
@@ -744,6 +811,25 @@ impl P2PNetwork {
                         warn!("Error parsing message: {}", e);
                     }
                 }
+            }
+
+            // Clean up connection when done - check both original and remapped session IDs
+            let remapped_id = network_clone.get_remapped_session_id(&session_id).await;
+            let mut connections = network_clone.active_connections.write().await;
+
+            // Try to remove by original session ID first
+            let removed = connections.remove(&session_id).is_some();
+
+            // If not found and we have a remapped ID, try removing by that too
+            if !removed {
+                if let Some(mapped_id) = remapped_id {
+                    connections.remove(&mapped_id);
+                    debug!("Connection cleaned up for remapped session: {} (original: {})", mapped_id, session_id);
+                } else {
+                    debug!("Connection cleaned up for session: {}", session_id);
+                }
+            } else {
+                debug!("Connection cleaned up for session: {}", session_id);
             }
         });
     }
@@ -763,8 +849,10 @@ impl P2PNetwork {
 
     /// Send a message over the P2P connection
     pub async fn send_message(&self, session_id: &str, message: NetworkMessage) -> Result<()> {
+        // Resolve the actual session ID (in case of remapping)
+        let actual_session_id = self.resolve_session_id(session_id).await;
         let connections = self.active_connections.read().await;
-        if let Some(sender) = connections.get(session_id) {
+        if let Some(sender) = connections.get(&actual_session_id) {
             if let Err(_) = sender.send(message) {
                 return Err(anyhow::anyhow!(
                     "Failed to send message - connection closed"
@@ -849,9 +937,16 @@ impl P2PNetwork {
             warn!("Failed to send session end message: {}", e);
         }
 
-        // Clean up session
-        self.sessions.write().await.remove(session_id);
-        self.active_connections.write().await.remove(session_id);
+        // Clean up session - check both original and remapped session IDs
+        let actual_session_id = self.resolve_session_id(session_id).await;
+        self.sessions.write().await.remove(&actual_session_id);
+        self.active_connections.write().await.remove(&actual_session_id);
+
+        // Also try to remove by original session ID if different
+        if session_id != actual_session_id {
+            self.sessions.write().await.remove(session_id);
+            self.active_connections.write().await.remove(session_id);
+        }
         Ok(())
     }
 
@@ -986,15 +1081,46 @@ impl P2PNetwork {
                         from.fmt_short(),
                         session_id
                     );
-                    drop(sessions_guard); // Release read lock
-                    let mut sessions_write = self.sessions.write().await;
-                    if let Some(session) = sessions_write.get_mut(session_id) {
-                        session.participants.push(from.to_string());
-                        session.header = header;
+
+                    // 如果是客户端接收到SessionInfo，需要更新session_id映射
+                    let host_session_id = header.session_id.clone();
+                    if session_id != host_session_id {
+                        info!("Updating session mapping: {} -> {}", session_id, host_session_id);
+
+                        drop(sessions_guard); // Release read lock
+
+                        // 更新session和连接映射
+                        let mut sessions_write = self.sessions.write().await;
+                        let mut connections_write = self.active_connections.write().await;
+                        let mut mappings_write = self.session_mappings.write().await;
+
+                        // 移动session到新的session_id
+                        if let Some(mut session) = sessions_write.remove(session_id) {
+                            session.header = header.clone();
+                            sessions_write.insert(host_session_id.clone(), session);
+                        }
+
+                        // 移动连接到新的session_id
+                        if let Some(connection) = connections_write.remove(session_id) {
+                            connections_write.insert(host_session_id.clone(), connection);
+                        }
+
+                        // 记录session映射关系
+                        mappings_write.insert(session_id.to_string(), host_session_id.clone());
+
+                        info!("Session mapping updated successfully");
+                    } else {
+                        drop(sessions_guard); // Release read lock
+                        let mut sessions_write = self.sessions.write().await;
+                        if let Some(session) = sessions_write.get_mut(session_id) {
+                            session.participants.push(from.to_string());
+                            session.header = header;
+                        }
                     }
                 }
                 NetworkMessage::ParticipantJoined { from, timestamp } => {
-                    info!("Participant {} joined session", from.fmt_short());
+                    info!("🎉 Participant {} joined session {} (host: {})",
+                          from.fmt_short(), session_id, session.is_host);
                     let event = TerminalEvent {
                         timestamp,
                         event_type: EventType::Output,
@@ -1004,10 +1130,9 @@ impl P2PNetwork {
                         warn!("No active receivers for participant joined event, skipping");
                     }
 
-                    // 如果我们是主机，自动发送历史记录
+                    // 简化：只发送历史记录，不发送SessionInfo
                     if session.is_host {
-                        info!("We are the host, attempting to send history data");
-
+                        info!("🚀 We are the host, sending history data to new participant");
                         drop(sessions_guard); // 释放锁
 
                         // 获取历史记录回调

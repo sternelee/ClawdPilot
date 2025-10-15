@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getDeviceCapabilities } from "../utils/mobile";
 // Import types from the shared library
 interface TerminalInfo {
   id: string;
@@ -43,7 +42,6 @@ interface TerminalSession {
 export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [terminals, setTerminals] = createSignal<TerminalInfo[]>([]);
   const [webshares, setWebshares] = createSignal<WebShareInfo[]>([]);
-  const [loading, setLoading] = createSignal(true);
   const [terminalSessions, setTerminalSessions] = createSignal<
     Map<string, TerminalSession>
   >(new Map());
@@ -55,33 +53,145 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [showCreateDialog, setShowCreateDialog] = createSignal(false);
   const [terminalName, setTerminalName] = createSignal("");
 
-  // 移动端下拉菜单状态
-  const [showTerminalMenu, setShowTerminalMenu] = createSignal(false);
-  const [showWebShareMenu, setShowWebShareMenu] = createSignal(false);
-  const [showMainMenu, setShowMainMenu] = createSignal(false);
+  // 错误提示状态
+  const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+  const [showError, setShowError] = createSignal(false);
 
-  const deviceCapabilities = getDeviceCapabilities();
-  const isMobile = deviceCapabilities.isMobile;
+  // 连接状态
+  const [connectionStatus, setConnectionStatus] = createSignal<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [isLoading, setIsLoading] = createSignal(false);
+
+  // 文本输入相关状态
+  const [textInput, setTextInput] = createSignal("");
+  const [isInputFocused, setIsInputFocused] = createSignal(false);
+
+  // AI修正和上传相关状态
+  const [isCorrectingText, setIsCorrectingText] = createSignal(false);
+  const [uploadedImages, setUploadedImages] = createSignal<string[]>([]);
+  const [isRecording, setIsRecording] = createSignal(false);
+
+  // 显示错误信息
+  const showErrorMessage = (message: string) => {
+    setErrorMessage(message);
+    setShowError(true);
+    setTimeout(() => {
+      setShowError(false);
+      setErrorMessage(null);
+    }, 5000); // 5秒后自动消失
+  };
+
+  // 更新连接状态
+  const updateConnectionStatus = (status: 'connecting' | 'connected' | 'disconnected') => {
+    setConnectionStatus(status);
+    if (status === 'disconnected') {
+      showErrorMessage("与远程会话的连接已断开，请重新连接");
+    }
+  };
+
+  // 顶部导航栏显示的终端和WebShare信息
+  const getActiveTerminalDisplay = () => {
+    if (activeTerminalId()) {
+      const terminal = terminals().find(t => t.id === activeTerminalId());
+      return `term:${terminal?.name || `Terminal ${activeTerminalId()?.slice(0, 8)}`}`;
+    }
+    return `term:${terminals().length > 0 ? terminals()[0].name || `Terminal ${terminals()[0].id.slice(0, 8)}` : '无终端'}`;
+  };
+
+  const getWebShareDisplay = () => {
+    if (webshares().length === 0) {
+      return 'web:无服务';
+    } else if (webshares().length === 1) {
+      return `web:${webshares()[0].public_port}`;
+    } else {
+      return `web:${webshares().map(ws => ws.public_port).join(',')}`;
+    }
+  };
+
 
   let containerRef: HTMLDivElement | undefined;
 
-  // 获取终端列表
-  const fetchTerminals = async () => {
-    try {
-      await invoke("get_terminal_list", { sessionId: props.sessionId });
-    } catch (error) {
-      console.error("Failed to fetch terminal list:", error);
+  // 带重试机制的获取终端列表
+  const fetchTerminalsWithRetry = async (retryCount = 3, delay = 1000) => {
+    setIsLoading(true);
+    for (let attempt = 0; attempt < retryCount; attempt++) {
+      try {
+        await invoke("get_terminal_list", { sessionId: props.sessionId });
+        updateConnectionStatus('connected');
+        setIsLoading(false);
+        return; // 成功则退出
+      } catch (error) {
+        console.error(`Failed to fetch terminal list (attempt ${attempt + 1}/${retryCount}):`, error);
+
+        // 如果是最后一次尝试，显示错误
+        if (attempt === retryCount - 1) {
+          let userMessage = "获取终端列表失败";
+          if (error && typeof error === 'string') {
+            if (error.includes("No active connection for session")) {
+              userMessage = "会话连接尚未建立，请稍后重试或重新连接";
+            } else {
+              userMessage = `获取终端列表失败: ${error}`;
+            }
+          }
+          showErrorMessage(userMessage);
+        } else if (error && typeof error === 'string' && error.includes("No active connection for session")) {
+          // 如果是连接问题，等待后重试
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // 指数退避
+        } else {
+          // 其他类型的错误不重试
+          let userMessage = "获取终端列表失败";
+          if (error && typeof error === 'string') {
+            userMessage = `获取终端列表失败: ${error}`;
+          }
+          showErrorMessage(userMessage);
+          return;
+        }
+      }
     }
   };
 
-  // 获取WebShare列表
-  const fetchWebShares = async () => {
-    try {
-      await invoke("get_webshare_list", { sessionId: props.sessionId });
-    } catch (error) {
-      console.error("Failed to fetch webshare list:", error);
+  // 带重试机制的获取WebShare列表
+  const fetchWebSharesWithRetry = async (retryCount = 3, delay = 1000) => {
+    for (let attempt = 0; attempt < retryCount; attempt++) {
+      try {
+        await invoke("get_webshare_list", { sessionId: props.sessionId });
+        return; // 成功则退出
+      } catch (error) {
+        console.error(`Failed to fetch webshare list (attempt ${attempt + 1}/${retryCount}):`, error);
+
+        // 如果是最后一次尝试，显示错误
+        if (attempt === retryCount - 1) {
+          let userMessage = "获取WebShare列表失败";
+          if (error && typeof error === 'string') {
+            if (error.includes("No active connection for session")) {
+              userMessage = "会话连接尚未建立，请稍后重试或重新连接";
+            } else {
+              userMessage = `获取WebShare列表失败: ${error}`;
+            }
+          }
+          showErrorMessage(userMessage);
+        } else if (error && typeof error === 'string' && error.includes("No active connection for session")) {
+          // 如果是连接问题，等待后重试
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // 指数退避
+        } else {
+          // 其他类型的错误不重试
+          let userMessage = "获取WebShare列表失败";
+          if (error && typeof error === 'string') {
+            userMessage = `获取WebShare列表失败: ${error}`;
+          }
+          showErrorMessage(userMessage);
+          return;
+        }
+      }
     }
   };
+
+  // 保持原有函数的兼容性
+  const fetchTerminals = () => fetchTerminalsWithRetry();
+  const fetchWebShares = () => fetchWebSharesWithRetry();
 
   // 计算终端大小（基于容器宽度）
   const calculateTerminalSize = () => {
@@ -119,26 +229,71 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     setShowCreateDialog(false);
   };
 
-  // 创建新终端
+  // 创建新终端（带重试机制）
   const createTerminal = async (config?: {
     name?: string;
     shell_path?: string;
     working_dir?: string;
     rows?: number;
     cols?: number;
-  }) => {
-    try {
-      const request = {
-        session_id: props.sessionId,
-        name: config?.name,
-        shell_path: config?.shell_path,
-        working_dir: config?.working_dir,
-        size:
-          config?.rows && config?.cols ? [config.rows, config.cols] : undefined,
-      };
-      await invoke("create_terminal", { request });
-    } catch (error) {
-      console.error("Failed to create terminal:", error);
+  }, retryCount = 2, delay = 1000) => {
+    for (let attempt = 0; attempt < retryCount; attempt++) {
+      try {
+        const request = {
+          session_id: props.sessionId,
+          name: config?.name,
+          shell_path: config?.shell_path,
+          working_dir: config?.working_dir,
+          size:
+            config?.rows && config?.cols ? [config.rows, config.cols] : undefined,
+        };
+        await invoke("create_terminal", { request });
+        return; // 成功则退出
+      } catch (error) {
+        console.error(`Failed to create terminal (attempt ${attempt + 1}/${retryCount}):`, error);
+
+        // 如果是最后一次尝试，显示错误
+        if (attempt === retryCount - 1) {
+          // 提供用户友好的错误信息
+          let userMessage = "创建终端失败";
+          if (error && typeof error === 'string') {
+            if (error.includes("No active connection for session")) {
+              userMessage = "会话连接尚未建立，请稍后重试或刷新页面";
+            } else if (error.includes("Connection refused")) {
+              userMessage = "无法连接到服务器，请检查网络连接";
+            } else if (error.includes("timeout")) {
+              userMessage = "请求超时，请稍后重试";
+            } else {
+              userMessage = `创建终端失败: ${error}`;
+            }
+          } else if (error && typeof error === 'object' && 'message' in error) {
+            userMessage = `创建终端失败: ${error.message}`;
+          }
+
+          showErrorMessage(userMessage);
+        } else if (error && typeof error === 'string' && error.includes("No active connection for session")) {
+          // 如果是连接问题，等待后重试
+          console.log(`Retrying create_terminal in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // 指数退避
+        } else {
+          // 其他类型的错误不重试
+          let userMessage = "创建终端失败";
+          if (error && typeof error === 'string') {
+            if (error.includes("Connection refused")) {
+              userMessage = "无法连接到服务器，请检查网络连接";
+            } else if (error.includes("timeout")) {
+              userMessage = "请求超时，请稍后重试";
+            } else {
+              userMessage = `创建终端失败: ${error}`;
+            }
+          } else if (error && typeof error === 'object' && 'message' in error) {
+            userMessage = `创建终端失败: ${error.message}`;
+          }
+          showErrorMessage(userMessage);
+          return;
+        }
+      }
     }
   };
 
@@ -157,6 +312,18 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       await invoke("create_webshare", { request });
     } catch (error) {
       console.error("Failed to create webshare:", error);
+
+      let userMessage = "创建WebShare失败";
+      if (error && typeof error === 'string') {
+        if (error.includes("No active connection for session")) {
+          userMessage = "会话连接已断开，请重新连接";
+        } else if (error.includes("Port already in use")) {
+          userMessage = "端口已被使用，请选择其他端口";
+        } else {
+          userMessage = `创建WebShare失败: ${error}`;
+        }
+      }
+      showErrorMessage(userMessage);
     }
   };
 
@@ -183,6 +350,102 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       }
     } catch (error) {
       console.error("Failed to stop terminal:", error);
+
+      let userMessage = "停止终端失败";
+      if (error && typeof error === 'string') {
+        if (error.includes("No active connection for session")) {
+          userMessage = "会话连接已断开，请重新连接";
+        } else {
+          userMessage = `停止终端失败: ${error}`;
+        }
+      }
+      showErrorMessage(userMessage);
+    }
+  };
+
+  // 发送文本到终端
+  const sendTextToTerminal = async () => {
+    const text = textInput();
+    const activeId = activeTerminalId();
+
+    if (!text.trim() || !activeId) return;
+
+    try {
+      await invoke("send_terminal_input_to_terminal", {
+        request: {
+          session_id: props.sessionId,
+          terminal_id: activeId,
+          input: text,
+        },
+      });
+      setTextInput(""); // 发送后清空输入框
+    } catch (error) {
+      console.error("Failed to send text to terminal:", error);
+      showErrorMessage("发送文本失败");
+    }
+  };
+
+  // 处理键盘快捷键
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      e.preventDefault();
+      sendTextToTerminal();
+    }
+  };
+
+  // AI修正文本语法
+  const correctTextWithAI = async () => {
+    const text = textInput();
+    if (!text.trim()) return;
+
+    setIsCorrectingText(true);
+    try {
+      // 这里可以集成AI API来修正文本
+      // 目前先提供一个占位实现
+      showErrorMessage("AI修正功能开发中...");
+      // TODO: 集成实际的AI修正API
+      // const correctedText = await invoke("correct_text_with_ai", { text });
+      // setTextInput(correctedText);
+    } catch (error) {
+      console.error("AI correction failed:", error);
+      showErrorMessage("AI修正失败");
+    } finally {
+      setIsCorrectingText(false);
+    }
+  };
+
+  // 处理图片上传
+  const handleImageUpload = (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const files = target.files;
+
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result as string;
+          setUploadedImages(prev => [...prev, result]);
+          showErrorMessage(`已上传图片: ${file.name}`);
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  };
+
+  // 处理语音输入
+  const toggleVoiceRecording = () => {
+    if (isRecording()) {
+      // 停止录音
+      setIsRecording(false);
+      showErrorMessage("语音功能开发中...");
+      // TODO: 实现实际的语音转文字功能
+    } else {
+      // 开始录音
+      setIsRecording(true);
+      showErrorMessage("语音功能开发中...");
+      // TODO: 实现实际的语音录制和转换
     }
   };
 
@@ -479,10 +742,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   onMount(async () => {
     await setupTerminalEventListeners();
 
-    // 初始加载数据
-    await Promise.all([fetchTerminals(), fetchWebShares()]);
+    // 等待一段时间让CLI端建立session连接，然后初始加载数据
+    console.log("Waiting for session to be established...");
+    await new Promise(resolve => setTimeout(resolve, 2000)); // 等待2秒
 
-    setLoading(false);
+    console.log("Initializing data fetch...");
+    await Promise.all([fetchTerminals(), fetchWebShares()]);
   });
 
   // 响应式更新
@@ -498,144 +763,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   });
 
-  // 渲染终端列表
-  const renderTerminalList = (inDropdown = false) => (
-    <div class={inDropdown ? "space-y-2" : "space-y-2"}>
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold">终端列表</h3>
-        <button
-          class="btn btn-primary btn-sm"
-          onClick={() => {
-            openCreateDialog();
-            if (inDropdown) setShowTerminalMenu(false);
-          }}
-          title="创建新终端"
-        >
-          ➕ 新建
-        </button>
-      </div>
-
-      <For each={terminals()}>
-        {(terminal) => (
-          <div
-            class={`card bg-base-200 shadow-sm p-3 ${activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
-              }`}
-          >
-            <div class="flex justify-between items-start">
-              <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">
-                  {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
-                </div>
-                <div class="text-xs opacity-70 truncate">
-                  {terminal.shell_type} • {terminal.current_dir}
-                </div>
-                <div class="text-xs opacity-50 mt-1">
-                  {terminal.status} • {terminal.size[0]}x{terminal.size[1]}
-                </div>
-              </div>
-              <div class="flex space-x-1 ml-2">
-                {activeTerminalId() === terminal.id ? (
-                  <div class="badge badge-primary badge-sm">活动</div>
-                ) : (
-                  <button
-                    class="btn btn-primary btn-xs"
-                    onClick={() => {
-                      connectToTerminal(terminal.id);
-                      if (inDropdown) setShowTerminalMenu(false);
-                    }}
-                    disabled={terminal.status !== "Running"}
-                  >
-                    连接
-                  </button>
-                )}
-                <button
-                  class="btn btn-ghost btn-xs"
-                  onClick={() => stopTerminal(terminal.id)}
-                  title="停止终端"
-                >
-                  🛑
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </For>
-
-      {terminals().length === 0 && (
-        <div class="text-center py-8 opacity-50">
-          <div class="text-4xl mb-2">💻</div>
-          <div>暂无终端</div>
-          <button
-            class="btn btn-primary btn-sm mt-4"
-            onClick={() => {
-              openCreateDialog();
-              if (inDropdown) setShowTerminalMenu(false);
-            }}
-          >
-            创建第一个终端
-          </button>
-        </div>
-      )}
-    </div>
-  );
-
-  // 渲染WebShare列表
-  const renderWebShareList = (inDropdown = false) => (
-    <div class="space-y-2">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold">WebShare 服务</h3>
-        <button
-          class="btn btn-primary btn-sm"
-          onClick={() => {
-            createWebShare({
-              local_port: 3000,
-              service_name: "Local Development Server",
-            });
-            if (inDropdown) setShowWebShareMenu(false);
-          }}
-          title="创建WebShare"
-        >
-          ➕ 新建
-        </button>
-      </div>
-
-      <For each={webshares()}>
-        {(webshare) => (
-          <div class="card bg-base-200 shadow-sm p-3">
-            <div class="flex justify-between items-start">
-              <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">{webshare.service_name}</div>
-                <div class="text-xs opacity-70">
-                  {webshare.public_port} → {webshare.local_port}
-                </div>
-                <div class="text-xs opacity-50 mt-1">{webshare.status}</div>
-              </div>
-              <div class="flex space-x-1 ml-2">
-                <button
-                  class="btn btn-ghost btn-xs"
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `http://localhost:${webshare.public_port}`
-                    );
-                  }}
-                  title="复制URL"
-                >
-                  📋
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </For>
-
-      {webshares().length === 0 && (
-        <div class="text-center py-8 opacity-50">
-          <div class="text-4xl mb-2">🌐</div>
-          <div>暂无WebShare服务</div>
-        </div>
-      )}
-    </div>
-  );
 
   // 渲染活动终端
   const renderActiveTerminal = () => {
@@ -677,6 +804,22 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
   return (
     <div class="h-full flex flex-col">
+      {/* 错误提示 */}
+      <Show when={showError() && errorMessage()}>
+        <div class="alert alert-error fixed top-4 right-4 w-80 z-50 shadow-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>{errorMessage()}</span>
+          <button
+            class="btn btn-ghost btn-sm"
+            onClick={() => setShowError(false)}
+          >
+            ✕
+          </button>
+        </div>
+      </Show>
+
       {/* 创建终端对话框 */}
       <Show when={showCreateDialog()}>
         <div class="modal modal-open">
@@ -727,206 +870,208 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       {/* 头部 */}
       <div class="navbar bg-base-100 border-b min-h-[48px] px-2 sm:px-4">
-        <div class="flex-1">
+        <div class="flex-1 flex items-center">
           <button class="btn btn-ghost btn-sm" onClick={props.onBack}>
             ← 返回
           </button>
-          <span class="ml-2 font-medium hidden sm:inline">远程会话</span>
         </div>
+
+        {/* 中间信息显示区域 */}
+        <div class="flex-none flex items-center space-x-2 sm:space-x-4">
+          {/* 终端信息 */}
+          <div
+            class="badge badge-outline badge-sm sm:badge-md cursor-pointer hover:badge-primary"
+            onClick={() => {
+              // 如果有终端但没有活动的，自动连接第一个可用终端
+              if (terminals().length > 0 && !activeTerminalId()) {
+                const runningTerminal = terminals().find(t => t.status === "Running") || terminals()[0];
+                connectToTerminal(runningTerminal.id);
+              }
+            }}
+            title={activeTerminalId() ? "当前活动终端" : "点击连接终端"}
+          >
+            {getActiveTerminalDisplay()}
+          </div>
+
+          {/* WebShare信息 */}
+          <div
+            class="badge badge-outline badge-sm sm:badge-md cursor-pointer hover:badge-primary"
+            onClick={() => {
+              // 如果没有WebShare，创建一个默认的
+              if (webshares().length === 0) {
+                createWebShare({
+                  local_port: 3000,
+                  service_name: "Local Development Server",
+                });
+              }
+            }}
+            title={webshares().length > 0 ? "WebShare服务运行中" : "点击创建WebShare服务"}
+          >
+            {getWebShareDisplay()}
+          </div>
+        </div>
+
         <div class="flex-none flex items-center space-x-1">
           <button
             class="btn btn-ghost btn-sm"
-            onClick={() => Promise.all([fetchTerminals(), fetchWebShares()])}
+            onClick={() => {
+              console.log("Manual refresh triggered");
+              Promise.all([fetchTerminalsWithRetry(5, 500), fetchWebSharesWithRetry(5, 500)]);
+            }}
             title="刷新"
           >
             🔄
           </button>
 
-          {/* 移动端下拉菜单 */}
-          <Show when={isMobile}>
-            <div class="dropdown dropdown-end">
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={() => setShowMainMenu(!showMainMenu())}
-              >
-                ☰
-              </button>
-              <Show when={showMainMenu()}>
-                <ul class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-72 max-h-[80vh] overflow-y-auto z-50 mt-2">
-                  <li class="menu-title">
-                    <span>终端管理</span>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        setShowTerminalMenu(true);
-                        setShowMainMenu(false);
-                      }}
-                    >
-                      💻 终端列表 ({terminals().length})
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        setShowWebShareMenu(true);
-                        setShowMainMenu(false);
-                      }}
-                    >
-                      🌐 WebShare ({webshares().length})
-                    </button>
-                  </li>
-                  <li class="menu-title">
-                    <span>操作</span>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        openCreateDialog();
-                        setShowMainMenu(false);
-                      }}
-                    >
-                      ➕ 新建终端
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        props.onDisconnect();
-                        setShowMainMenu(false);
-                      }}
-                    >
-                      🔌 断开连接
-                    </button>
-                  </li>
-                </ul>
-              </Show>
-            </div>
-          </Show>
-
-          {/* 桌面端按钮 */}
-          <Show when={!isMobile}>
-            <button
-              class="btn btn-ghost btn-sm"
-              onClick={props.onDisconnect}
-              title="断开连接"
-            >
-              🔌 断开
-            </button>
-          </Show>
+          <button
+            class="btn btn-ghost btn-sm"
+            onClick={props.onDisconnect}
+            title="断开连接"
+          >
+            🔌 断开
+          </button>
         </div>
       </div>
 
-      {/* 移动端终端列表下拉菜单 */}
-      <Show when={showTerminalMenu()}>
-        <div
-          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-          onClick={() => setShowTerminalMenu(false)}
-        >
-          <div
-            class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
-              <h2 class="text-lg font-semibold">终端列表</h2>
-              <button
-                class="btn btn-ghost btn-sm btn-circle"
-                onClick={() => setShowTerminalMenu(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div class="p-4">
-              {loading() ? (
-                <div class="text-center py-8">
-                  <div class="loading loading-spinner"></div>
-                  <div class="mt-2">加载中...</div>
-                </div>
-              ) : (
-                renderTerminalList(true)
-              )}
-            </div>
-          </div>
-        </div>
-      </Show>
-
-      {/* 移动端WebShare列表下拉菜单 */}
-      <Show when={showWebShareMenu()}>
-        <div
-          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-          onClick={() => setShowWebShareMenu(false)}
-        >
-          <div
-            class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
-              <h2 class="text-lg font-semibold">WebShare 服务</h2>
-              <button
-                class="btn btn-ghost btn-sm btn-circle"
-                onClick={() => setShowWebShareMenu(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div class="p-4">
-              {loading() ? (
-                <div class="text-center py-8">
-                  <div class="loading loading-spinner"></div>
-                  <div class="mt-2">加载中...</div>
-                </div>
-              ) : (
-                renderWebShareList(true)
-              )}
-            </div>
-          </div>
-        </div>
-      </Show>
 
       {/* 主内容 */}
-      <div ref={containerRef} class="flex-1 flex overflow-hidden">
-        {/* 桌面端侧边栏 - 终端和WebShare列表 */}
-        <Show when={!isMobile}>
-          <div class="w-80 bg-base-100 border-r overflow-y-auto p-4">
-            {loading() ? (
-              <div class="text-center py-8">
-                <div class="loading loading-spinner"></div>
-                <div class="mt-2">加载中...</div>
-              </div>
-            ) : (
-              <div class="space-y-8">
-                {renderTerminalList(false)}
-                {renderWebShareList(false)}
-              </div>
-            )}
-          </div>
-        </Show>
-
+      <div class="flex-1 flex flex-col overflow-hidden">
         {/* 终端显示区域 */}
-        {renderActiveTerminal()}
+        <div ref={containerRef} class="flex-1 flex overflow-hidden">
+          {renderActiveTerminal()}
 
-        {/* 无活动终端时的占位符 */}
-        {!activeTerminalId() && (
-          <div class="flex-1 flex items-center justify-center bg-base-200">
-            <div class="text-center opacity-50 px-4">
-              <div class="text-6xl mb-4">💻</div>
-              <div class="text-xl">选择一个终端开始</div>
-              <div class="text-sm mt-2">
-                {isMobile
-                  ? "点击右上角菜单选择或创建终端"
-                  : "从左侧列表中选择或创建新终端"}
-              </div>
-              <Show when={isMobile}>
+          {/* 无活动终端时的占位符 */}
+          {!activeTerminalId() && (
+            <div class="flex-1 flex items-center justify-center bg-base-200">
+              <div class="text-center opacity-50 px-4">
+                <div class="text-6xl mb-4">💻</div>
+                <div class="text-xl">选择一个终端开始</div>
+                <div class="text-sm mt-2">
+                  点击顶部终端标签连接，或刷新按钮获取最新状态
+                </div>
                 <button
                   class="btn btn-primary btn-sm mt-4"
-                  onClick={() => setShowMainMenu(true)}
+                  onClick={openCreateDialog}
                 >
-                  打开菜单
+                  创建新终端
                 </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 文本输入框和底部工具栏 */}
+        <Show when={activeTerminalId()}>
+          <div class="border-t bg-base-100">
+            {/* 输入框区域 */}
+            <div class="p-2">
+              <textarea
+                class="w-full textarea textarea-bordered textarea-sm resize-none"
+                placeholder="输入命令或文本，Ctrl+Enter 发送..."
+                value={textInput()}
+                onInput={(e) => setTextInput(e.currentTarget.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
+                rows={isInputFocused() ? 4 : 2}
+                style="min-height: 60px; max-height: 200px;"
+              />
+
+              {/* 显示已上传的图片 */}
+              <Show when={uploadedImages().length > 0}>
+                <div class="mt-2 flex flex-wrap gap-2">
+                  <For each={uploadedImages()}>
+                    {(imageSrc, index) => (
+                      <div class="relative">
+                        <img
+                          src={imageSrc}
+                          alt={`Uploaded ${index()}`}
+                          class="w-12 h-12 object-cover rounded border"
+                        />
+                        <button
+                          class="absolute -top-1 -right-1 btn btn-xs btn-circle btn-ghost bg-base-100 border"
+                          onClick={() => {
+                            setUploadedImages(prev => prev.filter((_, i) => i !== index()));
+                          }}
+                          title="移除图片"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </For>
+                </div>
               </Show>
             </div>
+
+            {/* 底部工具栏 */}
+            <div class="flex justify-between items-center px-2 pb-2">
+              <div class="flex items-center space-x-2">
+                {/* 闪电按钮 - AI修正文本语法 */}
+                <button
+                  class="btn btn-ghost btn-xs btn-circle"
+                  onClick={correctTextWithAI}
+                  disabled={!textInput().trim() || isCorrectingText()}
+                  title="AI修正文本语法"
+                >
+                  <span class={`text-lg ${isCorrectingText() ? 'loading loading-spinner' : ''}`}>
+                    ⚡
+                  </span>
+                </button>
+
+                {/* 图片上传按钮 */}
+                <div class="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    class="hidden"
+                    id="image-upload"
+                    onChange={handleImageUpload}
+                  />
+                  <label
+                    for="image-upload"
+                    class="btn btn-ghost btn-xs btn-circle cursor-pointer"
+                    title="上传图片"
+                  >
+                    🖼️
+                  </label>
+                </div>
+
+                {/* 清空按钮 */}
+                <button
+                  class="btn btn-ghost btn-xs btn-circle"
+                  onClick={() => setTextInput("")}
+                  disabled={!textInput()}
+                  title="清空输入"
+                >
+                  🗑️
+                </button>
+              </div>
+
+              <div class="flex items-center space-x-2">
+                {/* 发送按钮 */}
+                <button
+                  class="btn btn-primary btn-sm"
+                  onClick={sendTextToTerminal}
+                  disabled={!textInput().trim() || !activeTerminalId()}
+                  title="发送到终端"
+                >
+                  发送
+                </button>
+
+                {/* 语音输入按钮 */}
+                <button
+                  class={`btn btn-ghost btn-xs btn-circle ${isRecording() ? 'btn-error animate-pulse' : ''}`}
+                  onClick={toggleVoiceRecording}
+                  title={isRecording() ? "停止录音" : "开始语音输入"}
+                >
+                  🎤
+                </button>
+              </div>
+            </div>
           </div>
-        )}
+        </Show>
       </div>
     </div>
   );

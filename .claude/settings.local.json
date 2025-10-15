@@ -38,7 +38,8 @@
       "Bash(git commit:*)",
       "Bash(rustc:*)",
       "Bash(RUST_LOG=debug ./target/debug/iroh-code-remote:*)",
-      "WebFetch(domain:docs.tauri.app)"
+      "WebFetch(domain:docs.tauri.app)",
+      "mcp__jean-memory__jean_memory"
     ],
     "deny": []
   }

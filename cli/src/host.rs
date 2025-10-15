@@ -92,7 +92,7 @@ impl HostSession {
             )
             .await?;
 
-        // 设置历史记录回调，当有新参与者加入时发送基本信息
+        // 简化：设置基本的历史记录回调
         let session_id_clone = session_id.clone();
         self.network
             .set_history_callback(move |_session_id| {

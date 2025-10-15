@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use tauri::Manager;
-use tauri::{Emitter, State};
+use tauri::{Emitter, State, Listener, Event};
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, error, warn};
@@ -30,6 +30,25 @@ fn is_valid_session_ticket(ticket: &str) -> bool {
 
 // Parse structured events from terminal data
 fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    // Handle session info
+    if data.starts_with("[SessionInfo:") {
+        if let Some(start) = data.find('[') {
+            if let Some(end) = data.find(']') {
+                let info_part = &data[start + 1..end];
+                let parts: Vec<&str> = info_part.split(':').collect();
+                if parts.len() >= 2 {
+                    let session_id = parts[1].trim().to_string();
+                    return Ok(serde_json::json!({
+                        "type": "session_info",
+                        "data": {
+                            "session_id": session_id
+                        }
+                    }));
+                }
+            }
+        }
+    }
+
     // Handle terminal list response
     if data.starts_with("[Terminal List Response:") {
         if let Some(start) = data.find('[') {
@@ -315,6 +334,7 @@ async fn initialize_network_with_relay(
     Ok(node_id)
 }
 
+
 #[tauri::command]
 async fn connect_to_peer(
     session_ticket: String,
@@ -341,8 +361,9 @@ async fn connect_to_peer(
         }
     };
 
-    // Generate unique session ID using the node address
-    let session_id = format!("session_{}", ticket.node_addr().node_id);
+    // Use temporary session ID for P2P layer
+    let temp_session_id = format!("session_{}", uuid::Uuid::new_v4());
+    let session_id = temp_session_id; // Store temp session_id for app use
 
     // Check session limits before creating new session
     {
@@ -390,13 +411,16 @@ async fn connect_to_peer(
         }
     }
 
-    // Join session
+    // Join session - simplified flow without waiting for SessionInfo
     let (sender, mut event_receiver) = network
         .join_session(ticket)
         .await
         .map_err(|e| format!("Failed to join session: {}", e))?;
 
-    // Create terminal session with enhanced tracking
+    info!("✅ Connected to host successfully");
+    info!("🔗 Using session ID based on node_id: {}", session_id);
+
+    // Create terminal session with simplified tracking
     let (tx, mut rx) = mpsc::unbounded_channel();
     let cancellation_token = CancellationToken::new();
     let terminal_session = TerminalSession {
