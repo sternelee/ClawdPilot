@@ -197,9 +197,9 @@ export class GestureRecognizer {
 
     // Check for double tap
     const now = Date.now();
-    if (this.lastTapPoint && 
-        now - this.lastTapTime < this.threshold.doubleTap &&
-        touches.length === 1) {
+    if (this.lastTapPoint &&
+      now - this.lastTapTime < this.threshold.doubleTap &&
+      touches.length === 1) {
       const distance = this.getDistance(this.lastTapPoint, touchPoints[0]);
       if (distance < 50) { // Within 50px
         this.triggerCallback("doubleTap", this.currentGesture);
@@ -447,16 +447,16 @@ export class MobileKeyboard {
   private static adjustmentCallbacks: Array<() => void> = [];
   private static debounceTimeout: ReturnType<typeof setTimeout> | null = null;
   private static viewportManagerIntegration = false;
-  
+
   static init(integrateWithViewportManager: boolean = false): void {
     // Store initial heights for accurate comparison
     this.initialVisualViewportHeight = window.visualViewport?.height || window.innerHeight;
     this.initialWindowHeight = window.innerHeight;
     this.viewportManagerIntegration = integrateWithViewportManager;
-    
+
     // Set up input focus tracking
     this.setupInputTracking();
-    
+
     // Primary method: Use visualViewport API (recommended and modern)
     if ("visualViewport" in window && window.visualViewport) {
       window.visualViewport.addEventListener("resize", this.handleVisualViewportChange.bind(this));
@@ -464,7 +464,7 @@ export class MobileKeyboard {
       // Fallback for older browsers
       window.addEventListener("resize", this.handleWindowResize.bind(this));
     }
-    
+
     // Handle page load and orientation changes
     window.addEventListener("load", () => {
       this.initialVisualViewportHeight = window.visualViewport?.height || window.innerHeight;
@@ -476,7 +476,7 @@ export class MobileKeyboard {
       viewportManagerIntegration: this.viewportManagerIntegration
     });
   }
-  
+
   private static setupInputTracking(): void {
     // Track active input elements
     document.addEventListener("focusin", (e) => {
@@ -488,7 +488,7 @@ export class MobileKeyboard {
         setTimeout(() => this.adjustScrollIfNeeded(), 300);
       }
     });
-    
+
     document.addEventListener("focusout", () => {
       this.activeInput = null;
       // Wait for keyboard to hide
@@ -499,28 +499,28 @@ export class MobileKeyboard {
       }, 300);
     });
   }
-  
+
   private static isInputElement(element: HTMLElement): boolean {
-    return element.tagName === "INPUT" || 
-           element.tagName === "TEXTAREA" || 
-           element.contentEditable === "true" ||
-           element.closest(".xterm-helper-textarea") !== null; // xterm terminal input
+    return element.tagName === "INPUT" ||
+      element.tagName === "TEXTAREA" ||
+      element.contentEditable === "true" ||
+      element.closest(".xterm-helper-textarea") !== null; // xterm terminal input
   }
-  
+
   private static handleVisualViewportChange(): void {
     const currentViewportHeight = window.visualViewport?.height || window.innerHeight;
     const viewportOffsetTop = window.visualViewport?.offsetTop || 0;
-    
+
     // Calculate keyboard height using multiple metrics for accuracy
     const heightDiffFromInitial = this.initialVisualViewportHeight - currentViewportHeight;
     const windowDiff = this.initialWindowHeight - window.innerHeight;
     this.keyboardHeight = Math.max(heightDiffFromInitial, windowDiff, 0);
-    
+
     // Determine if keyboard is visible with device-specific thresholds
     const capabilities = getDeviceCapabilities();
     const threshold = capabilities.isMobile ? 120 : 150; // Lower threshold for mobile
     const isKeyboardVisible = this.keyboardHeight > threshold;
-    
+
     this.updateKeyboardState(isKeyboardVisible, {
       height: this.keyboardHeight,
       viewportHeight: currentViewportHeight,
@@ -528,21 +528,21 @@ export class MobileKeyboard {
       threshold
     });
   }
-  
+
   private static handleWindowResize(): void {
     // Debounce resize events
     if (this.debounceTimeout) {
       clearTimeout(this.debounceTimeout);
     }
-    
+
     this.debounceTimeout = setTimeout(() => {
       const currentHeight = window.innerHeight;
       this.keyboardHeight = this.initialWindowHeight - currentHeight;
-      
+
       const capabilities = getDeviceCapabilities();
       const threshold = capabilities.isMobile ? 120 : 150;
       const isKeyboardVisible = this.keyboardHeight > threshold;
-      
+
       this.updateKeyboardState(isKeyboardVisible, {
         height: this.keyboardHeight,
         viewportHeight: currentHeight,
@@ -550,32 +550,32 @@ export class MobileKeyboard {
       });
     }, 100);
   }
-  
+
   private static updateKeyboardState(isVisible: boolean, keyboardInfo: KeyboardInfo): void {
     if (isVisible !== this.isVisible) {
       this.isVisible = isVisible;
       this.callbacks.forEach((callback) => callback(this.isVisible, keyboardInfo));
-      
+
       // Update fixed elements
       KeyboardManager.adjustFixedElements(isVisible ? this.keyboardHeight : 0);
-      
+
       if (isVisible) {
         this.adjustScrollIfNeeded();
       }
     }
   }
-  
+
   private static adjustScrollIfNeeded(): void {
     if (!this.activeInput || !this.isVisible) return;
-    
+
     const inputRect = this.activeInput.getBoundingClientRect();
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
     const viewportOffsetTop = window.visualViewport?.offsetTop || 0;
-    
+
     // Calculate if input is blocked by keyboard
     const inputBottomInViewport = inputRect.bottom - viewportOffsetTop;
     const availableHeight = viewportHeight - viewportOffsetTop;
-    
+
     if (inputBottomInViewport > availableHeight) {
       // Input is blocked by keyboard, scroll it into view
       this.activeInput.scrollIntoView({
@@ -583,7 +583,7 @@ export class MobileKeyboard {
         block: "end", // Align bottom of input with bottom of visible area
         inline: "nearest"
       });
-      
+
       // Add additional buffer space to ensure input is not right at the edge
       setTimeout(() => {
         const newRect = this.activeInput?.getBoundingClientRect();
@@ -605,11 +605,11 @@ export class MobileKeyboard {
         inline: "nearest"
       });
     }
-    
+
     // Trigger adjustment callbacks for custom handling
     this.adjustmentCallbacks.forEach(callback => callback());
   }
-  
+
   private static resetScroll(): void {
     // Optional: Reset scroll position when keyboard hides
     // Usually browsers handle this automatically, but we can add custom logic here
@@ -624,7 +624,7 @@ export class MobileKeyboard {
       }
     };
   }
-  
+
   static onScrollAdjustment(callback: () => void): () => void {
     this.adjustmentCallbacks.push(callback);
     return () => {
@@ -638,15 +638,15 @@ export class MobileKeyboard {
   static isKeyboardVisible(): boolean {
     return this.isVisible;
   }
-  
+
   static getKeyboardHeight(): number {
     return this.keyboardHeight;
   }
-  
+
   static getActiveInput(): HTMLElement | null {
     return this.activeInput;
   }
-  
+
   static forceScrollAdjustment(): void {
     if (this.isVisible && this.activeInput) {
       this.adjustScrollIfNeeded();
@@ -666,33 +666,33 @@ export class MobileKeyboard {
 export class KeyboardManager {
   private static fixedElements: Map<HTMLElement, FixedElementConfig> = new Map();
   private static originalStyles: Map<HTMLElement, string> = new Map();
-  
+
   static registerFixedElement(element: HTMLElement, config: FixedElementConfig): () => void {
     this.fixedElements.set(element, config);
     this.originalStyles.set(element, element.style.bottom);
-    
+
     return () => {
       this.unregisterFixedElement(element);
     };
   }
-  
+
   static unregisterFixedElement(element: HTMLElement): void {
     const originalStyle = this.originalStyles.get(element);
     if (originalStyle !== undefined) {
       element.style.bottom = originalStyle;
     }
-    
+
     this.fixedElements.delete(element);
     this.originalStyles.delete(element);
   }
-  
+
   static adjustFixedElements(keyboardHeight: number): void {
     this.fixedElements.forEach((config, element) => {
       if (keyboardHeight > 0) {
         // Keyboard is visible, adjust element position
         const adjustment = config.adjustWithKeyboard ? keyboardHeight : 0;
         element.style.bottom = `${adjustment}px`;
-        
+
         if (config.onKeyboardShow) {
           config.onKeyboardShow(keyboardHeight);
         }
@@ -700,14 +700,14 @@ export class KeyboardManager {
         // Keyboard is hidden, restore original position
         const originalStyle = this.originalStyles.get(element) || '0px';
         element.style.bottom = originalStyle;
-        
+
         if (config.onKeyboardHide) {
           config.onKeyboardHide();
         }
       }
     });
   }
-  
+
   static clear(): void {
     this.fixedElements.forEach((config, element) => {
       this.unregisterFixedElement(element);
@@ -719,28 +719,28 @@ export class KeyboardManager {
 export class InputFocusManager {
   private static activeInputs: Set<HTMLElement> = new Set();
   private static scrollHistory: Array<{ x: number; y: number }> = [];
-  
+
   static trackInput(input: HTMLElement): () => void {
     this.activeInputs.add(input);
-    
+
     const cleanup = () => {
       this.activeInputs.delete(input);
     };
-    
+
     // Setup input-specific handlers
     const handleFocus = () => {
       // Store current scroll position
-      this.scrollHistory.push({ 
-        x: window.scrollX || window.pageXOffset, 
-        y: window.scrollY || window.pageYOffset 
+      this.scrollHistory.push({
+        x: window.scrollX || window.pageXOffset,
+        y: window.scrollY || window.pageYOffset
       });
-      
+
       // Wait for keyboard and adjust
       setTimeout(() => this.ensureInputVisible(input), 100);
       setTimeout(() => this.ensureInputVisible(input), 300);
       setTimeout(() => this.ensureInputVisible(input), 600);
     };
-    
+
     const handleBlur = () => {
       // Optionally restore scroll position
       setTimeout(() => {
@@ -752,33 +752,33 @@ export class InputFocusManager {
         }
       }, 300);
     };
-    
+
     input.addEventListener('focus', handleFocus);
     input.addEventListener('blur', handleBlur);
-    
+
     return () => {
       input.removeEventListener('focus', handleFocus);
       input.removeEventListener('blur', handleBlur);
       cleanup();
     };
   }
-  
+
   private static ensureInputVisible(input: HTMLElement): void {
     if (!MobileKeyboard.isKeyboardVisible()) return;
-    
+
     const inputRect = input.getBoundingClientRect();
     const viewportHeight = window.visualViewport?.height || window.innerHeight;
     const viewportTop = window.visualViewport?.offsetTop || 0;
-    
+
     // Calculate visible area
     const visibleTop = viewportTop;
     const visibleBottom = viewportTop + viewportHeight;
-    
+
     // Check if input is within visible area with some buffer
     const buffer = 50; // 50px buffer
     const inputTop = inputRect.top;
     const inputBottom = inputRect.bottom;
-    
+
     if (inputBottom > visibleBottom - buffer) {
       // Input bottom is too close to or below keyboard
       input.scrollIntoView({
@@ -786,7 +786,7 @@ export class InputFocusManager {
         block: 'end', // Align bottom of input with bottom of visible area
         inline: 'nearest'
       });
-      
+
       // Fine-tune positioning after scroll
       setTimeout(() => {
         const newRect = input.getBoundingClientRect();
@@ -807,7 +807,7 @@ export class InputFocusManager {
       });
     }
   }
-  
+
   private static restoreScrollPosition(): void {
     if (this.scrollHistory.length > 0) {
       const lastPosition = this.scrollHistory.pop()!;
@@ -818,7 +818,7 @@ export class InputFocusManager {
       });
     }
   }
-  
+
   static clear(): void {
     this.activeInputs.clear();
     this.scrollHistory = [];
@@ -918,7 +918,7 @@ export class ScreenOrientation {
 // Enhanced mobile utilities initialization
 export function initializeMobileUtils(options: { integrateViewportManager?: boolean } = {}): void {
   const integrateViewportManager = options.integrateViewportManager ?? false;
-  
+
   MobileKeyboard.init(integrateViewportManager);
 
   // Add mobile-specific CSS classes
@@ -963,7 +963,7 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
         :root {
           --viewport-height: -webkit-fill-available;
         }
-        
+
         /* Prevent zoom on input focus */
         input[type="text"],
         input[type="email"],
@@ -973,12 +973,12 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
           transform: translateZ(0);
         }
       }
-      
+
       /* Dynamic keyboard state classes */
       .keyboard-visible {
         --effective-viewport-height: calc(var(--dynamic-viewport-height) - var(--keyboard-height));
       }
-      
+
       /* Smooth transitions for viewport changes */
       .mobile-viewport-transition {
         transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1),
@@ -1010,7 +1010,7 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
     if (visible && keyboardInfo) {
       const keyboardHeight = keyboardInfo.height;
       const effectiveHeight = keyboardInfo.viewportHeight - (keyboardInfo.viewportOffsetTop || 0);
-      
+
       document.documentElement.style.setProperty(
         "--keyboard-height",
         `${keyboardHeight}px`,
@@ -1030,7 +1030,7 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
       document.documentElement.style.removeProperty("--effective-viewport-height");
     }
   });
-  
+
   // Auto-register common input elements for focus management
   const autoRegisterInputs = () => {
     document.querySelectorAll('input, textarea, [contenteditable="true"]').forEach(input => {
@@ -1040,10 +1040,10 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
       }
     });
   };
-  
+
   // Initial registration and observe for new inputs
   autoRegisterInputs();
-  
+
   // Use MutationObserver to handle dynamically added inputs
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
@@ -1071,19 +1071,19 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
       }
     });
   });
-  
+
   observer.observe(document.body, {
     childList: true,
     subtree: true
   });
-  
+
   // Cleanup function for proper resource management
   const cleanup = () => {
     observer.disconnect();
     KeyboardManager.clear();
     InputFocusManager.clear();
   };
-  
+
   // Store cleanup function globally for potential use
   (window as any).__mobileUtilsCleanup = cleanup;
 }

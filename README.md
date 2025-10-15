@@ -296,3 +296,6 @@ cd cli && cargo test
 ---
 
 **riterm** - 让终端协作变得简单！ 🚀
+
+# 查看设备日志（在另一个终端窗口）
+idevicesyslog | grep RiTerm

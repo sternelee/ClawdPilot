@@ -1,8 +1,8 @@
 name: app
 options:
-  bundleIdPrefix: com.riterm.app
+  bundleIdPrefix: com.example.riterm
   deploymentTarget:
-    iOS: 13.0
+    iOS: 14.0
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -11,7 +11,7 @@ settingGroups:
   app:
     base:
       PRODUCT_NAME: RiTerm
-      PRODUCT_BUNDLE_IDENTIFIER: com.riterm.app
+      PRODUCT_BUNDLE_IDENTIFIER: com.example.riterm
 targetTemplates:
   app:
     type: application

@@ -518,9 +518,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       <For each={terminals()}>
         {(terminal) => (
           <div
-            class={`card bg-base-200 shadow-sm p-3 ${
-              activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
-            }`}
+            class={`card bg-base-200 shadow-sm p-3 ${activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
+              }`}
           >
             <div class="flex justify-between items-start">
               <div class="flex-1 min-w-0">

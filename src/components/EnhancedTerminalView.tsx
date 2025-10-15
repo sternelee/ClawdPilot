@@ -264,7 +264,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     controller.onGesture('zoom-in', (state, action) => {
       const now = Date.now();
       if (now - lastGestureTime() < 100) return; // Debounce
-      
+
       setLastGestureTime(now);
       const newSize = Math.min(fontSize() + 1, 24);
       if (newSize !== fontSize()) {
@@ -275,7 +275,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     controller.onGesture('zoom-out', (state, action) => {
       const now = Date.now();
       if (now - lastGestureTime() < 100) return; // Debounce
-      
+
       setLastGestureTime(now);
       const newSize = Math.max(fontSize() - 1, 8);
       if (newSize !== fontSize()) {
@@ -475,14 +475,14 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
       onDataDispose = term.onData((data) => {
         debugTerminal(`Terminal input: ${data}`);
         props.onInput(data);
-        
+
         // Track cursor position for occlusion prevention
         if (deviceCapabilities().isMobile && terminalElement) {
           const occlusionPrevention = getOcclusionPrevention();
           const cursorY = term.buffer.active.cursorY;
           const lineHeight = term.options.fontSize! * (term.options.lineHeight || 1.2);
           const absoluteY = cursorY * lineHeight;
-          
+
           occlusionPrevention.updateCursorPosition(terminalElement, absoluteY);
         }
       });
@@ -554,7 +554,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
     const layoutManager = getAdaptiveLayoutManager();
     const unsubscribeLayout = layoutManager.onLayoutChange((config) => {
       setLayoutConfig(config);
-      
+
       // Adjust terminal on layout change
       const fit = fitAddon();
       if (fit && terminalInstance) {
@@ -569,7 +569,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         }, 150);
       }
     });
-    
+
     setLayoutCleanup(() => unsubscribeLayout);
 
     // Enhanced mobile keyboard and input management setup
@@ -676,15 +676,15 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
       // Setup occlusion prevention
       const occlusionPrevention = getOcclusionPrevention();
-      
+
       // Track terminal element for occlusion
       if (terminalElement) {
         const trackCleanup = occlusionPrevention.trackElement(terminalElement);
-        
+
         // Subscribe to occlusion events
         const occlusionCallback = occlusionPrevention.onOcclusionDetected((status) => {
           console.log('[EnhancedTerminalView] Occlusion detected:', status);
-          
+
           // Adjust terminal if needed
           const fit = fitAddon();
           if (fit && terminalInstance && status.isOccluded) {
@@ -698,12 +698,12 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
             }, 100);
           }
         });
-        
+
         // Subscribe to scroll adjustments
         const scrollCallback = occlusionPrevention.onScrollAdjusted((adjustment) => {
           console.log('[EnhancedTerminalView] Scroll adjusted:', adjustment);
         });
-        
+
         // Combine cleanup functions
         setOcclusionCleanup(() => () => {
           trackCleanup();
@@ -898,13 +898,13 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
     const advancedKeys = isMobileDevice
       ? [
-          { label: "Home", key: "\x1b[H" },
-          { label: "End", key: "\x1b[F" },
-          { label: "PgUp", key: "\x1b[5~" },
-          { label: "PgDn", key: "\x1b[6~" },
-          { label: "Ctrl+Z", key: "\x1a" },
-          { label: "Ctrl+X", key: "\x18" },
-        ]
+        { label: "Home", key: "\x1b[H" },
+        { label: "End", key: "\x1b[F" },
+        { label: "PgUp", key: "\x1b[5~" },
+        { label: "PgDn", key: "\x1b[6~" },
+        { label: "Ctrl+Z", key: "\x1a" },
+        { label: "Ctrl+X", key: "\x18" },
+      ]
       : [];
 
     return [...baseKeys, ...navigationKeys, ...advancedKeys];
@@ -1211,8 +1211,8 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
               <div class="text-sm">
                 <div class="font-medium mb-1">📱 Mobile Gestures</div>
                 <div class="text-xs opacity-70">
-                  • Two-finger swipe: show/hide keyboard<br/>
-                  • Pinch: zoom terminal<br/>
+                  • Two-finger swipe: show/hide keyboard<br />
+                  • Pinch: zoom terminal<br />
                   • Long press: show controls
                 </div>
               </div>
