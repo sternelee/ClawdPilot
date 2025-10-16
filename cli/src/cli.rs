@@ -7,7 +7,7 @@ use crate::terminal_manager::TerminalManager;
 use riterm_shared::{P2PNetwork, p2p::NetworkMessage};
 
 #[derive(Parser)]
-#[command(name = "iroh-code-remote")]
+#[command(name = "riterm")]
 #[command(about = "A terminal host for remote P2P management")]
 pub struct Cli {
     #[arg(
@@ -44,6 +44,9 @@ impl CliApp {
     pub async fn run(&mut self, cli: Cli) -> Result<()> {
         // 设置TCP转发消息处理器
         self.setup_tcp_forward_message_handler().await?;
+
+        // 设置文件传输消息处理器
+        self.setup_file_transfer_message_handler().await?;
 
         self.start_terminal_host().await
     }
@@ -606,5 +609,101 @@ impl CliApp {
             "TCP forward message handler ended for session: {}",
             session_id
         );
+    }
+
+    /// 设置文件传输消息处理器
+    async fn setup_file_transfer_message_handler(&mut self) -> Result<()> {
+        let network = self.network.clone();
+        let terminal_manager = self.terminal_manager.clone();
+        let mut message_receiver = network
+            .get_message_receiver()
+            .await
+            .context("Failed to get message receiver for file transfer")?;
+
+        // 启动文件传输消息处理任务
+        tokio::spawn(async move {
+            info!("File transfer message handler started");
+
+            while let Some(message) = message_receiver.recv().await {
+                match message {
+                    NetworkMessage::FileTransferStart {
+                        terminal_id,
+                        file_name,
+                        file_data,
+                        ..
+                    } => {
+                        info!(
+                            "Received file transfer start: {} for terminal {} ({} bytes)",
+                            file_name,
+                            terminal_id,
+                            file_data.len()
+                        );
+
+                        // Get the terminal's current working directory
+                        let current_dir =
+                            match terminal_manager.get_terminal_info(&terminal_id).await {
+                                Some(terminal_info) => {
+                                    std::path::PathBuf::from(&terminal_info.current_dir)
+                                }
+                                None => {
+                                    info!(
+                                        "Terminal {} not found, using default directory",
+                                        terminal_id
+                                    );
+                                    std::env::current_dir()
+                                        .unwrap_or_else(|_| std::path::PathBuf::from("/"))
+                                }
+                            };
+
+                        let file_path = current_dir.join(&file_name);
+
+                        // Save the file to the terminal's working directory
+                        match tokio::fs::write(&file_path, &file_data).await {
+                            Ok(()) => {
+                                info!(
+                                    "✅ File {} saved successfully to {} (terminal: {})",
+                                    file_name,
+                                    file_path.display(),
+                                    terminal_id
+                                );
+
+                                // Log the file transfer completion
+                                info!(
+                                    "📁 File transfer completed: {} -> {}",
+                                    file_name,
+                                    file_path.display()
+                                );
+                            }
+                            Err(e) => {
+                                error!(
+                                    "❌ Failed to save file {} to {} (terminal: {}): {}",
+                                    file_name,
+                                    file_path.display(),
+                                    terminal_id,
+                                    e
+                                );
+
+                                // Log the file transfer error
+                                warn!(
+                                    "📁 File transfer failed: {} -> {} (terminal: {}): {}",
+                                    file_name,
+                                    file_path.display(),
+                                    terminal_id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                    _ => {
+                        // Other file transfer messages (Progress, Complete, Error) would be handled here
+                        // For now, we only handle FileTransferStart
+                    }
+                }
+            }
+
+            info!("File transfer message handler ended");
+        });
+
+        Ok(())
     }
 }

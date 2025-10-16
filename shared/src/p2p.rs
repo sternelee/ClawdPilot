@@ -175,6 +175,42 @@ pub enum NetworkMessage {
         timestamp: u64,
     },
 
+    // === File Transfer ===
+    /// File transfer start - contains file metadata
+    FileTransferStart {
+        from: NodeId,
+        terminal_id: String,
+        file_name: String,
+        file_size: u64,
+        file_data: Vec<u8>, // Base64 encoded file content
+        timestamp: u64,
+    },
+    /// File transfer progress notification
+    FileTransferProgress {
+        from: NodeId,
+        terminal_id: String,
+        file_name: String,
+        bytes_transferred: u64,
+        total_bytes: u64,
+        timestamp: u64,
+    },
+    /// File transfer completion
+    FileTransferComplete {
+        from: NodeId,
+        terminal_id: String,
+        file_name: String,
+        file_path: String, // Path where file was saved on CLI side
+        timestamp: u64,
+    },
+    /// File transfer error
+    FileTransferError {
+        from: NodeId,
+        terminal_id: String,
+        file_name: String,
+        error_message: String,
+        timestamp: u64,
+    },
+
     // === WebShare Management ===
     /// Create WebShare request (deprecated, use TcpForwardCreate)
     WebShareCreate {
@@ -577,8 +613,12 @@ impl P2PNetwork {
             .await?;
 
         // Send ParticipantJoined message to host
-        info!("Sending ParticipantJoined message to host for session: {}", temp_session_id);
-        self.send_participant_joined(&temp_session_id, &connection_sender).await?;
+        info!(
+            "Sending ParticipantJoined message to host for session: {}",
+            temp_session_id
+        );
+        self.send_participant_joined(&temp_session_id, &connection_sender)
+            .await?;
         info!("✅ ParticipantJoined message sent successfully");
 
         // Start handling incoming messages
@@ -778,7 +818,8 @@ impl P2PNetwork {
                 }
 
                 let len = u32::from_be_bytes(len_buf) as usize;
-                if len > 10 * 1024 * 1024 { // 10MB limit
+                if len > 10 * 1024 * 1024 {
+                    // 10MB limit
                     warn!("Message too large: {} bytes", len);
                     break;
                 }
@@ -824,7 +865,10 @@ impl P2PNetwork {
             if !removed {
                 if let Some(mapped_id) = remapped_id {
                     connections.remove(&mapped_id);
-                    debug!("Connection cleaned up for remapped session: {} (original: {})", mapped_id, session_id);
+                    debug!(
+                        "Connection cleaned up for remapped session: {} (original: {})",
+                        mapped_id, session_id
+                    );
                 } else {
                     debug!("Connection cleaned up for session: {}", session_id);
                 }
@@ -940,7 +984,10 @@ impl P2PNetwork {
         // Clean up session - check both original and remapped session IDs
         let actual_session_id = self.resolve_session_id(session_id).await;
         self.sessions.write().await.remove(&actual_session_id);
-        self.active_connections.write().await.remove(&actual_session_id);
+        self.active_connections
+            .write()
+            .await
+            .remove(&actual_session_id);
 
         // Also try to remove by original session ID if different
         if session_id != actual_session_id {
@@ -1085,7 +1132,10 @@ impl P2PNetwork {
                     // 如果是客户端接收到SessionInfo，需要更新session_id映射
                     let host_session_id = header.session_id.clone();
                     if session_id != host_session_id {
-                        info!("Updating session mapping: {} -> {}", session_id, host_session_id);
+                        info!(
+                            "Updating session mapping: {} -> {}",
+                            session_id, host_session_id
+                        );
 
                         drop(sessions_guard); // Release read lock
 
@@ -1119,8 +1169,12 @@ impl P2PNetwork {
                     }
                 }
                 NetworkMessage::ParticipantJoined { from, timestamp } => {
-                    info!("🎉 Participant {} joined session {} (host: {})",
-                          from.fmt_short(), session_id, session.is_host);
+                    info!(
+                        "🎉 Participant {} joined session {} (host: {})",
+                        from.fmt_short(),
+                        session_id,
+                        session.is_host
+                    );
                     let event = TerminalEvent {
                         timestamp,
                         event_type: EventType::Output,
@@ -1739,6 +1793,119 @@ impl P2PNetwork {
                         warn!("No active receivers for TCP forward stopped event, skipping");
                     }
                 }
+                // === File Transfer Messages ===
+                NetworkMessage::FileTransferStart {
+                    from,
+                    terminal_id,
+                    file_name,
+                    file_size,
+                    file_data,
+                    timestamp,
+                } => {
+                    info!(
+                        "Received file transfer start from {} for terminal {} ({}: {} bytes)",
+                        from.fmt_short(),
+                        terminal_id,
+                        file_name,
+                        file_size
+                    );
+                    let event = TerminalEvent {
+                        timestamp,
+                        event_type: EventType::Output,
+                        data: format!(
+                            "[File Transfer Start] {} -> {} ({} bytes)",
+                            file_name, terminal_id, file_size
+                        ),
+                    };
+                    if session.event_sender.send(event).is_err() {
+                        warn!("No active receivers for file transfer start event, skipping");
+                    }
+                }
+                NetworkMessage::FileTransferProgress {
+                    from,
+                    terminal_id,
+                    file_name,
+                    bytes_transferred,
+                    total_bytes,
+                    timestamp,
+                } => {
+                    debug!(
+                        "Received file transfer progress from {} for terminal {} ({}: {}/{})",
+                        from.fmt_short(),
+                        terminal_id,
+                        file_name,
+                        bytes_transferred,
+                        total_bytes
+                    );
+                    let progress = if total_bytes > 0 {
+                        (bytes_transferred * 100 / total_bytes).min(100)
+                    } else {
+                        0
+                    };
+                    let event = TerminalEvent {
+                        timestamp,
+                        event_type: EventType::Output,
+                        data: format!(
+                            "[File Transfer Progress] {} -> {} ({}%)",
+                            file_name, terminal_id, progress
+                        ),
+                    };
+                    if session.event_sender.send(event).is_err() {
+                        warn!("No active receivers for file transfer progress event, skipping");
+                    }
+                }
+                NetworkMessage::FileTransferComplete {
+                    from,
+                    terminal_id,
+                    file_name,
+                    file_path,
+                    timestamp,
+                } => {
+                    info!(
+                        "Received file transfer complete from {} for terminal {} ({} -> {})",
+                        from.fmt_short(),
+                        terminal_id,
+                        file_name,
+                        file_path
+                    );
+                    let event = TerminalEvent {
+                        timestamp,
+                        event_type: EventType::Output,
+                        data: format!(
+                            "[File Transfer Complete] {} saved to {} in terminal {}",
+                            file_name, file_path, terminal_id
+                        ),
+                    };
+                    if session.event_sender.send(event).is_err() {
+                        warn!("No active receivers for file transfer complete event, skipping");
+                    }
+                }
+                NetworkMessage::FileTransferError {
+                    from,
+                    terminal_id,
+                    file_name,
+                    error_message,
+                    timestamp,
+                } => {
+                    warn!(
+                        "Received file transfer error from {} for terminal {} ({}: {})",
+                        from.fmt_short(),
+                        terminal_id,
+                        file_name,
+                        error_message
+                    );
+                    let event = TerminalEvent {
+                        timestamp,
+                        event_type: EventType::Output,
+                        data: format!(
+                            "[File Transfer Error] {} in terminal {}: {}",
+                            file_name, terminal_id, error_message
+                        ),
+                    };
+                    if session.event_sender.send(event).is_err() {
+                        warn!("No active receivers for file transfer error event, skipping");
+                    }
+                }
             }
         }
         Ok(())
@@ -2170,6 +2337,104 @@ impl P2PNetwork {
             from: self.endpoint.node_id(),
             session_id: session_id.to_string(),
             remote_port,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        self.send_message(session_id, message).await
+    }
+
+    // === File Transfer Methods ===
+
+    pub async fn send_file_transfer_start(
+        &self,
+        session_id: &str,
+        terminal_id: String,
+        file_name: String,
+        file_data: Vec<u8>,
+    ) -> Result<()> {
+        debug!(
+            "Sending file transfer start for {} to terminal {}",
+            file_name, terminal_id
+        );
+        let file_size = file_data.len() as u64;
+        let message = NetworkMessage::FileTransferStart {
+            from: self.endpoint.node_id(),
+            terminal_id,
+            file_name,
+            file_size,
+            file_data,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        self.send_message(session_id, message).await
+    }
+
+    pub async fn send_file_transfer_progress(
+        &self,
+        session_id: &str,
+        terminal_id: String,
+        file_name: String,
+        bytes_transferred: u64,
+        total_bytes: u64,
+    ) -> Result<()> {
+        debug!(
+            "Sending file transfer progress for {} to terminal {} ({}/{})",
+            file_name, terminal_id, bytes_transferred, total_bytes
+        );
+        let message = NetworkMessage::FileTransferProgress {
+            from: self.endpoint.node_id(),
+            terminal_id,
+            file_name,
+            bytes_transferred,
+            total_bytes,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        self.send_message(session_id, message).await
+    }
+
+    pub async fn send_file_transfer_complete(
+        &self,
+        session_id: &str,
+        terminal_id: String,
+        file_name: String,
+        file_path: String,
+    ) -> Result<()> {
+        debug!(
+            "Sending file transfer complete for {} to terminal {} (saved to {})",
+            file_name, terminal_id, file_path
+        );
+        let message = NetworkMessage::FileTransferComplete {
+            from: self.endpoint.node_id(),
+            terminal_id,
+            file_name,
+            file_path,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+        };
+        self.send_message(session_id, message).await
+    }
+
+    pub async fn send_file_transfer_error(
+        &self,
+        session_id: &str,
+        terminal_id: String,
+        file_name: String,
+        error_message: String,
+    ) -> Result<()> {
+        debug!(
+            "Sending file transfer error for {} to terminal {}: {}",
+            file_name, terminal_id, error_message
+        );
+        let message = NetworkMessage::FileTransferError {
+            from: self.endpoint.node_id(),
+            terminal_id,
+            file_name,
+            error_message,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs(),

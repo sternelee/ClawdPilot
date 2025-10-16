@@ -16,8 +16,7 @@ use cli::{Cli, CliApp};
 async fn main() -> Result<()> {
     // Create a file appender for logging
     std::fs::create_dir_all("logs").ok(); // Create logs directory if it doesn't exist
-    let file_appender =
-        RollingFileAppender::new(Rotation::DAILY, "logs", "iroh-code-remote-cli.log");
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "riterm.log");
 
     // Create a fmt layer for file logging
     let file_layer = tracing_subscriber::fmt::layer()

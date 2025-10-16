@@ -3,15 +3,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use base64::Engine;
 use tauri::Manager;
-use tauri::{Emitter, State, Listener, Event};
+use tauri::{Emitter, Event, Listener, State};
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
-use tracing::{info, error, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
-use base64::Engine;
 
-use riterm_shared::{EventType, P2PNetwork, TerminalEvent, NodeTicket, p2p::NetworkMessage};
+use riterm_shared::{EventType, NodeTicket, P2PNetwork, TerminalEvent, p2p::NetworkMessage};
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
 const MAX_CONCURRENT_SESSIONS: usize = 50;
@@ -216,6 +216,55 @@ fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::
         }
     }
 
+    // Handle file transfer messages
+    if data.starts_with("[File Transfer Start]") {
+        if let Some(start) = data.find('[') {
+            if let Some(end) = data.find(']') {
+                let info_part = &data[start + 1..end];
+                return Ok(serde_json::json!({
+                    "type": "file_transfer_start",
+                    "info": info_part
+                }));
+            }
+        }
+    }
+
+    if data.starts_with("[File Transfer Progress]") {
+        if let Some(start) = data.find('[') {
+            if let Some(end) = data.find(']') {
+                let info_part = &data[start + 1..end];
+                return Ok(serde_json::json!({
+                    "type": "file_transfer_progress",
+                    "info": info_part
+                }));
+            }
+        }
+    }
+
+    if data.starts_with("[File Transfer Complete]") {
+        if let Some(start) = data.find('[') {
+            if let Some(end) = data.find(']') {
+                let info_part = &data[start + 1..end];
+                return Ok(serde_json::json!({
+                    "type": "file_transfer_complete",
+                    "info": info_part
+                }));
+            }
+        }
+    }
+
+    if data.starts_with("[File Transfer Error]") {
+        if let Some(start) = data.find('[') {
+            if let Some(end) = data.find(']') {
+                let info_part = &data[start + 1..end];
+                return Ok(serde_json::json!({
+                    "type": "file_transfer_error",
+                    "info": info_part
+                }));
+            }
+        }
+    }
+
     Err("No structured event found".into())
 }
 
@@ -333,7 +382,6 @@ async fn initialize_network_with_relay(
 
     Ok(node_id)
 }
-
 
 #[tauri::command]
 async fn connect_to_peer(
@@ -928,11 +976,7 @@ async fn send_terminal_input_to_terminal(
     };
 
     network
-        .send_terminal_input(
-            &request.session_id,
-            request.terminal_id,
-            request.input,
-        )
+        .send_terminal_input(&request.session_id, request.terminal_id, request.input)
         .await
         .map_err(|e| format!("Failed to send terminal input: {}", e))?;
 
@@ -1214,6 +1258,23 @@ async fn get_session_stats(state: State<'_, AppState>) -> Result<serde_json::Val
     }))
 }
 
+// === File Transfer Types ===
+
+#[derive(Serialize, Deserialize)]
+pub struct FileTransferRequest {
+    pub session_id: String,
+    pub terminal_id: String,
+    pub file_path: String, // Local file path to send
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FileTransferDataRequest {
+    pub session_id: String,
+    pub terminal_id: String,
+    pub file_name: String,
+    pub file_data: Vec<u8>, // Base64 encoded file content
+}
+
 // === TCP Forwarding Commands ===
 
 /// Create TCP forwarding connection (like dumbpipe connect-tcp)
@@ -1233,7 +1294,10 @@ async fn create_tcp_forward(
     };
 
     // Create TCP forward client
-    let client = Arc::new(riterm_shared::TcpForwardClient::new(local_port, remote_port));
+    let client = Arc::new(riterm_shared::TcpForwardClient::new(
+        local_port,
+        remote_port,
+    ));
 
     // Store client in state for later use
     {
@@ -1242,18 +1306,24 @@ async fn create_tcp_forward(
     }
 
     // Send TCP forward create request
-    if let Err(e) = network.create_tcp_forward(
-        &session_id,
-        local_port,
-        remote_port,
-        format!("TCP Forward {} -> {}", local_port, remote_port),
-    ).await {
+    if let Err(e) = network
+        .create_tcp_forward(
+            &session_id,
+            local_port,
+            remote_port,
+            format!("TCP Forward {} -> {}", local_port, remote_port),
+        )
+        .await
+    {
         return Err(format!("Failed to create TCP forward: {}", e));
     }
 
     // Don't start the TCP client immediately
     // Wait for CLI to send TcpForwardConnected notification
-    info!("TCP forward client created for session {}, waiting for CLI confirmation", session_id);
+    info!(
+        "TCP forward client created for session {}, waiting for CLI confirmation",
+        session_id
+    );
 
     Ok(())
 }
@@ -1265,7 +1335,10 @@ async fn handle_tcp_forward_connected(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    info!("TCP forward connected on port {} for session {}", remote_port, session_id);
+    info!(
+        "TCP forward connected on port {} for session {}",
+        remote_port, session_id
+    );
 
     // Get the TCP client for this session and start it
     let tcp_clients = state.tcp_clients.read().await;
@@ -1275,11 +1348,20 @@ async fn handle_tcp_forward_connected(
 
         // Start the TCP forward client to listen for local connections
         tokio::spawn(async move {
-            info!("Starting TCP forward client for session {} on local port", session_id_clone);
+            info!(
+                "Starting TCP forward client for session {} on local port",
+                session_id_clone
+            );
             if let Err(e) = client_clone.start().await {
-                error!("TCP forward client error for session {}: {}", session_id_clone, e);
+                error!(
+                    "TCP forward client error for session {}: {}",
+                    session_id_clone, e
+                );
             } else {
-                info!("TCP forward client started successfully for session {}", session_id_clone);
+                info!(
+                    "TCP forward client started successfully for session {}",
+                    session_id_clone
+                );
             }
         });
 
@@ -1302,8 +1384,12 @@ async fn handle_tcp_forward_data(
 
     match base64::engine::general_purpose::STANDARD.decode(&data) {
         Ok(decoded_data) => {
-            info!("Received {} bytes of TCP data for port {} in session {}",
-                  decoded_data.len(), remote_port, session_id);
+            info!(
+                "Received {} bytes of TCP data for port {} in session {}",
+                decoded_data.len(),
+                remote_port,
+                session_id
+            );
 
             // Get the TCP client for this session
             let tcp_clients = state.tcp_clients.read().await;
@@ -1313,7 +1399,10 @@ async fn handle_tcp_forward_data(
                     error!("Failed to forward data to TCP client: {}", e);
                     return Err(format!("Failed to forward TCP data: {}", e));
                 }
-                info!("Successfully forwarded {} bytes to TCP client", decoded_data.len());
+                info!(
+                    "Successfully forwarded {} bytes to TCP client",
+                    decoded_data.len()
+                );
             } else {
                 warn!("No TCP client found for session {}", session_id);
                 return Err("TCP client not found".to_string());
@@ -1321,7 +1410,7 @@ async fn handle_tcp_forward_data(
 
             Ok(())
         }
-        Err(e) => Err(format!("Failed to decode TCP data: {}", e))
+        Err(e) => Err(format!("Failed to decode TCP data: {}", e)),
     }
 }
 
@@ -1346,11 +1435,112 @@ async fn stop_tcp_forward(
         tcp_clients.remove(&session_id);
     }
 
-    if let Err(e) = network.send_tcp_forward_stopped(&session_id, remote_port).await {
+    if let Err(e) = network
+        .send_tcp_forward_stopped(&session_id, remote_port)
+        .await
+    {
         return Err(format!("Failed to stop TCP forward: {}", e));
     }
 
-    info!("TCP forwarding stopped for session {} on port {}", session_id, remote_port);
+    info!(
+        "TCP forwarding stopped for session {} on port {}",
+        session_id, remote_port
+    );
+    Ok(())
+}
+
+// === File Transfer Commands ===
+
+/// Send a file from App to CLI terminal
+#[tauri::command]
+async fn send_file_to_terminal(
+    request: FileTransferRequest,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let network = {
+        let network_guard = state.network.read().await;
+        match network_guard.as_ref() {
+            Some(n) => n.clone(),
+            None => return Err("Network not initialized".to_string()),
+        }
+    };
+
+    // Read file content
+    let file_content = tokio::fs::read(&request.file_path)
+        .await
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let file_name = std::path::Path::new(&request.file_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("unknown_file")
+        .to_string();
+
+    info!(
+        "Sending file {} ({} bytes) to terminal {}",
+        file_name,
+        file_content.len(),
+        request.terminal_id
+    );
+
+    // Send file transfer start message
+    if let Err(e) = network
+        .send_file_transfer_start(
+            &request.session_id,
+            request.terminal_id.clone(),
+            file_name.clone(),
+            file_content,
+        )
+        .await
+    {
+        return Err(format!("Failed to send file transfer start: {}", e));
+    }
+
+    info!(
+        "File transfer initiated for {} to terminal {}",
+        file_name, request.terminal_id
+    );
+    Ok(())
+}
+
+/// Send file data directly (for files already read by frontend)
+#[tauri::command]
+async fn send_file_data_to_terminal(
+    request: FileTransferDataRequest,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let network = {
+        let network_guard = state.network.read().await;
+        match network_guard.as_ref() {
+            Some(n) => n.clone(),
+            None => return Err("Network not initialized".to_string()),
+        }
+    };
+
+    info!(
+        "Sending file data {} ({} bytes) to terminal {}",
+        request.file_name,
+        request.file_data.len(),
+        request.terminal_id
+    );
+
+    // Send file transfer start message
+    if let Err(e) = network
+        .send_file_transfer_start(
+            &request.session_id,
+            request.terminal_id.clone(),
+            request.file_name.clone(),
+            request.file_data,
+        )
+        .await
+    {
+        return Err(format!("Failed to send file transfer start: {}", e));
+    }
+
+    info!(
+        "File transfer initiated for {} to terminal {}",
+        request.file_name, request.terminal_id
+    );
     Ok(())
 }
 
@@ -1428,7 +1618,10 @@ pub fn run() {
             create_tcp_forward,
             handle_tcp_forward_connected,
             handle_tcp_forward_data,
-            stop_tcp_forward
+            stop_tcp_forward,
+            // File Transfer
+            send_file_to_terminal,
+            send_file_data_to_terminal
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())
