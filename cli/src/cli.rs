@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use tokio::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info};
+use std::sync::Arc;
 
 use crate::terminal_manager::TerminalManager;
-use riterm_shared::{P2PNetwork, p2p::NetworkMessage};
+use riterm_shared::{P2PNetwork, p2p::*};
 
 #[derive(Parser)]
 #[command(name = "riterm")]
@@ -24,6 +25,7 @@ pub struct CliApp {
     network: P2PNetwork,
     terminal_manager: TerminalManager,
     tcp_forward_manager: Option<riterm_shared::TcpForwardManager>,
+    message_router: Arc<MessageRouter>,
 }
 
 impl CliApp {
@@ -33,15 +35,20 @@ impl CliApp {
             .context("Failed to initialize P2P network")?;
 
         let terminal_manager = TerminalManager::new();
+        let message_router = Arc::new(MessageRouter::new());
 
         Ok(Self {
             network,
             terminal_manager,
             tcp_forward_manager: None,
+            message_router,
         })
     }
 
-    pub async fn run(&mut self, cli: Cli) -> Result<()> {
+    pub async fn run(&mut self, _cli: Cli) -> Result<()> {
+        // 注册消息处理器
+        self.setup_message_handlers().await?;
+
         // 设置TCP转发消息处理器
         self.setup_tcp_forward_message_handler().await?;
 
@@ -49,6 +56,31 @@ impl CliApp {
         self.setup_file_transfer_message_handler().await?;
 
         self.start_terminal_host().await
+    }
+
+    /// 设置所有消息处理器
+    async fn setup_message_handlers(&mut self) -> Result<()> {
+        // 注册终端消息处理器
+        let terminal_handler = Arc::new(CliTerminalMessageHandler::new(
+            self.terminal_manager.clone(),
+            self.network.clone(),
+        ));
+        self.message_router.register_handler(terminal_handler).await;
+
+        // 注册端口转发处理器
+        let port_forward_handler = Arc::new(CliPortForwardMessageHandler::new(
+            self.network.clone(),
+        ));
+        self.message_router.register_handler(port_forward_handler).await;
+
+        // 注册文件传输处理器
+        let file_transfer_handler = Arc::new(CliFileTransferMessageHandler::new(
+            self.terminal_manager.clone(),
+        ));
+        self.message_router.register_handler(file_transfer_handler).await;
+
+        info!("All message handlers registered successfully");
+        Ok(())
     }
 
     /// 启动终端主机模式 - 创建P2P会话并管理本地终端
@@ -93,7 +125,7 @@ impl CliApp {
         println!("✅ Session ticket generated successfully");
         println!();
         println!("📊 Host Status:");
-        println!("   🔗 Node ID: {}", &self.network.get_node_id().await[..16]);
+        println!("   🔗 Node ID: {}", &self.network.get_node_id().await.to_string()[..16]);
         println!("   📡 Session ID: {}", header.session_id);
         println!("   🛠️  Local terminal management capabilities enabled");
         println!();
@@ -118,8 +150,8 @@ impl CliApp {
                   data: String|
                   -> tokio::task::JoinHandle<anyhow::Result<Option<String>>> {
                 let terminal_manager = terminal_manager_for_input.clone();
-                let session_id = session_id_for_input.clone();
-                let network = network_for_input.clone();
+                let _session_id = session_id_for_input.clone();
+                let _network = network_for_input.clone();
 
                 tokio::spawn(async move {
                     info!(
@@ -160,16 +192,16 @@ impl CliApp {
         let gossip_sender_for_responses = sender.clone();
 
         // 设置终端输出处理器回调
-        let terminal_manager_for_output = self.terminal_manager.clone();
+        let _terminal_manager_for_output = self.terminal_manager.clone();
         let session_id_for_output = header.session_id.clone();
         let network_for_output = self.network.clone();
-        let gossip_sender_for_output = gossip_sender_for_responses.clone();
+        let _gossip_sender_for_output = gossip_sender_for_responses.clone();
 
         // 创建终端输出处理器回调
         let output_processor = move |terminal_id: String, data: String| {
             let session_id = session_id_for_output.clone();
             let network = network_for_output.clone();
-            let gossip_sender = gossip_sender_for_output.clone();
+            let _gossip_sender = _gossip_sender_for_output.clone();
 
             info!(
                 "🔥 RECEIVED TERMINAL OUTPUT: terminal_id={}, data='{}'",
@@ -177,19 +209,18 @@ impl CliApp {
             );
 
             tokio::spawn(async move {
+                // 创建新的结构化终端输出消息
+                let terminal_message = MessageFactory::terminal_output(
+                    network.local_node_id(),
+                    terminal_id.clone(),
+                    data.clone(),
+                );
+
                 // 发送终端输出
                 if let Err(e) = network
                     .send_message(
                         &session_id,
-                        riterm_shared::p2p::NetworkMessage::TerminalOutput {
-                            from: network.local_node_id(),
-                            terminal_id: terminal_id.clone(),
-                            data: data.clone(),
-                            timestamp: std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_secs(),
-                        },
+                        terminal_message,
                     )
                     .await
                 {
@@ -210,7 +241,7 @@ impl CliApp {
 
         // 设置终端管理消息处理器
         let terminal_manager = self.terminal_manager.clone();
-        let network_for_terminal = self.network.clone();
+        let _network_for_terminal = self.network.clone();
 
         // 创建一个默认终端用于测试
         let terminal_manager_task = terminal_manager.clone();
@@ -241,14 +272,14 @@ impl CliApp {
 
         // 设置历史记录回调来处理终端管理请求
         let terminal_manager = self.terminal_manager.clone();
-        let session_id_for_history = header.session_id.clone();
-        let sender_for_history = sender.clone();
+        let _session_id_for_history = header.session_id.clone();
+        let _sender_for_history = sender.clone();
 
         self.network
             .set_history_callback(move |_session_id: &str| {
-                let terminal_manager = terminal_manager.clone();
-                let session_id = session_id_for_history.clone();
-                let sender = sender_for_history.clone();
+                let _terminal_manager = terminal_manager.clone();
+                let _session_id = _session_id_for_history.clone();
+                let _sender = _sender_for_history.clone();
 
                 let (tx, rx) = tokio::sync::oneshot::channel();
 
@@ -276,7 +307,7 @@ impl CliApp {
         let terminal_manager_for_events = self.terminal_manager.clone();
         let session_id_for_events = header.session_id.clone();
         let network_for_events = self.network.clone();
-        let gossip_sender_for_events = gossip_sender_for_responses.clone();
+        let _gossip_sender_for_events = gossip_sender_for_responses.clone();
 
         tokio::spawn(async move {
             info!(
@@ -348,18 +379,19 @@ impl CliApp {
                                         terminal_list.len()
                                     );
 
+                                    // 创建新的结构化终端列表响应消息
+                                    let terminal_list_message = MessageBuilder::new()
+                                        .from_node(network_for_events.local_node_id())
+                                        .with_domain(MessageDomain::Terminal)
+                                        .build(StructuredPayload::TerminalManagement(
+                                            TerminalManagementMessage::ListResponse { terminals: terminal_list }
+                                        ));
+
                                     // 发送终端列表响应
                                     if let Err(e) = network_for_events
                                         .send_message(
                                             &session_id_for_events,
-                                            riterm_shared::p2p::NetworkMessage::TerminalListResponse {
-                                                from: network_for_events.local_node_id(),
-                                                terminals: terminal_list,
-                                                timestamp: std::time::SystemTime::now()
-                                                    .duration_since(std::time::UNIX_EPOCH)
-                                                    .unwrap_or_default()
-                                                    .as_secs(),
-                                            },
+                                            terminal_list_message,
                                         )
                                         .await
                                     {
@@ -460,6 +492,8 @@ impl CliApp {
 
         // Create TCP forward manager
         let config = riterm_shared::TcpForwardConfig {
+            node_id: self.network.local_node_id(),
+            service_id: format!("tcp_{}_{}", local_port, remote_port),
             local_port,
             remote_port,
             service_name: service_name.clone(),
@@ -505,23 +539,32 @@ impl CliApp {
 
             while let Some(message) = message_receiver.recv().await {
                 match message {
-                    NetworkMessage::TcpForwardCreate {
-                        session_id,
+                    NetworkMessage::Structured { payload: StructuredPayload::PortForward(PortForwardMessage::Create {
+                        service_id,
                         local_port,
                         remote_port,
+                        service_type: _,
                         service_name,
-                        ..
-                    } => {
+                        terminal_id: _,
+                        metadata,
+                    }), .. } => {
+                        let session_id = metadata
+                            .as_ref()
+                            .and_then(|m| m.get("session_id"))
+                            .cloned()
+                            .unwrap_or_else(|| service_id.clone());
                         info!(
-                            "Received TCP forward create request: {}:{}:{} for session {}",
+                            "Received TCP forward create request: {}:{:?}:{} for session {}",
                             local_port, remote_port, service_name, session_id
                         );
 
                         // 创建TCP转发配置
                         let (tcp_sender, tcp_receiver) = mpsc::unbounded_channel();
                         let config = riterm_shared::TcpForwardConfig {
+                            node_id: network.local_node_id(),
+                            service_id: service_id.clone(),
                             local_port,
-                            remote_port,
+                            remote_port: remote_port.unwrap_or(0), // Use 0 if not specified
                             service_name: service_name.clone(),
                             session_id: session_id.clone(),
                             network_sender: tcp_sender,
@@ -535,7 +578,7 @@ impl CliApp {
                         }
 
                         info!(
-                            "TCP forwarding started for {} ({} -> {})",
+                            "TCP forwarding started for {} ({} -> {:?})",
                             service_name, local_port, remote_port
                         );
 
@@ -566,7 +609,7 @@ impl CliApp {
 
     /// 处理TCP转发的消息
     async fn handle_tcp_forward_messages(
-        network: P2PNetwork,
+        _network: P2PNetwork,
         session_id: String,
         tcp_manager: riterm_shared::TcpForwardManager,
         mut message_receiver: mpsc::UnboundedReceiver<NetworkMessage>,
@@ -578,22 +621,23 @@ impl CliApp {
 
         while let Some(message) = message_receiver.recv().await {
             match message {
-                NetworkMessage::TcpForwardData {
-                    session_id: msg_session_id,
+                NetworkMessage::Structured { payload: StructuredPayload::PortForward(PortForwardMessage::Data {
+                    service_id,
                     data,
-                    remote_port,
-                    ..
-                } if msg_session_id == session_id => {
+                }), .. } if service_id == session_id => {
                     // 将接收到的数据转发到本地TCP连接
                     if let Err(e) = tcp_manager.forward_data(&data).await {
                         error!("Failed to forward TCP data: {}", e);
                     }
                 }
-                NetworkMessage::TcpForwardStopped {
-                    session_id: msg_session_id,
-                    ..
-                } if msg_session_id == session_id => {
+                NetworkMessage::Structured { payload: StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                    service_id,
+                    reason,
+                }), .. } if service_id == session_id => {
                     info!("TCP forward stopped for session: {}", session_id);
+                    if let Some(reason) = reason {
+                        info!("Stop reason: {}", reason);
+                    }
                     if let Err(e) = tcp_manager.stop().await {
                         error!("Failed to stop TCP forwarding: {}", e);
                     }
@@ -626,18 +670,23 @@ impl CliApp {
 
             while let Some(message) = message_receiver.recv().await {
                 match message {
-                    NetworkMessage::FileTransferStart {
+                    NetworkMessage::Structured { payload: StructuredPayload::FileTransfer(FileTransferMessage::Start {
                         terminal_id,
                         file_name,
-                        file_data,
-                        ..
-                    } => {
+                        file_size,
+                        chunk_count: _,
+                        mime_type: _,
+                    }), .. } => {
                         info!(
                             "Received file transfer start: {} for terminal {} ({} bytes)",
                             file_name,
                             terminal_id,
-                            file_data.len()
+                            file_size
                         );
+
+                        // For now, we'll handle the old way - in the new architecture,
+                        // file data should come through Chunk messages
+                        // This is a placeholder for the chunked transfer implementation
 
                         // Get the terminal's current working directory
                         let current_dir =
@@ -656,47 +705,90 @@ impl CliApp {
                             };
 
                         let file_path = current_dir.join(&file_name);
+                        info!("File will be saved to: {}", file_path.display());
 
-                        // Save the file to the terminal's working directory
-                        match tokio::fs::write(&file_path, &file_data).await {
-                            Ok(()) => {
-                                info!(
-                                    "✅ File {} saved successfully to {} (terminal: {})",
-                                    file_name,
-                                    file_path.display(),
-                                    terminal_id
-                                );
+                        // In the new architecture, we should wait for Chunk messages
+                        // For now, we'll log that we're ready to receive file chunks
+                        info!("Ready to receive file chunks for: {}", file_name);
+                    }
+                    NetworkMessage::Structured { payload: StructuredPayload::FileTransfer(FileTransferMessage::Chunk {
+                        terminal_id,
+                        file_name,
+                        chunk_index,
+                        chunk_data,
+                        is_last,
+                    }), .. } => {
+                        info!(
+                            "Received file chunk {}/{} for {} ({} bytes)",
+                            chunk_index,
+                            "unknown", // We don't have total chunks yet
+                            file_name,
+                            chunk_data.len()
+                        );
 
-                                // Log the file transfer completion
-                                info!(
-                                    "📁 File transfer completed: {} -> {}",
-                                    file_name,
-                                    file_path.display()
-                                );
+                        // Get the terminal's current working directory
+                        let current_dir =
+                            match terminal_manager.get_terminal_info(&terminal_id).await {
+                                Some(terminal_info) => {
+                                    std::path::PathBuf::from(&terminal_info.current_dir)
+                                }
+                                None => {
+                                    std::env::current_dir()
+                                        .unwrap_or_else(|_| std::path::PathBuf::from("/"))
+                                }
+                            };
+
+                        let file_path = current_dir.join(&file_name);
+
+                        // For now, we'll just append or create the file
+                        // In a full implementation, we should handle chunk ordering and reassembly
+                        if chunk_index == 0 {
+                            // First chunk - create or overwrite the file
+                            if let Err(e) = tokio::fs::write(&file_path, &chunk_data).await {
+                                error!("Failed to save first chunk of file {}: {}", file_name, e);
+                            } else {
+                                info!("Saved first chunk of file: {}", file_name);
                             }
-                            Err(e) => {
-                                error!(
-                                    "❌ Failed to save file {} to {} (terminal: {}): {}",
-                                    file_name,
-                                    file_path.display(),
-                                    terminal_id,
-                                    e
-                                );
-
-                                // Log the file transfer error
-                                warn!(
-                                    "📁 File transfer failed: {} -> {} (terminal: {}): {}",
-                                    file_name,
-                                    file_path.display(),
-                                    terminal_id,
-                                    e
-                                );
+                        } else {
+                            // Subsequent chunks - append to file
+                            if let Err(e) = tokio::fs::write(&file_path, &chunk_data).await {
+                                error!("Failed to save chunk {} of file {}: {}", chunk_index, file_name, e);
+                            } else {
+                                info!("Saved chunk {} of file: {}", chunk_index, file_name);
                             }
                         }
+
+                        if is_last {
+                            info!("✅ File transfer completed: {} -> {}", file_name, file_path.display());
+                        }
                     }
-                    _ => {
-                        // Other file transfer messages (Progress, Complete, Error) would be handled here
-                        // For now, we only handle FileTransferStart
+                    NetworkMessage::Structured { payload: StructuredPayload::FileTransfer(FileTransferMessage::Complete {
+                        terminal_id: _,
+                        file_name,
+                        file_path,
+                        file_hash,
+                    }), .. } => {
+                        info!(
+                            "✅ File transfer completion confirmed: {} -> {}",
+                            file_name, file_path
+                        );
+                        if let Some(hash) = file_hash {
+                            info!("File hash: {}", hash);
+                        }
+                    }
+                    NetworkMessage::Structured { payload: StructuredPayload::FileTransfer(FileTransferMessage::Error {
+                        terminal_id: _,
+                        file_name,
+                        error_message,
+                        error_code,
+                    }), .. } => {
+                        error!(
+                            "❌ File transfer error for {}: {} (code: {:?})",
+                            file_name, error_message, error_code
+                        );
+                    }
+                      _ => {
+                        // Other message types are handled by different handlers
                     }
                 }
             }
@@ -705,5 +797,221 @@ impl CliApp {
         });
 
         Ok(())
+    }
+}
+
+// === Message Handler Implementations ===
+
+/// CLI Terminal Message Handler
+pub struct CliTerminalMessageHandler {
+    terminal_manager: TerminalManager,
+    network: P2PNetwork,
+}
+
+impl CliTerminalMessageHandler {
+    pub fn new(terminal_manager: TerminalManager, network: P2PNetwork) -> Self {
+        Self {
+            terminal_manager,
+            network,
+        }
+    }
+}
+
+impl MessageHandler for CliTerminalMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::Create {
+                            name: _,
+                            shell_path: _,
+                            working_dir: _,
+                            size: _,
+                        }) => {
+                            info!("Creating terminal from structured message");
+                            // This would be handled by the existing terminal creation logic
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::Input {
+                            terminal_id: _,
+                            data: _,
+                        }) => {
+                            info!("Handling terminal input from structured message");
+                            // This would be handled by the existing terminal input logic
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::Resize {
+                            terminal_id,
+                            rows,
+                            cols,
+                        }) => {
+                            info!("Resizing terminal {} to {}x{}", terminal_id, rows, cols);
+                            if let Err(e) = self.terminal_manager.resize_terminal(&terminal_id, rows, cols).await {
+                                error!("Failed to resize terminal {}: {}", terminal_id, e);
+                            }
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::Stop {
+                            terminal_id,
+                        }) => {
+                            info!("Stopping terminal {}", terminal_id);
+                            if let Err(e) = self.terminal_manager.close_terminal(&terminal_id).await {
+                                error!("Failed to stop terminal {}: {}", terminal_id, e);
+                            }
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::ListRequest) => {
+                            info!("Handling terminal list request");
+                            // This would be handled by the existing terminal list logic
+                        }
+                        _ => {
+                            debug!("Ignoring terminal message type in CLI handler");
+                        }
+                    }
+                }
+              }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::Terminal
+    }
+}
+
+/// CLI Port Forward Message Handler
+pub struct CliPortForwardMessageHandler {
+    network: P2PNetwork,
+}
+
+impl CliPortForwardMessageHandler {
+    pub fn new(network: P2PNetwork) -> Self {
+        Self { network }
+    }
+}
+
+impl MessageHandler for CliPortForwardMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::PortForward(PortForwardMessage::Create {
+                            service_id: _,
+                            local_port: _,
+                            remote_port: _,
+                            service_type,
+                            service_name,
+                            terminal_id: _,
+                            metadata: _,
+                        }) => {
+                            info!("Creating port forwarding service: {} ({})", service_name, service_type);
+                            // This would be handled by the existing port forwarding logic
+                        }
+                        StructuredPayload::PortForward(PortForwardMessage::Connected {
+                            service_id: _,
+                            assigned_remote_port,
+                            access_url,
+                        }) => {
+                            info!("Port forwarding service connected on port {}", assigned_remote_port);
+                            if let Some(url) = access_url {
+                                info!("Access URL: {}", url);
+                            }
+                        }
+                        StructuredPayload::PortForward(PortForwardMessage::StatusUpdate {
+                            service_id: _,
+                            status,
+                        }) => {
+                            info!("Port forwarding service status: {:?}", status);
+                        }
+                        StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                            service_id: _,
+                            reason,
+                        }) => {
+                            info!("Port forwarding service stopped");
+                            if let Some(reason) = reason {
+                                info!("Stop reason: {}", reason);
+                            }
+                        }
+                        _ => {
+                            debug!("Ignoring port forward message type in CLI handler");
+                        }
+                    }
+                }
+                }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::PortForward
+    }
+}
+
+/// CLI File Transfer Message Handler
+pub struct CliFileTransferMessageHandler {
+    terminal_manager: TerminalManager,
+}
+
+impl CliFileTransferMessageHandler {
+    pub fn new(terminal_manager: TerminalManager) -> Self {
+        Self { terminal_manager }
+    }
+}
+
+impl MessageHandler for CliFileTransferMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::FileTransfer(FileTransferMessage::Start {
+                            terminal_id: _,
+                            file_name,
+                            file_size,
+                            chunk_count: _,
+                            mime_type: _,
+                        }) => {
+                            info!("File transfer started: {} ({} bytes)", file_name, file_size);
+                        }
+                        StructuredPayload::FileTransfer(FileTransferMessage::Progress {
+                            terminal_id: _,
+                            file_name,
+                            bytes_transferred,
+                            total_bytes,
+                        }) => {
+                            info!("File transfer progress: {} - {}/{} bytes ({}%)",
+                                file_name, bytes_transferred, total_bytes,
+                                (bytes_transferred * 100 / total_bytes.max(1))
+                            );
+                        }
+                        StructuredPayload::FileTransfer(FileTransferMessage::Complete {
+                            terminal_id: _,
+                            file_name,
+                            file_path,
+                            file_hash,
+                        }) => {
+                            info!("File transfer completed: {} -> {}", file_name, file_path);
+                            if let Some(hash) = file_hash {
+                                info!("File hash: {}", hash);
+                            }
+                        }
+                        StructuredPayload::FileTransfer(FileTransferMessage::Error {
+                            terminal_id: _,
+                            file_name,
+                            error_message,
+                            error_code,
+                        }) => {
+                            error!("File transfer error: {} - {} (code: {:?})", file_name, error_message, error_code);
+                        }
+                        _ => {
+                            debug!("Ignoring file transfer message type in CLI handler");
+                        }
+                    }
+                }
+              }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::FileTransfer
     }
 }

@@ -4,9 +4,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, mpsc};
 use tracing::{error, info, warn};
-
-use crate::p2p::NetworkMessage;
 use iroh::NodeId;
+
+use crate::p2p::{NetworkMessage, MessageBuilder, PortForwardMessage, MessageDomain, StructuredPayload};
 
 /// TCP forwarding configuration
 #[derive(Debug, Clone)]
@@ -16,6 +16,8 @@ pub struct TcpForwardConfig {
     pub service_name: String,
     pub session_id: String,
     pub network_sender: mpsc::UnboundedSender<NetworkMessage>,
+    pub service_id: String,
+    pub node_id: NodeId,
 }
 
 /// Active TCP forwarding connection
@@ -55,19 +57,17 @@ impl TcpForwardManager {
         info!("TCP forward server listening on {}", addr);
 
         // Notify that TCP forwarding is ready
-        if let Err(_e) = self
-            .config
-            .network_sender
-            .send(NetworkMessage::TcpForwardConnected {
-                from: todo!("Network layer should fill this"),
-                session_id: self.config.session_id.clone(),
-                remote_port: self.config.remote_port,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            })
-        {
+        let message = MessageBuilder::new()
+            .from_node(self.config.node_id)
+            .for_session(self.config.session_id.clone())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Connected {
+                service_id: self.config.service_id.clone(),
+                assigned_remote_port: self.config.remote_port,
+                access_url: None,
+            }));
+
+        if let Err(_e) = self.config.network_sender.send(message) {
             error!("Failed to send TCP forward connected notification: {}", _e);
         }
 
@@ -85,17 +85,18 @@ impl TcpForwardManager {
                         conn_guard.push(TcpForwardConnection {
                             remote_port: config.remote_port,
                             local_stream: socket,
-                            remote_node_id: todo!("Network layer should fill this"),
+                            remote_node_id: config.node_id,
                         });
                         drop(conn_guard);
 
                         // Handle this connection in a separate task
                         let connections_clone = connections.clone();
+                        let config_clone = config.clone();
                         tokio::spawn(async move {
                             if let Err(e) = Self::handle_connection(
                                 connections_clone,
                                 connection_id,
-                                config.clone(),
+                                config_clone,
                             )
                             .await
                             {
@@ -148,16 +149,16 @@ impl TcpForwardManager {
                     info!("Read {} bytes from TCP connection {}", n, connection_id);
 
                     // Send data through P2P network to remote client
-                    if let Err(e) = config.network_sender.send(NetworkMessage::TcpForwardData {
-                        from: todo!("Network layer should fill this"),
-                        session_id: config.session_id.clone(),
-                        remote_port: config.remote_port,
-                        data: data.clone(),
-                        timestamp: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs(),
-                    }) {
+                    let message = MessageBuilder::new()
+                        .from_node(config.node_id)
+                        .for_session(config.session_id.clone())
+                        .with_domain(MessageDomain::PortForward)
+                        .build(StructuredPayload::PortForward(PortForwardMessage::Data {
+                            service_id: config.service_id.clone(),
+                            data: data.clone(),
+                        }));
+
+                    if let Err(e) = config.network_sender.send(message) {
                         error!("Failed to send TCP data through P2P network: {}", e);
                         break;
                     }
@@ -172,18 +173,16 @@ impl TcpForwardManager {
         }
 
         // Notify that TCP forwarding stopped for this connection
-        if let Err(e) = config
-            .network_sender
-            .send(NetworkMessage::TcpForwardStopped {
-                from: todo!("Network layer should fill this"),
-                session_id: config.session_id.clone(),
-                remote_port: config.remote_port,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            })
-        {
+        let message = MessageBuilder::new()
+            .from_node(config.node_id)
+            .for_session(config.session_id.clone())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                service_id: config.service_id.clone(),
+                reason: Some("Connection closed".to_string()),
+            }));
+
+        if let Err(e) = config.network_sender.send(message) {
             error!("Failed to send TCP forward stopped notification: {}", e);
         }
 
@@ -298,7 +297,7 @@ impl TcpForwardClient {
     async fn handle_client(
         mut socket: tokio::net::TcpStream,
         remote_port: u16,
-        connections: Arc<Mutex<Vec<tokio::net::TcpStream>>>,
+        _connections: Arc<Mutex<Vec<tokio::net::TcpStream>>>,
     ) -> Result<()> {
         info!("Handling client connection for remote port {}", remote_port);
 
@@ -318,7 +317,7 @@ impl TcpForwardClient {
                 }
                 Ok(n) => {
                     // Read data from client
-                    let data = buffer[..n].to_vec();
+                    let _data = buffer[..n].to_vec();
                     info!("Read {} bytes from client connection {}", n, connection_id);
 
                     // TODO: Forward this data to the P2P network

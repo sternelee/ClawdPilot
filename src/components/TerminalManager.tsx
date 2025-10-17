@@ -1,19 +1,12 @@
-import { createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, For, Show, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { createMessageHandler, extractTerminalInfo } from "../utils/messageHandler";
+import { createApiClient, ApiValidators } from "../utils/api";
+import { TerminalInfo, TerminalEvent, MessageDomain } from "../types/messages";
 
-interface Terminal {
-  id: string;
-  name?: string;
-  shell_type: string;
-  current_dir: string;
-  status: "Starting" | "Running" | "Paused" | "Stopped" | "Error";
-  created_at: number;
-  last_activity: number;
-  size: [number, number];
-  process_id?: number;
-  associated_webshares: number[];
-}
+// Use the new TerminalInfo type from messages.ts
+type Terminal = TerminalInfo;
 
 interface CreateTerminalRequest {
   session_id: string;
@@ -59,16 +52,37 @@ export function TerminalManager(props: {
   const [newTerminalRows, setNewTerminalRows] = createSignal(24);
   const [newTerminalCols, setNewTerminalCols] = createSignal(80);
 
+  // Create API client and message handler
+  let apiClient: ReturnType<typeof createApiClient>;
+  let messageHandler: ReturnType<typeof createMessageHandler>;
+
   // Load terminals on mount
   onMount(() => {
+    apiClient = createApiClient(props.sessionId);
+    messageHandler = createMessageHandler(props.sessionId, {
+      onTerminalEvent: handleTerminalEvent,
+      onError: (error) => console.error("Terminal manager message handler error:", error)
+    });
+
     loadTerminals();
     setupEventListeners();
+  });
+
+  // Cleanup on unmount
+  onCleanup(async () => {
+    if (messageHandler) {
+      await messageHandler.stopListening();
+    }
   });
 
   const loadTerminals = async () => {
     setLoading(true);
     try {
-      await invoke("list_terminals", { sessionId: props.sessionId });
+      const response = await apiClient.listTerminals();
+      if (!response.success) {
+        throw new Error(response.error || "Failed to list terminals");
+      }
+      // Terminal list will be received via events
     } catch (error) {
       console.error("Failed to load terminals:", error);
     } finally {
@@ -77,38 +91,84 @@ export function TerminalManager(props: {
   };
 
   const setupEventListeners = async () => {
-    // Listen for structured terminal events
-    await listen(`structured-event-${props.sessionId}`, (event) => {
-      const structuredEvent = event.payload;
-      console.log("Received structured terminal event:", structuredEvent);
+    if (!messageHandler) {
+      console.error("Message handler not initialized");
+      return;
+    }
 
-      if (structuredEvent.type === "terminal_list_response") {
-        setTerminals(structuredEvent.data.terminals || []);
-      } else if (structuredEvent.type === "terminal_status_update") {
+    try {
+      await messageHandler.startListening();
+    } catch (error) {
+      console.error("Failed to start message handler:", error);
+    }
+  };
+
+  const handleTerminalEvent = (event: TerminalEvent) => {
+    console.log("Terminal event:", event);
+
+    switch (event.type) {
+      case "created":
+        const terminalInfo = extractTerminalInfo(event);
+        if (terminalInfo) {
+          setTerminals(prev => [...prev, terminalInfo]);
+        }
+        break;
+
+      case "stopped":
+        setTerminals(prev => prev.filter(t => t.id !== event.terminal_id));
+        if (selectedTerminal() === event.terminal_id) {
+          setSelectedTerminal(null);
+        }
+        break;
+
+      case "status_update":
         setTerminals(prev =>
           prev.map(terminal =>
-            terminal.id === structuredEvent.terminal_id
-              ? { ...terminal, status: structuredEvent.status }
+            terminal.id === event.terminal_id
+              ? { ...terminal, status: event.data.status }
               : terminal
           )
         );
-      } else if (structuredEvent.type === "terminal_output") {
+        break;
+
+      case "output":
         // Handle terminal output for specific terminal if needed
-        console.log(`Terminal ${structuredEvent.terminal_id} output:`, structuredEvent.data);
-      } else if (structuredEvent.type === "terminal_input") {
-        // Handle terminal input feedback if needed
-        console.log(`Terminal ${structuredEvent.terminal_id} input:`, structuredEvent.data);
-      } else if (structuredEvent.type === "terminal_resize") {
-        // Handle terminal resize feedback
-        console.log(`Terminal ${structuredEvent.terminal_id} resized to:`, structuredEvent.size);
-      }
-    });
+        console.log(`Terminal ${event.terminal_id} output:`, event.data.data);
+        break;
+
+      case "directory_changed":
+        setTerminals(prev =>
+          prev.map(terminal =>
+            terminal.id === event.terminal_id
+              ? { ...terminal, current_dir: event.data.new_dir }
+              : terminal
+          )
+        );
+        break;
+
+      case "resize":
+        setTerminals(prev =>
+          prev.map(terminal =>
+            terminal.id === event.terminal_id
+              ? { ...terminal, size: [event.data.rows, event.data.cols] }
+              : terminal
+          )
+        );
+        break;
+
+      case "list_response":
+        setTerminals(event.data.terminals || []);
+        break;
+
+      default:
+        console.log(`Unhandled terminal event type: ${event.type}`);
+    }
   };
 
   const createTerminal = async () => {
     setCreating(true);
     try {
-      const request: CreateTerminalRequest = {
+      const request = {
         session_id: props.sessionId,
         name: newTerminalName() || undefined,
         shell_path: newTerminalShell() || undefined,
@@ -116,12 +176,23 @@ export function TerminalManager(props: {
         size: [newTerminalRows(), newTerminalCols()],
       };
 
-      await invoke("create_terminal", { request });
+      // Validate request
+      const errors = ApiValidators.validateCreateTerminalRequest(request);
+      if (errors.length > 0) {
+        throw new Error(`Validation errors: ${errors.join(", ")}`);
+      }
+
+      const response = await apiClient.createTerminal(request);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to create terminal");
+      }
+
       setShowCreateForm(false);
       resetCreateForm();
-      loadTerminals(); // Refresh the list
+      // Terminal will be added via events, no need to refresh list
     } catch (error) {
       console.error("Failed to create terminal:", error);
+      // TODO: Show error to user
     } finally {
       setCreating(false);
     }
@@ -129,44 +200,57 @@ export function TerminalManager(props: {
 
   const stopTerminal = async (terminalId: string) => {
     try {
-      const request: TerminalStopRequest = {
+      const request = {
         session_id: props.sessionId,
         terminal_id: terminalId,
       };
 
-      await invoke("stop_terminal", { request });
-      loadTerminals(); // Refresh the list
+      const response = await apiClient.stopTerminal(request);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to stop terminal");
+      }
+      // Terminal will be removed via events, no need to refresh list
     } catch (error) {
       console.error("Failed to stop terminal:", error);
+      // TODO: Show error to user
     }
   };
 
   const sendInputToTerminal = async (terminalId: string, input: string) => {
     try {
-      const request: TerminalInputRequest = {
+      const request = {
         session_id: props.sessionId,
         terminal_id: terminalId,
         input,
       };
 
-      await invoke("send_terminal_input_to_terminal", { request });
+      const response = await apiClient.sendTerminalInput(request);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to send input to terminal");
+      }
     } catch (error) {
       console.error("Failed to send input to terminal:", error);
+      // TODO: Show error to user
     }
   };
 
   const resizeTerminal = async (terminalId: string, rows: number, cols: number) => {
     try {
-      const request: TerminalResizeRequest = {
+      const request = {
         session_id: props.sessionId,
         terminal_id: terminalId,
         rows,
         cols,
       };
 
-      await invoke("resize_terminal", { request });
+      const response = await apiClient.resizeTerminal(request);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to resize terminal");
+      }
+      // Terminal will be updated via events, no need to refresh list
     } catch (error) {
       console.error("Failed to resize terminal:", error);
+      // TODO: Show error to user
     }
   };
 

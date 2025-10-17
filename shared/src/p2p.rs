@@ -1,5 +1,4 @@
 use anyhow::Result;
-use base64::Engine;
 use iroh::{Endpoint, NodeAddr, NodeId};
 use iroh_base::ticket::NodeTicket;
 use iroh_gossip::api::GossipSender; // Keep for backward compatibility
@@ -9,32 +8,319 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SessionHeader {
-    pub version: u8,
-    pub width: u16,
-    pub height: u16,
-    pub timestamp: u64,
-    pub title: Option<String>,
-    pub command: Option<String>,
-    pub session_id: String,
+// === Refactored Message System ===
+// Organized by functional domains with proper versioning
+
+/// Message version for compatibility and migration
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, PartialOrd)]
+pub enum MessageVersion {
+    V1 = 1, // Legacy format
+    V2 = 2, // New structured format
 }
 
-/// ALPN for riterm protocol
-pub const ALPN: &[u8] = b"RITERMV0";
+impl Default for MessageVersion {
+    fn default() -> Self {
+        MessageVersion::V2
+    }
+}
 
-/// Handshake for terminal connections
-pub const HANDSHAKE: &[u8] = b"riterm_hello";
+/// Message domains for categorization and routing
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum MessageDomain {
+    Session,
+    Terminal,
+    FileTransfer,
+    PortForward, // Unified: TCP Forward + WebShare
+    System,
+}
 
-/// Forward compatibility with dumbpipe
-// NodeTicket is already imported and available
-
-// === Network Layer Messages ===
-// These are transmitted over direct P2P connections
-
+/// Base message header with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NetworkMessage {
+pub struct MessageHeader {
+    pub version: MessageVersion,
+    pub domain: MessageDomain,
+    pub from: NodeId,
+    pub timestamp: u64,
+    pub message_id: String, // UUID for tracking and deduplication
+    pub session_id: Option<String>, // For session routing
+}
+
+impl Default for MessageHeader {
+    fn default() -> Self {
+        Self {
+            version: MessageVersion::default(),
+            domain: MessageDomain::Session,
+            from: NodeId::from_bytes(&[0u8; 32]).expect("Valid NodeId"), // Will be overwritten
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            message_id: Uuid::new_v4().to_string(),
+            session_id: None,
+        }
+    }
+}
+
+// === Domain-Specific Message Types ===
+
+/// Session management messages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SessionMessage {
+    /// Session metadata when joining or creating session
+    SessionInfo { header: SessionHeader },
+    /// Session ended notification
+    SessionEnd,
+    /// Participant joined notification
+    ParticipantJoined,
+    /// Directed message to specific node
+    DirectedMessage { to: NodeId, data: String },
+    /// Session history data
+    HistoryData { shell_type: String, working_dir: String, history: Vec<String> },
+}
+
+/// Terminal I/O messages (for virtual terminals)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TerminalIOMessage {
+    /// Terminal output data
+    Output { data: String },
+    /// User input data
+    Input { data: String },
+    /// Terminal resize
+    Resize { width: u16, height: u16 },
+}
+
+/// Terminal management messages (for real terminals)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TerminalManagementMessage {
+    /// Create a new terminal request
+    Create {
+        name: Option<String>,
+        shell_path: Option<String>,
+        working_dir: Option<String>,
+        size: Option<(u16, u16)>,
+    },
+    /// Terminal output data
+    Output { terminal_id: String, data: String },
+    /// Terminal input data
+    Input { terminal_id: String, data: String },
+    /// Terminal resize request
+    Resize { terminal_id: String, rows: u16, cols: u16 },
+    /// Terminal status update
+    StatusUpdate { terminal_id: String, status: TerminalStatus },
+    /// Terminal directory change notification
+    DirectoryChanged { terminal_id: String, new_dir: String },
+    /// Stop terminal request
+    Stop { terminal_id: String },
+    /// List terminals request
+    ListRequest,
+    /// List terminals response
+    ListResponse { terminals: Vec<TerminalInfo> },
+}
+
+/// File transfer messages - improved for large files
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FileTransferMessage {
+    /// File transfer metadata (separate from actual data)
+    Start {
+        terminal_id: String,
+        file_name: String,
+        file_size: u64,
+        chunk_count: Option<u32>, // For chunked transfers
+        mime_type: Option<String>, // Content type hint
+    },
+    /// File transfer chunk data
+    Chunk {
+        terminal_id: String,
+        file_name: String,
+        chunk_index: u32,
+        chunk_data: Vec<u8>,
+        is_last: bool,
+    },
+    /// File transfer progress notification
+    Progress {
+        terminal_id: String,
+        file_name: String,
+        bytes_transferred: u64,
+        total_bytes: u64,
+    },
+    /// File transfer completion
+    Complete {
+        terminal_id: String,
+        file_name: String,
+        file_path: String,
+        file_hash: Option<String>, // For integrity verification
+    },
+    /// File transfer error
+    Error {
+        terminal_id: String,
+        file_name: String,
+        error_message: String,
+        error_code: Option<u32>, // For machine-readable errors
+    },
+    /// Request to pause/resume transfer
+    Control {
+        terminal_id: String,
+        file_name: String,
+        action: TransferControlAction,
+    },
+}
+
+/// Transfer control actions
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TransferControlAction {
+    Pause,
+    Resume,
+    Cancel,
+}
+
+/// Unified Port Forwarding messages (replaces separate TCP and WebShare)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PortForwardMessage {
+    /// Create port forwarding service
+    Create {
+        service_id: String, // Unique service identifier
+        local_port: u16,
+        remote_port: Option<u16>, // None = auto-assign
+        service_type: PortForwardType,
+        service_name: String,
+        terminal_id: Option<String>, // Associated terminal (if any)
+        metadata: Option<HashMap<String, String>>, // Additional config
+    },
+    /// Port forwarding connection established
+    Connected {
+        service_id: String,
+        assigned_remote_port: u16,
+        access_url: Option<String>, // For web services
+    },
+    /// Port forwarding data
+    Data {
+        service_id: String,
+        data: Vec<u8>,
+    },
+    /// Port forwarding status update
+    StatusUpdate {
+        service_id: String,
+        status: PortForwardStatus,
+    },
+    /// Port forwarding stopped
+    Stopped {
+        service_id: String,
+        reason: Option<String>,
+    },
+    /// List port forwarding services request
+    ListRequest,
+    /// List port forwarding services response
+    ListResponse { services: Vec<PortForwardInfo> },
+}
+
+/// Types of port forwarding services
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PortForwardType {
+    /// Generic TCP forwarding
+    Tcp,
+    /// HTTP/HTTPS service with automatic web interface
+    Web,
+    /// Static file serving
+    Static,
+    /// Reverse proxy
+    Proxy,
+}
+
+impl std::fmt::Display for PortForwardType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PortForwardType::Tcp => write!(f, "TCP"),
+            PortForwardType::Web => write!(f, "Web"),
+            PortForwardType::Static => write!(f, "Static"),
+            PortForwardType::Proxy => write!(f, "Proxy"),
+        }
+    }
+}
+
+/// Port forwarding status
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PortForwardStatus {
+    Starting,
+    Active,
+    Paused,
+    Error(String),
+    Stopped,
+}
+
+/// Port forwarding service information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortForwardInfo {
+    pub service_id: String,
+    pub service_type: PortForwardType,
+    pub service_name: String,
+    pub local_port: u16,
+    pub remote_port: u16,
+    pub access_url: Option<String>,
+    pub status: PortForwardStatus,
+    pub terminal_id: Option<String>,
+    pub created_at: u64,
+    pub connection_count: u32,
+    pub bytes_transferred: u64,
+}
+
+/// System messages for health checks, stats, and errors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SystemMessage {
+    /// Stats request
+    StatsRequest,
+    /// Stats response
+    StatsResponse {
+        terminal_stats: TerminalStats,
+        port_forward_stats: PortForwardStats, // Unified stats
+        node_id: String,
+        timestamp: u64,
+    },
+    /// Ping for connection health check
+    Ping { sequence: u64 },
+    /// Pong response to ping
+    Pong { sequence: u64, timestamp: u64 },
+    /// Error response
+    Error {
+        code: SystemErrorCode,
+        message: String,
+        details: Option<HashMap<String, String>>,
+    },
+    /// Heartbeat for connection keep-alive
+    Heartbeat,
+}
+
+/// System error codes
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum SystemErrorCode {
+    InvalidMessage,
+    UnsupportedVersion,
+    SessionNotFound,
+    TerminalNotFound,
+    ServiceNotFound,
+    PermissionDenied,
+    InternalError,
+    NetworkError,
+}
+
+/// Port forwarding statistics (replaces separate WebShare stats)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortForwardStats {
+    pub total: usize,
+    pub active: usize,
+    pub errors: usize,
+    pub stopped: usize,
+    pub total_connections: u32,
+    pub total_bytes_transferred: u64,
+}
+
+// === Legacy Support Layer ===
+
+/// Legacy NetworkMessage for backward compatibility
+/// Contains all original message types before refactoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LegacyNetworkMessage {
     // === Session Management ===
     /// Session metadata when joining or creating session
     SessionInfo { from: NodeId, header: SessionHeader },
@@ -211,7 +497,7 @@ pub enum NetworkMessage {
         timestamp: u64,
     },
 
-    // === WebShare Management ===
+    // === WebShare Management (Legacy - now merged into PortForward) ===
     /// Create WebShare request (deprecated, use TcpForwardCreate)
     WebShareCreate {
         from: NodeId,
@@ -256,15 +542,254 @@ pub enum NetworkMessage {
     },
 }
 
-/// Simple message wrapper for direct P2P transmission
+// === Main Network Message ===
+
+/// Network message - organized by domain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NetworkMessage {
+    /// Structured format with metadata and payload
+    Structured {
+        header: MessageHeader,
+        payload: StructuredPayload,
+    },
+}
+
+/// Structured payloads organized by domain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StructuredPayload {
+    Session(SessionMessage),
+    TerminalIO(TerminalIOMessage),
+    TerminalManagement(TerminalManagementMessage),
+    FileTransfer(FileTransferMessage),
+    PortForward(PortForwardMessage),
+    System(SystemMessage),
+}
+
+impl NetworkMessage {
+    /// Get the message domain
+    pub fn domain(&self) -> MessageDomain {
+        match self {
+            NetworkMessage::Structured { header, .. } => header.domain,
+        }
+    }
+
+    /// Get the message header
+    pub fn header(&self) -> &MessageHeader {
+        match self {
+            NetworkMessage::Structured { header, .. } => header,
+        }
+    }
+
+    /// Get the sender node ID
+    pub fn from(&self) -> NodeId {
+        self.header().from
+    }
+
+    /// Get the timestamp
+    pub fn timestamp(&self) -> u64 {
+        self.header().timestamp
+    }
+
+    /// Get the message ID
+    pub fn message_id(&self) -> &str {
+        &self.header().message_id
+    }
+
+    /// Get the session ID if available
+    pub fn session_id(&self) -> Option<&String> {
+        self.header().session_id.as_ref()
+    }
+
+    /// Check if message is compatible with given version
+    pub fn is_compatible_with(&self, version: MessageVersion) -> bool {
+        self.header().version <= version
+    }
+
+    /// Create a new structured message
+    pub fn new_structured<T: Into<MessageDomain>>(
+        domain: T,
+        from: NodeId,
+        session_id: Option<String>,
+        payload: StructuredPayload,
+    ) -> Self {
+        let header = MessageHeader {
+            domain: domain.into(),
+            from,
+            session_id,
+            ..Default::default()
+        };
+
+        NetworkMessage::Structured { header, payload }
+    }
+
+    /// Create a simple response message
+    pub fn create_response(&self, payload: StructuredPayload) -> Self {
+        Self::new_structured(
+            self.domain(),
+            self.from(),
+            self.session_id().cloned(),
+            payload,
+        )
+    }
+
+    /// Create an error response
+    pub fn create_error(
+        &self,
+        code: SystemErrorCode,
+        message: String,
+        details: Option<HashMap<String, String>>,
+    ) -> Self {
+        let payload = StructuredPayload::System(SystemMessage::Error { code, message, details });
+        self.create_response(payload)
+    }
+}
+
+// === Message Router and Handler Infrastructure ===
+
+/// Message handler trait for processing domain-specific messages
+pub trait MessageHandler: Send + Sync {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + '_>>;
+    fn domain(&self) -> MessageDomain;
+}
+
+/// Message router for handling different message types
+pub struct MessageRouter {
+    handlers: Arc<RwLock<HashMap<MessageDomain, Arc<dyn MessageHandler>>>>,
+}
+
+impl MessageRouter {
+    pub fn new() -> Self {
+        Self {
+            handlers: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub async fn register_handler(&self, handler: Arc<dyn MessageHandler>) {
+        let domain = handler.domain();
+        let mut handlers = self.handlers.write().await;
+        handlers.insert(domain, handler);
+        info!("Registered handler for domain: {:?}", domain);
+    }
+
+    pub async fn route_message(&self, message: NetworkMessage) -> Result<()> {
+        let domain = message.domain();
+        let handlers = self.handlers.read().await;
+        if let Some(handler) = handlers.get(&domain) {
+            debug!("Routing message to handler for domain: {:?}", domain);
+            handler.handle_message(message).await
+        } else {
+            warn!("No handler registered for domain: {:?}", domain);
+            Err(anyhow::anyhow!("No handler registered for domain: {:?}", domain))
+        }
+    }
+
+    pub async fn unregister_handler(&self, domain: MessageDomain) {
+        let mut handlers = self.handlers.write().await;
+        handlers.remove(&domain);
+        info!("Unregistered handler for domain: {:?}", domain);
+    }
+
+    pub async fn list_registered_domains(&self) -> Vec<MessageDomain> {
+        let handlers = self.handlers.read().await;
+        handlers.keys().cloned().collect()
+    }
+}
+
+impl Default for MessageRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Convenience macro for creating message handlers
+#[macro_export]
+macro_rules! create_message_handler {
+    ($domain:expr, $handler_name:ident, $message_var:ident, $handler_body:block) => {
+        struct $handler_name;
+        impl $crate::p2p::MessageHandler for $handler_name {
+            fn handle_message(&self, message: $crate::p2p::NetworkMessage) -> $crate::anyhow::Result<()> {
+                if let $crate::p2p::NetworkMessage::Structured { payload: $message_var, .. } = message {
+                    if let Some(domain_match) = $crate::p2p::match_payload_domain!($message_var, $domain) {
+                        $handler_body
+                        Ok(())
+                    } else {
+                        Err($crate::anyhow::anyhow!("Message domain mismatch"))
+                    }
+                } else {
+                    Err($crate::anyhow::anyhow!("Expected structured message"))
+                }
+            }
+
+            fn domain(&self) -> $crate::p2p::MessageDomain {
+                $domain
+            }
+        }
+    };
+}
+
+/// Macro for matching payload domains
+#[macro_export]
+macro_rules! match_payload_domain {
+    ($payload:expr, $domain:expr) => {
+        match ($payload, $domain) {
+            ($crate::p2p::StructuredPayload::Session(_), $crate::p2p::MessageDomain::Session) => Some(true),
+            ($crate::p2p::StructuredPayload::TerminalIO(_), $crate::p2p::MessageDomain::Terminal) => Some(true),
+            ($crate::p2p::StructuredPayload::TerminalManagement(_), $crate::p2p::MessageDomain::Terminal) => Some(true),
+            ($crate::p2p::StructuredPayload::FileTransfer(_), $crate::p2p::MessageDomain::FileTransfer) => Some(true),
+            ($crate::p2p::StructuredPayload::PortForward(_), $crate::p2p::MessageDomain::PortForward) => Some(true),
+            ($crate::p2p::StructuredPayload::System(_), $crate::p2p::MessageDomain::System) => Some(true),
+            _ => None,
+        }
+    };
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionHeader {
+    pub version: u8,
+    pub width: u16,
+    pub height: u16,
+    pub timestamp: u64,
+    pub title: Option<String>,
+    pub command: Option<String>,
+    pub session_id: String,
+}
+
+/// ALPN for riterm protocol
+pub const ALPN: &[u8] = b"RITERMV0";
+
+/// Handshake for terminal connections
+pub const HANDSHAKE: &[u8] = b"riterm_hello";
+
+/// Forward compatibility with dumbpipe
+// NodeTicket is already imported and available
+
+// === Network Layer Messages ===
+// These are transmitted over direct P2P connections
+// Legacy NetworkMessage has been moved to LegacyNetworkMessage above
+
+/// Enhanced message wrapper for direct P2P transmission with version support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PMessage {
     pub body: NetworkMessage,
+    pub version: MessageVersion,
+    pub compression: Option<String>, // Future: compression algorithm
 }
 
 impl P2PMessage {
     pub fn new(body: NetworkMessage) -> Self {
-        Self { body }
+        Self {
+            body,
+            version: MessageVersion::V2,
+            compression: None,
+        }
+    }
+
+    pub fn with_version(body: NetworkMessage, version: MessageVersion) -> Self {
+        Self {
+            body,
+            version,
+            compression: None,
+        }
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
@@ -274,7 +799,462 @@ impl P2PMessage {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         bincode::deserialize(bytes).map_err(Into::into)
     }
+
+    /// Check if message is compatible with current version
+    pub fn is_compatible(&self) -> bool {
+        self.body.is_compatible_with(self.version)
+    }
+
+    /// Get the message domain
+    pub fn domain(&self) -> MessageDomain {
+        self.body.domain()
+    }
+
+    /// Get message timestamp
+    pub fn timestamp(&self) -> u64 {
+        self.body.timestamp()
+    }
+
+    /// Get message ID
+    pub fn message_id(&self) -> &str {
+        self.body.message_id()
+    }
 }
+
+impl Default for P2PMessage {
+    fn default() -> Self {
+        Self {
+            body: NetworkMessage::Structured {
+                header: MessageHeader::default(),
+                payload: StructuredPayload::System(SystemMessage::Heartbeat),
+            },
+            version: MessageVersion::V2,
+            compression: None,
+        }
+    }
+}
+
+// === Migration and Compatibility Tools ===
+
+
+// === Message Builder for Convenience ===
+
+/// Builder pattern for creating structured messages
+pub struct MessageBuilder {
+    header: MessageHeader,
+}
+
+impl MessageBuilder {
+    pub fn new() -> Self {
+        Self {
+            header: MessageHeader::default(),
+        }
+    }
+
+    pub fn from_node(mut self, node_id: NodeId) -> Self {
+        self.header.from = node_id;
+        self
+    }
+
+    pub fn for_session(mut self, session_id: String) -> Self {
+        self.header.session_id = Some(session_id);
+        self
+    }
+
+    pub fn with_domain(mut self, domain: MessageDomain) -> Self {
+        self.header.domain = domain;
+        self
+    }
+
+    pub fn with_version(mut self, version: MessageVersion) -> Self {
+        self.header.version = version;
+        self
+    }
+
+    pub fn build(self, payload: StructuredPayload) -> NetworkMessage {
+        NetworkMessage::Structured {
+            header: self.header,
+            payload,
+        }
+    }
+
+    pub fn build_p2p(self, payload: StructuredPayload) -> P2PMessage {
+        P2PMessage::new(self.build(payload))
+    }
+}
+
+impl Default for MessageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// === Common Message Patterns ===
+
+/// Common message creation utilities
+pub struct MessageFactory;
+
+impl MessageFactory {
+    /// Create a session info message
+    pub fn session_info(from: NodeId, header: SessionHeader) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::Session)
+            .build(StructuredPayload::Session(SessionMessage::SessionInfo { header }))
+    }
+
+    /// Create a terminal output message
+    pub fn terminal_output(from: NodeId, terminal_id: String, data: String) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Output {
+                terminal_id,
+                data,
+            }))
+    }
+
+    /// Create a file transfer start message
+    pub fn file_transfer_start(
+        from: NodeId,
+        terminal_id: String,
+        file_name: String,
+        file_size: u64,
+    ) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::FileTransfer)
+            .build(StructuredPayload::FileTransfer(FileTransferMessage::Start {
+                terminal_id,
+                file_name,
+                file_size,
+                chunk_count: None,
+                mime_type: None,
+            }))
+    }
+
+    /// Create a port forwarding service (unified TCP + WebShare)
+    pub fn create_port_forward(
+        from: NodeId,
+        service_id: String,
+        local_port: u16,
+        remote_port: Option<u16>,
+        service_type: PortForwardType,
+        service_name: String,
+    ) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Create {
+                service_id,
+                local_port,
+                remote_port,
+                service_type,
+                service_name,
+                terminal_id: None,
+                metadata: None,
+            }))
+    }
+
+    /// Create a web service (convenience method)
+    pub fn create_web_service(
+        from: NodeId,
+        service_id: String,
+        local_port: u16,
+        public_port: Option<u16>,
+        service_name: String,
+        terminal_id: Option<String>,
+    ) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Create {
+                service_id,
+                local_port,
+                remote_port: public_port,
+                service_type: PortForwardType::Web,
+                service_name,
+                terminal_id,
+                metadata: None,
+            }))
+    }
+
+    /// Create a system error message
+    pub fn system_error(
+        from: NodeId,
+        code: SystemErrorCode,
+        message: String,
+        details: Option<HashMap<String, String>>,
+    ) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::System)
+            .build(StructuredPayload::System(SystemMessage::Error {
+                code,
+                message,
+                details,
+            }))
+    }
+
+    /// Create a ping message for health checks
+    pub fn ping(from: NodeId, sequence: u64) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::System)
+            .build(StructuredPayload::System(SystemMessage::Ping { sequence }))
+    }
+
+    /// Create a terminal input message
+    pub fn terminal_input(from: NodeId, data: String) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalIO(TerminalIOMessage::Input { data }))
+    }
+
+    /// Create a terminal resize message
+    pub fn terminal_resize(from: NodeId, terminal_id: String, rows: u16, cols: u16) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .for_session(terminal_id)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalIO(TerminalIOMessage::Resize {
+                width: cols,
+                height: rows
+            }))
+    }
+
+    /// Create a session info request message (using SessionInfo with empty header)
+    pub fn session_info_request(from: NodeId, session_id: String) -> NetworkMessage {
+        let header = SessionHeader {
+            version: 2,
+            width: 80,
+            height: 24,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            title: None,
+            command: None,
+            session_id: session_id.clone(),
+        };
+        MessageBuilder::new()
+            .from_node(from)
+            .for_session(session_id)
+            .with_domain(MessageDomain::Session)
+            .build(StructuredPayload::Session(SessionMessage::SessionInfo { header }))
+    }
+
+    /// Create a terminal create request
+    pub fn terminal_create_request(
+        from: NodeId,
+        session_id: String,
+        name: Option<String>,
+        shell: Option<String>,
+        working_dir: Option<String>,
+        size: Option<(u16, u16)>,
+    ) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .for_session(session_id)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Create {
+                name,
+                shell_path: shell,
+                working_dir,
+                size,
+            }))
+    }
+
+    /// Create a terminal stop request
+    pub fn terminal_stop_request(from: NodeId, session_id: String, terminal_id: String) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .for_session(session_id)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Stop {
+                terminal_id
+            }))
+    }
+
+    /// Create a terminal list request
+    pub fn terminal_list_request(from: NodeId, session_id: String) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .for_session(session_id)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::ListRequest))
+    }
+
+    /// Create a terminal list response
+    pub fn terminal_list_response(from: NodeId, session_id: String, terminals: Vec<TerminalInfo>) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .for_session(session_id)
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::ListResponse { terminals }))
+    }
+
+    /// Create a web service stop request
+    pub fn stop_web_service(from: NodeId, public_port: u16) -> NetworkMessage {
+        let service_id = format!("webshare_{}", public_port);
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                service_id,
+                reason: Some("Web service stopped by request".to_string()),
+            }))
+    }
+
+    /// Create a port forwarding service stop request
+    pub fn stop_port_forward_service(
+        from: NodeId,
+        service_id: String,
+        reason: Option<String>,
+    ) -> NetworkMessage {
+        MessageBuilder::new()
+            .from_node(from)
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                service_id,
+                reason,
+            }))
+    }
+}
+
+// === Usage Examples and Migration Guide ===
+
+///
+/// # Message System Refactoring - Usage Examples
+///
+/// ## Creating New Messages
+///
+/// ```rust
+/// use riterm_shared::p2p::*;
+/// use iroh::NodeId;
+///
+/// let node_id = NodeId::from_bytes([1u8; 32]);
+///
+/// // Create a terminal output message
+/// let message = MessageFactory::terminal_output(
+///     node_id,
+///     "terminal_123".to_string(),
+///     "Hello, World!".to_string(),
+/// );
+///
+/// // Create a port forwarding service (replaces both TCP and WebShare)
+/// let port_forward = MessageFactory::create_port_forward(
+///     node_id,
+///     "service_456".to_string(),
+///     3000,
+///     Some(8080),
+///     PortForwardType::Web,
+///     "My Web Service".to_string(),
+/// );
+///
+/// // Create using builder pattern
+/// let custom_message = MessageBuilder::new()
+///     .from_node(node_id)
+///     .for_session("session_789".to_string())
+///     .with_domain(MessageDomain::FileTransfer)
+///     .build(StructuredPayload::FileTransfer(FileTransferMessage::Start {
+///         terminal_id: "terminal_123".to_string(),
+///         file_name: "example.txt".to_string(),
+///         file_size: 1024,
+///         chunk_count: Some(1),
+///         mime_type: Some("text/plain".to_string()),
+///     }));
+/// ```
+///
+/// ## Message Routing and Handling
+///
+/// ```rust
+/// use riterm_shared::p2p::*;
+/// use std::sync::Arc;
+///
+/// // Create a message router
+/// let router = MessageRouter::new();
+///
+/// // Register handlers for different domains
+/// let terminal_handler = Arc::new(TerminalMessageHandler);
+/// router.register_handler(terminal_handler).await;
+///
+/// // Route messages
+/// if let Some(domain) = message.domain() {
+///     router.route_message(message).await?;
+/// }
+/// ```
+///
+/// ## Migration from Legacy Messages
+///
+/// ```rust
+/// // Convert legacy messages to new format
+/// let legacy_message = LegacyNetworkMessage::TerminalOutput {
+///     from: node_id,
+///     terminal_id: "term_123".to_string(),
+///     data: "output".to_string(),
+///     timestamp: 1234567890,
+/// };
+///
+/// let new_message = NetworkMessage::from_legacy(legacy_message, node_id);
+///
+/// // Or use P2PMessage wrapper
+/// let p2p_message = P2PMessage::new_legacy(legacy_message, node_id);
+/// ```
+///
+/// ## Port Forwarding Unification
+///
+/// The new system unifies TCP forwarding and WebShare:
+///
+/// ```rust
+/// // Old way (separate)
+/// let tcp_forward = LegacyNetworkMessage::TcpForwardCreate { ... };
+/// let webshare = LegacyNetworkMessage::WebShareCreate { ... };
+///
+/// // New way (unified)
+/// let port_forward = PortForwardMessage::Create {
+///     service_id: "service_123".to_string(),
+///     local_port: 3000,
+///     remote_port: Some(8080),
+///     service_type: PortForwardType::Web, // or PortForwardType::Tcp
+///     service_name: "My Service".to_string(),
+///     terminal_id: None,
+///     metadata: None,
+/// };
+/// ```
+///
+/// ## Version Compatibility
+///
+/// ```rust
+/// // Create versioned messages
+/// let message_v2 = P2PMessage::with_version(
+///     NetworkMessage::Structured { ... },
+///     MessageVersion::V2,
+/// );
+///
+/// // Check compatibility
+/// if message_v2.is_compatible() {
+///     // Process message
+/// }
+///
+/// // Ensure structured format
+/// let structured = message_v2.ensure_structured(node_id)?;
+/// ```
+///
+/// # Migration Checklist
+///
+/// 1. Replace individual TCP/WebShare messages with unified PortForwardMessage
+/// 2. Update message creation to use MessageFactory or MessageBuilder
+/// 3. Implement MessageHandler traits for each domain
+/// 4. Use MessageRouter for message distribution
+/// 5. Update serialization/deserialization to handle new format
+/// 6. Set up proper error handling with SystemMessage::Error
+/// 7. Add version checking for backward compatibility
+/// 8. Test with both legacy and new message formats
+/// 9. Update any existing P2P network code to use new message types
+/// 10. Remove old TCP/WebShare specific code after migration is complete
+///
 
 /// Forward compatibility alias
 pub type SessionTicket = NodeTicket;
@@ -284,7 +1264,6 @@ pub fn create_session_ticket(node_addr: NodeAddr, _session_id: &str) -> Result<N
     Ok(NodeTicket::new(node_addr))
 }
 
-#[derive(Debug)]
 pub struct SharedSession {
     pub header: SessionHeader,
     pub participants: Vec<String>,
@@ -293,6 +1272,9 @@ pub struct SharedSession {
     pub node_id: NodeId,
     pub input_sender: Option<mpsc::UnboundedSender<String>>,
     pub connection_sender: Option<mpsc::UnboundedSender<NetworkMessage>>,
+    // Add callback fields that handlers expect
+    pub history_callback: Option<Box<dyn Fn(&str) + Send + Sync>>,
+    pub terminal_input_callback: Option<Box<dyn Fn(String) + Send + Sync>>,
 }
 
 pub struct P2PNetwork {
@@ -561,6 +1543,8 @@ impl P2PNetwork {
             node_id: self.endpoint.node_id(),
             input_sender: Some(input_sender),
             connection_sender: Some(connection_sender.clone()),
+            history_callback: None,
+            terminal_input_callback: None,
         };
 
         self.sessions
@@ -618,6 +1602,8 @@ impl P2PNetwork {
             node_id: self.endpoint.node_id(),
             input_sender: None,
             connection_sender: Some(connection_sender.clone()),
+            history_callback: None,
+            terminal_input_callback: None,
         };
 
         self.sessions
@@ -645,8 +1631,8 @@ impl P2PNetwork {
         info!("✅ ParticipantJoined message sent successfully");
 
         // Start handling incoming messages
-        let network_clone = self.clone();
-        let session_id_clone = temp_session_id.clone();
+        let _network_clone = self.clone();
+        let _session_id_clone = temp_session_id.clone();
         tokio::spawn(async move {
             // TODO: Implement connection message handling
         });
@@ -901,19 +1887,7 @@ impl P2PNetwork {
         });
     }
 
-    /// Handle incoming messages from connection queue
-    async fn handle_connection_messages(
-        &self,
-        session_id: String,
-        mut receiver: mpsc::UnboundedReceiver<NetworkMessage>,
-    ) {
-        while let Some(message) = receiver.recv().await {
-            if let Err(e) = self.handle_network_message(&session_id, message).await {
-                error!("Error handling connection message: {}", e);
-            }
-        }
-    }
-
+  
     /// Send a message over the P2P connection
     pub async fn send_message(&self, session_id: &str, message: NetworkMessage) -> Result<()> {
         // Resolve the actual session ID (in case of remapping)
@@ -938,13 +1912,7 @@ impl P2PNetwork {
         data: String,
     ) -> Result<()> {
         debug!("Sending input data");
-        let message = NetworkMessage::Input {
-            from: self.endpoint.node_id(),
-            data,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageFactory::terminal_input(self.endpoint.node_id(), data);
         self.send_message(session_id, message).await
     }
 
@@ -956,14 +1924,10 @@ impl P2PNetwork {
         data: String,
     ) -> Result<()> {
         debug!("Sending directed message to node: {}", to.fmt_short());
-        let message = NetworkMessage::DirectedMessage {
-            from: self.endpoint.node_id(),
-            to,
-            data,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .build(StructuredPayload::Session(SessionMessage::DirectedMessage { to, data }));
         self.send_message(session_id, message).await
     }
 
@@ -975,14 +1939,12 @@ impl P2PNetwork {
         height: u16,
     ) -> Result<()> {
         debug!("Sending resize event");
-        let message = NetworkMessage::Resize {
-            from: self.endpoint.node_id(),
-            width,
+        let message = MessageFactory::terminal_resize(
+            self.endpoint.node_id(),
+            session_id.to_string(),
             height,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+            width
+        );
         self.send_message(session_id, message).await
     }
 
@@ -992,12 +1954,10 @@ impl P2PNetwork {
         _sender: &mpsc::UnboundedSender<NetworkMessage>,
     ) -> Result<()> {
         info!("Ending session: {}", session_id);
-        let message = NetworkMessage::SessionEnd {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .build(StructuredPayload::Session(SessionMessage::SessionEnd));
 
         // Send end session message
         if let Err(e) = self.send_message(session_id, message).await {
@@ -1026,12 +1986,10 @@ impl P2PNetwork {
         _sender: &mpsc::UnboundedSender<NetworkMessage>, // Kept for compatibility
     ) -> Result<()> {
         debug!("Sending participant joined notification");
-        let message = NetworkMessage::ParticipantJoined {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .build(StructuredPayload::Session(SessionMessage::ParticipantJoined));
         self.send_message(session_id, message).await
     }
 
@@ -1043,15 +2001,14 @@ impl P2PNetwork {
         history: Vec<String>,
     ) -> Result<()> {
         debug!("Sending history data");
-        let message = NetworkMessage::HistoryData {
-            from: self.endpoint.node_id(),
-            shell_type,
-            working_dir,
-            history,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .build(StructuredPayload::Session(SessionMessage::HistoryData {
+                shell_type,
+                working_dir,
+                history
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -1065,887 +2022,178 @@ impl P2PNetwork {
         let sessions_guard = self.sessions.read().await;
         if let Some(session) = sessions_guard.get(session_id) {
             match body {
-                NetworkMessage::Output {
-                    from: _,
-                    data,
-                    timestamp,
-                } => {
+                NetworkMessage::Structured { header, payload } => {
+                    // Handle structured messages based on domain
+                    match header.domain {
+                        MessageDomain::Terminal => self.handle_terminal_message(session, header, payload).await?,
+                        MessageDomain::Session => self.handle_session_message(session, header, payload).await?,
+                        MessageDomain::FileTransfer => self.handle_file_transfer_message(session, header, payload).await?,
+                        MessageDomain::PortForward => self.handle_port_forward_message(session, header, payload).await?,
+                        MessageDomain::System => self.handle_system_message(session, header, payload).await?,
+                    }
+                }
+            }
+        } else {
+            warn!("Received message for unknown session: {}", session_id);
+        }
+        Ok(())
+    }
+
+    async fn handle_terminal_message(&self, session: &SharedSession, header: MessageHeader, payload: StructuredPayload) -> Result<()> {
+        if let StructuredPayload::TerminalIO(msg) = payload {
+            match msg {
+                TerminalIOMessage::Output { data } => {
                     let event = TerminalEvent {
-                        timestamp,
+                        timestamp: header.timestamp,
                         event_type: EventType::Output { data },
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for output event, skipping");
                     }
                 }
-                NetworkMessage::Input {
-                    from,
-                    data,
-                    timestamp,
-                } => {
-                    debug!("Received input event from {}: {:?}", from.fmt_short(), data);
+                TerminalIOMessage::Input { data } => {
+                    // Handle terminal input
+                    if let Some(ref callback) = session.terminal_input_callback {
+                        callback(data);
+                    }
+                }
+                TerminalIOMessage::Resize { width, height } => {
+                    // Handle terminal resize
+                    debug!("Terminal resize request: {}x{}", width, height);
+                }
+            }
+        } else if let StructuredPayload::TerminalManagement(ref msg) = payload {
+            match msg {
+                TerminalManagementMessage::Output { terminal_id: _, data } => {
                     let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Input { data: data.clone() },
-                    };
-
-                    if session.is_host {
-                        if let Some(input_sender) = &session.input_sender {
-                            if input_sender.send(data).is_err() {
-                                // warn!("Failed to send input to terminal");
-                            }
-                        }
-                    }
-                    if session.event_sender.send(event).is_err() {
-                        // warn!("Failed to broadcast input event");
-                    }
-                }
-                NetworkMessage::Resize {
-                    from: _,
-                    width,
-                    height,
-                    timestamp,
-                } => {
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Resize { width, height },
-                    };
-                    if let Err(_e) = session.event_sender.send(event) {
-                        warn!("Failed to send resize event to subscribers");
-                    }
-                }
-                NetworkMessage::SessionEnd { from: _, timestamp } => {
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::End,
-                    };
-                    if let Err(_e) = session.event_sender.send(event) {
-                        warn!("Failed to send end event to subscribers");
-                    }
-                }
-                NetworkMessage::DirectedMessage {
-                    from,
-                    to,
-                    data,
-                    timestamp,
-                } => {
-                    let my_node_id = self.endpoint.node_id();
-                    if to == my_node_id {
-                        let event = TerminalEvent {
-                            timestamp,
-                            event_type: EventType::Output {
-                                data: format!("[DM from {}] {}", from.fmt_short(), data),
-                            },
-                        };
-                        if session.event_sender.send(event).is_err() {
-                            warn!("No active receivers for directed message, skipping");
-                        }
-                    }
-                }
-                NetworkMessage::SessionInfo { from, header } => {
-                    info!(
-                        "Received session info from {} for session: {}",
-                        from.fmt_short(),
-                        session_id
-                    );
-
-                    // 如果是客户端接收到SessionInfo，需要更新session_id映射
-                    let host_session_id = header.session_id.clone();
-                    if session_id != host_session_id {
-                        info!(
-                            "Updating session mapping: {} -> {}",
-                            session_id, host_session_id
-                        );
-
-                        drop(sessions_guard); // Release read lock
-
-                        // 更新session和连接映射
-                        let mut sessions_write = self.sessions.write().await;
-                        let mut connections_write = self.active_connections.write().await;
-                        let mut mappings_write = self.session_mappings.write().await;
-
-                        // 移动session到新的session_id
-                        if let Some(mut session) = sessions_write.remove(session_id) {
-                            session.header = header.clone();
-                            sessions_write.insert(host_session_id.clone(), session);
-                        }
-
-                        // 移动连接到新的session_id
-                        if let Some(connection) = connections_write.remove(session_id) {
-                            connections_write.insert(host_session_id.clone(), connection);
-                        }
-
-                        // 记录session映射关系
-                        mappings_write.insert(session_id.to_string(), host_session_id.clone());
-
-                        info!("Session mapping updated successfully");
-                    } else {
-                        drop(sessions_guard); // Release read lock
-                        let mut sessions_write = self.sessions.write().await;
-                        if let Some(session) = sessions_write.get_mut(session_id) {
-                            session.participants.push(from.to_string());
-                            session.header = header;
-                        }
-                    }
-                }
-                NetworkMessage::ParticipantJoined { from, timestamp } => {
-                    info!(
-                        "🎉 Participant {} joined session {} (host: {})",
-                        from.fmt_short(),
-                        session_id,
-                        session.is_host
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("Participant {} joined the session", from.fmt_short()),
-                        },
+                        timestamp: header.timestamp,
+                        event_type: EventType::Output { data: data.clone() },
                     };
                     if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for participant joined event, skipping");
-                    }
-
-                    // 简化：只发送历史记录，不发送SessionInfo
-                    if session.is_host {
-                        info!("🚀 We are the host, sending history data to new participant");
-                        drop(sessions_guard); // 释放锁
-
-                        // 获取历史记录回调
-                        let callback = {
-                            let history_callback_guard = self.history_callback.read().await;
-                            history_callback_guard.as_ref().map(|cb| cb(session_id))
-                        };
-
-                        if let Some(receiver) = callback {
-                            // 在新的任务中处理历史记录发送，避免阻塞消息处理
-                            let network_clone = self.clone();
-                            let session_id_clone = session_id.to_string();
-
-                            tokio::spawn(async move {
-                                match receiver.await {
-                                    Ok(Some(session_info)) => {
-                                        info!("Got history data, sending to new participant");
-
-                                        if let Err(e) = network_clone
-                                            .send_history_data(
-                                                &session_id_clone,
-                                                session_info.shell,
-                                                session_info.cwd,
-                                                session_info
-                                                    .logs
-                                                    .lines()
-                                                    .map(|s| s.to_string())
-                                                    .collect(),
-                                            )
-                                            .await
-                                        {
-                                            error!("Failed to send history data: {}", e);
-                                        } else {
-                                            info!(
-                                                "✅ Successfully sent history data to new participant"
-                                            );
-                                        }
-                                    }
-                                    Ok(None) => {
-                                        info!("No history data available to send");
-                                    }
-                                    Err(_e) => {
-                                        error!("Failed to get history data");
-                                    }
-                                }
-                            });
-                        } else {
-                            warn!("No history callback set, cannot send history data");
-                        }
+                        warn!("No active receivers for output event, skipping");
                     }
                 }
-                NetworkMessage::HistoryData {
-                    from,
-                    shell_type,
-                    working_dir,
-                    history,
-                    timestamp,
-                } => {
-                    info!("Received history data from {}", from.fmt_short());
-
-                    // Send session info event
-                    let info_event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!(
-                                "=== Session History ===\nShell: {}\nWorking Directory: {}\n",
-                                shell_type, working_dir
-                            ),
-                        },
-                    };
-                    if session.event_sender.send(info_event).is_err() {
-                        warn!("No active receivers for history info event, skipping");
-                    }
-
-                    // Send each history line as a separate event
-                    for (i, line) in history.iter().enumerate() {
-                        let history_event = TerminalEvent {
-                            timestamp: timestamp + (i as u64), // Slight time offset for ordering
-                            event_type: EventType::HistoryData { data: line.clone() },
-                        };
-                        if session.event_sender.send(history_event).is_err() {
-                            warn!("No active receivers for history data event, skipping");
-                        }
-                    }
-
-                    // Send separator
-                    let separator_event = TerminalEvent {
-                        timestamp: timestamp + (history.len() as u64) + 1,
-                        event_type: EventType::Output {
-                            data: "=== End of History ===\n".to_string(),
-                        },
-                    };
-                    if session.event_sender.send(separator_event).is_err() {
-                        warn!("No active receivers for history separator event, skipping");
-                    }
+                TerminalManagementMessage::StatusUpdate { terminal_id, status } => {
+                    debug!("Terminal status update: {} -> {:?}", terminal_id, status);
                 }
-
-                // === Terminal Management Messages ===
-                NetworkMessage::TerminalCreate {
-                    from,
-                    name,
-                    shell_path,
-                    working_dir,
-                    size,
-                    timestamp,
-                } => {
-                    info!("Received terminal create request from {}", from.fmt_short());
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!(
-                                "[Terminal Create Request] Name: {:?}, Shell: {:?}, Dir: {:?}, Size: {:?}",
-                                name, shell_path, working_dir, size
-                            ),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal create event, skipping");
-                    }
+                TerminalManagementMessage::ListResponse { terminals } => {
+                    info!("Received terminal list with {} terminals", terminals.len());
                 }
-                NetworkMessage::TerminalStatusUpdate {
-                    from,
-                    terminal_id,
-                    status,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received terminal status update from {} for terminal {}",
-                        from.fmt_short(),
-                        terminal_id
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[Terminal Status Update] {}: {:?}", terminal_id, status),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal status update event, skipping");
-                    }
-                }
-                NetworkMessage::TerminalOutput {
-                    from,
-                    terminal_id,
-                    data,
-                    timestamp,
-                } => {
-                    debug!(
-                        "Received terminal output from {} for terminal {}",
-                        from.fmt_short(),
-                        terminal_id
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::TerminalOutput { terminal_id, data },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal output event, skipping");
-                    }
-                }
-                NetworkMessage::TerminalInput {
-                    from,
-                    terminal_id,
-                    data,
-                    timestamp,
-                } => {
-                    debug!(
-                        "Received terminal input from {} for terminal {}",
-                        from.fmt_short(),
-                        terminal_id
-                    );
-
-                    // Clone values before moving them into the closure
-                    let terminal_id_clone = terminal_id.clone();
-                    let data_clone = data.clone();
-
-                    // 如果我们是主机，处理终端输入并发送输出响应
-                    if session.is_host {
-                        // 获取终端输入处理回调
-                        let input_callback = {
-                            let callback_guard = self.terminal_input_callback.read().await;
-                            callback_guard
-                                .as_ref()
-                                .map(|cb| cb(terminal_id_clone.clone(), data_clone.clone()))
-                        };
-
-                        drop(sessions_guard); // 释放锁
-
-                        if let Some(input_handler) = input_callback {
-                            // 使用回调处理终端输入
-                            let network_clone = self.clone();
-                            let session_id_clone = session_id.to_string();
-                            let terminal_id_for_output = terminal_id_clone.clone();
-
-                            tokio::spawn(async move {
-                                // 等待输入处理完成
-                                match input_handler.await {
-                                    Ok(Ok(Some(response_data))) => {
-                                        // 发送终端输出响应
-                                        if let Err(e) = network_clone
-                                            .send_message(
-                                                &session_id_clone,
-                                                NetworkMessage::TerminalOutput {
-                                                    from: network_clone.endpoint.node_id(),
-                                                    terminal_id: terminal_id_for_output,
-                                                    data: response_data,
-                                                    timestamp: std::time::SystemTime::now()
-                                                        .duration_since(std::time::UNIX_EPOCH)
-                                                        .unwrap_or_default()
-                                                        .as_secs(),
-                                                },
-                                            )
-                                            .await
-                                        {
-                                            error!(
-                                                "Failed to send terminal output response: {}",
-                                                e
-                                            );
-                                        }
-                                    }
-                                    Ok(Ok(None)) => {
-                                        // 没有输出数据，这是正常的，终端输出将通过其他方式发送
-                                        debug!("Terminal input processed, no immediate output");
-                                    }
-                                    Ok(Err(e)) => {
-                                        error!("Terminal input processing failed: {}", e);
-                                    }
-                                    Err(e) => {
-                                        error!("Terminal input handler join error: {}", e);
-                                    }
-                                }
-                            });
-                        } else {
-                            // 没有设置回调，使用模拟输出（向后兼容）
-                            warn!("No terminal input callback set, using simulated output");
-                            let network_clone = self.clone();
-                            let session_id_clone = session_id.to_string();
-
-                            tokio::spawn(async move {
-                                // 这里应该将输入发送到对应的终端实例
-                                // 由于我们使用虚拟终端，暂时模拟终端输出
-                                let response_data = if data_clone == "\r" {
-                                    // 模拟回车符的响应
-                                    format!("\r\n[Terminal Output: {}] $ ", terminal_id_clone)
-                                } else {
-                                    // 模拟普通输入的回显
-                                    format!(
-                                        "[Terminal Output: {}] {}",
-                                        terminal_id_clone, data_clone
-                                    )
-                                };
-
-                                // 发送终端输出响应
-                                if let Err(e) = network_clone
-                                    .send_message(
-                                        &session_id_clone,
-                                        NetworkMessage::TerminalOutput {
-                                            from: network_clone.endpoint.node_id(),
-                                            terminal_id: terminal_id_clone,
-                                            data: response_data,
-                                            timestamp: std::time::SystemTime::now()
-                                                .duration_since(std::time::UNIX_EPOCH)
-                                                .unwrap_or_default()
-                                                .as_secs(),
-                                        },
-                                    )
-                                    .await
-                                {
-                                    error!("Failed to send terminal output response: {}", e);
-                                }
-                            });
-                        }
-                    } else {
-                        drop(sessions_guard); // 释放锁
-                    }
-
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::TerminalInput { terminal_id, data },
-                    };
-                    // 重新获取会话来发送事件
-                    let network_clone = self.clone();
-                    let sessions_guard = network_clone.sessions.read().await;
-                    if let Some(session) = sessions_guard.get(session_id) {
-                        if session.event_sender.send(event).is_err() {
-                            warn!("No active receivers for terminal input event, skipping");
-                        }
-                    }
-                }
-                NetworkMessage::TerminalResize {
-                    from,
-                    terminal_id,
-                    rows,
-                    cols,
-                    timestamp,
-                } => {
-                    debug!(
-                        "Received terminal resize from {} for terminal {}",
-                        from.fmt_short(),
-                        terminal_id
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::TerminalResize {
-                            terminal_id,
-                            rows,
-                            cols,
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal resize event, skipping");
-                    }
-                }
-                NetworkMessage::TerminalDirectoryChanged {
-                    from,
-                    terminal_id,
-                    new_dir,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received terminal directory change from {} for terminal {}",
-                        from.fmt_short(),
-                        terminal_id
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[Terminal Directory Change: {}] {}", terminal_id, new_dir),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal directory change event, skipping");
-                    }
-                }
-                NetworkMessage::TerminalStop {
-                    from,
-                    terminal_id,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received terminal stop request from {} for terminal {}",
-                        from.fmt_short(),
-                        terminal_id
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[Terminal Stop Request] {}", terminal_id),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal stop event, skipping");
-                    }
-                }
-                NetworkMessage::TerminalListRequest { from, timestamp } => {
-                    info!("Received terminal list request from {}", from.fmt_short());
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: "[Terminal List Request]".to_string(),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal list request event, skipping");
-                    }
-                }
-                NetworkMessage::TerminalListResponse {
-                    from,
-                    terminals,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received terminal list response from {} with {} terminals",
-                        from.fmt_short(),
-                        terminals.len()
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::TerminalList { terminals },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for terminal list response event, skipping");
-                    }
-                }
-
-                // === WebShare Management Messages ===
-                NetworkMessage::WebShareCreate {
-                    from,
-                    local_port,
-                    public_port,
-                    service_name,
-                    terminal_id,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare create request from {} for port {}",
-                        from.fmt_short(),
-                        local_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::WebShareCreate {
-                            local_port,
-                            public_port: public_port.unwrap_or(0),
-                            service_name,
-                            terminal_id,
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare create event, skipping");
-                    }
-                }
-                NetworkMessage::WebShareStatusUpdate {
-                    from,
-                    public_port,
-                    status,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare status update from {} for port {}",
-                        from.fmt_short(),
-                        public_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[WebShare Status Update: {}] {:?}", public_port, status),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare status update event, skipping");
-                    }
-                }
-                NetworkMessage::WebShareStop {
-                    from,
-                    public_port,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare stop request from {} for port {}",
-                        from.fmt_short(),
-                        public_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[WebShare Stop Request] {}", public_port),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare stop event, skipping");
-                    }
-                }
-                NetworkMessage::WebShareListRequest { from, timestamp } => {
-                    info!("Received webshare list request from {}", from.fmt_short());
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: "[WebShare List Request]".to_string(),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare list request event, skipping");
-                    }
-                }
-                NetworkMessage::WebShareListResponse {
-                    from,
-                    webshares,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare list response from {} with {} webshares",
-                        from.fmt_short(),
-                        webshares.len()
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::WebShareList { webshares },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare list response event, skipping");
-                    }
-                }
-                NetworkMessage::StatsRequest { from, timestamp } => {
-                    info!("Received stats request from {}", from.fmt_short());
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: "[Stats Request]".to_string(),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for stats request event, skipping");
-                    }
-                }
-                NetworkMessage::StatsResponse {
-                    from,
-                    terminal_stats,
-                    webshare_stats,
-                    node_id,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received stats response from {} (node: {})",
-                        from.fmt_short(),
-                        &node_id[..16]
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Stats {
-                            terminal_stats,
-                            webshare_stats,
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for stats response event, skipping");
-                    }
-                }
-                // === TCP Port Forwarding Messages ===
-                NetworkMessage::TcpForwardCreate {
-                    from,
-                    session_id,
-                    local_port,
-                    remote_port,
-                    service_name,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received TCP forward create request from {} (port {} -> {})",
-                        from.fmt_short(),
-                        local_port,
-                        remote_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!(
-                                "[TCP Forward Create Request] {} -> {} ({})",
-                                local_port, remote_port, service_name
-                            ),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for TCP forward create event, skipping");
-                    }
-                }
-                NetworkMessage::TcpForwardConnected {
-                    from,
-                    session_id,
-                    remote_port,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received TCP forward connected notification from {} for port {}",
-                        from.fmt_short(),
-                        remote_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[TCP Forward Connected] Port {}", remote_port),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for TCP forward connected event, skipping");
-                    }
-                }
-                NetworkMessage::TcpForwardData {
-                    from,
-                    session_id,
-                    remote_port,
-                    data,
-                    timestamp,
-                } => {
-                    debug!(
-                        "Received TCP forward data from {} for port {} ({} bytes)",
-                        from.fmt_short(),
-                        remote_port,
-                        data.len()
-                    );
-                    // Convert binary data to base64 for transmission in events
-                    let data_str = base64::engine::general_purpose::STANDARD.encode(&data);
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[TCP Forward Data:{}] {}", remote_port, data_str),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for TCP forward data event, skipping");
-                    }
-                }
-                NetworkMessage::TcpForwardStopped {
-                    from,
-                    session_id,
-                    remote_port,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received TCP forward stopped notification from {} for port {}",
-                        from.fmt_short(),
-                        remote_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output {
-                            data: format!("[TCP Forward Stopped] Port {}", remote_port),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for TCP forward stopped event, skipping");
-                    }
-                }
-                // === File Transfer Messages ===
-                NetworkMessage::FileTransferStart {
-                    from,
-                    terminal_id,
-                    file_name,
-                    file_size,
-                    file_data,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received file transfer start from {} for terminal {} ({}: {} bytes)",
-                        from.fmt_short(),
-                        terminal_id,
-                        file_name,
-                        file_size
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::FileTransferStart {
-                            terminal_id: terminal_id.clone(),
-                            file_name: file_name.clone(),
-                            file_size,
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for file transfer start event, skipping");
-                    }
-                }
-                NetworkMessage::FileTransferProgress {
-                    from,
-                    terminal_id,
-                    file_name,
-                    bytes_transferred,
-                    total_bytes,
-                    timestamp,
-                } => {
-                    debug!(
-                        "Received file transfer progress from {} for terminal {} ({}: {}/{})",
-                        from.fmt_short(),
-                        terminal_id,
-                        file_name,
-                        bytes_transferred,
-                        total_bytes
-                    );
-                    let progress = if total_bytes > 0 {
-                        (bytes_transferred * 100 / total_bytes).min(100)
-                    } else {
-                        0
-                    };
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::FileTransferProgress {
-                            terminal_id: terminal_id.clone(),
-                            file_name: file_name.clone(),
-                            progress: progress as u8,
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for file transfer progress event, skipping");
-                    }
-                }
-                NetworkMessage::FileTransferComplete {
-                    from,
-                    terminal_id,
-                    file_name,
-                    file_path,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received file transfer complete from {} for terminal {} ({} -> {})",
-                        from.fmt_short(),
-                        terminal_id,
-                        file_name,
-                        file_path
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::FileTransferComplete {
-                            terminal_id: terminal_id.clone(),
-                            file_name: file_name.clone(),
-                            file_path: file_path.clone(),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for file transfer complete event, skipping");
-                    }
-                }
-                NetworkMessage::FileTransferError {
-                    from,
-                    terminal_id,
-                    file_name,
-                    error_message,
-                    timestamp,
-                } => {
-                    warn!(
-                        "Received file transfer error from {} for terminal {} ({}: {})",
-                        from.fmt_short(),
-                        terminal_id,
-                        file_name,
-                        error_message
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::FileTransferError {
-                            terminal_id: terminal_id.clone(),
-                            file_name: file_name.clone(),
-                            error: error_message.clone(),
-                        },
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for file transfer error event, skipping");
-                    }
+                _ => {
+                    debug!("Unhandled terminal management message: {:?}", msg);
                 }
             }
         }
         Ok(())
     }
 
-    pub async fn get_node_id(&self) -> String {
-        self.endpoint.node_id().to_string()
+    async fn handle_session_message(&self, session: &SharedSession, header: MessageHeader, payload: StructuredPayload) -> Result<()> {
+        if let StructuredPayload::Session(ref msg) = payload {
+            match msg {
+                SessionMessage::SessionInfo { header: session_header } => {
+                    info!("Received session info: {:?}", session_header);
+                }
+                SessionMessage::SessionEnd => {
+                    let event = TerminalEvent {
+                        timestamp: header.timestamp,
+                        event_type: EventType::End,
+                    };
+                    if session.event_sender.send(event).is_err() {
+                        warn!("No active receivers for session end event, skipping");
+                    }
+                }
+                SessionMessage::ParticipantJoined => {
+                    info!("Participant joined");
+                }
+                SessionMessage::HistoryData { shell_type, working_dir, history } => {
+                    debug!("Received history data: {} entries", history.len());
+                    // Note: history_callback handling needs to be updated
+                    if let Some(ref callback) = session.history_callback {
+                        // Convert to string format expected by callback
+                        let data = format!("Shell: {}, Dir: {}", shell_type, working_dir);
+                        callback(&data);
+                    }
+                }
+                _ => {
+                    debug!("Unhandled session message: {:?}", msg);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_file_transfer_message(&self, _session: &SharedSession, _header: MessageHeader, payload: StructuredPayload) -> Result<()> {
+        if let StructuredPayload::FileTransfer(msg) = payload {
+            match msg {
+                FileTransferMessage::Start { terminal_id: _, file_name, file_size, .. } => {
+                    info!("File transfer started: {} ({} bytes)", file_name, file_size);
+                }
+                FileTransferMessage::Progress { terminal_id: _, file_name, bytes_transferred, total_bytes, .. } => {
+                    let progress = (bytes_transferred * 100) / total_bytes;
+                    debug!("File transfer progress: {} - {}%", file_name, progress);
+                }
+                FileTransferMessage::Complete { terminal_id: _, file_name, file_path, file_hash: _ } => {
+                    info!("File transfer completed: {} (saved to {})", file_name, file_path);
+                }
+                FileTransferMessage::Error { terminal_id: _, file_name, error_message, error_code } => {
+                    error!("File transfer error: {} - {} ({:?})", file_name, error_message, error_code);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_port_forward_message(&self, _session: &SharedSession, _header: MessageHeader, payload: StructuredPayload) -> Result<()> {
+        if let StructuredPayload::PortForward(msg) = payload {
+            match msg {
+                PortForwardMessage::Create { service_id, local_port, remote_port, service_type, service_name: _, .. } => {
+                    info!("Port forward created: {} ({:?}) {} -> {:?}", service_id, service_type, local_port, remote_port);
+                }
+                PortForwardMessage::StatusUpdate { service_id, status, .. } => {
+                    info!("Port forward status update: {} -> {:?}", service_id, status);
+                }
+                PortForwardMessage::Stopped { service_id, .. } => {
+                    info!("Port forward stopped: {}", service_id);
+                }
+                PortForwardMessage::Data { service_id, data } => {
+                    debug!("Port forward data: {} ({} bytes)", service_id, data.len());
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_system_message(&self, _session: &SharedSession, _header: MessageHeader, payload: StructuredPayload) -> Result<()> {
+        if let StructuredPayload::System(msg) = payload {
+            match msg {
+                SystemMessage::Error { code, message, details } => {
+                    error!("System error: {:?} - {} {:?}", code, message, details);
+                }
+                SystemMessage::Ping { sequence } => {
+                    debug!("Received ping: {}", sequence);
+                }
+                SystemMessage::Pong { sequence, timestamp: _ } => {
+                    debug!("Received pong: {}", sequence);
+                }
+                SystemMessage::Heartbeat => {
+                    debug!("Received heartbeat");
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Get the endpoint node ID for use in messages
     pub fn local_node_id(&self) -> NodeId {
         self.endpoint.node_id()
+    }
+
+    /// Get the endpoint node ID (alias for local_node_id)
+    pub async fn get_node_id(&self) -> NodeId {
+        self.local_node_id()
     }
 
     pub async fn get_node_addr(&self) -> Result<NodeAddr> {
@@ -2038,16 +2286,14 @@ impl P2PNetwork {
         size: Option<(u16, u16)>,
     ) -> Result<()> {
         debug!("Sending terminal create request");
-        let message = NetworkMessage::TerminalCreate {
-            from: self.endpoint.node_id(),
+        let message = MessageFactory::terminal_create_request(
+            self.endpoint.node_id(),
+            session_id.to_string(),
             name,
             shell_path,
             working_dir,
             size,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2058,13 +2304,11 @@ impl P2PNetwork {
         terminal_id: String,
     ) -> Result<()> {
         debug!("Sending terminal stop request");
-        let message = NetworkMessage::TerminalStop {
-            from: self.endpoint.node_id(),
+        let message = MessageFactory::terminal_stop_request(
+            self.endpoint.node_id(),
+            session_id.to_string(),
             terminal_id,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2074,12 +2318,10 @@ impl P2PNetwork {
         _sender: &GossipSender, // Kept for compatibility
     ) -> Result<()> {
         debug!("Sending terminal list request");
-        let message = NetworkMessage::TerminalListRequest {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageFactory::terminal_list_request(
+            self.endpoint.node_id(),
+            session_id.to_string(),
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2090,13 +2332,11 @@ impl P2PNetwork {
         terminals: Vec<TerminalInfo>,
     ) -> Result<()> {
         debug!("Sending terminal list response");
-        let message = NetworkMessage::TerminalListResponse {
-            from: self.endpoint.node_id(),
+        let message = MessageFactory::terminal_list_response(
+            self.endpoint.node_id(),
+            session_id.to_string(),
             terminals,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2109,14 +2349,14 @@ impl P2PNetwork {
         data: String,
     ) -> Result<()> {
         debug!("Sending terminal input for terminal {}", terminal_id);
-        let message = NetworkMessage::TerminalInput {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            data,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Input {
+                terminal_id,
+                data,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2128,15 +2368,15 @@ impl P2PNetwork {
         cols: u16,
     ) -> Result<()> {
         debug!("Sending terminal resize for terminal {}", terminal_id);
-        let message = NetworkMessage::TerminalResize {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            rows,
-            cols,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Resize {
+                terminal_id,
+                rows,
+                cols,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2150,14 +2390,14 @@ impl P2PNetwork {
             "Sending terminal status update for terminal {}",
             terminal_id
         );
-        let message = NetworkMessage::TerminalStatusUpdate {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            status,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::StatusUpdate {
+                terminal_id,
+                status,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2171,14 +2411,14 @@ impl P2PNetwork {
             "Sending terminal directory change for terminal {}",
             terminal_id
         );
-        let message = NetworkMessage::TerminalDirectoryChanged {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            new_dir,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::Terminal)
+            .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::DirectoryChanged {
+                terminal_id,
+                new_dir,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2194,16 +2434,15 @@ impl P2PNetwork {
         terminal_id: Option<String>,
     ) -> Result<()> {
         debug!("Sending webshare create request");
-        let message = NetworkMessage::WebShareCreate {
-            from: self.endpoint.node_id(),
+        let service_id = format!("webshare_{}", &uuid::Uuid::new_v4().to_string()[..8]);
+        let message = MessageFactory::create_web_service(
+            self.endpoint.node_id(),
+            service_id,
             local_port,
             public_port,
             service_name,
             terminal_id,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2213,14 +2452,16 @@ impl P2PNetwork {
         _sender: &GossipSender, // Kept for compatibility
         public_port: u16,
     ) -> Result<()> {
-        debug!("Sending webshare stop request");
-        let message = NetworkMessage::WebShareStop {
-            from: self.endpoint.node_id(),
-            public_port,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        debug!("Sending webshare stop request for port {}", public_port);
+        let service_id = format!("webshare_{}", public_port);
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                service_id,
+                reason: Some("WebShare stopped by request".to_string()),
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2230,12 +2471,11 @@ impl P2PNetwork {
         _sender: &GossipSender, // Kept for compatibility
     ) -> Result<()> {
         debug!("Sending webshare list request");
-        let message = NetworkMessage::WebShareListRequest {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::ListRequest));
         self.send_message(session_id, message).await
     }
 
@@ -2246,24 +2486,41 @@ impl P2PNetwork {
         webshares: Vec<WebShareInfo>,
     ) -> Result<()> {
         debug!("Sending webshare list response");
-        let message = NetworkMessage::WebShareListResponse {
-            from: self.endpoint.node_id(),
-            webshares,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        // Convert WebShareInfo to PortForwardInfo
+        let services = webshares.into_iter().map(|ws| PortForwardInfo {
+            service_id: format!("webshare_{}", ws.public_port),
+            service_type: PortForwardType::Web,
+            service_name: ws.service_name,
+            local_port: ws.local_port,
+            remote_port: ws.public_port,
+            access_url: Some(format!("http://localhost:{}", ws.public_port)),
+            status: match ws.status {
+                WebShareStatus::Starting => PortForwardStatus::Starting,
+                WebShareStatus::Active => PortForwardStatus::Active,
+                WebShareStatus::Error(msg) => PortForwardStatus::Error(msg),
+                WebShareStatus::Stopped => PortForwardStatus::Stopped,
+            },
+            terminal_id: ws.terminal_id,
+            created_at: ws.created_at,
+            connection_count: 0, // Not tracked in old WebShareInfo
+            bytes_transferred: 0, // Not tracked in old WebShareInfo
+        }).collect();
+
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::ListResponse { services }));
         self.send_message(session_id, message).await
     }
 
     pub async fn send_stats_request(&self, session_id: &str, _sender: &GossipSender) -> Result<()> {
         debug!("Sending stats request");
-        let message = NetworkMessage::StatsRequest {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::System)
+            .build(StructuredPayload::System(SystemMessage::StatsRequest));
         self.send_message(session_id, message).await
     }
 
@@ -2275,15 +2532,29 @@ impl P2PNetwork {
         webshare_stats: WebShareStats,
     ) -> Result<()> {
         debug!("Sending stats response");
-        let message = NetworkMessage::StatsResponse {
-            from: self.endpoint.node_id(),
-            terminal_stats,
-            webshare_stats,
-            node_id: self.endpoint.node_id().to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
+        // Convert WebShareStats to PortForwardStats
+        let port_forward_stats = PortForwardStats {
+            total: webshare_stats.total,
+            active: webshare_stats.active,
+            errors: webshare_stats.errors,
+            stopped: webshare_stats.stopped,
+            total_connections: 0, // Not tracked in old WebShareStats
+            total_bytes_transferred: 0, // Not tracked in old WebShareStats
         };
+
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::System)
+            .build(StructuredPayload::System(SystemMessage::StatsResponse {
+                terminal_stats,
+                port_forward_stats,
+                node_id: self.endpoint.node_id().to_string(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2300,16 +2571,15 @@ impl P2PNetwork {
             "Creating TCP forward from port {} to remote port {}",
             local_port, remote_port
         );
-        let message = NetworkMessage::TcpForwardCreate {
-            from: self.endpoint.node_id(),
-            session_id: session_id.to_string(),
+        let service_id = format!("tcp_{}", local_port);
+        let message = MessageFactory::create_port_forward(
+            self.endpoint.node_id(),
+            service_id,
             local_port,
-            remote_port,
+            Some(remote_port),
+            PortForwardType::Tcp,
             service_name,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2322,14 +2592,16 @@ impl P2PNetwork {
             "Notifying TCP forward connected for remote port {}",
             remote_port
         );
-        let message = NetworkMessage::TcpForwardConnected {
-            from: self.endpoint.node_id(),
-            session_id: session_id.to_string(),
-            remote_port,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let service_id = format!("tcp_{}", remote_port);
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Connected {
+                service_id,
+                assigned_remote_port: remote_port,
+                access_url: None,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2344,15 +2616,15 @@ impl P2PNetwork {
             remote_port,
             data.len()
         );
-        let message = NetworkMessage::TcpForwardData {
-            from: self.endpoint.node_id(),
-            session_id: session_id.to_string(),
-            remote_port,
-            data,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let service_id = format!("tcp_{}", remote_port);
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Data {
+                service_id,
+                data,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2361,14 +2633,15 @@ impl P2PNetwork {
             "Notifying TCP forward stopped for remote port {}",
             remote_port
         );
-        let message = NetworkMessage::TcpForwardStopped {
-            from: self.endpoint.node_id(),
-            session_id: session_id.to_string(),
-            remote_port,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let service_id = format!("tcp_{}", remote_port);
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::PortForward)
+            .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                service_id,
+                reason: Some("TCP forward stopped".to_string()),
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2386,16 +2659,12 @@ impl P2PNetwork {
             file_name, terminal_id
         );
         let file_size = file_data.len() as u64;
-        let message = NetworkMessage::FileTransferStart {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            file_name,
+        let message = MessageFactory::file_transfer_start(
+            self.endpoint.node_id(),
+            terminal_id.clone(),
+            file_name.clone(),
             file_size,
-            file_data,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        );
         self.send_message(session_id, message).await
     }
 
@@ -2411,16 +2680,16 @@ impl P2PNetwork {
             "Sending file transfer progress for {} to terminal {} ({}/{})",
             file_name, terminal_id, bytes_transferred, total_bytes
         );
-        let message = NetworkMessage::FileTransferProgress {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            file_name,
-            bytes_transferred,
-            total_bytes,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::FileTransfer)
+            .build(StructuredPayload::FileTransfer(FileTransferMessage::Progress {
+                terminal_id,
+                file_name,
+                bytes_transferred,
+                total_bytes,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2435,15 +2704,16 @@ impl P2PNetwork {
             "Sending file transfer complete for {} to terminal {} (saved to {})",
             file_name, terminal_id, file_path
         );
-        let message = NetworkMessage::FileTransferComplete {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            file_name,
-            file_path,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::FileTransfer)
+            .build(StructuredPayload::FileTransfer(FileTransferMessage::Complete {
+                terminal_id,
+                file_name,
+                file_path,
+                file_hash: None,
+            }));
         self.send_message(session_id, message).await
     }
 
@@ -2458,24 +2728,25 @@ impl P2PNetwork {
             "Sending file transfer error for {} to terminal {}: {}",
             file_name, terminal_id, error_message
         );
-        let message = NetworkMessage::FileTransferError {
-            from: self.endpoint.node_id(),
-            terminal_id,
-            file_name,
-            error_message,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
+        let message = MessageBuilder::new()
+            .from_node(self.endpoint.node_id())
+            .for_session(session_id.to_string())
+            .with_domain(MessageDomain::FileTransfer)
+            .build(StructuredPayload::FileTransfer(FileTransferMessage::Error {
+                terminal_id,
+                file_name,
+                error_message,
+                error_code: None,
+            }));
         self.send_message(session_id, message).await
     }
 
     /// Get a receiver for all network messages (for CLI message handlers)
     pub async fn get_message_receiver(&self) -> Result<mpsc::UnboundedReceiver<NetworkMessage>> {
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (_sender, receiver) = mpsc::unbounded_channel();
 
         // Create a new message receiver task that monitors all active connections
-        let connections = self.active_connections.clone();
+        let _connections = self.active_connections.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));

@@ -3,15 +3,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
-use base64::Engine;
 use tauri::Manager;
-use tauri::{Emitter, Event, Listener, State};
+use tauri::{Emitter, State};
 use tokio::sync::{RwLock, mpsc};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-use riterm_shared::{EventType, NodeTicket, P2PNetwork, TerminalEvent, p2p::NetworkMessage};
+use riterm_shared::{EventType, NodeTicket, P2PNetwork, TerminalEvent, p2p::*};
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
 const MAX_CONCURRENT_SESSIONS: usize = 50;
@@ -178,6 +177,7 @@ pub struct AppState {
     network: RwLock<Option<P2PNetwork>>,
     cleanup_token: RwLock<Option<CancellationToken>>,
     tcp_clients: RwLock<HashMap<String, Arc<riterm_shared::TcpForwardClient>>>,
+    message_router: Arc<MessageRouter>,
 }
 
 #[derive(Clone)]
@@ -276,7 +276,7 @@ async fn initialize_network_with_relay(
         .await
         .map_err(|e| format!("Failed to initialize P2P network: {}", e))?;
 
-    let node_id = network.get_node_id().await;
+    let node_id = network.get_node_id().await.to_string();
 
     let mut network_guard = state.network.write().await;
     *network_guard = Some(network);
@@ -443,6 +443,20 @@ async fn connect_to_peer(
 
                                 let structured_event_name = format!("structured-event-{}", session_id_clone_events);
                                 let _ = app_handle_clone.emit(&structured_event_name, &structured_event);
+                            }
+
+                            // Route NetworkMessage through message router if available
+                            // This will handle both structured and legacy messages
+                            if let Some(_network) = &*app_handle_clone.state::<AppState>().network.read().await {
+                                // Get the message router from app state
+                                if let Some(state_guard) = app_handle_clone.try_state::<AppState>() {
+                                    let _message_router = &state_guard.message_router;
+
+                                    // Create a temporary network message for routing (if we have the data)
+                                    // This is a simplified approach - in practice, we'd need to extract
+                                    // the actual NetworkMessage from the TerminalEvent
+                                    // For now, we'll emit the event as before
+                                }
                             }
 
                             let event_name = format!("terminal-event-{}", session_id_clone_events);
@@ -702,7 +716,7 @@ async fn get_node_info(state: State<'_, AppState>) -> Result<String, String> {
             None => return Err("Network not initialized".to_string()),
         }
     };
-    Ok(network.get_node_id().await)
+    Ok(network.get_node_id().await.to_string())
 }
 
 #[tauri::command]
@@ -745,7 +759,7 @@ async fn create_terminal(
     request: TerminalCreateRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -761,21 +775,20 @@ async fn create_terminal(
         }
     };
 
+    // Create new structured terminal create message
+    let terminal_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::Terminal)
+        .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Create {
+            name: request.name,
+            shell_path: request.shell_path,
+            working_dir: request.working_dir,
+            size: request.size,
+        }));
+
     network
-        .send_message(
-            &request.session_id,
-            NetworkMessage::TerminalCreate {
-                from: network.local_node_id(),
-                name: request.name,
-                shell_path: request.shell_path,
-                working_dir: request.working_dir,
-                size: request.size,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&request.session_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to create terminal: {}", e))?;
 
@@ -787,7 +800,7 @@ async fn stop_terminal(
     request: TerminalStopRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -803,18 +816,17 @@ async fn stop_terminal(
         }
     };
 
+    // Create new structured terminal stop message
+    let terminal_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::Terminal)
+        .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Stop {
+            terminal_id: request.terminal_id,
+        }));
+
     network
-        .send_message(
-            &request.session_id,
-            NetworkMessage::TerminalStop {
-                from: network.local_node_id(),
-                terminal_id: request.terminal_id,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&request.session_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to stop terminal: {}", e))?;
 
@@ -823,7 +835,7 @@ async fn stop_terminal(
 
 #[tauri::command]
 async fn list_terminals(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&session_id)
@@ -839,17 +851,15 @@ async fn list_terminals(session_id: String, state: State<'_, AppState>) -> Resul
         }
     };
 
+    // Create new structured terminal list request message
+    let terminal_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(session_id.clone())
+        .with_domain(MessageDomain::Terminal)
+        .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::ListRequest));
+
     network
-        .send_message(
-            &session_id,
-            NetworkMessage::TerminalListRequest {
-                from: network.local_node_id(),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&session_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to list terminals: {}", e))?;
 
@@ -861,7 +871,7 @@ async fn send_terminal_input_to_terminal(
     request: TerminalInputRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -890,7 +900,7 @@ async fn resize_terminal(
     request: TerminalResizeRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -926,7 +936,7 @@ async fn create_webshare(
     request: WebShareCreateRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -942,21 +952,19 @@ async fn create_webshare(
         }
     };
 
+    // Create unified port forwarding message for WebShare (which is now a type of port forwarding)
+    let service_id = format!("webshare_{}", request.public_port.unwrap_or(request.local_port));
+    let port_forward_message = MessageFactory::create_web_service(
+        network.local_node_id(),
+        service_id,
+        request.local_port,
+        request.public_port,
+        request.service_name,
+        request.terminal_id,
+    );
+
     network
-        .send_message(
-            &request.session_id,
-            NetworkMessage::WebShareCreate {
-                from: network.local_node_id(),
-                local_port: request.local_port,
-                public_port: request.public_port,
-                service_name: request.service_name,
-                terminal_id: request.terminal_id,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&request.session_id, port_forward_message)
         .await
         .map_err(|e| format!("Failed to create webshare: {}", e))?;
 
@@ -968,7 +976,7 @@ async fn stop_webshare(
     request: WebShareStopRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -984,18 +992,19 @@ async fn stop_webshare(
         }
     };
 
+    // Create unified port forwarding stop message for WebShare
+    let service_id = format!("webshare_{}", request.public_port);
+    let port_forward_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::PortForward)
+        .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+            service_id,
+            reason: Some("WebShare stopped by user".to_string()),
+        }));
+
     network
-        .send_message(
-            &request.session_id,
-            NetworkMessage::WebShareStop {
-                from: network.local_node_id(),
-                public_port: request.public_port,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&request.session_id, port_forward_message)
         .await
         .map_err(|e| format!("Failed to stop webshare: {}", e))?;
 
@@ -1004,7 +1013,7 @@ async fn stop_webshare(
 
 #[tauri::command]
 async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&session_id)
@@ -1020,17 +1029,15 @@ async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Resul
         }
     };
 
+    // Create unified port forwarding list request message
+    let port_forward_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(session_id.clone())
+        .with_domain(MessageDomain::PortForward)
+        .build(StructuredPayload::PortForward(PortForwardMessage::ListRequest));
+
     network
-        .send_message(
-            &session_id,
-            NetworkMessage::WebShareListRequest {
-                from: network.local_node_id(),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&session_id, port_forward_message)
         .await
         .map_err(|e| format!("Failed to list webshares: {}", e))?;
 
@@ -1039,7 +1046,7 @@ async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Resul
 
 #[tauri::command]
 async fn get_system_stats(request: StatsRequest, state: State<'_, AppState>) -> Result<(), String> {
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&request.session_id)
@@ -1055,17 +1062,23 @@ async fn get_system_stats(request: StatsRequest, state: State<'_, AppState>) -> 
         }
     };
 
+    // Create new structured system stats request message
+    let _system_message = MessageFactory::system_error(
+        network.local_node_id(),
+        SystemErrorCode::InternalError,
+        "This should be a StatsRequest, but we need to implement it".to_string(),
+        None,
+    );
+
+    // Create new structured system stats request message
+    let system_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::System)
+        .build(StructuredPayload::System(SystemMessage::StatsRequest));
+
     network
-        .send_message(
-            &request.session_id,
-            NetworkMessage::StatsRequest {
-                from: network.local_node_id(),
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&request.session_id, system_message)
         .await
         .map_err(|e| format!("Failed to get system stats: {}", e))?;
 
@@ -1089,7 +1102,7 @@ async fn connect_to_terminal(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     // This command tells the remote CLI that we want to connect to a specific terminal
-    let session_sender = {
+    let _session_sender = {
         let sessions = state.sessions.read().await;
         sessions
             .get(&session_id)
@@ -1107,21 +1120,20 @@ async fn connect_to_terminal(
 
     // Send a directed message to connect to the specific terminal
     // This is a placeholder - the actual implementation depends on how the CLI handles terminal selection
-    let connect_message = format!("CONNECT_TO_TERMINAL:{}", terminal_id);
+    let _connect_message = format!("CONNECT_TO_TERMINAL:{}", terminal_id);
+
+    // Create a terminal input message to connect to specific terminal
+    let terminal_message = MessageBuilder::new()
+        .from_node(network.local_node_id())
+        .for_session(session_id.clone())
+        .with_domain(MessageDomain::Terminal)
+        .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Input {
+            terminal_id: terminal_id.clone(),
+            data: format!("CONNECT_TO_TERMINAL:{}", terminal_id),
+        }));
 
     network
-        .send_message(
-            &session_id,
-            NetworkMessage::DirectedMessage {
-                from: network.local_node_id(),
-                to: network.local_node_id(),
-                data: connect_message,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            },
-        )
+        .send_message(&session_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to connect to terminal: {}", e))?;
 
@@ -1525,7 +1537,364 @@ pub fn run() {
             send_file_to_terminal,
             send_file_data_to_terminal
         ])
-        .setup(|_app| Ok(()))
+        .setup(|app| {
+            // Setup message handlers
+            let app_handle = app.handle().clone();
+
+            // Register message handlers in background task
+            let terminal_handler = Arc::new(AppTerminalMessageHandler::new(app_handle.clone()));
+            let app_handle1 = app_handle.clone();
+            tokio::spawn(async move {
+                // Get the message router from the app handle state
+                if let Some(state) = app_handle1.try_state::<AppState>() {
+                    state.message_router.register_handler(terminal_handler).await;
+                }
+            });
+
+            let port_forward_handler = Arc::new(AppPortForwardMessageHandler::new(app_handle.clone()));
+            let app_handle2 = app_handle.clone();
+            tokio::spawn(async move {
+                // Get the message router from the app handle state
+                if let Some(state) = app_handle2.try_state::<AppState>() {
+                    state.message_router.register_handler(port_forward_handler).await;
+                }
+            });
+
+            let file_transfer_handler = Arc::new(AppFileTransferMessageHandler::new(app_handle.clone()));
+            let app_handle3 = app_handle.clone();
+            tokio::spawn(async move {
+                // Get the message router from the app handle state
+                if let Some(state) = app_handle3.try_state::<AppState>() {
+                    state.message_router.register_handler(file_transfer_handler).await;
+                }
+            });
+
+            let system_handler = Arc::new(AppSystemMessageHandler::new(app_handle.clone()));
+            let app_handle4 = app_handle.clone();
+            tokio::spawn(async move {
+                // Get the message router from the app handle state
+                if let Some(state) = app_handle4.try_state::<AppState>() {
+                    state.message_router.register_handler(system_handler).await;
+                }
+            });
+
+            info!("✅ App message handlers registration initiated");
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+// === App Message Handlers ===
+
+/// App Terminal Message Handler
+pub struct AppTerminalMessageHandler {
+    app_handle: tauri::AppHandle,
+}
+
+impl AppTerminalMessageHandler {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
+    }
+}
+
+impl MessageHandler for AppTerminalMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::Output {
+                            terminal_id,
+                            data,
+                        }) => {
+                            info!("Received terminal output from structured message: {} -> {}", terminal_id, data);
+                            // Emit to frontend
+                            let _ = self.app_handle.emit("terminal-output", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "data": data
+                            }));
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::StatusUpdate {
+                            terminal_id,
+                            status,
+                        }) => {
+                            info!("Terminal status update: {} -> {:?}", terminal_id, status);
+                            let _ = self.app_handle.emit("terminal-status-update", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "status": status
+                            }));
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::DirectoryChanged {
+                            terminal_id,
+                            new_dir,
+                        }) => {
+                            info!("Terminal directory changed: {} -> {}", terminal_id, new_dir);
+                            let _ = self.app_handle.emit("terminal-directory-changed", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "new_dir": new_dir
+                            }));
+                        }
+                        StructuredPayload::TerminalManagement(TerminalManagementMessage::ListResponse {
+                            terminals,
+                        }) => {
+                            info!("Received terminal list: {} terminals", terminals.len());
+                            let _ = self.app_handle.emit("terminal-list-response", serde_json::json!({
+                                "terminals": terminals
+                            }));
+                        }
+                        _ => {
+                            debug!("Ignoring non-terminal-management message in terminal handler");
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Received non-structured message in terminal handler");
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::Terminal
+    }
+}
+
+/// App Port Forward Message Handler (unified TCP + WebShare)
+pub struct AppPortForwardMessageHandler {
+    app_handle: tauri::AppHandle,
+}
+
+impl AppPortForwardMessageHandler {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
+    }
+}
+
+impl MessageHandler for AppPortForwardMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + '_>> {
+        let app_handle = self.app_handle.clone();
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::PortForward(PortForwardMessage::Connected {
+                            service_id,
+                            assigned_remote_port,
+                            access_url,
+                        }) => {
+                            info!("Port forwarding service {} connected on port {}", service_id, assigned_remote_port);
+                            let _ = app_handle.emit("port-forward-connected", serde_json::json!({
+                                "service_id": service_id,
+                                "assigned_remote_port": assigned_remote_port,
+                                "access_url": access_url
+                            }));
+                        }
+                        StructuredPayload::PortForward(PortForwardMessage::StatusUpdate {
+                            service_id,
+                            status,
+                        }) => {
+                            info!("Port forwarding service {} status: {:?}", service_id, status);
+                            let _ = app_handle.emit("port-forward-status-update", serde_json::json!({
+                                "service_id": service_id,
+                                "status": status
+                            }));
+                        }
+                        StructuredPayload::PortForward(PortForwardMessage::Stopped {
+                            service_id,
+                            reason,
+                        }) => {
+                            info!("Port forwarding service {} stopped", service_id);
+                            let _ = app_handle.emit("port-forward-stopped", serde_json::json!({
+                                "service_id": service_id,
+                                "reason": reason
+                            }));
+                        }
+                        StructuredPayload::PortForward(PortForwardMessage::ListResponse { services }) => {
+                            info!("Received port forwarding services list: {} services", services.len());
+                            let _ = app_handle.emit("port-forward-list-response", serde_json::json!({
+                                "services": services
+                            }));
+                        }
+                        _ => {
+                            debug!("Ignoring port forward message type in App handler");
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Received non-structured message in port forward handler");
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::PortForward
+    }
+}
+
+/// App File Transfer Message Handler
+pub struct AppFileTransferMessageHandler {
+    app_handle: tauri::AppHandle,
+}
+
+impl AppFileTransferMessageHandler {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
+    }
+}
+
+impl MessageHandler for AppFileTransferMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + '_>> {
+        let app_handle = self.app_handle.clone();
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::FileTransfer(FileTransferMessage::Start {
+                            terminal_id,
+                            file_name,
+                            file_size,
+                            chunk_count,
+                            mime_type,
+                        }) => {
+                            info!("File transfer started: {} ({} bytes) for terminal {}", file_name, file_size, terminal_id);
+                            let _ = app_handle.emit("file-transfer-start", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "file_name": file_name,
+                                "file_size": file_size,
+                                "chunk_count": chunk_count,
+                                "mime_type": mime_type
+                            }));
+                        }
+                        StructuredPayload::FileTransfer(FileTransferMessage::Progress {
+                            terminal_id,
+                            file_name,
+                            bytes_transferred,
+                            total_bytes,
+                        }) => {
+                            let progress = if total_bytes > 0 {
+                                (bytes_transferred * 100) / total_bytes
+                            } else {
+                                0
+                            };
+                            info!("File transfer progress: {} - {}% ({}/{})", file_name, progress, bytes_transferred, total_bytes);
+                            let _ = app_handle.emit("file-transfer-progress", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "file_name": file_name,
+                                "bytes_transferred": bytes_transferred,
+                                "total_bytes": total_bytes,
+                                "progress": progress
+                            }));
+                        }
+                        StructuredPayload::FileTransfer(FileTransferMessage::Complete {
+                            terminal_id,
+                            file_name,
+                            file_path,
+                            file_hash,
+                        }) => {
+                            info!("File transfer completed: {} -> {}", file_name, file_path);
+                            let _ = app_handle.emit("file-transfer-complete", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "file_name": file_name,
+                                "file_path": file_path,
+                                "file_hash": file_hash
+                            }));
+                        }
+                        StructuredPayload::FileTransfer(FileTransferMessage::Error {
+                            terminal_id,
+                            file_name,
+                            error_message,
+                            error_code,
+                        }) => {
+                            error!("File transfer error: {} - {} (code: {:?})", file_name, error_message, error_code);
+                            let _ = app_handle.emit("file-transfer-error", serde_json::json!({
+                                "terminal_id": terminal_id,
+                                "file_name": file_name,
+                                "error_message": error_message,
+                                "error_code": error_code
+                            }));
+                        }
+                        _ => {
+                            debug!("Ignoring file transfer message type in App handler");
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Received non-structured message in file transfer handler");
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::FileTransfer
+    }
+}
+
+/// App System Message Handler
+pub struct AppSystemMessageHandler {
+    app_handle: tauri::AppHandle,
+}
+
+impl AppSystemMessageHandler {
+    pub fn new(app_handle: tauri::AppHandle) -> Self {
+        Self { app_handle }
+    }
+}
+
+impl MessageHandler for AppSystemMessageHandler {
+    fn handle_message(&self, message: NetworkMessage) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<()>> + Send + '_>> {
+        let app_handle = self.app_handle.clone();
+        Box::pin(async move {
+            match message {
+                NetworkMessage::Structured { payload, .. } => {
+                    match payload {
+                        StructuredPayload::System(SystemMessage::StatsResponse {
+                            terminal_stats,
+                            port_forward_stats,
+                            node_id,
+                            timestamp: _,
+                        }) => {
+                            info!("Received system stats from node: {}", node_id);
+                            let _ = app_handle.emit("system-stats-response", serde_json::json!({
+                                "terminal_stats": terminal_stats,
+                                "port_forward_stats": port_forward_stats,
+                                "node_id": node_id
+                            }));
+                        }
+                        StructuredPayload::System(SystemMessage::Ping { sequence }) => {
+                            info!("Received ping: {}", sequence);
+                            // Send pong response
+                            let _ = app_handle.emit("system-ping", serde_json::json!({
+                                "sequence": sequence
+                            }));
+                        }
+                        StructuredPayload::System(SystemMessage::Error { code, message, details }) => {
+                            error!("System error: {:?} - {} (details: {:?})", code, message, details);
+                            let _ = app_handle.emit("system-error", serde_json::json!({
+                                "code": code,
+                                "message": message,
+                                "details": details
+                            }));
+                        }
+                        _ => {
+                            debug!("Ignoring system message type in App handler");
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Received non-structured message in system handler");
+                }
+            }
+            Ok(())
+        })
+    }
+
+    fn domain(&self) -> MessageDomain {
+        MessageDomain::System
+    }
 }

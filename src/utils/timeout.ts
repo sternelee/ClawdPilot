@@ -237,12 +237,10 @@ export class ConnectionManager {
   }
 
   private async createConnectionPromise(ticket: string): Promise<string> {
-    // 导入 invoke 函数（在实际使用时）
-    const { invoke } = await import("@tauri-apps/api/core");
+    // Use the enhanced connection API
+    const { ConnectionApi } = await import("./api");
 
-    return invoke<string>("connect_to_peer", {
-      sessionTicket: ticket,
-    });
+    return ConnectionApi.connectToPeer(ticket);
   }
 
   abort(): void {

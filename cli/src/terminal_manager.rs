@@ -5,11 +5,11 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::terminal_runner::{TerminalCommand, TerminalRunner};
 use riterm_shared::p2p::{
-    TerminalInfo, TerminalStats, TerminalStatus, WebShareInfo, WebShareStats,
+    TerminalInfo, TerminalStats, TerminalStatus,
 };
 
 /// Simplified terminal manager inspired by sshx

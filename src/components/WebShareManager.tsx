@@ -1,14 +1,14 @@
-import { createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { createSignal, createEffect, onMount, For, Show, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { createMessageHandler, extractPortForwardInfo } from "../utils/messageHandler";
+import { createApiClient, createWebShareAdapter, ApiValidators } from "../utils/api";
+import { PortForwardInfo, PortForwardEvent, MessageDomain, PortForwardType } from "../types/messages";
 
-interface WebShare {
-  local_port: number;
-  public_port: number;
-  service_name: string;
-  terminal_id?: string;
-  status: "Starting" | "Active" | "Error" | "Stopped";
-  created_at: number;
+// Use the new PortForwardInfo type for WebShare (WebShare is now HTTP PortForward)
+interface WebShare extends Omit<PortForwardInfo, "service_type" | "service_id"> {
+  public_port: number; // Map remote_port to public_port for legacy compatibility
+  service_id: string; // Keep for internal use
 }
 
 interface CreateWebShareRequest {
@@ -40,16 +40,39 @@ export function WebShareManager(props: {
   const [newServiceName, setNewServiceName] = createSignal("");
   const [newTerminalId, setNewTerminalId] = createSignal("");
 
+  // Create API client and message handler
+  let apiClient: ReturnType<typeof createApiClient>;
+  let webShareAdapter: ReturnType<typeof createWebShareAdapter>;
+  let messageHandler: ReturnType<typeof createMessageHandler>;
+
   // Load WebShares on mount
   onMount(() => {
+    apiClient = createApiClient(props.sessionId);
+    webShareAdapter = createWebShareAdapter(props.sessionId);
+    messageHandler = createMessageHandler(props.sessionId, {
+      onPortForwardEvent: handlePortForwardEvent,
+      onError: (error) => console.error("WebShare manager message handler error:", error)
+    });
+
     loadWebShares();
     setupEventListeners();
+  });
+
+  // Cleanup on unmount
+  onCleanup(async () => {
+    if (messageHandler) {
+      await messageHandler.stopListening();
+    }
   });
 
   const loadWebShares = async () => {
     setLoading(true);
     try {
-      await invoke("list_webshares", { sessionId: props.sessionId });
+      const response = await apiClient.listPortForwards();
+      if (!response.success) {
+        throw new Error(response.error || "Failed to list web shares");
+      }
+      // WebShare list will be received via events (filtered for HTTP type)
     } catch (error) {
       console.error("Failed to load webshares:", error);
     } finally {
@@ -58,42 +81,118 @@ export function WebShareManager(props: {
   };
 
   const setupEventListeners = async () => {
-    // Listen for structured WebShare events
-    await listen(`structured-event-${props.sessionId}`, (event) => {
-      const structuredEvent = event.payload;
-      console.log("Received structured WebShare event:", structuredEvent);
+    if (!messageHandler) {
+      console.error("Message handler not initialized");
+      return;
+    }
 
-      if (structuredEvent.type === "webshare_list_response") {
-        setWebshares(structuredEvent.data.webshares || []);
-      } else if (structuredEvent.type === "webshare_status_update") {
+    try {
+      await messageHandler.startListening();
+    } catch (error) {
+      console.error("Failed to start message handler:", error);
+    }
+  };
+
+  const handlePortForwardEvent = (event: PortForwardEvent) => {
+    console.log("Port forward event:", event);
+
+    // Only handle HTTP type events for WebShare
+    if (event.data.service_type && event.data.service_type !== PortForwardType.Http) {
+      return;
+    }
+
+    const portForwardInfo = extractPortForwardInfo(event);
+    if (!portForwardInfo) {
+      return;
+    }
+
+    // Convert PortForwardInfo to WebShare interface
+    const webShare: WebShare = {
+      ...portForwardInfo,
+      public_port: portForwardInfo.remote_port,
+      service_id: event.service_id,
+      service_type: undefined, // Remove service_type for legacy compatibility
+    };
+
+    switch (event.type) {
+      case "created":
+        setWebshares(prev => [...prev, webShare]);
+        break;
+
+      case "connected":
         setWebshares(prev =>
-          prev.map(webshare =>
-            webshare.public_port === parseInt(structuredEvent.public_port)
-              ? { ...webshare, status: structuredEvent.status }
-              : webshare
+          prev.map(ws =>
+            ws.service_id === event.service_id
+              ? { ...ws, status: "Active", access_url: portForwardInfo.access_url }
+              : ws
           )
         );
-      }
-    });
+        break;
+
+      case "status_update":
+        setWebshares(prev =>
+          prev.map(ws =>
+            ws.service_id === event.service_id
+              ? { ...ws, status: portForwardInfo.status as any }
+              : ws
+          )
+        );
+        break;
+
+      case "stopped":
+        setWebshares(prev => prev.filter(ws => ws.service_id !== event.service_id));
+        break;
+
+      case "list_response":
+        // Filter for HTTP services and convert to WebShare format
+        const httpServices = (event.data.services || [])
+          .filter((service: PortForwardInfo) => service.service_type === PortForwardType.Http)
+          .map((service: PortForwardInfo) => ({
+            ...service,
+            public_port: service.remote_port,
+            service_id: service.service_id,
+            service_type: undefined, // Remove service_type for legacy compatibility
+          }));
+        setWebshares(httpServices);
+        break;
+
+      default:
+        console.log(`Unhandled port forward event type: ${event.type}`);
+    }
   };
 
   const createWebShare = async () => {
     setCreating(true);
     try {
-      const request: CreateWebShareRequest = {
+      const request = {
         session_id: props.sessionId,
         local_port: newLocalPort(),
-        public_port: newPublicPort() || undefined,
+        remote_port: newPublicPort() || undefined,
+        service_type: PortForwardType.Http,
         service_name: newServiceName() || `Service on port ${newLocalPort()}`,
         terminal_id: newTerminalId() || undefined,
+        metadata: {
+          created_by: "webshare_manager"
+        }
       };
 
-      await invoke("create_webshare", { request });
+      // Validate request
+      const errors = ApiValidators.validateCreatePortForwardRequest(request);
+      if (errors.length > 0) {
+        throw new Error(`Validation errors: ${errors.join(", ")}`);
+      }
+
+      const response = await apiClient.createPortForward(request);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to create web share");
+      }
+
       setShowCreateForm(false);
       resetCreateForm();
-      loadWebShares(); // Refresh the list
+      // WebShare will be added via events, no need to refresh list
     } catch (error) {
       console.error("Failed to create webshare:", error);
+      // TODO: Show error to user
     } finally {
       setCreating(false);
     }
@@ -101,15 +200,25 @@ export function WebShareManager(props: {
 
   const stopWebShare = async (publicPort: number) => {
     try {
-      const request: WebShareStopRequest = {
+      // Find the service_id for the given public_port
+      const webshare = webshares().find(ws => ws.public_port === publicPort);
+      if (!webshare) {
+        throw new Error("WebShare not found");
+      }
+
+      const request = {
         session_id: props.sessionId,
-        public_port: publicPort,
+        service_id: webshare.service_id,
       };
 
-      await invoke("stop_webshare", { request });
-      loadWebShares(); // Refresh the list
+      const response = await apiClient.stopPortForward(request);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to stop web share");
+      }
+      // WebShare will be removed via events, no need to refresh list
     } catch (error) {
       console.error("Failed to stop webshare:", error);
+      // TODO: Show error to user
     }
   };
 
