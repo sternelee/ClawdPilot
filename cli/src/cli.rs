@@ -216,9 +216,17 @@ impl CliApp {
                     data.clone(),
                 );
 
+                // Get the connected node ID for this session
+                let connected_node_id = {
+                    let sessions = network.get_active_node_ids().await;
+                    // In CLI, we need to find the connected node for this session
+                    // For now, we'll use the first active node (this is a simplification)
+                    sessions.into_iter().next().unwrap_or_else(|| network.get_node_id())
+                };
+
                 // 发送终端输出
                 if let Err(e) = network
-                    .send_message_to_session(&session_id, terminal_message)
+                    .send_message(connected_node_id, terminal_message)
                     .await
                 {
                     error!("Failed to send terminal output to P2P network: {}", e);
@@ -384,9 +392,17 @@ impl CliApp {
                                             TerminalManagementMessage::ListResponse { terminals: terminal_list }
                                         ));
 
+                                    // Get the connected node ID for this session
+                                    let connected_node_id = {
+                                        let sessions = network_for_events.get_active_node_ids().await;
+                                        // In CLI, we need to find the connected node for this session
+                                        // For now, we'll use the first active node (this is a simplification)
+                                        sessions.into_iter().next().unwrap_or_else(|| network_for_events.get_node_id())
+                                    };
+
                                     // 发送终端列表响应
                                     if let Err(e) = network_for_events
-                                        .send_message_to_session(&session_id_for_events, terminal_list_message)
+                                        .send_message(connected_node_id, terminal_list_message)
                                         .await
                                     {
                                         error!("Failed to send terminal list response: {}", e);

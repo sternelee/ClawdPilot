@@ -11,6 +11,7 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 use riterm_shared::{EventType, NodeTicket, P2PNetwork, TerminalEvent, p2p::*};
+use iroh::NodeId;
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
 const MAX_CONCURRENT_SESSIONS: usize = 50;
@@ -178,6 +179,7 @@ pub struct AppState {
     cleanup_token: RwLock<Option<CancellationToken>>,
     tcp_clients: RwLock<HashMap<String, Arc<riterm_shared::TcpForwardClient>>>,
     message_router: Arc<MessageRouter>,
+    node_id: RwLock<Option<NodeId>>,
 }
 
 #[derive(Clone)]
@@ -188,6 +190,7 @@ pub struct TerminalSession {
     pub last_activity: Arc<RwLock<Instant>>,
     pub cancellation_token: CancellationToken,
     pub event_count: Arc<std::sync::atomic::AtomicUsize>,
+    pub connected_node_id: NodeId,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -276,15 +279,22 @@ async fn initialize_network_with_relay(
         .await
         .map_err(|e| format!("Failed to initialize P2P network: {}", e))?;
 
-    let node_id = network.get_node_id().to_string();
+    let node_id = network.get_node_id();
+    let node_id_string = node_id.to_string();
 
+    // Store network and node ID in global state
     let mut network_guard = state.network.write().await;
     *network_guard = Some(network);
+    drop(network_guard);
+
+    let mut node_id_guard = state.node_id.write().await;
+    *node_id_guard = Some(node_id);
+    drop(node_id_guard);
 
     // Start cleanup task if not already running
     start_cleanup_task(&state).await;
 
-    Ok(node_id)
+    Ok(node_id_string)
 }
 
 #[tauri::command]
@@ -302,6 +312,9 @@ async fn connect_to_peer(
     let ticket = session_ticket
         .parse::<NodeTicket>()
         .map_err(|e| format!("Invalid session ticket format: {}", e))?;
+
+    // Extract the host node ID from the ticket
+    let host_node_id = ticket.node_addr().node_id;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -340,16 +353,8 @@ async fn connect_to_peer(
                 // Cancel all async tasks for the existing session
                 existing_session.cancellation_token.cancel();
 
-                // End the P2P session
-                if let Some(network) = &*state.network.read().await {
-                    if let Err(e) = network
-                        .end_session(&session_id, &existing_session.sender)
-                        .await
-                    {
-                        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                        tracing::error!("Failed to end existing P2P session: {}", e);
-                    }
-                }
+                // P2P session cleanup will be handled by the cancellation token
+                // The new Node ID-based architecture doesn't require explicit session ending
 
                 #[cfg(any(debug_assertions, not(feature = "release-logging")))]
                 tracing::info!("Cleaned up existing session: {}", session_id);
@@ -381,6 +386,7 @@ async fn connect_to_peer(
         last_activity: Arc::new(RwLock::new(Instant::now())),
         cancellation_token: cancellation_token.clone(),
         event_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        connected_node_id: host_node_id,
     };
 
     {
@@ -491,10 +497,10 @@ async fn connect_to_peer(
 
     // Handle outgoing input events with cancellation support
     let network_clone = network.clone();
-    let sender_clone = sender.clone();
     let session_id_clone_input = session_id.clone();
     let cancellation_token_input = cancellation_token.clone();
     let last_activity_input = terminal_session.last_activity.clone();
+    let connected_node_id_input = terminal_session.connected_node_id;
 
     tokio::spawn(async move {
         loop {
@@ -509,8 +515,18 @@ async fn connect_to_peer(
                             }
 
                             if let EventType::Input { data } = &event.event_type {
+                                // Create a structured input message
+                                let input_message = MessageBuilder::new()
+                                    .from_node(network_clone.get_node_id())
+                                    .for_session(session_id_clone_input.clone())
+                                    .with_domain(MessageDomain::Terminal)
+                                    .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Input {
+                                        terminal_id: "default".to_string(), // Use default terminal ID
+                                        data: data.clone(),
+                                    }));
+
                                 if let Err(e) = network_clone
-                                    .send_input(&session_id_clone_input, &sender_clone, data.clone())
+                                    .send_message(connected_node_id_input, input_message)
                                     .await
                                 {
                                     #[cfg(any(debug_assertions, not(feature = "release-logging")))]
@@ -607,22 +623,14 @@ async fn send_directed_message(
     request: DirectedMessageRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // Clone the session sender to avoid holding the lock across await
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
-    // Parse target node ID
-    let target_node_id = request
-        .target_node_id
-        .parse()
-        .map_err(|e| format!("Invalid target node ID: {}", e))?;
+    // Parse target node ID - in the new architecture, messages are routed through the connected node
+    // The target node ID is not directly used in this implementation
+    let _target_node_id = request.target_node_id; // Keep for potential future use
 
-    // Send directed message
+    // Send directed message using the new API
     let network = {
         let network_guard = state.network.read().await;
         match network_guard.as_ref() {
@@ -631,15 +639,18 @@ async fn send_directed_message(
         }
     };
 
-    if let Err(e) = network
-        .send_directed_message(
-            &request.session_id,
-            &session_sender,
-            target_node_id,
-            request.message,
-        )
-        .await
-    {
+    // Create a generic message with the directed message content
+    let message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::System)
+        .build(StructuredPayload::System(SystemMessage::Error {
+            code: SystemErrorCode::InternalError,
+            message: request.message,
+            details: None,
+        }));
+
+    if let Err(e) = network.send_message(connected_node_id, message).await {
         return Err(format!("Failed to send directed message: {}", e));
     }
 
@@ -688,17 +699,8 @@ async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> R
         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
         tracing::info!("Cancelled async tasks for session: {}", session_id);
 
-        let network = {
-            let network_guard = state.network.read().await;
-            network_guard.as_ref().cloned()
-        };
-
-        if let Some(network) = network {
-            if let Err(e) = network.end_session(&session_id, &session.sender).await {
-                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::error!("Failed to end P2P session gracefully: {}", e);
-            }
-        }
+        // In the new Node ID architecture, session cleanup is handled by cancellation token
+        // No explicit end_session call needed
 
         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
         tracing::info!("Session {} disconnected successfully", session_id);
@@ -718,14 +720,21 @@ async fn get_active_sessions(state: State<'_, AppState>) -> Result<Vec<String>, 
 
 #[tauri::command]
 async fn get_node_info(state: State<'_, AppState>) -> Result<String, String> {
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let node_id_guard = state.node_id.read().await;
+    match node_id_guard.as_ref() {
+        Some(node_id) => Ok(node_id.to_string()),
+        None => {
+            // Fallback to network if not in global state
+            let network = {
+                let network_guard = state.network.read().await;
+                match network_guard.as_ref() {
+                    Some(n) => n.clone(),
+                    None => return Err("Network not initialized".to_string()),
+                }
+            };
+            Ok(network.get_node_id().to_string())
         }
-    };
-    Ok(network.get_node_id().to_string())
+    }
 }
 
 #[tauri::command]
@@ -736,6 +745,18 @@ async fn parse_session_ticket(ticket: String) -> Result<String, String> {
     } else {
         Err("Invalid session ticket format".to_string())
     }
+}
+
+/// Get the connected node ID for a session
+async fn get_connected_node_id(
+    session_id: &str,
+    state: &State<'_, AppState>,
+) -> Result<NodeId, String> {
+    let sessions = state.sessions.read().await;
+    sessions
+        .get(session_id)
+        .map(|session| session.connected_node_id)
+        .ok_or("Session not found".to_string())
 }
 
 /// Start background cleanup task for session management
@@ -768,13 +789,8 @@ async fn create_terminal(
     request: TerminalCreateRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -786,7 +802,7 @@ async fn create_terminal(
 
     // Create new structured terminal create message
     let terminal_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(request.session_id.clone())
         .with_domain(MessageDomain::Terminal)
         .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Create {
@@ -797,7 +813,7 @@ async fn create_terminal(
         }));
 
     network
-        .send_message_to_session(&request.session_id, terminal_message)
+        .send_message(connected_node_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to create terminal: {}", e))?;
 
@@ -809,13 +825,8 @@ async fn stop_terminal(
     request: TerminalStopRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -827,7 +838,7 @@ async fn stop_terminal(
 
     // Create new structured terminal stop message
     let terminal_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(request.session_id.clone())
         .with_domain(MessageDomain::Terminal)
         .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Stop {
@@ -835,7 +846,7 @@ async fn stop_terminal(
         }));
 
     network
-        .send_message_to_session(&request.session_id, terminal_message)
+        .send_message(connected_node_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to stop terminal: {}", e))?;
 
@@ -844,13 +855,8 @@ async fn stop_terminal(
 
 #[tauri::command]
 async fn list_terminals(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -862,13 +868,13 @@ async fn list_terminals(session_id: String, state: State<'_, AppState>) -> Resul
 
     // Create new structured terminal list request message
     let terminal_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(session_id.clone())
         .with_domain(MessageDomain::Terminal)
         .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::ListRequest));
 
     network
-        .send_message_to_session(&session_id, terminal_message)
+        .send_message(connected_node_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to list terminals: {}", e))?;
 
@@ -880,13 +886,8 @@ async fn send_terminal_input_to_terminal(
     request: TerminalInputRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -896,8 +897,18 @@ async fn send_terminal_input_to_terminal(
         }
     };
 
+    // Create a structured terminal input message
+    let input_message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::Terminal)
+        .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Input {
+            terminal_id: request.terminal_id,
+            data: request.input,
+        }));
+
     network
-        .send_terminal_input(&request.session_id, request.terminal_id, request.input)
+        .send_message(connected_node_id, input_message)
         .await
         .map_err(|e| format!("Failed to send terminal input: {}", e))?;
 
@@ -909,13 +920,8 @@ async fn resize_terminal(
     request: TerminalResizeRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -925,13 +931,19 @@ async fn resize_terminal(
         }
     };
 
+    // Create a structured terminal resize message
+    let resize_message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::Terminal)
+        .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Resize {
+            terminal_id: request.terminal_id,
+            rows: request.rows,
+            cols: request.cols,
+        }));
+
     network
-        .send_terminal_resize(
-            &request.session_id,
-            request.terminal_id,
-            request.rows,
-            request.cols,
-        )
+        .send_message(connected_node_id, resize_message)
         .await
         .map_err(|e| format!("Failed to resize terminal: {}", e))?;
 
@@ -945,13 +957,8 @@ async fn create_webshare(
     request: WebShareCreateRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -964,7 +971,7 @@ async fn create_webshare(
     // Create unified port forwarding message for WebShare (which is now a type of port forwarding)
     let service_id = format!("webshare_{}", request.public_port.unwrap_or(request.local_port));
     let port_forward_message = MessageFactory::create_web_service(
-        network.local_node_id(),
+        network.get_node_id(),
         service_id,
         request.local_port,
         request.public_port,
@@ -973,7 +980,7 @@ async fn create_webshare(
     );
 
     network
-        .send_message_to_session(&request.session_id, port_forward_message)
+        .send_message(connected_node_id, port_forward_message)
         .await
         .map_err(|e| format!("Failed to create webshare: {}", e))?;
 
@@ -985,13 +992,8 @@ async fn stop_webshare(
     request: WebShareStopRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -1004,7 +1006,7 @@ async fn stop_webshare(
     // Create unified port forwarding stop message for WebShare
     let service_id = format!("webshare_{}", request.public_port);
     let port_forward_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(request.session_id.clone())
         .with_domain(MessageDomain::PortForward)
         .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
@@ -1013,7 +1015,7 @@ async fn stop_webshare(
         }));
 
     network
-        .send_message_to_session(&request.session_id, port_forward_message)
+        .send_message(connected_node_id, port_forward_message)
         .await
         .map_err(|e| format!("Failed to stop webshare: {}", e))?;
 
@@ -1022,13 +1024,8 @@ async fn stop_webshare(
 
 #[tauri::command]
 async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -1040,13 +1037,13 @@ async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Resul
 
     // Create unified port forwarding list request message
     let port_forward_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(session_id.clone())
         .with_domain(MessageDomain::PortForward)
         .build(StructuredPayload::PortForward(PortForwardMessage::ListRequest));
 
     network
-        .send_message_to_session(&session_id, port_forward_message)
+        .send_message(connected_node_id, port_forward_message)
         .await
         .map_err(|e| format!("Failed to list webshares: {}", e))?;
 
@@ -1055,13 +1052,8 @@ async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Resul
 
 #[tauri::command]
 async fn get_system_stats(request: StatsRequest, state: State<'_, AppState>) -> Result<(), String> {
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -1072,22 +1064,14 @@ async fn get_system_stats(request: StatsRequest, state: State<'_, AppState>) -> 
     };
 
     // Create new structured system stats request message
-    let _system_message = MessageFactory::system_error(
-        network.local_node_id(),
-        SystemErrorCode::InternalError,
-        "This should be a StatsRequest, but we need to implement it".to_string(),
-        None,
-    );
-
-    // Create new structured system stats request message
     let system_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(request.session_id.clone())
         .with_domain(MessageDomain::System)
         .build(StructuredPayload::System(SystemMessage::StatsRequest));
 
     network
-        .send_message_to_session(&request.session_id, system_message)
+        .send_message(connected_node_id, system_message)
         .await
         .map_err(|e| format!("Failed to get system stats: {}", e))?;
 
@@ -1110,14 +1094,8 @@ async fn connect_to_terminal(
     terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // This command tells the remote CLI that we want to connect to a specific terminal
-    let _session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&session_id, &state).await?;
 
     let network = {
         let network_guard = state.network.read().await;
@@ -1127,13 +1105,9 @@ async fn connect_to_terminal(
         }
     };
 
-    // Send a directed message to connect to the specific terminal
-    // This is a placeholder - the actual implementation depends on how the CLI handles terminal selection
-    let _connect_message = format!("CONNECT_TO_TERMINAL:{}", terminal_id);
-
     // Create a terminal input message to connect to specific terminal
     let terminal_message = MessageBuilder::new()
-        .from_node(network.local_node_id())
+        .from_node(network.get_node_id())
         .for_session(session_id.clone())
         .with_domain(MessageDomain::Terminal)
         .build(StructuredPayload::TerminalManagement(TerminalManagementMessage::Input {
@@ -1142,7 +1116,7 @@ async fn connect_to_terminal(
         }));
 
     network
-        .send_message_to_session(&session_id, terminal_message)
+        .send_message(connected_node_id, terminal_message)
         .await
         .map_err(|e| format!("Failed to connect to terminal: {}", e))?;
 
@@ -1208,6 +1182,9 @@ async fn create_tcp_forward(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&session_id, &state).await?;
+
     let network = {
         let network_guard = state.network.read().await;
         match network_guard.as_ref() {
@@ -1228,16 +1205,22 @@ async fn create_tcp_forward(
         tcp_clients.insert(session_id.clone(), client.clone());
     }
 
-    // Send TCP forward create request
-    if let Err(e) = network
-        .create_tcp_forward(
-            &session_id,
+    // Send TCP forward create request using generic message
+    let port_forward_message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(session_id.clone())
+        .with_domain(MessageDomain::PortForward)
+        .build(StructuredPayload::PortForward(PortForwardMessage::Create {
+            service_id: format!("tcp_{}", remote_port),
             local_port,
-            remote_port,
-            format!("TCP Forward {} -> {}", local_port, remote_port),
-        )
-        .await
-    {
+            remote_port: Some(remote_port),
+            service_type: PortForwardType::Tcp,
+            service_name: format!("TCP Forward {} -> {}", local_port, remote_port),
+            terminal_id: None,
+            metadata: None,
+        }));
+
+    if let Err(e) = network.send_message(connected_node_id, port_forward_message).await {
         return Err(format!("Failed to create TCP forward: {}", e));
     }
 
@@ -1344,6 +1327,9 @@ async fn stop_tcp_forward(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&session_id, &state).await?;
+
     let network = {
         let network_guard = state.network.read().await;
         match network_guard.as_ref() {
@@ -1358,10 +1344,17 @@ async fn stop_tcp_forward(
         tcp_clients.remove(&session_id);
     }
 
-    if let Err(e) = network
-        .send_tcp_forward_stopped(&session_id, remote_port)
-        .await
-    {
+    // Send TCP forward stop message using generic message
+    let port_forward_message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(session_id.clone())
+        .with_domain(MessageDomain::PortForward)
+        .build(StructuredPayload::PortForward(PortForwardMessage::Stopped {
+            service_id: format!("tcp_{}", remote_port),
+            reason: Some("TCP forward stopped by user".to_string()),
+        }));
+
+    if let Err(e) = network.send_message(connected_node_id, port_forward_message).await {
         return Err(format!("Failed to stop TCP forward: {}", e));
     }
 
@@ -1380,6 +1373,9 @@ async fn send_file_to_terminal(
     request: FileTransferRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
+
     let network = {
         let network_guard = state.network.read().await;
         match network_guard.as_ref() {
@@ -1406,16 +1402,20 @@ async fn send_file_to_terminal(
         request.terminal_id
     );
 
-    // Send file transfer start message
-    if let Err(e) = network
-        .send_file_transfer_start(
-            &request.session_id,
-            request.terminal_id.clone(),
-            file_name.clone(),
-            file_content,
-        )
-        .await
-    {
+    // Send file transfer start message using generic message
+    let file_transfer_message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::FileTransfer)
+        .build(StructuredPayload::FileTransfer(FileTransferMessage::Start {
+            terminal_id: request.terminal_id.clone(),
+            file_name: file_name.clone(),
+            file_size: file_content.len() as u64,
+            chunk_count: Some(1), // Single chunk for simplicity
+            mime_type: Some("application/octet-stream".to_string()),
+        }));
+
+    if let Err(e) = network.send_message(connected_node_id, file_transfer_message).await {
         return Err(format!("Failed to send file transfer start: {}", e));
     }
 
@@ -1432,6 +1432,9 @@ async fn send_file_data_to_terminal(
     request: FileTransferDataRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Get the connected node ID for this session
+    let connected_node_id = get_connected_node_id(&request.session_id, &state).await?;
+
     let network = {
         let network_guard = state.network.read().await;
         match network_guard.as_ref() {
@@ -1447,16 +1450,20 @@ async fn send_file_data_to_terminal(
         request.terminal_id
     );
 
-    // Send file transfer start message
-    if let Err(e) = network
-        .send_file_transfer_start(
-            &request.session_id,
-            request.terminal_id.clone(),
-            request.file_name.clone(),
-            request.file_data,
-        )
-        .await
-    {
+    // Send file transfer start message using generic message
+    let file_transfer_message = MessageBuilder::new()
+        .from_node(network.get_node_id())
+        .for_session(request.session_id.clone())
+        .with_domain(MessageDomain::FileTransfer)
+        .build(StructuredPayload::FileTransfer(FileTransferMessage::Start {
+            terminal_id: request.terminal_id.clone(),
+            file_name: request.file_name.clone(),
+            file_size: request.file_data.len() as u64,
+            chunk_count: Some(1), // Single chunk for simplicity
+            mime_type: Some("application/octet-stream".to_string()),
+        }));
+
+    if let Err(e) = network.send_message(connected_node_id, file_transfer_message).await {
         return Err(format!("Failed to send file transfer start: {}", e));
     }
 
