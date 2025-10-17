@@ -37,6 +37,16 @@ export function HomeView(props: HomeViewProps) {
   const deviceCapabilities = getDeviceCapabilities();
   const isMobile = deviceCapabilities.isMobile;
 
+  // Helper functions - moved to component scope
+  const formatLastActivity = (timestamp: number) => {
+    if (timestamp === 0) return "无活动";
+    const diff = Date.now() - timestamp;
+    if (diff < 1000) return "刚刚";
+    if (diff < 60000) return `${Math.floor(diff / 1000)}秒前`;
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
+    return `${Math.floor(diff / 3600000)}小时前`;
+  };
+
   const handleLogin = () => {
     props.onLogin(username(), password());
     setShowLoginModal(false);
@@ -178,15 +188,6 @@ export function HomeView(props: HomeViewProps) {
                     return `${Math.floor(diff / 3600000)} 小时前`;
                   return date.toLocaleDateString();
                 };
-
-  const formatLastActivity = (timestamp: number) => {
-    if (timestamp === 0) return "无活动";
-    const diff = Date.now() - timestamp;
-    if (diff < 1000) return "刚刚";
-    if (diff < 60000) return `${Math.floor(diff / 1000)}秒前`;
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`;
-    return `${Math.floor(diff / 3600000)}小时前`;
-  };
 
                 return (
                   <div class="flex items-center justify-between p-4 bg-base-200 rounded-lg hover:bg-base-300 transition-colors">
