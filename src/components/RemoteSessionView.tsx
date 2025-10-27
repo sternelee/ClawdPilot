@@ -390,7 +390,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         } catch (error) {
           console.error("Failed to parse legacy terminal output event:", error);
         }
-      });
+      }
+    });
   };
 
   // 组件挂载时初始化
@@ -713,7 +714,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 <div class="mt-2">加载中...</div>
               </div>
             ) : (
-              { renderTerminalList(false) }
+              renderTerminalList(false)
             )}
           </div>
         </Show>

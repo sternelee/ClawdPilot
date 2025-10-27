@@ -289,6 +289,7 @@ function App() {
               // terminalInstance.writeln("\r\n\r\n[Session Ended]");
               // handleDisconnect();
             }
+          }
         },
       );
 
