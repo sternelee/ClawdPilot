@@ -68,14 +68,7 @@ pub enum NetworkMessage {
         data: String,
         timestamp: u64,
     },
-    /// Terminal resize (for virtual terminals)
-    Resize {
-        from: EndpointId,
-        width: u16,
-        height: u16,
-        timestamp: u64,
-    },
-
+  
     // === Terminal Management (Real Terminals) ===
     /// Create a new local terminal request
     TerminalCreate {
@@ -340,9 +333,7 @@ pub enum EventType {
     Output,
     /// User input (for virtual terminals)
     Input,
-    /// Terminal resize (for virtual terminals)
-    Resize { width: u16, height: u16 },
-    /// Session started
+        /// Session started
     Start,
     /// Session ended
     End,
@@ -616,32 +607,7 @@ impl P2PNetwork {
         Ok(())
     }
 
-    pub async fn send_resize_event(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-        width: u16,
-        height: u16,
-    ) -> Result<()> {
-        debug!("Sending resize event");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for resize"))?;
-
-        let body = TerminalMessageBody::Resize {
-            from: self.endpoint.id(),
-            width,
-            height,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
+    
     pub async fn end_session(&self, session_id: &str, sender: &GossipSender) -> Result<()> {
         info!("Ending session: {}", session_id);
         let sessions = self.sessions.read().await;
@@ -805,21 +771,6 @@ impl P2PNetwork {
                     }
                     if session.event_sender.send(event).is_err() {
                         // warn!("Failed to broadcast input event");
-                    }
-                }
-                TerminalMessageBody::Resize {
-                    from: _,
-                    width,
-                    height,
-                    timestamp,
-                } => {
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Resize { width, height },
-                        data: format!("{}x{}", width, height),
-                    };
-                    if let Err(_e) = session.event_sender.send(event) {
-                        warn!("Failed to send resize event to subscribers");
                     }
                 }
                 TerminalMessageBody::SessionEnd { from: _, timestamp } => {

@@ -336,55 +336,18 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         event.payload.data.includes("[Terminal Output:")
       ) {
         try {
-          // 解析终端输出格式: "[Terminal Output: terminal_id] data"
           const rawData = event.payload.data;
-          console.log("Raw data (repr):", JSON.stringify(rawData));
-          console.log("Raw data (length):", rawData.length);
-          console.log(
-            "Raw data (contains Terminal Output):",
-            rawData.includes("[Terminal Output:")
-          );
+          const match = rawData.match(/\[Terminal Output: ([^]]+)\] (.*)/s);
 
-          // 尝试多种匹配方式
-          let match = rawData.match(/\[Terminal Output: ([^]]+)\] (.*)/);
-          console.log("First match attempt:", match);
-
-          if (!match) {
-            // 尝试包含换行符的匹配
-            match = rawData.match(/\[Terminal Output: ([^\]]+)\]\s*(.*)/s);
-            console.log("Second match attempt (with whitespace):", match);
-          }
-
-          if (!match) {
-            // 尝试更宽松的匹配
-            match = rawData.match(/\[Terminal Output:[^\]]*\]([^\]]*)\](.*)/);
-            console.log("Third match attempt (loose):", match);
-          }
           if (match && match[1] && match[2]) {
             const terminalId = match[1];
             const outputData = match[2];
-
-            console.log(
-              "🔥 Legacy terminal output for terminal:",
-              terminalId,
-              "data:",
-              outputData
-            );
 
             const sessions = terminalSessions();
             const session = sessions.get(terminalId);
 
             if (session && session.isActive) {
-              console.log(
-                "✅ Writing to terminal session (legacy):",
-                terminalId
-              );
               session.terminal.write(outputData);
-            } else {
-              console.warn(
-                "⚠️ No active terminal session found for (legacy):",
-                terminalId
-              );
             }
           }
         } catch (error) {

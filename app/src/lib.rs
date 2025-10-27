@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
+use regex::Regex;
 
 use tauri::Manager;
 use tauri::{Emitter, State};
@@ -59,17 +60,13 @@ fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::
 
     // Handle terminal output
     if data.starts_with("[Terminal Output:") {
-        if let Some(start) = data.find('[') {
-            if let Some(end) = data.find(']') {
-                let output_part = &data[start + 1..end];
-                let parts: Vec<&str> = output_part.split("] ").collect();
-                if parts.len() >= 2 {
-                    return Ok(serde_json::json!({
-                        "type": "terminal_output",
-                        "terminal_id": parts.get(0).unwrap_or(&"unknown"),
-                        "data": parts.get(1).unwrap_or(&"")
-                    }));
-                }
+        if let Some(captures) = Regex::new(r"\[Terminal Output: ([^]]+)\] (.*)").unwrap().captures(data) {
+            if let (Some(terminal_id), Some(output_data)) = (captures.get(1), captures.get(2)) {
+                return Ok(serde_json::json!({
+                    "type": "terminal_output",
+                    "terminal_id": terminal_id.as_str(),
+                    "data": output_data.as_str()
+                }));
             }
         }
     }
