@@ -23,7 +23,6 @@ import type { LayoutConfig } from "../utils/mobile/AdaptiveLayoutManager";
 import { QuickAccessToolbar } from "./ui/QuickAccessToolbar";
 import "./ui/QuickAccessToolbar.css";
 import { TerminalManager } from "./TerminalManager";
-import { WebShareManager } from "./WebShareManager";
 import { SystemMonitor } from "./SystemMonitor";
 
 interface EnhancedTerminalViewProps {
@@ -79,7 +78,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
   // Management modal states
   const [showTerminalManager, setShowTerminalManager] = createSignal(false);
-  const [showWebShareManager, setShowWebShareManager] = createSignal(false);
   const [showSystemMonitor, setShowSystemMonitor] = createSignal(false);
 
   // Enhanced mobile keyboard and input management
@@ -1034,14 +1032,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
             <button
               class="btn btn-ghost btn-xs"
-              onClick={() => setShowWebShareManager(!showWebShareManager())}
-              title="WebShare Manager"
-            >
-              🌐
-            </button>
-
-            <button
-              class="btn btn-ghost btn-xs"
               onClick={() => setShowSystemMonitor(!showSystemMonitor())}
               title="System Monitor"
             >
@@ -1369,14 +1359,6 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         <TerminalManager
           sessionId={props.sessionId!}
           onClose={() => setShowTerminalManager(false)}
-        />
-      </Show>
-
-      <Show when={showWebShareManager() && props.sessionId}>
-        <WebShareManager
-          sessionId={props.sessionId!}
-          availableTerminals={[]} // TODO: Get actual terminals from backend
-          onClose={() => setShowWebShareManager(false)}
         />
       </Show>
 

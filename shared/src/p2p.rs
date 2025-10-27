@@ -144,38 +144,6 @@ pub enum NetworkMessage {
         timestamp: u64,
     },
 
-    // === WebShare Management ===
-    /// Create WebShare request
-    WebShareCreate {
-        from: NodeId,
-        local_port: u16,
-        public_port: Option<u16>,
-        service_name: String,
-        terminal_id: Option<String>,
-        timestamp: u64,
-    },
-    /// WebShare status update
-    WebShareStatusUpdate {
-        from: NodeId,
-        public_port: u16,
-        status: WebShareStatus,
-        timestamp: u64,
-    },
-    /// Stop WebShare request
-    WebShareStop {
-        from: NodeId,
-        public_port: u16,
-        timestamp: u64,
-    },
-    /// List WebShares request
-    WebShareListRequest { from: NodeId, timestamp: u64 },
-    /// List WebShares response
-    WebShareListResponse {
-        from: NodeId,
-        webshares: Vec<WebShareInfo>,
-        timestamp: u64,
-    },
-
     // === System Statistics ===
     /// Stats request
     StatsRequest { from: NodeId, timestamp: u64 },
@@ -183,7 +151,6 @@ pub enum NetworkMessage {
     StatsResponse {
         from: NodeId,
         terminal_stats: TerminalStats,
-        webshare_stats: WebShareStats,
         node_id: String,
         timestamp: u64,
     },
@@ -414,23 +381,9 @@ pub enum EventType {
         cols: u16,
     },
 
-    // === WebShare Management Events ===
-    /// WebShare created
-    WebShareCreate {
-        local_port: u16,
-        public_port: u16,
-        service_name: String,
-        terminal_id: Option<String>,
-    },
-    /// WebShare list updated
-    WebShareList(Vec<WebShareInfo>),
-
     // === System Events ===
     /// System statistics
-    Stats {
-        terminal_stats: TerminalStats,
-        webshare_stats: WebShareStats,
-    },
+    Stats { terminal_stats: TerminalStats },
 }
 
 /// Frontend event with timestamp, event type, and optional data
@@ -468,7 +421,6 @@ pub struct TerminalInfo {
     pub last_activity: u64,
     pub size: (u16, u16), // (rows, cols)
     pub process_id: Option<u32>,
-    pub associated_webshares: Vec<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -484,34 +436,6 @@ pub enum TerminalStatus {
 pub struct TerminalStats {
     pub total: usize,
     pub running: usize,
-    pub errors: usize,
-    pub stopped: usize,
-}
-
-// === WebShare Management Types ===
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebShareInfo {
-    pub local_port: u16,
-    pub public_port: u16,
-    pub service_name: String,
-    pub terminal_id: Option<String>,
-    pub status: WebShareStatus,
-    pub created_at: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum WebShareStatus {
-    Starting,
-    Active,
-    Error(String),
-    Stopped,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebShareStats {
-    pub total: usize,
-    pub active: usize,
     pub errors: usize,
     pub stopped: usize,
 }
@@ -1399,103 +1323,6 @@ impl P2PNetwork {
                     }
                 }
 
-                // === WebShare Management Messages ===
-                TerminalMessageBody::WebShareCreate {
-                    from,
-                    local_port,
-                    public_port,
-                    service_name,
-                    terminal_id,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare create request from {} for port {}",
-                        from.fmt_short(),
-                        local_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::WebShareCreate {
-                            local_port,
-                            public_port: public_port.unwrap_or(0),
-                            service_name,
-                            terminal_id,
-                        },
-                        data: String::new(),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare create event, skipping");
-                    }
-                }
-                TerminalMessageBody::WebShareStatusUpdate {
-                    from,
-                    public_port,
-                    status,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare status update from {} for port {}",
-                        from.fmt_short(),
-                        public_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output,
-                        data: format!("[WebShare Status Update: {}] {:?}", public_port, status),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare status update event, skipping");
-                    }
-                }
-                TerminalMessageBody::WebShareStop {
-                    from,
-                    public_port,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare stop request from {} for port {}",
-                        from.fmt_short(),
-                        public_port
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output,
-                        data: format!("[WebShare Stop Request] {}", public_port),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare stop event, skipping");
-                    }
-                }
-                TerminalMessageBody::WebShareListRequest { from, timestamp } => {
-                    info!("Received webshare list request from {}", from.fmt_short());
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output,
-                        data: "[WebShare List Request]".to_string(),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare list request event, skipping");
-                    }
-                }
-                TerminalMessageBody::WebShareListResponse {
-                    from,
-                    webshares,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received webshare list response from {} with {} webshares",
-                        from.fmt_short(),
-                        webshares.len()
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::WebShareList(webshares),
-                        data: String::new(),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for webshare list response event, skipping");
-                    }
-                }
                 TerminalMessageBody::StatsRequest { from, timestamp } => {
                     info!("Received stats request from {}", from.fmt_short());
                     let event = TerminalEvent {
@@ -1510,7 +1337,6 @@ impl P2PNetwork {
                 TerminalMessageBody::StatsResponse {
                     from,
                     terminal_stats,
-                    webshare_stats,
                     node_id,
                     timestamp,
                 } => {
@@ -1521,10 +1347,7 @@ impl P2PNetwork {
                     );
                     let event = TerminalEvent {
                         timestamp,
-                        event_type: EventType::Stats {
-                            terminal_stats,
-                            webshare_stats,
-                        },
+                        event_type: EventType::Stats { terminal_stats },
                         data: String::new(),
                     };
                     if session.event_sender.send(event).is_err() {
@@ -1728,108 +1551,6 @@ impl P2PNetwork {
         Ok(())
     }
 
-    // === WebShare Management Methods ===
-
-    pub async fn send_webshare_create(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-        local_port: u16,
-        public_port: Option<u16>,
-        service_name: String,
-        terminal_id: Option<String>,
-    ) -> Result<()> {
-        debug!("Sending webshare create request");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for webshare create"))?;
-
-        let body = TerminalMessageBody::WebShareCreate {
-            from: self.endpoint.node_id(),
-            local_port,
-            public_port,
-            service_name,
-            terminal_id,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
-    pub async fn send_webshare_stop(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-        public_port: u16,
-    ) -> Result<()> {
-        debug!("Sending webshare stop request");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for webshare stop"))?;
-
-        let body = TerminalMessageBody::WebShareStop {
-            from: self.endpoint.node_id(),
-            public_port,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
-    pub async fn send_webshare_list_request(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-    ) -> Result<()> {
-        debug!("Sending webshare list request");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for webshare list"))?;
-
-        let body = TerminalMessageBody::WebShareListRequest {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
-    pub async fn send_webshare_list_response(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-        webshares: Vec<WebShareInfo>,
-    ) -> Result<()> {
-        debug!("Sending webshare list response");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for webshare list response"))?;
-
-        let body = TerminalMessageBody::WebShareListResponse {
-            from: self.endpoint.node_id(),
-            webshares,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
     pub async fn send_stats_request(&self, session_id: &str, sender: &GossipSender) -> Result<()> {
         debug!("Sending stats request");
         let sessions = self.sessions.read().await;
@@ -1853,7 +1574,6 @@ impl P2PNetwork {
         session_id: &str,
         sender: &GossipSender,
         terminal_stats: TerminalStats,
-        webshare_stats: WebShareStats,
     ) -> Result<()> {
         debug!("Sending stats response");
         let sessions = self.sessions.read().await;
@@ -1864,7 +1584,6 @@ impl P2PNetwork {
         let body = TerminalMessageBody::StatsResponse {
             from: self.endpoint.node_id(),
             terminal_stats,
-            webshare_stats,
             node_id: self.endpoint.node_id().to_string(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?

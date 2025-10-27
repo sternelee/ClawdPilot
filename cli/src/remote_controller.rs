@@ -32,16 +32,6 @@ pub enum ControllerCommand {
         terminal_id: String,
     },
     ListTerminals,
-    CreateWebShare {
-        local_port: u16,
-        public_port: Option<u16>,
-        service_name: String,
-        terminal_id: Option<String>,
-    },
-    StopWebShare {
-        public_port: u16,
-    },
-    ListWebShares,
     ShowStats,
     Help,
     Exit,
@@ -133,9 +123,6 @@ impl RemoteTerminalController {
         println!("   create   - Create a new terminal");
         println!("   stop     - Stop a terminal");
         println!("   list     - List all terminals");
-        println!("   webshare - Create a WebShare");
-        println!("   ws-stop  - Stop a WebShare");
-        println!("   ws-list  - List all WebShares");
         println!("   stats    - Show system statistics");
         println!("   exit     - Exit controller");
         println!();
@@ -161,11 +148,6 @@ impl RemoteTerminalController {
         println!("   stop <terminal_id>        - Stop a terminal (use ID or name)");
         println!("   list                      - List all active terminals");
         println!();
-        println!("🌐 WebShare Management:");
-        println!("   webshare <local_port>    - Create WebShare for local service");
-        println!("   webshare <lp>:<pp>        - Create WebShare with specific public port");
-        println!("   ws-stop <public_port>     - Stop a WebShare");
-        println!("   ws-list                   - List all active WebShares");
         println!();
         println!("📊 System Information:");
         println!("   stats                     - Show system statistics");
@@ -174,7 +156,6 @@ impl RemoteTerminalController {
         println!();
         println!("💡 Examples:");
         println!("   create myterm              - Create terminal named 'myterm'");
-        println!("   webshare 3000:8080         - Share local port 3000 as public port 8080");
         println!("   stop abc123                - Stop terminal with ID starting with 'abc123'");
 
         Ok(())
@@ -227,54 +208,6 @@ impl RemoteTerminalController {
                     eprintln!("Failed to send terminal list request: {}", e);
                 } else {
                     println!("📋 Terminal list request sent");
-                }
-            }
-
-            ControllerCommand::CreateWebShare {
-                local_port,
-                public_port,
-                service_name,
-                terminal_id,
-            } => {
-                if let Err(e) = self
-                    .network
-                    .send_webshare_create(
-                        &self.session_id,
-                        &self.sender,
-                        local_port,
-                        public_port,
-                        service_name,
-                        terminal_id,
-                    )
-                    .await
-                {
-                    eprintln!("Failed to send WebShare create command: {}", e);
-                } else {
-                    println!("✅ WebShare creation command sent");
-                }
-            }
-
-            ControllerCommand::StopWebShare { public_port } => {
-                if let Err(e) = self
-                    .network
-                    .send_webshare_stop(&self.session_id, &self.sender, public_port)
-                    .await
-                {
-                    eprintln!("Failed to send WebShare stop command: {}", e);
-                } else {
-                    println!("✅ WebShare stop command sent");
-                }
-            }
-
-            ControllerCommand::ListWebShares => {
-                if let Err(e) = self
-                    .network
-                    .send_webshare_list_request(&self.session_id, &self.sender)
-                    .await
-                {
-                    eprintln!("Failed to send WebShare list request: {}", e);
-                } else {
-                    println!("📋 WebShare list request sent");
                 }
             }
 
@@ -378,53 +311,8 @@ impl RemoteTerminalController {
                 }
             }
             "list" | "ls" => Some(ControllerCommand::ListTerminals),
-            "webshare" | "ws" => {
-                if parts.len() >= 2 {
-                    if let Ok((local_port, public_port)) = Self::parse_port_mapping(parts[1]) {
-                        Some(ControllerCommand::CreateWebShare {
-                            local_port,
-                            public_port,
-                            service_name: format!("Port {}", local_port),
-                            terminal_id: None,
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            "ws-stop" => {
-                if parts.len() >= 2 {
-                    if let Ok(port) = parts[1].parse::<u16>() {
-                        Some(ControllerCommand::StopWebShare { public_port: port })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }
-            "ws-list" => Some(ControllerCommand::ListWebShares),
             "stats" => Some(ControllerCommand::ShowStats),
             _ => None,
-        }
-    }
-
-    fn parse_port_mapping(port_str: &str) -> Result<(u16, Option<u16>)> {
-        let parts: Vec<&str> = port_str.split(':').collect();
-
-        match parts.len() {
-            1 => {
-                let local_port: u16 = parts[0].parse()?;
-                Ok((local_port, None)) // None 表示自动分配
-            }
-            2 => {
-                let local_port: u16 = parts[0].parse()?;
-                let public_port: u16 = parts[1].parse()?;
-                Ok((local_port, Some(public_port)))
-            }
-            _ => Err(anyhow::anyhow!("Invalid port format")),
         }
     }
 

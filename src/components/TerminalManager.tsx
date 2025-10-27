@@ -12,7 +12,6 @@ interface Terminal {
   last_activity: number;
   size: [number, number];
   process_id?: number;
-  associated_webshares: number[];
 }
 
 interface CreateTerminalRequest {
@@ -322,11 +321,10 @@ export function TerminalManager(props: {
               <For each={terminals()}>
                 {(terminal) => (
                   <div
-                    class={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                      selectedTerminal() === terminal.id
+                    class={`border rounded-lg p-4 cursor-pointer transition-colors ${selectedTerminal() === terminal.id
                         ? "border-blue-500 bg-blue-50"
                         : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                    }`}
+                      }`}
                     onClick={() => setSelectedTerminal(terminal.id)}
                   >
                     <div class="flex justify-between items-start mb-2">
@@ -344,7 +342,6 @@ export function TerminalManager(props: {
                           <div>Directory: {terminal.current_dir}</div>
                           <div>Size: {terminal.size[0]}x{terminal.size[1]}</div>
                           <div>PID: {terminal.process_id || "N/A"}</div>
-                          <div>WebShares: {terminal.associated_webshares.length}</div>
                         </div>
                       </div>
                       <div class="flex flex-col space-y-1">

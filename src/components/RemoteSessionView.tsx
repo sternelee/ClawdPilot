@@ -15,16 +15,6 @@ interface TerminalInfo {
   last_activity: number;
   size: [number, number];
   process_id?: number;
-  associated_webshares: number[];
-}
-
-interface WebShareInfo {
-  local_port: number;
-  public_port: number;
-  service_name: string;
-  terminal_id?: string;
-  status: "Starting" | "Active" | "Error" | "Stopped" | string;
-  created_at: number;
 }
 
 interface RemoteSessionViewProps {
@@ -42,7 +32,6 @@ interface TerminalSession {
 
 export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [terminals, setTerminals] = createSignal<TerminalInfo[]>([]);
-  const [webshares, setWebshares] = createSignal<WebShareInfo[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [terminalSessions, setTerminalSessions] = createSignal<
     Map<string, TerminalSession>
@@ -57,7 +46,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
   // 移动端下拉菜单状态
   const [showTerminalMenu, setShowTerminalMenu] = createSignal(false);
-  const [showWebShareMenu, setShowWebShareMenu] = createSignal(false);
   const [showMainMenu, setShowMainMenu] = createSignal(false);
 
   const deviceCapabilities = getDeviceCapabilities();
@@ -74,14 +62,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   };
 
-  // 获取WebShare列表
-  const fetchWebShares = async () => {
-    try {
-      await invoke("get_webshare_list", { sessionId: props.sessionId });
-    } catch (error) {
-      console.error("Failed to fetch webshare list:", error);
-    }
-  };
 
   // 计算终端大小（基于容器宽度）
   const calculateTerminalSize = () => {
@@ -142,23 +122,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   };
 
-  // 创建WebShare
-  const createWebShare = async (config: {
-    local_port: number;
-    public_port?: number;
-    service_name: string;
-    terminal_id?: string;
-  }) => {
-    try {
-      const request = {
-        session_id: props.sessionId,
-        ...config,
-      };
-      await invoke("create_webshare", { request });
-    } catch (error) {
-      console.error("Failed to create webshare:", error);
-    }
-  };
 
   // 停止终端
   const stopTerminal = async (terminalId: string) => {
@@ -427,52 +390,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         } catch (error) {
           console.error("Failed to parse legacy terminal output event:", error);
         }
-      }
-
-      // 处理WebShare列表响应 - 使用新的结构化数据
-      if (
-        event.payload.event_type &&
-        typeof event.payload.event_type === "object" &&
-        "WebShareList" in event.payload.event_type
-      ) {
-        try {
-          // 新的结构化格式直接从event_type中获取WebShare列表
-          console.log("Received structured WebShareList event:", event.payload);
-          const webshareData =
-            (event.payload.event_type as any).WebShareList || [];
-          console.log("Parsed webshare list:", webshareData);
-          setWebshares(webshareData);
-        } catch (error) {
-          console.error(
-            "Failed to parse structured webshare list event:",
-            error
-          );
-        }
-      }
-
-      // 兼容旧的字符串格式
-      if (
-        event.payload.data &&
-        event.payload.data.includes("[WebShare List Response:")
-      ) {
-        try {
-          // 解析WebShare列表响应格式: "[WebShare List Response: X webshares] [{\"local_port\":...}]"
-          const match = event.payload.data.match(
-            /\[WebShare List Response: (\d+) webshares\] (.+)/
-          );
-          if (match && match[2]) {
-            const webshareData = JSON.parse(match[2]);
-            console.log("Parsed webshare list (legacy):", webshareData);
-            setWebshares(webshareData);
-          }
-        } catch (error) {
-          console.error(
-            "Failed to parse legacy webshare list response:",
-            error
-          );
-        }
-      }
-    });
+      });
   };
 
   // 组件挂载时初始化
@@ -480,7 +398,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     await setupTerminalEventListeners();
 
     // 初始加载数据
-    await Promise.all([fetchTerminals(), fetchWebShares()]);
+    await fetchTerminals();
 
     setLoading(false);
   });
@@ -579,63 +497,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     </div>
   );
 
-  // 渲染WebShare列表
-  const renderWebShareList = (inDropdown = false) => (
-    <div class="space-y-2">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold">WebShare 服务</h3>
-        <button
-          class="btn btn-primary btn-sm"
-          onClick={() => {
-            createWebShare({
-              local_port: 3000,
-              service_name: "Local Development Server",
-            });
-            if (inDropdown) setShowWebShareMenu(false);
-          }}
-          title="创建WebShare"
-        >
-          ➕ 新建
-        </button>
-      </div>
-
-      <For each={webshares()}>
-        {(webshare) => (
-          <div class="card bg-base-200 shadow-sm p-3">
-            <div class="flex justify-between items-start">
-              <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">{webshare.service_name}</div>
-                <div class="text-xs opacity-70">
-                  {webshare.public_port} → {webshare.local_port}
-                </div>
-                <div class="text-xs opacity-50 mt-1">{webshare.status}</div>
-              </div>
-              <div class="flex space-x-1 ml-2">
-                <button
-                  class="btn btn-ghost btn-xs"
-                  onClick={() => {
-                    navigator.clipboard.writeText(
-                      `http://localhost:${webshare.public_port}`
-                    );
-                  }}
-                  title="复制URL"
-                >
-                  📋
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </For>
-
-      {webshares().length === 0 && (
-        <div class="text-center py-8 opacity-50">
-          <div class="text-4xl mb-2">🌐</div>
-          <div>暂无WebShare服务</div>
-        </div>
-      )}
-    </div>
-  );
 
   // 渲染活动终端
   const renderActiveTerminal = () => {
@@ -736,7 +597,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         <div class="flex-none flex items-center space-x-1">
           <button
             class="btn btn-ghost btn-sm"
-            onClick={() => Promise.all([fetchTerminals(), fetchWebShares()])}
+            onClick={() => fetchTerminals()}
             title="刷新"
           >
             🔄
@@ -764,16 +625,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                       }}
                     >
                       💻 终端列表 ({terminals().length})
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        setShowWebShareMenu(true);
-                        setShowMainMenu(false);
-                      }}
-                    >
-                      🌐 WebShare ({webshares().length})
                     </button>
                   </li>
                   <li class="menu-title">
@@ -850,42 +701,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         </div>
       </Show>
 
-      {/* 移动端WebShare列表下拉菜单 */}
-      <Show when={showWebShareMenu()}>
-        <div
-          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-          onClick={() => setShowWebShareMenu(false)}
-        >
-          <div
-            class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
-              <h2 class="text-lg font-semibold">WebShare 服务</h2>
-              <button
-                class="btn btn-ghost btn-sm btn-circle"
-                onClick={() => setShowWebShareMenu(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div class="p-4">
-              {loading() ? (
-                <div class="text-center py-8">
-                  <div class="loading loading-spinner"></div>
-                  <div class="mt-2">加载中...</div>
-                </div>
-              ) : (
-                renderWebShareList(true)
-              )}
-            </div>
-          </div>
-        </div>
-      </Show>
 
       {/* 主内容 */}
       <div ref={containerRef} class="flex-1 flex overflow-hidden">
-        {/* 桌面端侧边栏 - 终端和WebShare列表 */}
+        {/* 桌面端侧边栏 - 终端列表 */}
         <Show when={!isMobile}>
           <div class="w-80 bg-base-100 border-r overflow-y-auto p-4">
             {loading() ? (
@@ -894,10 +713,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 <div class="mt-2">加载中...</div>
               </div>
             ) : (
-              <div class="space-y-8">
-                {renderTerminalList(false)}
-                {renderWebShareList(false)}
-              </div>
+              { renderTerminalList(false) }
             )}
           </div>
         </Show>

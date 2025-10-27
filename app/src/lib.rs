@@ -42,20 +42,6 @@ fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::
         }
     }
 
-    // Handle webshare list response
-    if data.starts_with("[WebShare List Response:") {
-        if let Some(start) = data.find('[') {
-            if let Some(json_part) = data.get(start..) {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_part) {
-                    return Ok(serde_json::json!({
-                        "type": "webshare_list_response",
-                        "data": parsed
-                    }));
-                }
-            }
-        }
-    }
-
     // Handle terminal status updates
     if data.starts_with("[Terminal Status Update:") {
         if let Some(start) = data.find('[') {
@@ -118,23 +104,6 @@ fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::
                         "type": "terminal_resize",
                         "terminal_id": parts.get(0).unwrap_or(&"unknown"),
                         "size": parts.get(1).unwrap_or(&"")
-                    }));
-                }
-            }
-        }
-    }
-
-    // Handle WebShare status updates
-    if data.starts_with("[WebShare Status Update:") {
-        if let Some(start) = data.find('[') {
-            if let Some(end) = data.find(']') {
-                let status_part = &data[start + 1..end];
-                let parts: Vec<&str> = status_part.split(": ").collect();
-                if parts.len() >= 2 {
-                    return Ok(serde_json::json!({
-                        "type": "webshare_status_update",
-                        "public_port": parts.get(0).unwrap_or(&"0"),
-                        "status": parts.get(1).unwrap_or(&"unknown")
                     }));
                 }
             }
@@ -222,23 +191,6 @@ pub struct TerminalResizeRequest {
     pub terminal_id: String,
     pub rows: u16,
     pub cols: u16,
-}
-
-// === WebShare Management Types ===
-
-#[derive(Serialize, Deserialize)]
-pub struct WebShareCreateRequest {
-    pub session_id: String,
-    pub local_port: u16,
-    pub public_port: Option<u16>,
-    pub service_name: String,
-    pub terminal_id: Option<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct WebShareStopRequest {
-    pub session_id: String,
-    pub public_port: u16,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -397,7 +349,7 @@ async fn connect_to_peer(
                                     session_id_clone_events, current_count, MAX_EVENTS_PER_SESSION);
                             }
 
-                            // Parse structured events for terminal and WebShare management
+                            // Parse structured events for terminal management
                             if let Ok(structured_event) = parse_structured_event(&event.data) {
                                 let structured_event_name = format!("structured-event-{}", session_id_clone_events);
                                 let _ = app_handle_clone.emit(&structured_event_name, &structured_event);
@@ -860,133 +812,9 @@ async fn resize_terminal(
     Ok(())
 }
 
-// === WebShare Management Commands ===
-
-#[tauri::command]
-async fn create_webshare(
-    request: WebShareCreateRequest,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
-        }
-    };
-
-    network
-        .send_webshare_create(
-            &request.session_id,
-            &session_sender,
-            request.local_port,
-            request.public_port,
-            request.service_name,
-            request.terminal_id,
-        )
-        .await
-        .map_err(|e| format!("Failed to create webshare: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
-async fn stop_webshare(
-    request: WebShareStopRequest,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
-        }
-    };
-
-    network
-        .send_webshare_stop(&request.session_id, &session_sender, request.public_port)
-        .await
-        .map_err(|e| format!("Failed to stop webshare: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
-async fn list_webshares(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
-        }
-    };
-
-    network
-        .send_webshare_list_request(&session_id, &session_sender)
-        .await
-        .map_err(|e| format!("Failed to list webshares: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
-async fn get_system_stats(request: StatsRequest, state: State<'_, AppState>) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
-        }
-    };
-
-    network
-        .send_stats_request(&request.session_id, &session_sender)
-        .await
-        .map_err(|e| format!("Failed to get system stats: {}", e))?;
-
-    Ok(())
-}
-
 #[tauri::command]
 async fn get_terminal_list(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
     list_terminals(session_id, state).await
-}
-
-#[tauri::command]
-async fn get_webshare_list(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    list_webshares(session_id, state).await
 }
 
 #[tauri::command]
@@ -1129,12 +957,6 @@ pub fn run() {
             send_terminal_input_to_terminal,
             resize_terminal,
             connect_to_terminal,
-            // WebShare Management
-            create_webshare,
-            stop_webshare,
-            list_webshares,
-            get_webshare_list,
-            get_system_stats
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())

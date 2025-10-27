@@ -9,12 +9,6 @@ interface TerminalStats {
   stopped: number;
 }
 
-interface WebShareStats {
-  total: number;
-  active: number;
-  errors: number;
-  stopped: number;
-}
 
 interface StatsRequest {
   session_id: string;
@@ -35,12 +29,6 @@ export function SystemMonitor(props: {
     stopped: 0,
   });
 
-  const [webshareStats, setWebshareStats] = createSignal<WebShareStats>({
-    total: 0,
-    active: 0,
-    errors: 0,
-    stopped: 0,
-  });
 
   // Load stats on mount and set up auto-refresh
   onMount(() => {
@@ -83,11 +71,10 @@ export function SystemMonitor(props: {
 
         // Parse stats from the node_info string
         try {
-          // The node_info contains a summary like "Terminals: X, WebShares: Y"
-          const match = structuredEvent.node_info.match(/Terminals:\s*(\d+).*WebShares:\s*(\d+)/);
+          // The node_info contains terminal count
+          const match = structuredEvent.node_info.match(/Terminals:\s*(\d+)/);
           if (match) {
             const terminalCount = parseInt(match[1]);
-            const webshareCount = parseInt(match[2]);
 
             // Update stats with available information
             setTerminalStats(prev => ({
@@ -96,14 +83,6 @@ export function SystemMonitor(props: {
               running: Math.floor(terminalCount * 0.7), // Estimate
               errors: Math.floor(terminalCount * 0.1),   // Estimate
               stopped: Math.floor(terminalCount * 0.2), // Estimate
-            }));
-
-            setWebshareStats(prev => ({
-              ...prev,
-              total: webshareCount,
-              active: Math.floor(webshareCount * 0.8),   // Estimate
-              errors: Math.floor(webshareCount * 0.05),  // Estimate
-              stopped: Math.floor(webshareCount * 0.15), // Estimate
             }));
           }
         } catch (error) {
@@ -119,20 +98,11 @@ export function SystemMonitor(props: {
   };
 
   const getStatusColor = (type: string, status: string) => {
-    if (type === "terminal") {
-      switch (status) {
-        case "running": return "bg-green-500";
-        case "stopped": return "bg-gray-400";
-        case "errors": return "bg-red-500";
-        default: return "bg-gray-300";
-      }
-    } else {
-      switch (status) {
-        case "active": return "bg-green-500";
-        case "stopped": return "bg-gray-400";
-        case "errors": return "bg-red-500";
-        default: return "bg-gray-300";
-      }
+    switch (status) {
+      case "running": return "bg-green-500";
+      case "stopped": return "bg-gray-400";
+      case "errors": return "bg-red-500";
+      default: return "bg-gray-300";
     }
   };
 
@@ -251,62 +221,6 @@ export function SystemMonitor(props: {
               </div>
             </div>
 
-            {/* WebShare Stats */}
-            <div class="bg-white border rounded-lg p-4 shadow-sm">
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">WebShare Statistics</h3>
-                <div class="text-2xl">🌐</div>
-              </div>
-
-              <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                  <span class="text-sm text-gray-600">Total Services</span>
-                  <span class="font-semibold">{webshareStats().total}</span>
-                </div>
-
-                {/* Progress bars for webshare stats */}
-                <div class="space-y-2">
-                  <div>
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-sm text-green-600">Active</span>
-                      <span class="text-sm">{webshareStats().active}</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        class={`h-2 rounded-full transition-all duration-300 ${getStatusColor("webshare", "active")}`}
-                        style={`width: ${getStatPercentage(webshareStats().active, webshareStats().total)}%`}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-sm text-gray-600">Stopped</span>
-                      <span class="text-sm">{webshareStats().stopped}</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        class={`h-2 rounded-full transition-all duration-300 ${getStatusColor("webshare", "stopped")}`}
-                        style={`width: ${getStatPercentage(webshareStats().stopped, webshareStats().total)}%`}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div class="flex justify-between items-center mb-1">
-                      <span class="text-sm text-red-600">Errors</span>
-                      <span class="text-sm">{webshareStats().errors}</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        class={`h-2 rounded-full transition-all duration-300 ${getStatusColor("webshare", "errors")}`}
-                        style={`width: ${getStatPercentage(webshareStats().errors, webshareStats().total)}%`}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* Additional Information */}
@@ -315,7 +229,6 @@ export function SystemMonitor(props: {
               <div class="font-semibold mb-2">💡 System Information:</div>
               <div class="space-y-1">
                 <div>• Terminal statistics show the current state of all managed terminals</div>
-                <div>• WebShare statistics display active port forwarding services</div>
                 <div>• Data updates automatically every 10 seconds</div>
                 <div>• Click refresh to manually update the statistics</div>
               </div>
@@ -327,7 +240,7 @@ export function SystemMonitor(props: {
         <div class="bg-gray-100 p-3 border-t text-sm text-gray-600 text-center">
           <div>Monitoring: {props.sessionId}</div>
           <div class="text-xs text-gray-500 mt-1">
-            📊 Real-time system statistics for remote terminal management
+            📊 Real-time terminal statistics for remote session monitoring
           </div>
         </div>
       </div>

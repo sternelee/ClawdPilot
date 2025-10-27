@@ -270,7 +270,6 @@ impl TerminalRunner {
                 .as_secs(),
             size: self.size,
             process_id: None,
-            associated_webshares: Vec::new(),
         }
     }
 

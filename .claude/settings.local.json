@@ -41,5 +41,9 @@
       "WebFetch(domain:docs.tauri.app)"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "mcp_box"
+  ],
+  "enableAllProjectMcpServers": true
 }

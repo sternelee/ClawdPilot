@@ -8,9 +8,7 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 
 use crate::terminal_runner::{TerminalCommand, TerminalRunner};
-use riterm_shared::p2p::{
-    TerminalInfo, TerminalStats, TerminalStatus, WebShareInfo, WebShareStats,
-};
+use riterm_shared::p2p::{TerminalInfo, TerminalStats, TerminalStatus};
 
 /// Simplified terminal manager inspired by sshx
 #[derive(Clone)]
