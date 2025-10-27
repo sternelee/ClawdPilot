@@ -3,7 +3,7 @@ use anyhow::Result;
 use bincode;
 use chacha20poly1305::{ChaCha20Poly1305, Key, Nonce};
 use futures::StreamExt;
-use iroh::{Endpoint, NodeAddr, NodeId, protocol::Router};
+use iroh::{Endpoint, EndpointAddr, EndpointId, discovery::dns::DnsDiscovery, protocol::Router};
 pub use iroh_gossip::api::GossipSender;
 use iroh_gossip::{
     api::{Event, GossipReceiver},
@@ -39,15 +39,18 @@ pub type EncryptionKey = [u8; 32];
 pub enum NetworkMessage {
     // === Session Management ===
     /// Session metadata when joining or creating session
-    SessionInfo { from: NodeId, header: SessionHeader },
+    SessionInfo {
+        from: EndpointId,
+        header: SessionHeader,
+    },
     /// Session ended notification
-    SessionEnd { from: NodeId, timestamp: u64 },
+    SessionEnd { from: EndpointId, timestamp: u64 },
     /// Participant joined notification
-    ParticipantJoined { from: NodeId, timestamp: u64 },
+    ParticipantJoined { from: EndpointId, timestamp: u64 },
     /// Directed message to specific node
     DirectedMessage {
-        from: NodeId,
-        to: NodeId,
+        from: EndpointId,
+        to: EndpointId,
         data: String,
         timestamp: u64,
     },
@@ -55,19 +58,19 @@ pub enum NetworkMessage {
     // === Terminal I/O (Virtual Terminals) ===
     /// Terminal output data (for virtual terminals)
     Output {
-        from: NodeId,
+        from: EndpointId,
         data: String,
         timestamp: u64,
     },
     /// User input data (for virtual terminals)
     Input {
-        from: NodeId,
+        from: EndpointId,
         data: String,
         timestamp: u64,
     },
     /// Terminal resize (for virtual terminals)
     Resize {
-        from: NodeId,
+        from: EndpointId,
         width: u16,
         height: u16,
         timestamp: u64,
@@ -76,7 +79,7 @@ pub enum NetworkMessage {
     // === Terminal Management (Real Terminals) ===
     /// Create a new local terminal request
     TerminalCreate {
-        from: NodeId,
+        from: EndpointId,
         name: Option<String>,
         shell_path: Option<String>,
         working_dir: Option<String>,
@@ -85,21 +88,21 @@ pub enum NetworkMessage {
     },
     /// Terminal output data (from real terminal)
     TerminalOutput {
-        from: NodeId,
+        from: EndpointId,
         terminal_id: String,
         data: String,
         timestamp: u64,
     },
     /// Terminal input data (to real terminal)
     TerminalInput {
-        from: NodeId,
+        from: EndpointId,
         terminal_id: String,
         data: String,
         timestamp: u64,
     },
     /// Terminal resize request
     TerminalResize {
-        from: NodeId,
+        from: EndpointId,
         terminal_id: String,
         rows: u16,
         cols: u16,
@@ -107,29 +110,29 @@ pub enum NetworkMessage {
     },
     /// Terminal status update
     TerminalStatusUpdate {
-        from: NodeId,
+        from: EndpointId,
         terminal_id: String,
         status: TerminalStatus,
         timestamp: u64,
     },
     /// Terminal directory change notification
     TerminalDirectoryChanged {
-        from: NodeId,
+        from: EndpointId,
         terminal_id: String,
         new_dir: String,
         timestamp: u64,
     },
     /// Stop terminal request
     TerminalStop {
-        from: NodeId,
+        from: EndpointId,
         terminal_id: String,
         timestamp: u64,
     },
     /// List terminals request
-    TerminalListRequest { from: NodeId, timestamp: u64 },
+    TerminalListRequest { from: EndpointId, timestamp: u64 },
     /// List terminals response
     TerminalListResponse {
-        from: NodeId,
+        from: EndpointId,
         terminals: Vec<TerminalInfo>,
         timestamp: u64,
     },
@@ -182,7 +185,7 @@ impl EncryptedTerminalMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionTicket {
     pub topic_id: TopicId,
-    pub nodes: Vec<NodeAddr>,
+    pub nodes: Vec<EndpointAddr>,
     pub key: EncryptionKey,
 }
 
@@ -272,7 +275,7 @@ pub struct SharedSession {
     pub participants: Vec<String>,
     pub is_host: bool,
     pub event_sender: broadcast::Sender<TerminalEvent>,
-    pub node_id: NodeId, // Store the node ID for this session
+    pub node_id: EndpointId, // Store the node ID for this session
     pub key: EncryptionKey,
     pub input_sender: Option<mpsc::UnboundedSender<String>>,
     pub gossip_sender: Option<GossipSender>,
@@ -411,20 +414,23 @@ impl P2PNetwork {
 
         // Create iroh endpoint with optional custom relay
         let endpoint_builder = Endpoint::builder();
-        let endpoint = if let Some(relay) = relay_url {
+        let endpoint: Endpoint = if let Some(relay) = relay_url {
             info!("Using custom relay server: {}", relay);
             // Parse the relay URL and use it for discovery
             let _relay_url: Url = relay.parse()?;
             endpoint_builder
-                .discovery_n0() // Use default discovery for now, custom relay setup is more complex
+                .discovery(DnsDiscovery::n0_dns()) // Use n0 DNS discovery
                 .bind()
                 .await?
         } else {
             info!("Using default n0 relay server");
-            endpoint_builder.discovery_n0().bind().await?
+            endpoint_builder
+                .discovery(DnsDiscovery::n0_dns())
+                .bind()
+                .await?
         };
 
-        let node_id = endpoint.node_id();
+        let node_id = endpoint.id();
         info!("Node ID: {}", node_id);
 
         // Create gossip instance
@@ -467,10 +473,10 @@ impl P2PNetwork {
 
         let session = SharedSession {
             header: header.clone(),
-            participants: vec![self.endpoint.node_id().to_string()],
+            participants: vec![self.endpoint.id().to_string()],
             is_host: true,
             event_sender: event_sender.clone(),
-            node_id: self.endpoint.node_id(),
+            node_id: self.endpoint.id(),
             key,
             input_sender: Some(input_sender),
             gossip_sender: Some(sender.clone()),
@@ -486,7 +492,7 @@ impl P2PNetwork {
 
         // Send session info message
         let body = TerminalMessageBody::SessionInfo {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             header,
         };
         let message = EncryptedTerminalMessage::new(body, &key)?;
@@ -531,7 +537,7 @@ impl P2PNetwork {
             participants: vec![],
             is_host: false,
             event_sender: event_sender.clone(),
-            node_id: self.endpoint.node_id(),
+            node_id: self.endpoint.id(),
             key: ticket.key,
             input_sender: None,
             gossip_sender: None,
@@ -547,7 +553,7 @@ impl P2PNetwork {
         // No need to pre-add them to the address book.
 
         // Subscribe and join the gossip topic with known peers
-        let node_ids = ticket.nodes.iter().map(|p| p.node_id).collect();
+        let node_ids = ticket.nodes.iter().map(|p| p.id).collect();
         let topic = self
             .gossip
             .subscribe_and_join(ticket.topic_id, node_ids)
@@ -573,7 +579,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for input"))?;
 
         let body = TerminalMessageBody::Input {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             data,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -588,7 +594,7 @@ impl P2PNetwork {
         &self,
         session_id: &str,
         sender: &GossipSender,
-        to: NodeId,
+        to: EndpointId,
         data: String,
     ) -> Result<()> {
         debug!("Sending directed message to node: {}", to.fmt_short());
@@ -598,7 +604,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for directed message"))?;
 
         let body = TerminalMessageBody::DirectedMessage {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             to,
             data,
             timestamp: std::time::SystemTime::now()
@@ -624,7 +630,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for resize"))?;
 
         let body = TerminalMessageBody::Resize {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             width,
             height,
             timestamp: std::time::SystemTime::now()
@@ -644,7 +650,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for ending"))?;
 
         let body = TerminalMessageBody::SessionEnd {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs(),
@@ -668,7 +674,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for participant joined"))?;
 
         let body = TerminalMessageBody::ParticipantJoined {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs(),
@@ -832,7 +838,7 @@ impl P2PNetwork {
                     data,
                     timestamp,
                 } => {
-                    let my_node_id = self.endpoint.node_id();
+                    let my_node_id = self.endpoint.id();
                     if to == my_node_id {
                         let event = TerminalEvent {
                             timestamp,
@@ -1159,24 +1165,24 @@ impl P2PNetwork {
     }
 
     pub async fn get_node_id(&self) -> String {
-        self.endpoint.node_id().to_string()
+        self.endpoint.id().to_string()
     }
 
-    pub async fn get_node_addr(&self) -> Result<NodeAddr> {
+    pub async fn get_node_addr(&self) -> Result<EndpointAddr> {
         debug!("Getting node address...");
         // In iroh 0.93, node_addr() now returns NodeAddr directly
-        let node_addr = self.endpoint.node_addr();
-        debug!("Got node address: {:?}", node_addr);
-        Ok(node_addr)
+        let endpoint_addr = self.endpoint.addr();
+        debug!("Got endpoint address: {:?}", endpoint_addr);
+        Ok(endpoint_addr)
     }
 
-    pub async fn connect_to_peer(&self, node_addr: NodeAddr) -> Result<()> {
-        debug!("Connecting to peer: {}", node_addr.node_id);
+    pub async fn connect_to_peer(&self, endpoint_addr: EndpointAddr) -> Result<()> {
+        debug!("Connecting to peer: {}", endpoint_addr.id);
 
         // In iroh 0.93, add_node_addr() is removed.
         // Node addresses are now provided directly when connecting.
         // The endpoint will automatically use the provided addresses.
-        debug!("Node address stored for peer {}", node_addr.node_id);
+        debug!("Node address stored for peer {}", endpoint_addr.id);
 
         Ok(())
     }
@@ -1266,7 +1272,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal create"))?;
 
         let body = TerminalMessageBody::TerminalCreate {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             name,
             shell_path,
             working_dir,
@@ -1293,7 +1299,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal stop"))?;
 
         let body = TerminalMessageBody::TerminalStop {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminal_id,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -1316,7 +1322,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal list"))?;
 
         let body = TerminalMessageBody::TerminalListRequest {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs(),
@@ -1339,7 +1345,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal list response"))?;
 
         let body = TerminalMessageBody::TerminalListResponse {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminals,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -1366,7 +1372,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal output"))?;
 
         let body = TerminalMessageBody::TerminalOutput {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminal_id,
             data,
             timestamp: std::time::SystemTime::now()
@@ -1392,7 +1398,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal input"))?;
 
         let body = TerminalMessageBody::TerminalInput {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminal_id,
             data,
             timestamp: std::time::SystemTime::now()
@@ -1419,7 +1425,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal resize"))?;
 
         let body = TerminalMessageBody::TerminalResize {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminal_id,
             rows,
             cols,
@@ -1449,7 +1455,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal status update"))?;
 
         let body = TerminalMessageBody::TerminalStatusUpdate {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminal_id,
             status,
             timestamp: std::time::SystemTime::now()
@@ -1478,7 +1484,7 @@ impl P2PNetwork {
             .ok_or_else(|| anyhow::anyhow!("Session not found for terminal directory change"))?;
 
         let body = TerminalMessageBody::TerminalDirectoryChanged {
-            from: self.endpoint.node_id(),
+            from: self.endpoint.id(),
             terminal_id,
             new_dir,
             timestamp: std::time::SystemTime::now()

@@ -38,12 +38,14 @@
       "Bash(git commit:*)",
       "Bash(rustc:*)",
       "Bash(RUST_LOG=debug ./target/debug/iroh-code-remote:*)",
-      "WebFetch(domain:docs.tauri.app)"
+      "WebFetch(domain:docs.tauri.app)",
+      "WebFetch(domain:crates.io)",
+      "Bash(git checkout:*)"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "mcp_box"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
