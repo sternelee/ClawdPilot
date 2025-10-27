@@ -66,44 +66,7 @@ function App() {
               terminalInstance.write(termEvent.data);
             } else if (termEvent.event_type === "End") {
               // 处理会话结束
-            } else if (termEvent.event_type === "HistoryData") {
-              // 处理历史数据
-              try {
-                const historyData = JSON.parse(termEvent.data);
-                const { logs, shell, cwd } = historyData;
-
-                setTerminalInfo({
-                  sessionTitle: `Remote Shell`,
-                  terminalType: shell || "shell",
-                  workingDirectory: cwd || "~",
-                });
-
-                terminalInstance.writeln(
-                  "\\r\\n\\x1b[1;36m📜 Session History Received\\x1b[0m"
-                );
-                terminalInstance.writeln(`\\x1b[1;33mShell:\\x1b[0m ${shell}`);
-                terminalInstance.writeln(
-                  `\\x1b[1;33mWorking Directory:\\x1b[0m ${cwd}`
-                );
-                terminalInstance.writeln(
-                  "\\x1b[1;33m--- History Start ---\\x1b[0m"
-                );
-                terminalInstance.write(logs);
-                terminalInstance.writeln(
-                  "\\x1b[1;33m--- History End ---\\x1b[0m\\r\\n"
-                );
-
-                updateHistoryEntry(ticket, {
-                  description: `Connected with history (Shell: ${shell}, CWD: ${cwd})`,
-                });
-              } catch (error) {
-                console.error("Failed to parse history data:", error);
-                terminalInstance.writeln(
-                  "\\r\\n\\x1b[1;31m❌ Failed to parse session history\\x1b[0m\\r\\n"
-                );
-              }
             }
-          }
         }
       );
 

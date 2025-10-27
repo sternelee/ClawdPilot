@@ -110,19 +110,7 @@ fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::
         }
     }
 
-    // Handle stats response
-    if data.starts_with("[Stats Response:") {
-        if let Some(start) = data.find('[') {
-            if let Some(end) = data.find(']') {
-                let stats_part = &data[start + 1..end];
-                return Ok(serde_json::json!({
-                    "type": "stats_response",
-                    "node_info": stats_part
-                }));
-            }
-        }
-    }
-
+    
     Err("No structured event found".into())
 }
 
@@ -193,10 +181,6 @@ pub struct TerminalResizeRequest {
     pub cols: u16,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct StatsRequest {
-    pub session_id: String,
-}
 
 #[tauri::command]
 async fn initialize_network(state: State<'_, AppState>) -> Result<String, String> {
@@ -861,37 +845,6 @@ async fn connect_to_terminal(
     Ok(())
 }
 
-/// Get session statistics for monitoring
-#[tauri::command]
-async fn get_session_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    let sessions = state.sessions.read().await;
-    let mut total_events = 0;
-    let mut session_details = Vec::new();
-
-    for (session_id, session) in sessions.iter() {
-        let event_count = session
-            .event_count
-            .load(std::sync::atomic::Ordering::Relaxed);
-        let last_activity = session.last_activity.read().await;
-        let inactive_duration = Instant::now().duration_since(*last_activity);
-
-        total_events += event_count;
-        session_details.push(serde_json::json!({
-            "id": session_id,
-            "event_count": event_count,
-            "inactive_duration_secs": inactive_duration.as_secs()
-        }));
-    }
-
-    Ok(serde_json::json!({
-        "total_sessions": sessions.len(),
-        "max_sessions": MAX_CONCURRENT_SESSIONS,
-        "total_events": total_events,
-        "max_events_per_session": MAX_EVENTS_PER_SESSION,
-        "session_timeout_secs": SESSION_TIMEOUT_SECS,
-        "sessions": session_details
-    }))
-}
 
 /// Initialize tracing with conditional log levels based on build configuration
 fn init_tracing() {
@@ -948,7 +901,6 @@ pub fn run() {
             get_active_sessions,
             get_node_info,
             parse_session_ticket,
-            get_session_stats,
             // Terminal Management
             create_terminal,
             stop_terminal,

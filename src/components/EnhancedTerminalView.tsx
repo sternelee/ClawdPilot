@@ -23,7 +23,6 @@ import type { LayoutConfig } from "../utils/mobile/AdaptiveLayoutManager";
 import { QuickAccessToolbar } from "./ui/QuickAccessToolbar";
 import "./ui/QuickAccessToolbar.css";
 import { TerminalManager } from "./TerminalManager";
-import { SystemMonitor } from "./SystemMonitor";
 
 interface EnhancedTerminalViewProps {
   onReady: (terminal: Terminal, fitAddon: FitAddon) => void;
@@ -78,8 +77,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
 
   // Management modal states
   const [showTerminalManager, setShowTerminalManager] = createSignal(false);
-  const [showSystemMonitor, setShowSystemMonitor] = createSignal(false);
-
+  
   // Enhanced mobile keyboard and input management
   const [keyboardCleanup, setKeyboardCleanup] = createSignal<
     (() => void) | null
@@ -1030,14 +1028,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
               💻
             </button>
 
-            <button
-              class="btn btn-ghost btn-xs"
-              onClick={() => setShowSystemMonitor(!showSystemMonitor())}
-              title="System Monitor"
-            >
-              📊
-            </button>
-          </Show>
+                      </Show>
 
           <button
             class="btn btn-ghost btn-xs"
@@ -1362,13 +1353,7 @@ export function EnhancedTerminalView(props: EnhancedTerminalViewProps) {
         />
       </Show>
 
-      <Show when={showSystemMonitor() && props.sessionId}>
-        <SystemMonitor
-          sessionId={props.sessionId!}
-          onClose={() => setShowSystemMonitor(false)}
-        />
-      </Show>
-
+      
       {/* Quick Access Toolbar */}
       <Show when={deviceCapabilities().isMobile && showQuickAccess()}>
         <QuickAccessToolbar

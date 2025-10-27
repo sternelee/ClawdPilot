@@ -8,7 +8,7 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 
 use crate::terminal_runner::{TerminalCommand, TerminalRunner};
-use riterm_shared::p2p::{TerminalInfo, TerminalStats, TerminalStatus};
+use riterm_shared::p2p::{TerminalInfo, TerminalStatus};
 
 /// Simplified terminal manager inspired by sshx
 #[derive(Clone)]
@@ -168,32 +168,7 @@ impl TerminalManager {
             .collect()
     }
 
-    /// Get terminal statistics
-    pub async fn get_stats(&self) -> TerminalStats {
-        let terminals = self.terminals.read().await;
-        let total = terminals.len();
-        let mut running = 0;
-        let mut errors = 0;
-        let mut stopped = 0;
-
-        for session in terminals.values() {
-            match session.info.status {
-                TerminalStatus::Running => running += 1,
-                TerminalStatus::Starting => running += 1,
-                TerminalStatus::Paused => stopped += 1,
-                TerminalStatus::Stopped => stopped += 1,
-                TerminalStatus::Error(_) => errors += 1,
-            }
-        }
-
-        TerminalStats {
-            total,
-            running,
-            errors,
-            stopped,
-        }
-    }
-
+    
     /// Create terminal via P2P request (for remote participants)
     pub async fn handle_create_terminal_request(
         &self,
@@ -260,11 +235,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Test statistics
-        let stats = manager.get_stats().await;
-        assert_eq!(stats.total, 1);
-        assert_eq!(stats.running, 1);
-
+        
         // Test closing
         manager.close_terminal(&terminal_id).await.unwrap();
     }

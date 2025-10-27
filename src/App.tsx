@@ -288,60 +288,7 @@ function App() {
               // INFO: 其他端退出不影响本端
               // terminalInstance.writeln("\r\n\r\n[Session Ended]");
               // handleDisconnect();
-            } else if (termEvent.event_type === "HistoryData") {
-              // 处理接收到的历史记录数据
-              console.log("📜 Received session history:", termEvent.data);
-
-              // 解析历史记录数据
-              try {
-                const historyData = JSON.parse(termEvent.data);
-                const { logs, shell, cwd } = historyData;
-
-                // 更新终端信息
-                setTerminalInfo({
-                  sessionTitle: `Remote Shell`,
-                  terminalType: shell || "shell",
-                  workingDirectory: cwd || "~",
-                });
-
-                // 在终端中显示历史记录
-                if (terminalInstance && !(terminalInstance as any)._isDisposed) {
-                  terminalInstance.writeln(
-                    "\r\n\x1b[1;36m📜 Session History Received\x1b[0m",
-                  );
-                  terminalInstance.writeln(`\x1b[1;33mShell:\x1b[0m ${shell}`);
-                  terminalInstance.writeln(
-                    `\x1b[1;33mWorking Directory:\x1b[0m ${cwd}`,
-                  );
-                  terminalInstance.writeln(
-                    "\x1b[1;33m--- History Start ---\x1b[0m",
-                  );
-                  terminalInstance.write(logs);
-                  terminalInstance.writeln(
-                    "\x1b[1;33m--- History End ---\x1b[0m\r\n",
-                  );
-                } else {
-                  console.error("[Mobile Debug] Cannot display history - terminal not ready");
-                }
-
-                // 更新连接历史记录
-                updateHistoryEntry(ticket, {
-                  description: `Connected with history (Shell: ${shell}, CWD: ${cwd})`,
-                });
-
-                console.log(
-                  `✅ History displayed: ${logs.length} characters, Shell: ${shell}, CWD: ${cwd}`,
-                );
-              } catch (error) {
-                console.error("❌ Failed to parse history data:", error);
-                if (terminalInstance && !(terminalInstance as any)._isDisposed) {
-                  terminalInstance.writeln(
-                    "\r\n\x1b[1;31m❌ Failed to parse session history\x1b[0m\r\n",
-                  );
-                }
-              }
             }
-          }
         },
       );
 

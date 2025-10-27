@@ -73,16 +73,7 @@ pub enum NetworkMessage {
         timestamp: u64,
     },
 
-    // === Session History ===
-    /// Session history data
-    HistoryData {
-        from: NodeId,
-        shell_type: String,
-        working_dir: String,
-        history: Vec<String>,
-        timestamp: u64,
-    },
-
+    
     // === Terminal Management (Real Terminals) ===
     /// Create a new local terminal request
     TerminalCreate {
@@ -142,18 +133,7 @@ pub enum NetworkMessage {
         from: NodeId,
         terminals: Vec<TerminalInfo>,
         timestamp: u64,
-    },
-
-    // === System Statistics ===
-    /// Stats request
-    StatsRequest { from: NodeId, timestamp: u64 },
-    /// Stats response
-    StatsResponse {
-        from: NodeId,
-        terminal_stats: TerminalStats,
-        node_id: String,
-        timestamp: u64,
-    },
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -364,8 +344,6 @@ pub enum EventType {
     Start,
     /// Session ended
     End,
-    /// History data
-    HistoryData,
 
     // === Real Terminal Management Events ===
     /// Terminal list updated
@@ -379,11 +357,7 @@ pub enum EventType {
         terminal_id: String,
         rows: u16,
         cols: u16,
-    },
-
-    // === System Events ===
-    /// System statistics
-    Stats { terminal_stats: TerminalStats },
+    }
 }
 
 /// Frontend event with timestamp, event type, and optional data
@@ -391,7 +365,7 @@ pub enum EventType {
 pub struct TerminalEvent {
     pub timestamp: u64,
     pub event_type: EventType,
-    /// Data field used for simple events (Output, Input, HistoryData)
+    /// Data field used for simple events (Output, Input)
     /// For structured events, this is typically empty
     pub data: String,
 }
@@ -432,13 +406,6 @@ pub enum TerminalStatus {
     Error(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TerminalStats {
-    pub total: usize,
-    pub running: usize,
-    pub errors: usize,
-    pub stopped: usize,
-}
 
 impl P2PNetwork {
     pub async fn new(relay_url: Option<String>) -> Result<Self> {
@@ -713,34 +680,7 @@ impl P2PNetwork {
         Ok(())
     }
 
-    pub async fn send_history_data(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-        shell_type: String,
-        working_dir: String,
-        history: Vec<String>,
-    ) -> Result<()> {
-        debug!("Sending history data");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for history data"))?;
-
-        let body = TerminalMessageBody::HistoryData {
-            from: self.endpoint.node_id(),
-            shell_type,
-            working_dir,
-            history,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
+    
     async fn start_topic_listener(
         &self,
         mut receiver: GossipReceiver,
@@ -929,112 +869,6 @@ impl P2PNetwork {
                     };
                     if session.event_sender.send(event).is_err() {
                         warn!("No active receivers for participant joined event, skipping");
-                    }
-
-                    // 如果我们是主机，自动发送历史记录
-                    if session.is_host {
-                        info!("We are the host, attempting to send history data");
-
-                        // 获取 gossip_sender 的克隆
-                        let gossip_sender = session.gossip_sender.clone();
-                        drop(sessions_guard); // 释放锁
-
-                        if let Some(sender) = gossip_sender {
-                            // 获取历史记录回调
-                            let callback = {
-                                let history_callback_guard = self.history_callback.read().await;
-                                history_callback_guard.as_ref().map(|cb| cb(session_id))
-                            };
-
-                            if let Some(receiver) = callback {
-                                // 在新的任务中处理历史记录发送，避免阻塞消息处理
-                                let network_clone = self.clone();
-                                let session_id_clone = session_id.to_string();
-
-                                tokio::spawn(async move {
-                                    match receiver.await {
-                                        Ok(Some(session_info)) => {
-                                            info!("Got history data, sending to new participant");
-
-                                            if let Err(e) = network_clone
-                                                .send_history_data(
-                                                    &session_id_clone,
-                                                    &sender,
-                                                    session_info.shell,
-                                                    session_info.cwd,
-                                                    session_info
-                                                        .logs
-                                                        .lines()
-                                                        .map(|s| s.to_string())
-                                                        .collect(),
-                                                )
-                                                .await
-                                            {
-                                                error!("Failed to send history data: {}", e);
-                                            } else {
-                                                info!(
-                                                    "✅ Successfully sent history data to new participant"
-                                                );
-                                            }
-                                        }
-                                        Ok(None) => {
-                                            info!("No history data available to send");
-                                        }
-                                        Err(_e) => {
-                                            error!("Failed to get history data");
-                                        }
-                                    }
-                                });
-                            } else {
-                                warn!("No history callback set, cannot send history data");
-                            }
-                        } else {
-                            warn!("No gossip sender available for sending history data");
-                        }
-                    }
-                }
-                TerminalMessageBody::HistoryData {
-                    from,
-                    shell_type,
-                    working_dir,
-                    history,
-                    timestamp,
-                } => {
-                    info!("Received history data from {}", from.fmt_short());
-
-                    // Send session info event
-                    let info_event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output,
-                        data: format!(
-                            "=== Session History ===\nShell: {}\nWorking Directory: {}\n",
-                            shell_type, working_dir
-                        ),
-                    };
-                    if session.event_sender.send(info_event).is_err() {
-                        warn!("No active receivers for history info event, skipping");
-                    }
-
-                    // Send each history line as a separate event
-                    for (i, line) in history.iter().enumerate() {
-                        let history_event = TerminalEvent {
-                            timestamp: timestamp + (i as u64), // Slight time offset for ordering
-                            event_type: EventType::HistoryData,
-                            data: line.clone(),
-                        };
-                        if session.event_sender.send(history_event).is_err() {
-                            warn!("No active receivers for history data event, skipping");
-                        }
-                    }
-
-                    // Send separator
-                    let separator_event = TerminalEvent {
-                        timestamp: timestamp + (history.len() as u64) + 1,
-                        event_type: EventType::Output,
-                        data: "=== End of History ===\n".to_string(),
-                    };
-                    if session.event_sender.send(separator_event).is_err() {
-                        warn!("No active receivers for history separator event, skipping");
                     }
                 }
 
@@ -1322,39 +1156,7 @@ impl P2PNetwork {
                         warn!("No active receivers for terminal list response event, skipping");
                     }
                 }
-
-                TerminalMessageBody::StatsRequest { from, timestamp } => {
-                    info!("Received stats request from {}", from.fmt_short());
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Output,
-                        data: "[Stats Request]".to_string(),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for stats request event, skipping");
-                    }
                 }
-                TerminalMessageBody::StatsResponse {
-                    from,
-                    terminal_stats,
-                    node_id,
-                    timestamp,
-                } => {
-                    info!(
-                        "Received stats response from {} (node: {})",
-                        from.fmt_short(),
-                        &node_id[..16]
-                    );
-                    let event = TerminalEvent {
-                        timestamp,
-                        event_type: EventType::Stats { terminal_stats },
-                        data: String::new(),
-                    };
-                    if session.event_sender.send(event).is_err() {
-                        warn!("No active receivers for stats response event, skipping");
-                    }
-                }
-            }
         }
         Ok(())
     }
@@ -1551,49 +1353,7 @@ impl P2PNetwork {
         Ok(())
     }
 
-    pub async fn send_stats_request(&self, session_id: &str, sender: &GossipSender) -> Result<()> {
-        debug!("Sending stats request");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for stats request"))?;
-
-        let body = TerminalMessageBody::StatsRequest {
-            from: self.endpoint.node_id(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
-    pub async fn send_stats_response(
-        &self,
-        session_id: &str,
-        sender: &GossipSender,
-        terminal_stats: TerminalStats,
-    ) -> Result<()> {
-        debug!("Sending stats response");
-        let sessions = self.sessions.read().await;
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("Session not found for stats response"))?;
-
-        let body = TerminalMessageBody::StatsResponse {
-            from: self.endpoint.node_id(),
-            terminal_stats,
-            node_id: self.endpoint.node_id().to_string(),
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-        };
-        let message = EncryptedTerminalMessage::new(body, &session.key)?;
-        sender.broadcast(message.to_vec()?.into()).await?;
-        Ok(())
-    }
-
+    
     // Additional terminal management methods
 
     pub async fn send_terminal_output(

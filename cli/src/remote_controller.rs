@@ -32,7 +32,6 @@ pub enum ControllerCommand {
         terminal_id: String,
     },
     ListTerminals,
-    ShowStats,
     Help,
     Exit,
 }
@@ -123,7 +122,6 @@ impl RemoteTerminalController {
         println!("   create   - Create a new terminal");
         println!("   stop     - Stop a terminal");
         println!("   list     - List all terminals");
-        println!("   stats    - Show system statistics");
         println!("   exit     - Exit controller");
         println!();
         println!("🎮 Type a command and press Enter...");
@@ -150,7 +148,6 @@ impl RemoteTerminalController {
         println!();
         println!();
         println!("📊 System Information:");
-        println!("   stats                     - Show system statistics");
         println!("   help                      - Show this help message");
         println!("   exit                      - Exit controller");
         println!();
@@ -211,18 +208,7 @@ impl RemoteTerminalController {
                 }
             }
 
-            ControllerCommand::ShowStats => {
-                if let Err(e) = self
-                    .network
-                    .send_stats_request(&self.session_id, &self.sender)
-                    .await
-                {
-                    eprintln!("Failed to send stats request: {}", e);
-                } else {
-                    println!("📊 Statistics request sent");
-                }
-            }
-
+            
             _ => {}
         }
 
@@ -311,7 +297,6 @@ impl RemoteTerminalController {
                 }
             }
             "list" | "ls" => Some(ControllerCommand::ListTerminals),
-            "stats" => Some(ControllerCommand::ShowStats),
             _ => None,
         }
     }
