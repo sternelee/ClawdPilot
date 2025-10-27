@@ -6,7 +6,6 @@ import {
   LanguageType,
   FontSizeType,
 } from "../stores/settingsStore";
-import { ModernCard, ModernButton } from "./ui/CyberEffects";
 import { HistoryEntry } from "../hooks/useConnectionHistory";
 
 interface SettingsModalProps {

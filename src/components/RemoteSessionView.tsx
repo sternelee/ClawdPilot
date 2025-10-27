@@ -708,22 +708,20 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                       const tabIndex = index() + 1;
                       return (
                         <button
-                          class={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap group ${
-                            isActive
-                              ? "bg-base-100 border border-b-0 border-gray-300 text-base-content shadow-sm"
-                              : "bg-base-300/50 hover:bg-base-300 text-base-content/70"
-                          }`}
+                          class={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap group ${isActive
+                            ? "bg-base-100 border border-b-0 border-gray-300 text-base-content shadow-sm"
+                            : "bg-base-300/50 hover:bg-base-300 text-base-content/70"
+                            }`}
                           onClick={() => setActiveTerminalId(terminal.id)}
                           title={`终端 ${tabIndex} - ${terminal.name || `Terminal ${terminal.id.slice(0, 8)}`} (${isActive ? "Ctrl+" + tabIndex + " 切换" : "Ctrl+" + tabIndex + " 打开"})`}
                         >
                           <span class="flex items-center space-x-1">
                             <span
-                              class={`w-2 h-2 rounded-full ${
-                                terminal.status === "Running" ? "bg-green-500" :
+                              class={`w-2 h-2 rounded-full ${terminal.status === "Running" ? "bg-green-500" :
                                 terminal.status === "Starting" ? "bg-yellow-500" :
-                                terminal.status === "Stopped" ? "bg-gray-500" :
-                                "bg-red-500"
-                              }`}
+                                  terminal.status === "Stopped" ? "bg-gray-500" :
+                                    "bg-red-500"
+                                }`}
                             />
                             <span class="flex items-center space-x-1">
                               <Show when={!isMobile && tabIndex <= 9}>
@@ -815,8 +813,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                   {isMobile
                     ? "点击右上角菜单选择或创建终端"
                     : terminals().length > 0
-                    ? "点击顶部标签页选择终端"
-                    : "点击顶部"新建"按钮创建第一个终端"}
+                      ? "点击顶部标签页选择终端"
+                      : "点击顶部新建按钮创建第一个终端"}
                 </div>
                 <Show when={isMobile}>
                   <button

@@ -12,22 +12,18 @@ import { listen } from "@tauri-apps/api/event";
 import "./App.css";
 import {
   createConnectionHistory,
-  HistoryEntry,
 } from "./hooks/useConnectionHistory";
-import { EnhancedTerminalView } from "./components/EnhancedTerminalView";
 import { SettingsModal } from "./components/SettingsModal";
 import { HomeView } from "./components/HomeView";
 import { RemoteSessionView } from "./components/RemoteSessionView";
 import { P2PBackground } from "./components/P2PBackground";
 import { t } from "./stores/settingsStore";
 import {
-  initializeMobileUtils,
   getDeviceCapabilities,
   MobileKeyboard,
   KeyboardInfo,
 } from "./utils/mobile";
 import { getViewportManager } from "./utils/mobile/ViewportManager";
-import { getLayoutCalculator } from "./utils/mobile/LayoutCalculator";
 import type { ViewportDimensions } from "./utils/mobile/ViewportManager";
 
 function App() {
@@ -59,13 +55,6 @@ function App() {
     window.innerHeight,
   );
   const [debugInfo, setDebugInfo] = createSignal("");
-
-  // Terminal information state
-  const [terminalInfo, setTerminalInfo] = createSignal<{
-    sessionTitle: string;
-    terminalType: string;
-    workingDirectory: string;
-  }>({ sessionTitle: "RiTerm", terminalType: "shell", workingDirectory: "~" });
 
   let sessionIdRef: string | null = null;
   let terminalInstance: Terminal | null = null;
@@ -140,40 +129,6 @@ function App() {
     // 初始化网络
     initializeNetwork();
   });
-
-  const handleTerminalReady = (term: Terminal, addon: FitAddon) => {
-    terminalInstance = term;
-    fitAddon = addon;
-
-    // 移动端调试信息
-    const deviceCapabilities = getDeviceCapabilities();
-    if (deviceCapabilities.isMobile) {
-      console.log("[Mobile Debug] Terminal ready callback triggered:", {
-        terminal: !!term,
-        isDisposed: !!(term as any)._isDisposed,
-        element: !!term.element,
-        rows: term.rows,
-        cols: term.cols,
-        terminalInstanceRef: !!terminalInstance
-      });
-    }
-
-    window.addEventListener("resize", () => addon.fit());
-  };
-
-  const handleTerminalInput = (data: string) => {
-    if (isConnected() && sessionIdRef) {
-      invoke("send_terminal_input", {
-        sessionId: sessionIdRef,
-        input: data,
-      }).catch((error) => {
-        console.error("Failed to send input:", error);
-        if (terminalInstance && !(terminalInstance as any)._isDisposed) {
-          terminalInstance.writeln(`\r\n❌ Failed to send input: ${error}`);
-        }
-      });
-    }
-  };
 
   const handleDisconnect = async () => {
     if (terminalInstance && !(terminalInstance as any)._isDisposed) {
@@ -414,28 +369,6 @@ function App() {
             />
           )}
 
-          {currentView() === "terminal" && isConnected() && (
-            <EnhancedTerminalView
-              onReady={handleTerminalReady}
-              onInput={handleTerminalInput}
-              isConnected={isConnected()}
-              onDisconnect={handleDisconnect}
-              onShowKeyboard={() => {
-                /* TODO: Implement mobile keyboard */
-              }}
-              sessionTitle={terminalInfo().sessionTitle}
-              terminalType={terminalInfo().terminalType}
-              workingDirectory={terminalInfo().workingDirectory}
-              keyboardVisible={keyboardVisible()}
-              safeViewportHeight={effectiveViewportHeight()}
-              onKeyboardToggle={(visible) => {
-                // 处理内部移动键盘状态变化
-                console.log("Terminal internal keyboard toggled:", visible);
-              }}
-              onShowSettings={() => setIsSettingsOpen(true)}
-              sessionId={sessionIdRef}
-            />
-          )}
         </div>
       </div>
 
