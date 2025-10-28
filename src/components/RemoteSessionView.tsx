@@ -4,6 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getDeviceCapabilities } from "../utils/mobile";
+import { useTerminalSessions } from "../stores/terminalSessionStore";
+import { useTerminalSession } from "../hooks/useTerminalSession";
 // Import types from the shared library
 interface TerminalInfo {
   id: string;
@@ -28,6 +30,7 @@ interface TerminalSession {
   terminal: Terminal;
   fitAddon: FitAddon;
   isActive: boolean;
+  terminalSession?: ReturnType<typeof useTerminalSession>;
 }
 
 export function RemoteSessionView(props: RemoteSessionViewProps) {
@@ -39,6 +42,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [activeTerminalId, setActiveTerminalId] = createSignal<string | null>(
     null
   );
+
+  // 全局会话管理
+  const terminalSessionManager = useTerminalSessions();
 
   // 创建终端弹窗相关状态
   const [showCreateDialog, setShowCreateDialog] = createSignal(false);
@@ -116,9 +122,21 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         size:
           config?.rows && config?.cols ? [config.rows, config.cols] : undefined,
       };
-      await invoke("create_terminal", { request });
+      const terminalId = await invoke<string>("create_terminal", { request });
+
+      // 创建会话记录
+      const session = terminalSessionManager.getSession(props.sessionId);
+      if (session) {
+        terminalSessionManager.updateSession(props.sessionId, {
+          status: "Running",
+          lastActivity: Date.now(),
+        });
+      }
+
+      return terminalId;
     } catch (error) {
       console.error("Failed to create terminal:", error);
+      throw error;
     }
   };
 
@@ -156,6 +174,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const sessions = terminalSessions();
       if (sessions.has(terminalId)) {
         setActiveTerminalId(terminalId);
+        terminalSessionManager.setActiveTerminal(terminalId);
         return;
       }
 
@@ -187,8 +206,44 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       setTerminalSessions(newSessions);
       setActiveTerminalId(terminalId);
 
+      // 获取或创建会话记录
+      let session = terminalSessionManager.getSession(terminalId);
+      if (!session) {
+        // 从终端信息创建会话记录
+        const terminalInfo = terminals().find(t => t.id === terminalId);
+        if (terminalInfo) {
+          terminalSessionManager.addSession({
+            terminalId,
+            sessionId: props.sessionId,
+            name: terminalInfo.name,
+            shellType: terminalInfo.shell_type,
+            currentDir: terminalInfo.current_dir,
+            status: "Running",
+            createdAt: Date.now(),
+            size: terminalInfo.size,
+            processId: terminalInfo.process_id,
+          });
+          session = terminalSessionManager.getSession(terminalId);
+        }
+      }
+
+      // 设置活动终端
+      terminalSessionManager.setActiveTerminal(terminalId);
+
+      // 初始化终端会话Hook
+      const terminalSessionHook = useTerminalSession(terminal, () => terminalId, {
+        saveInterval: 3000,
+        maxContentLength: 5000,
+      });
+
       // 设置终端数据处理器
       terminal.onData((data) => {
+        // 保存命令到会话
+        if (data.trim()) {
+          terminalSessionHook.saveCommand(data.trim());
+        }
+
+        // 发送到远程终端
         invoke("send_terminal_input_to_terminal", {
           request: {
             session_id: props.sessionId,
@@ -200,13 +255,22 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         });
       });
 
+      // 更新会话引用
+      terminalSession.terminalSession = terminalSessionHook;
+
       // 告诉CLI端我们连接到了这个终端
       await invoke("connect_to_terminal", {
         sessionId: props.sessionId,
         terminalId,
       });
+
+      // 更新连接状态
+      terminalSessionManager.updateConnectionState(terminalId, 'connected');
+
     } catch (error) {
       console.error("Failed to connect to terminal:", error);
+      // 更新连接状态为失败
+      terminalSessionManager.updateConnectionState(terminalId, 'disconnected');
     }
   };
 
@@ -219,6 +283,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       if (session && session.isActive) {
         session.terminal.write(data);
+
+        // 触发会话保存（通过解析输出更新工作目录等）
+        if (session.terminalSession) {
+          session.terminalSession.updateWorkingDirectory(data);
+        }
       }
     });
 
@@ -706,14 +775,20 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                     {(terminal, index) => {
                       const isActive = activeTerminalId() === terminal.id;
                       const tabIndex = index() + 1;
+                      const session = terminalSessionManager.getSession(terminal.id);
+                      const hasSessionData = session && (session.terminalContent || session.commandHistory?.length);
+
                       return (
                         <button
                           class={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap group ${isActive
                             ? "bg-base-100 border border-b-0 border-gray-300 text-base-content shadow-sm"
                             : "bg-base-300/50 hover:bg-base-300 text-base-content/70"
                             }`}
-                          onClick={() => setActiveTerminalId(terminal.id)}
-                          title={`终端 ${tabIndex} - ${terminal.name || `Terminal ${terminal.id.slice(0, 8)}`} (${isActive ? "Ctrl+" + tabIndex + " 切换" : "Ctrl+" + tabIndex + " 打开"})`}
+                          onClick={() => {
+                            setActiveTerminalId(terminal.id);
+                            terminalSessionManager.setActiveTerminal(terminal.id);
+                          }}
+                          title={`终端 ${tabIndex} - ${terminal.name || `Terminal ${terminal.id.slice(0, 8)}`} (${isActive ? "Ctrl+" + tabIndex + " 切换" : "Ctrl+" + tabIndex + " 打开"})${hasSessionData ? " - 有保存的会话数据" : ""}`}
                         >
                           <span class="flex items-center space-x-1">
                             <span
@@ -730,6 +805,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                                 </span>
                               </Show>
                               <span>{terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}</span>
+                              {hasSessionData && (
+                                <span class="text-xs text-blue-500" title="有保存的会话数据">
+                                  💾
+                                </span>
+                              )}
                             </span>
                           </span>
                           <Show when={isActive}>
@@ -829,6 +909,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           )}
         </div>
       </div>
+
     </div>
   );
 }

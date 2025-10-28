@@ -1,5 +1,4 @@
 import { createSignal, Show, For } from "solid-js";
-import { HistoryEntry } from "../hooks/useConnectionHistory";
 import { getDeviceCapabilities } from "../utils/mobile";
 
 interface HomeViewProps {
@@ -9,20 +8,17 @@ interface HomeViewProps {
   onShowSettings: () => void;
   connecting: boolean;
   connectionError: string | null;
-  history: HistoryEntry[];
   isLoggedIn: boolean;
   onLogin: (username: string, password: string) => void;
   onSkipLogin: () => void;
   isConnected: boolean;
   activeTicket: string | null;
   onReturnToSession: () => void;
-  onDeleteHistory: (ticket: string) => void;
   onDisconnect: () => void;
 }
 
 export function HomeView(props: HomeViewProps) {
   const [showLoginModal, setShowLoginModal] = createSignal(false);
-  const [showHistoryModal, setShowHistoryModal] = createSignal(false);
   const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
 
@@ -125,106 +121,7 @@ export function HomeView(props: HomeViewProps) {
     </Show>
   );
 
-  // 历史连接模态框
-  const renderHistoryModal = () => (
-    <Show when={showHistoryModal()}>
-      <div
-        class="fixed inset-0 bg-black/50 z-50 flex items-end justify-center md:items-center"
-        onClick={() => setShowHistoryModal(false)}
-      >
-        <div
-          class="bg-base-100 w-full max-w-md max-h-[80vh] rounded-t-3xl md:rounded-2xl p-6 transform transition-transform overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div class="text-center mb-6">
-            <div class="w-12 h-1 bg-base-300 rounded-full mx-auto mb-4 md:hidden"></div>
-            <h2 class="text-2xl font-bold mb-2">历史连接</h2>
-            <p class="text-sm opacity-70">选择一个历史连接来快速连接</p>
-          </div>
-
-          <div class="space-y-3">
-            <For each={props.history}>
-              {(entry) => {
-                const getConnectionStatusIcon = (entry: HistoryEntry) => {
-                  if (props.activeTicket === entry.ticket) return "🟢";
-                  switch (entry.status) {
-                    case "Completed":
-                      return "✅";
-                    case "Failed":
-                      return "❌";
-                    case "Active":
-                      return "🟡";
-                    default:
-                      return "⚪";
-                  }
-                };
-
-                const formatConnectionTime = (timestamp: string | number) => {
-                  const date = new Date(timestamp);
-                  const now = new Date();
-                  const diff = now.getTime() - date.getTime();
-
-                  if (diff < 60000) return "刚才";
-                  if (diff < 3600000)
-                    return `${Math.floor(diff / 60000)} 分钟前`;
-                  if (diff < 86400000)
-                    return `${Math.floor(diff / 3600000)} 小时前`;
-                  return date.toLocaleDateString();
-                };
-
-                return (
-                  <div class="flex items-center justify-between p-4 bg-base-200 rounded-lg hover:bg-base-300 transition-colors">
-                    <div class="flex items-center space-x-3 flex-1 min-w-0">
-                      <span class="text-lg">
-                        {getConnectionStatusIcon(entry)}
-                      </span>
-                      <div class="flex-1 min-w-0">
-                        <div class="font-medium truncate">{entry.title}</div>
-                        <div class="text-xs opacity-70 font-mono truncate">
-                          {entry.ticket.substring(0, 16)}...
-                        </div>
-                        <div class="text-xs opacity-50">
-                          {formatConnectionTime(entry.timestamp)}
-                        </div>
-                      </div>
-                    </div>
-                    <div class="flex space-x-2">
-                      <button
-                        class="btn btn-primary btn-sm"
-                        onClick={() => {
-                          handleQuickConnect(entry.ticket);
-                          setShowHistoryModal(false);
-                        }}
-                        disabled={props.connecting}
-                      >
-                        连接
-                      </button>
-                      <button
-                        class="btn btn-ghost btn-sm"
-                        onClick={() => props.onDeleteHistory(entry.ticket)}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                );
-              }}
-            </For>
-          </div>
-
-          <div class="mt-6 pt-4 border-t border-base-300">
-            <button
-              class="btn btn-ghost w-full"
-              onClick={() => setShowHistoryModal(false)}
-            >
-              ✖️ 关闭
-            </button>
-          </div>
-        </div>
-      </div>
-    </Show>
-  );
-
+  
   // 主页渲染 - 简洁设计
   const renderMainView = () => (
     <div class="min-h-screen bg-base-100 flex flex-col">
@@ -286,16 +183,6 @@ export function HomeView(props: HomeViewProps) {
         {/* > */}
         {/*   帐号登录 */}
         {/* </EnhancedButton> */}
-
-        {/* 历史连接按钮 */}
-        <Show when={props.history.length > 0}>
-          <button
-            class="btn btn-ghost w-full max-w-md md:mt-4"
-            onClick={() => setShowHistoryModal(true)}
-          >
-            📚 历史连接
-          </button>
-        </Show>
       </div>
     </div>
   );
@@ -307,9 +194,6 @@ export function HomeView(props: HomeViewProps) {
 
       {/* 登录模态框 */}
       {renderLoginModal()}
-
-      {/* 历史连接模态框 */}
-      {renderHistoryModal()}
 
       {/* 正在连接的加载遮罩 */}
       <Show when={props.connecting}>

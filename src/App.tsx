@@ -10,9 +10,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
-import {
-  createConnectionHistory,
-} from "./hooks/useConnectionHistory";
 import { SettingsModal } from "./components/SettingsModal";
 import { HomeView } from "./components/HomeView";
 import { RemoteSessionView } from "./components/RemoteSessionView";
@@ -25,6 +22,11 @@ import {
 } from "./utils/mobile";
 import { getViewportManager } from "./utils/mobile/ViewportManager";
 import type { ViewportDimensions } from "./utils/mobile/ViewportManager";
+
+// 在开发环境中导入测试脚本
+if (import.meta.env.DEV) {
+  import("./utils/testSessionManager");
+}
 
 function App() {
   const [sessionTicket, setSessionTicket] = createSignal("");
@@ -61,9 +63,7 @@ function App() {
   let fitAddon: FitAddon | null = null;
   let unlistenRef: (() => void) | null = null;
 
-  const { history, addHistoryEntry, updateHistoryEntry, deleteHistoryEntry } =
-    createConnectionHistory();
-
+  
   // Enhanced mobile initialization and keyboard state management
   onMount(() => {
     // Time update timer
@@ -128,6 +128,13 @@ function App() {
   onMount(() => {
     // 初始化网络
     initializeNetwork();
+
+    // Clean up history data from localStorage
+    try {
+      localStorage.removeItem("riterm-connection-history");
+    } catch (error) {
+      console.log("Failed to clean up history data:", error);
+    }
   });
 
   const handleDisconnect = async () => {
@@ -137,14 +144,7 @@ function App() {
       );
     }
 
-    const currentActiveTicket = activeTicket();
-    if (currentActiveTicket) {
-      updateHistoryEntry(currentActiveTicket, {
-        status: "Completed",
-        description: "Session ended by user.",
-      });
-    }
-
+  
     if (sessionIdRef) {
       try {
         await invoke("disconnect_session", { sessionId: sessionIdRef });
@@ -196,11 +196,7 @@ function App() {
       return;
     }
 
-    // If a new ticket is used, add it to history.
-    if (!history().some((h) => h.ticket === ticket)) {
-      addHistoryEntry(ticket);
-    }
-    setConnecting(true);
+      setConnecting(true);
     setStatus(t("connection.status.connecting"));
     setConnectionError(null);
 
@@ -225,8 +221,7 @@ function App() {
       setActiveTicket(ticket);
       setIsConnected(true);
       setCurrentView("remote");
-      updateHistoryEntry(ticket, { description: "Connected to remote CLI host." });
-
+  
       const unlisten = await listen<any>(
         `terminal-event-${actualSessionId}`,
         (event) => {
@@ -264,10 +259,6 @@ function App() {
 
       // 其他错误正常处理
       setStatus(t("connection.status.failed"));
-      updateHistoryEntry(ticket, {
-        status: "Failed",
-        description: errorMessage,
-      });
       setConnectionError(errorMessage);
       setNetworkStrength(1);
     } finally {
@@ -285,10 +276,7 @@ function App() {
     setIsLoggedIn(true);
   };
 
-  const activeHistoryEntry = createMemo(() =>
-    history().find((entry) => entry.ticket === activeTicket()),
-  );
-
+  
   return (
     <div
       class="w-full font-mono mobile-viewport"
@@ -349,14 +337,12 @@ function App() {
               onShowSettings={() => setIsSettingsOpen(true)}
               connecting={connecting()}
               connectionError={connectionError()}
-              history={history()}
               isLoggedIn={isLoggedIn()}
               onLogin={handleLogin}
               onSkipLogin={handleSkipLogin}
               isConnected={isConnected()}
               activeTicket={activeTicket()}
               onReturnToSession={() => setCurrentView("remote")}
-              onDeleteHistory={deleteHistoryEntry}
               onDisconnect={handleDisconnect}
             />
           )}
@@ -376,8 +362,6 @@ function App() {
       <SettingsModal
         isOpen={isSettingsOpen()}
         onClose={() => setIsSettingsOpen(false)}
-        entry={activeHistoryEntry() || null}
-        onSave={(ticket, updates) => updateHistoryEntry(ticket, updates)}
       />
     </div>
   );

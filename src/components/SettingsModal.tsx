@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show } from "solid-js";
+import { Show } from "solid-js";
 import {
   settingsStore,
   t,
@@ -6,38 +6,13 @@ import {
   LanguageType,
   FontSizeType,
 } from "../stores/settingsStore";
-import { HistoryEntry } from "../hooks/useConnectionHistory";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  entry?: HistoryEntry | null;
-  onSave?: (
-    ticket: string,
-    updates: { title: string; description: string },
-  ) => void;
 }
 
 export function SettingsModal(props: SettingsModalProps) {
-  const [title, setTitle] = createSignal("");
-  const [description, setDescription] = createSignal("");
-
-  createEffect(() => {
-    if (props.entry) {
-      setTitle(props.entry.title);
-      setDescription(props.entry.description);
-    }
-  });
-
-  const handleSave = () => {
-    if (props.entry && props.onSave) {
-      props.onSave(props.entry.ticket, {
-        title: title(),
-        description: description(),
-      });
-    }
-    props.onClose();
-  };
 
   const themeOptions = [
     { value: "riterm-dark", label: t("theme.riterm-dark") },
