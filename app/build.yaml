@@ -1,0 +1,12 @@
+targets:
+  $default:
+    builders:
+      rust_lib_app:cargokit:
+        enabled: true
+        options:
+          # Release build
+          release: true
+          # Cargo manifest path
+          manifestPath: rust/Cargo.toml
+          # Native library name
+          name: rust_lib_app

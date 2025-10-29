@@ -22,3 +22,4 @@ regex = "1.10"
 base64 = { workspace = true }
 brotli = { workspace = true }
 hex = { workspace = true }
+uuid = { workspace = true }

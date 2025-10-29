@@ -40,7 +40,15 @@
       "Bash(RUST_LOG=debug ./target/debug/iroh-code-remote:*)",
       "WebFetch(domain:docs.tauri.app)",
       "WebFetch(domain:crates.io)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(flutter_rust_bridge_codegen:*)",
+      "Bash(flutter pub:*)",
+      "WebFetch(domain:cjycode.com)",
+      "WebFetch(domain:pub.dev)",
+      "WebFetch(domain:rustdoc.cs.tuwien.ac.at)",
+      "Bash(flutter analyze:*)",
+      "Bash(flutter build:*)",
+      "Bash(flutter clean:*)"
     ],
     "deny": []
   },
