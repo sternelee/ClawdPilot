@@ -1,4 +1,5 @@
 // Mobile-specific utilities and features - Enhanced for mobile-first UI
+import { getDeviceCapabilities as getDeviceCapabilitiesFromStore } from "../stores/deviceStore";
 
 export interface FixedElementConfig {
   adjustWithKeyboard: boolean;
@@ -43,36 +44,9 @@ export interface GestureState {
   rotation: number;
 }
 
-// Device capability detection
+// Re-export device capabilities from store
 export function getDeviceCapabilities(): DeviceCapabilities {
-  const userAgent = navigator.userAgent.toLowerCase();
-  const isMobile =
-    /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
-      userAgent,
-    );
-  const isTablet = /ipad|android(?!.*mobile)/i.test(userAgent);
-  const isDesktop = !isMobile && !isTablet;
-
-  const screenWidth = window.screen.width;
-  let screenSize: DeviceCapabilities["screenSize"];
-
-  if (screenWidth < 475) screenSize = "xs";
-  else if (screenWidth < 640) screenSize = "sm";
-  else if (screenWidth < 768) screenSize = "md";
-  else if (screenWidth < 1024) screenSize = "lg";
-  else screenSize = "xl";
-
-  return {
-    isMobile,
-    isTablet,
-    isDesktop,
-    supportsTouch: "ontouchstart" in window || navigator.maxTouchPoints > 0,
-    supportsHaptic: "vibrate" in navigator,
-    supportsFullscreen: "requestFullscreen" in document.documentElement,
-    supportsOrientation: "orientation" in window,
-    screenSize,
-    hasPhysicalKeyboard: !isMobile || isTablet,
-  };
+  return getDeviceCapabilitiesFromStore();
 }
 
 // Haptic feedback utilities
@@ -921,16 +895,8 @@ export function initializeMobileUtils(options: { integrateViewportManager?: bool
 
   MobileKeyboard.init(integrateViewportManager);
 
-  // Add mobile-specific CSS classes
+  // Get capabilities from store (already initialized)
   const capabilities = getDeviceCapabilities();
-  document.documentElement.classList.toggle("mobile", capabilities.isMobile);
-  document.documentElement.classList.toggle("tablet", capabilities.isTablet);
-  document.documentElement.classList.toggle("desktop", capabilities.isDesktop);
-  document.documentElement.classList.toggle(
-    "touch",
-    capabilities.supportsTouch,
-  );
-  document.documentElement.classList.add(`screen-${capabilities.screenSize}`);
 
   // Add safe area support class
   if (capabilities.isMobile || capabilities.isTablet) {

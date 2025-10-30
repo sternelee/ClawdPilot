@@ -49,15 +49,58 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 创建终端弹窗相关状态
   const [showCreateDialog, setShowCreateDialog] = createSignal(false);
   const [terminalName, setTerminalName] = createSignal("");
+  const [dialogInputFocused, setDialogInputFocused] = createSignal(false);
 
   // 移动端下拉菜单状态
   const [showTerminalMenu, setShowTerminalMenu] = createSignal(false);
   const [showMainMenu, setShowMainMenu] = createSignal(false);
 
+  // 桌面端终端标签栏下拉状态
+  const [showDesktopTerminalDropdown, setShowDesktopTerminalDropdown] = createSignal(false);
+
   const deviceCapabilities = getDeviceCapabilities();
   const isMobile = deviceCapabilities.isMobile;
 
   let containerRef: HTMLDivElement | undefined;
+  let tabsContainerRef: HTMLDivElement | undefined;
+
+  // 发送快捷键到终端
+  const sendShortcut = (key: string) => {
+    const activeId = activeTerminalId();
+    if (!activeId) return;
+
+    const sessions = terminalSessions();
+    const session = sessions.get(activeId);
+    if (!session) return;
+
+    // 映射快捷键到终端控制字符
+    const keyMap: Record<string, string> = {
+      'esc': '\x1b',          // ESC
+      'tab': '\t',            // Tab
+      'enter': '\r',          // Enter/Return
+      'up': '\x1b[A',         // Up arrow
+      'down': '\x1b[B',       // Down arrow
+      'left': '\x1b[D',       // Left arrow
+      'right': '\x1b[C',      // Right arrow
+      'ctrl-c': '\x03',       // Ctrl+C
+      'ctrl-t': '\x14',       // Ctrl+T
+      'ctrl-d': '\x04',       // Ctrl+D
+      'ctrl-z': '\x1a',       // Ctrl+Z
+      'ctrl-l': '\x0c',       // Ctrl+L (clear)
+    };
+
+    const data = keyMap[key];
+    if (data) {
+      // 发送到后端终端
+      invoke("send_terminal_input_to_terminal", {
+        sessionId: props.sessionId,
+        terminalId: activeId,
+        input: data,
+      }).catch((error) => {
+        console.error("Failed to send terminal input:", error);
+      });
+    }
+  };
 
   // 获取终端列表
   const fetchTerminals = async () => {
@@ -187,6 +230,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           background: "#1a1a1a",
           foreground: "#f0f0f0",
         },
+        scrollback: 1000,
+        convertEol: true,
+        allowProposedApi: true,
+        rows: 24,  // 默认行数
+        cols: 80,  // 默认列数
       });
 
       const fitAddon = new FitAddon();
@@ -315,29 +363,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         }
       }
 
-      // 兼容旧的字符串格式
-      if (
-        event.payload.data &&
-        event.payload.data.includes("[Terminal List Response:")
-      ) {
-        try {
-          // 解析终端列表响应格式: "[Terminal List Response: X terminals] [{\"id\":\"...\"}]"
-          const match = event.payload.data.match(
-            /\[Terminal List Response: (\d+) terminals\] (.+)/
-          );
-          if (match && match[2]) {
-            const terminalData = JSON.parse(match[2]);
-            console.log("Parsed terminal list (legacy):", terminalData);
-            setTerminals(terminalData);
-          }
-        } catch (error) {
-          console.error(
-            "Failed to parse legacy terminal list response:",
-            error
-          );
-        }
-      }
-
       // 处理终端输出事件 - 使用新的结构化数据
       if (
         event.payload.event_type &&
@@ -398,31 +423,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           );
         }
       }
-
-      // 兼容旧的字符串格式（保留作为后备）
-      if (
-        event.payload.data &&
-        event.payload.data.includes("[Terminal Output:")
-      ) {
-        try {
-          const rawData = event.payload.data;
-          const match = rawData.match(/\[Terminal Output: ([^]]+)\] (.*)/s);
-
-          if (match && match[1] && match[2]) {
-            const terminalId = match[1];
-            const outputData = match[2];
-
-            const sessions = terminalSessions();
-            const session = sessions.get(terminalId);
-
-            if (session && session.isActive) {
-              session.terminal.write(outputData);
-            }
-          }
-        } catch (error) {
-          console.error("Failed to parse legacy terminal output event:", error);
-        }
-      }
     });
   };
 
@@ -434,18 +434,65 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     await fetchTerminals();
 
     setLoading(false);
+
+    // 添加 resize 监听器 - 使用 debounce
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const handleResize = () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+
+      resizeTimeout = setTimeout(() => {
+        const sessions = terminalSessions();
+        sessions.forEach((session) => {
+          try {
+            if (containerRef && containerRef.clientWidth > 0) {
+              session.fitAddon.fit();
+              console.log("Terminal resized:", {
+                rows: session.terminal.rows,
+                cols: session.terminal.cols
+              });
+            }
+          } catch (error) {
+            console.error("Error fitting terminal on resize:", error);
+          }
+        });
+      }, 150); // 150ms debounce
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    // 清理函数
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+    };
   });
 
-  // 响应式更新
+  // 响应式更新 - 改进版
   createEffect(() => {
-    if (activeTerminalId()) {
-      setTimeout(() => {
-        const sessions = terminalSessions();
-        const session = sessions.get(activeTerminalId()!);
-        if (session) {
-          session.fitAddon.fit();
-        }
-      }, 100);
+    const activeId = activeTerminalId();
+    if (activeId) {
+      // 使用双重 requestAnimationFrame 确保 DOM 完全更新
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const sessions = terminalSessions();
+          const session = sessions.get(activeId);
+          if (session && containerRef) {
+            try {
+              // 确保容器有尺寸
+              if (containerRef.clientWidth > 0 && containerRef.clientHeight > 0) {
+                session.fitAddon.fit();
+                console.log("Terminal refitted:", {
+                  rows: session.terminal.rows,
+                  cols: session.terminal.cols
+                });
+              }
+            } catch (error) {
+              console.error("Error fitting terminal:", error);
+            }
+          }
+        });
+      });
     }
   });
 
@@ -549,6 +596,44 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   );
 
 
+  // 渲染快捷键按钮栏
+  const renderShortcutBar = () => {
+    if (!activeTerminalId()) return null;
+
+    const shortcuts = [
+      { key: 'esc', label: 'Esc', color: 'bg-base-200' },
+      { key: 'tab', label: 'Tab', color: 'bg-base-200' },
+      { key: 'up', label: '↑', color: 'bg-base-200' },
+      { key: 'down', label: '↓', color: 'bg-base-200' },
+      { key: 'enter', label: 'Enter', color: 'bg-base-200' },
+      { key: 'ctrl-c', label: 'Ctrl-C', color: 'bg-base-200' },
+      { key: 'ctrl-t', label: 'Ctrl-T', color: 'bg-base-200' },
+    ];
+
+    return (
+      <div class="border-t bg-base-100 px-2 py-2 safe-area-bottom">
+        <div class="flex items-center justify-between gap-1 max-w-full overflow-x-auto">
+          <For each={shortcuts}>
+            {(shortcut) => (
+              <button
+                class={`btn btn-sm ${shortcut.color} hover:bg-base-300 border-base-300 text-base-content flex-1 min-w-0 px-2`}
+                onClick={() => sendShortcut(shortcut.key)}
+                onTouchStart={(e) => {
+                  e.currentTarget.classList.add('scale-95');
+                }}
+                onTouchEnd={(e) => {
+                  e.currentTarget.classList.remove('scale-95');
+                }}
+              >
+                <span class="text-xs sm:text-sm truncate">{shortcut.label}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
+    );
+  };
+
   // 渲染活动终端
   const renderActiveTerminal = () => {
     const terminalId = activeTerminalId();
@@ -559,46 +644,44 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     if (!session) return null;
 
     return (
-      <div class="flex-1 bg-black relative">
-        {/* 桌面端：直接显示终端，不重复标题栏 */}
-        <Show when={!isMobile}>
-          <div
-            ref={(el) => {
-              if (el && el.children.length === 0) {
-                session.terminal.open(el);
-                session.fitAddon.fit();
-              }
-            }}
-            class="w-full h-full"
-          />
-        </Show>
+      <div class="absolute inset-0 bg-black">
+        {/* 终端显示区域 */}
+        <div
+          ref={(el) => {
+            if (el && el.children.length === 0) {
+              try {
+                console.log("Opening terminal in container:", el);
 
-        {/* 移动端：保持原有的标题栏设计 */}
-        <Show when={isMobile}>
-          <div class="bg-base-100 px-4 py-2 flex justify-between items-center">
-            <div class="text-sm font-medium truncate">
-              {terminals().find((t) => t.id === terminalId)?.name ||
-                `Terminal ${terminalId.slice(0, 8)}`}
-            </div>
-            <button
-              class="btn btn-ghost btn-xs"
-              onClick={() => setActiveTerminalId(null)}
-              title="关闭终端"
-            >
-              ✖️
-            </button>
-          </div>
-          <div
-            ref={(el) => {
-              if (el && el.children.length === 0) {
+                // 打开终端
                 session.terminal.open(el);
-                session.fitAddon.fit();
+
+                // 等待 DOM 更新后再 fit
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    try {
+                      console.log("Fitting terminal, container size:", {
+                        width: el.clientWidth,
+                        height: el.clientHeight
+                      });
+                      session.fitAddon.fit();
+
+                      // 获取终端实际的行列数
+                      console.log("Terminal fitted to:", {
+                        rows: session.terminal.rows,
+                        cols: session.terminal.cols
+                      });
+                    } catch (error) {
+                      console.error("Error fitting terminal:", error);
+                    }
+                  });
+                });
+              } catch (error) {
+                console.error("Error opening terminal:", error);
               }
-            }}
-            class="flex-1"
-            style={{ height: "calc(100% - 48px)" }}
-          />
-        </Show>
+            }
+          }}
+          class="absolute inset-0 overflow-hidden"
+        />
       </div>
     );
   };
@@ -621,9 +704,23 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     <div class="h-full flex flex-col" onKeyDown={handleKeyboardShortcuts} tabIndex={0}>
       {/* 创建终端对话框 */}
       <Show when={showCreateDialog()}>
-        <div class="modal modal-open">
-          <div class="modal-box">
-            <h3 class="font-bold text-lg mb-4">创建新终端</h3>
+        <div
+          class="modal modal-open transition-all duration-300"
+          classList={{
+            "items-end md:items-center": !dialogInputFocused() || !isMobile,
+            "items-start pt-12": dialogInputFocused() && isMobile
+          }}
+        >
+          <div class="modal-box transition-all duration-300">
+            <h3
+              class="font-bold transition-all duration-300"
+              classList={{
+                "text-lg mb-4": !dialogInputFocused() || !isMobile,
+                "text-base mb-2": dialogInputFocused() && isMobile
+              }}
+            >
+              创建新终端
+            </h3>
             <div class="form-control">
               <label class="label">
                 <span class="label-text">终端名称（可选）</span>
@@ -631,9 +728,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               <input
                 type="text"
                 placeholder="例如：开发环境、生产服务器"
-                class="input input-bordered"
+                class="input input-bordered text-base"
                 value={terminalName()}
                 onInput={(e) => setTerminalName(e.currentTarget.value)}
+                onFocus={() => setDialogInputFocused(true)}
+                onBlur={() => setDialogInputFocused(false)}
                 onKeyPress={(e) => {
                   if (e.key === "Enter") {
                     confirmCreateTerminal();
@@ -641,13 +740,15 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 }}
               />
             </div>
-            <div class="mt-4 text-sm text-base-content/70">
-              <p>终端大小将自动适配当前页面宽度</p>
-              <p class="mt-1">
-                预计大小: {calculateTerminalSize().cols} 列 ×{" "}
-                {calculateTerminalSize().rows} 行
-              </p>
-            </div>
+            <Show when={!dialogInputFocused() || !isMobile}>
+              <div class="mt-4 text-sm text-base-content/70">
+                <p>终端大小将自动适配当前页面宽度</p>
+                <p class="mt-1">
+                  预计大小: {calculateTerminalSize().cols} 列 ×{" "}
+                  {calculateTerminalSize().rows} 行
+                </p>
+              </div>
+            </Show>
             <div class="modal-action">
               <button
                 class="btn btn-ghost"
@@ -678,15 +779,43 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             <span class="ml-2 font-medium hidden sm:inline">远程会话</span>
           </div>
           <div class="flex-none flex items-center space-x-1">
-            <button
-              class="btn btn-ghost btn-sm"
-              onClick={() => fetchTerminals()}
-              title="刷新"
-            >
-              🔄
-            </button>
+            {/* 移动端：创建按钮 */}
+            <Show when={isMobile}>
+              <button
+                class="btn btn-ghost btn-sm"
+                onClick={() => openCreateDialog()}
+                title="新建终端"
+              >
+                ➕
+              </button>
+            </Show>
 
-            {/* 移动端下拉菜单 */}
+            {/* 桌面端按钮 */}
+            <Show when={!isMobile}>
+              <button
+                class="btn btn-ghost btn-sm"
+                onClick={() => fetchTerminals()}
+                title="刷新"
+              >
+                🔄
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                onClick={() => openCreateDialog()}
+                title="新建终端"
+              >
+                ➕ 新建
+              </button>
+              <button
+                class="btn btn-ghost btn-sm"
+                onClick={props.onDisconnect}
+                title="断开连接"
+              >
+                🔌 断开
+              </button>
+            </Show>
+
+            {/* 移动端：菜单按钮 */}
             <Show when={isMobile}>
               <div class="dropdown dropdown-end">
                 <button
@@ -737,103 +866,194 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 </Show>
               </div>
             </Show>
-
-            {/* 桌面端按钮 */}
-            <Show when={!isMobile}>
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={() => openCreateDialog()}
-                title="新建终端"
-              >
-                ➕ 新建
-              </button>
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={props.onDisconnect}
-                title="断开连接"
-              >
-                🔌 断开
-              </button>
-            </Show>
           </div>
         </div>
 
+        {/* 移动端终端标签栏 - 水平滚动 */}
+        <Show when={isMobile && terminals().length > 0}>
+          <div class="border-t bg-base-100 overflow-x-auto scrollbar-hide">
+            <div class="flex px-2 py-1 min-w-max">
+              <For each={terminals()}>
+                {(terminal) => {
+                  const isActive = activeTerminalId() === terminal.id;
+                  return (
+                    <button
+                      class={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap mr-2 ${isActive
+                        ? "bg-primary text-primary-content shadow-md"
+                        : "bg-base-200 hover:bg-base-300 text-base-content"
+                        }`}
+                      onClick={() => {
+                        setActiveTerminalId(terminal.id);
+                        terminalSessionManager.setActiveTerminal(terminal.id);
+                      }}
+                    >
+                      <span
+                        class={`w-2 h-2 rounded-full ${terminal.status === "Running"
+                          ? "bg-green-400"
+                          : terminal.status === "Starting"
+                            ? "bg-yellow-400"
+                            : "bg-gray-400"
+                          }`}
+                      />
+                      <span class="truncate max-w-[120px]">
+                        {terminal.name || `Term ${terminal.id.slice(0, 6)}`}
+                      </span>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+        </Show>
+
         {/* 桌面端终端标签页 */}
         <Show when={!isMobile}>
-          <div class="border-t bg-base-200">
-            <div class="flex items-center px-2 py-1 overflow-x-auto">
-              <Show
-                when={terminals().length > 0}
-                fallback={
-                  <div class="text-sm text-gray-500 px-3 py-2">
-                    暂无终端，点击"新建"创建第一个终端
-                  </div>
-                }
+          <div class="border-t bg-base-200 relative">
+            <div class="flex items-center">
+              {/* 标签容器 - 隐藏滚动条 */}
+              <div
+                ref={tabsContainerRef}
+                class="flex-1 overflow-x-auto scrollbar-hide"
               >
-                <div class="flex space-x-1">
-                  <For each={terminals()}>
-                    {(terminal, index) => {
-                      const isActive = activeTerminalId() === terminal.id;
-                      const tabIndex = index() + 1;
-                      const session = terminalSessionManager.getSession(terminal.id);
-                      const hasSessionData = session && (session.terminalContent || session.commandHistory?.length);
+                <Show
+                  when={terminals().length > 0}
+                  fallback={
+                    <div class="text-sm text-gray-500 px-3 py-2">
+                      暂无终端，点击"新建"创建第一个终端
+                    </div>
+                  }
+                >
+                  <div class="flex space-x-1 px-2 py-1">
+                    <For each={terminals()}>
+                      {(terminal, index) => {
+                        const isActive = activeTerminalId() === terminal.id;
+                        const tabIndex = index() + 1;
+                        const session = terminalSessionManager.getSession(terminal.id);
+                        const hasSessionData = session && (session.terminalContent || session.commandHistory?.length);
 
-                      return (
-                        <button
-                          class={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap group ${isActive
-                            ? "bg-base-100 border border-b-0 border-gray-300 text-base-content shadow-sm"
-                            : "bg-base-300/50 hover:bg-base-300 text-base-content/70"
-                            }`}
-                          onClick={() => {
-                            setActiveTerminalId(terminal.id);
-                            terminalSessionManager.setActiveTerminal(terminal.id);
-                          }}
-                          title={`终端 ${tabIndex} - ${terminal.name || `Terminal ${terminal.id.slice(0, 8)}`} (${isActive ? "Ctrl+" + tabIndex + " 切换" : "Ctrl+" + tabIndex + " 打开"})${hasSessionData ? " - 有保存的会话数据" : ""}`}
-                        >
-                          <span class="flex items-center space-x-1">
-                            <span
-                              class={`w-2 h-2 rounded-full ${terminal.status === "Running" ? "bg-green-500" :
-                                terminal.status === "Starting" ? "bg-yellow-500" :
-                                  terminal.status === "Stopped" ? "bg-gray-500" :
-                                    "bg-red-500"
-                                }`}
-                            />
+                        return (
+                          <button
+                            class={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap group ${isActive
+                              ? "bg-base-100 border border-b-0 border-gray-300 text-base-content shadow-sm"
+                              : "bg-base-300/50 hover:bg-base-300 text-base-content/70"
+                              }`}
+                            onClick={() => {
+                              setActiveTerminalId(terminal.id);
+                              terminalSessionManager.setActiveTerminal(terminal.id);
+                            }}
+                            title={`终端 ${tabIndex} - ${terminal.name || `Terminal ${terminal.id.slice(0, 8)}`} (${isActive ? "Ctrl+" + tabIndex + " 切换" : "Ctrl+" + tabIndex + " 打开"})${hasSessionData ? " - 有保存的会话数据" : ""}`}
+                          >
                             <span class="flex items-center space-x-1">
-                              <Show when={!isMobile && tabIndex <= 9}>
-                                <span class={`text-xs ${isActive ? "text-gray-600" : "text-gray-500"} font-mono`}>
-                                  {tabIndex}
-                                </span>
-                              </Show>
-                              <span>{terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}</span>
-                              {hasSessionData && (
-                                <span class="text-xs text-blue-500" title="有保存的会话数据">
-                                  💾
-                                </span>
-                              )}
+                              <span
+                                class={`w-2 h-2 rounded-full ${terminal.status === "Running" ? "bg-green-500" :
+                                  terminal.status === "Starting" ? "bg-yellow-500" :
+                                    terminal.status === "Stopped" ? "bg-gray-500" :
+                                      "bg-red-500"
+                                  }`}
+                              />
+                              <span class="flex items-center space-x-1">
+                                <Show when={tabIndex <= 9}>
+                                  <span class={`text-xs ${isActive ? "text-gray-600" : "text-gray-500"} font-mono`}>
+                                    {tabIndex}
+                                  </span>
+                                </Show>
+                                <span>{terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}</span>
+                                {hasSessionData && (
+                                  <span class="text-xs text-blue-500" title="有保存的会话数据">
+                                    💾
+                                  </span>
+                                )}
+                              </span>
                             </span>
-                          </span>
-                          <Show when={isActive}>
-                            <button
-                              class="ml-1 text-gray-500 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: 实现关闭终端功能
-                              }}
-                              title="关闭终端"
-                            >
-                              ✕
-                            </button>
-                          </Show>
-                        </button>
-                      );
-                    }}
-                  </For>
+                            <Show when={isActive}>
+                              <button
+                                class="ml-1 text-gray-500 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // TODO: 实现关闭终端功能
+                                }}
+                                title="关闭终端"
+                              >
+                                ✕
+                              </button>
+                            </Show>
+                          </button>
+                        );
+                      }}
+                    </For>
+                  </div>
+                </Show>
+              </div>
+
+              {/* 下拉菜单按钮 - 仅在终端超过一定数量时显示 */}
+              <Show when={terminals().length > 5}>
+                <div class="relative border-l border-base-300">
+                  <button
+                    class="btn btn-ghost btn-sm h-full rounded-none px-3"
+                    onClick={() => setShowDesktopTerminalDropdown(!showDesktopTerminalDropdown())}
+                    title="显示所有终端"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* 下拉列表 */}
+                  <Show when={showDesktopTerminalDropdown()}>
+                    <div
+                      class="absolute right-0 top-full mt-1 w-64 max-h-96 overflow-y-auto bg-base-100 border border-base-300 rounded-lg shadow-xl z-50"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div class="p-2">
+                        <For each={terminals()}>
+                          {(terminal, index) => {
+                            const isActive = activeTerminalId() === terminal.id;
+                            const tabIndex = index() + 1;
+
+                            return (
+                              <button
+                                class={`w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-colors ${isActive
+                                  ? "bg-primary text-primary-content"
+                                  : "hover:bg-base-200"
+                                  }`}
+                                onClick={() => {
+                                  setActiveTerminalId(terminal.id);
+                                  terminalSessionManager.setActiveTerminal(terminal.id);
+                                  setShowDesktopTerminalDropdown(false);
+                                }}
+                              >
+                                <span
+                                  class={`w-2 h-2 rounded-full flex-shrink-0 ${terminal.status === "Running" ? "bg-green-500" :
+                                    terminal.status === "Starting" ? "bg-yellow-500" :
+                                      terminal.status === "Stopped" ? "bg-gray-500" :
+                                        "bg-red-500"
+                                    }`}
+                                />
+                                <span class="text-xs font-mono flex-shrink-0">{tabIndex}</span>
+                                <span class="truncate flex-1 text-left">
+                                  {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
+                                </span>
+                              </button>
+                            );
+                          }}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
                 </div>
               </Show>
             </div>
           </div>
         </Show>
       </div>
+
+      {/* 点击外部关闭桌面端下拉菜单 */}
+      <Show when={showDesktopTerminalDropdown()}>
+        <div
+          class="fixed inset-0 z-40"
+          onClick={() => setShowDesktopTerminalDropdown(false)}
+        />
+      </Show>
 
       {/* 移动端终端列表下拉菜单 */}
       <Show when={showTerminalMenu()}>
@@ -871,17 +1091,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       {/* 主内容 */}
       <div ref={containerRef} class="flex-1 flex overflow-hidden flex-col">
-        {/* 终端显示区域 - 桌面端全宽，移动端保持原样 */}
-        <div class="flex-1 relative">
-          {/* 桌面端终端显示 */}
-          <Show when={!isMobile}>
-            {renderActiveTerminal()}
-          </Show>
-
-          {/* 移动端终端显示 */}
-          <Show when={isMobile}>
-            {renderActiveTerminal()}
-          </Show>
+        {/* 终端显示区域 */}
+        <div class="flex-1 relative overflow-hidden">
+          {/* 桌面端和移动端终端显示 */}
+          {renderActiveTerminal()}
 
           {/* 无活动终端时的占位符 */}
           {!activeTerminalId() && (
@@ -908,6 +1121,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             </div>
           )}
         </div>
+
+        {/* 底部快捷键栏 */}
+        {renderShortcutBar()}
       </div>
 
     </div>

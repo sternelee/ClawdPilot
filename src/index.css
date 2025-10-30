@@ -824,3 +824,82 @@
     opacity: 1;
   }
 }
+
+/* Shortcut button styles */
+.shortcut-bar button {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shortcut-bar button:active {
+  transform: scale(0.92);
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth scroll for mobile tabs */
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Terminal optimization - 完整修复 */
+.xterm {
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.xterm .xterm-viewport {
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+  /* 关键：固定 viewport 高度 */
+  position: absolute !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+}
+
+.xterm .xterm-screen {
+  /* 移除固定高度，让它自然布局 */
+  position: relative;
+}
+
+/* 关键修复：限制滚动区域高度 */
+.xterm .xterm-rows {
+  position: relative;
+}
+
+.xterm canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.xterm-helper-textarea {
+  position: absolute;
+  opacity: 0;
+  left: -9999em;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: -10;
+  white-space: nowrap;
+  overflow: hidden;
+  resize: none;
+}
+
+/* Safe area insets */
+.safe-area-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}

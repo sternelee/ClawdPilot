@@ -1,4 +1,4 @@
-import { createSignal, Show, For } from "solid-js";
+import { createSignal, Show, For, onMount, onCleanup } from "solid-js";
 import { getDeviceCapabilities } from "../utils/mobile";
 
 interface HomeViewProps {
@@ -21,6 +21,8 @@ export function HomeView(props: HomeViewProps) {
   const [showLoginModal, setShowLoginModal] = createSignal(false);
   const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
+  const [inputFocused, setInputFocused] = createSignal(false);
+  const [loginInputFocused, setLoginInputFocused] = createSignal(false);
 
   // 检测设备类型
   const deviceCapabilities = getDeviceCapabilities();
@@ -53,17 +55,37 @@ export function HomeView(props: HomeViewProps) {
   const renderLoginModal = () => (
     <Show when={showLoginModal()}>
       <div
-        class="fixed inset-0 bg-black/50 z-50 flex items-end justify-center md:items-center"
+        class="fixed inset-0 bg-black/50 z-50 flex justify-center transition-all duration-300"
+        classList={{
+          "items-end md:items-center": !loginInputFocused() || !isMobile,
+          "items-start pt-12": loginInputFocused() && isMobile
+        }}
         onClick={() => setShowLoginModal(false)}
       >
         <div
-          class="bg-base-100 w-full max-w-md rounded-t-3xl md:rounded-2xl p-6 transform transition-transform"
+          class="bg-base-100 w-full max-w-md rounded-t-3xl md:rounded-2xl p-6 transform transition-all duration-300"
           onClick={(e) => e.stopPropagation()}
         >
-          <div class="text-center mb-6">
+          <div 
+            class="text-center transition-all duration-300"
+            classList={{
+              "mb-6": !loginInputFocused() || !isMobile,
+              "mb-4": loginInputFocused() && isMobile
+            }}
+          >
             <div class="w-12 h-1 bg-base-300 rounded-full mx-auto mb-4 md:hidden"></div>
-            <h2 class="text-2xl font-bold mb-2">登录</h2>
-            <p class="text-sm opacity-70">登录后解锁完整功能</p>
+            <h2 
+              class="font-bold transition-all duration-300"
+              classList={{
+                "text-2xl mb-2": !loginInputFocused() || !isMobile,
+                "text-xl mb-1": loginInputFocused() && isMobile
+              }}
+            >
+              登录
+            </h2>
+            <Show when={!loginInputFocused() || !isMobile}>
+              <p class="text-sm opacity-70">登录后解锁完整功能</p>
+            </Show>
           </div>
 
           <div class="space-y-4">
@@ -74,9 +96,11 @@ export function HomeView(props: HomeViewProps) {
               <input
                 type="text"
                 placeholder="输入用户名"
-                class="input input-bordered w-full"
+                class="input input-bordered w-full text-base"
                 value={username()}
                 onInput={(e) => setUsername(e.currentTarget.value)}
+                onFocus={() => setLoginInputFocused(true)}
+                onBlur={() => setLoginInputFocused(false)}
               />
             </div>
 
@@ -87,9 +111,11 @@ export function HomeView(props: HomeViewProps) {
               <input
                 type="password"
                 placeholder="输入密码"
-                class="input input-bordered w-full"
+                class="input input-bordered w-full text-base"
                 value={password()}
                 onInput={(e) => setPassword(e.currentTarget.value)}
+                onFocus={() => setLoginInputFocused(true)}
+                onBlur={() => setLoginInputFocused(false)}
                 onKeyDown={(e) => {
                   if (
                     e.key === "Enter" &&
@@ -112,9 +138,11 @@ export function HomeView(props: HomeViewProps) {
               </button>
             </div>
 
-            <div class="text-center text-xs opacity-50 mt-4">
-              <p>登陆后解锁完整功能</p>
-            </div>
+            <Show when={!loginInputFocused() || !isMobile}>
+              <div class="text-center text-xs opacity-50 mt-4">
+                <p>登陆后解锁完整功能</p>
+              </div>
+            </Show>
           </div>
         </div>
       </div>
@@ -126,16 +154,44 @@ export function HomeView(props: HomeViewProps) {
   const renderMainView = () => (
     <div class="min-h-screen bg-base-100 flex flex-col">
       {/* 主内容区域 - Logo 和 Slogan */}
-      <div class="flex-1 flex flex-col items-center justify-center p-6">
+      <div 
+        class="flex-1 flex flex-col items-center p-6 transition-all duration-300"
+        classList={{
+          "justify-center": !inputFocused() || !isMobile,
+          "justify-start pt-20": inputFocused() && isMobile
+        }}
+      >
         {/* Logo */}
-        <div class="text-center mb-12">
-          <div class="text-6xl text-primary mb-6">⚡</div>
-          <h1 class="text-4xl font-bold mb-3">
+        <div 
+          class="text-center transition-all duration-300"
+          classList={{
+            "mb-12": !inputFocused() || !isMobile,
+            "mb-8 scale-90": inputFocused() && isMobile
+          }}
+        >
+          <div 
+            class="text-6xl text-primary transition-all duration-300"
+            classList={{
+              "mb-6": !inputFocused() || !isMobile,
+              "mb-3": inputFocused() && isMobile
+            }}
+          >
+            ⚡
+          </div>
+          <h1 
+            class="font-bold transition-all duration-300"
+            classList={{
+              "text-4xl mb-3": !inputFocused() || !isMobile,
+              "text-3xl mb-2": inputFocused() && isMobile
+            }}
+          >
             RiTerm
           </h1>
-          <p class="text-lg text-base-content/70 max-w-sm">
-            P2P 终端远程连接工具
-          </p>
+          <Show when={!inputFocused() || !isMobile}>
+            <p class="text-lg text-base-content/70 max-w-sm">
+              P2P 终端远程连接工具
+            </p>
+          </Show>
         </div>
 
         {/* 连接输入框 */}
@@ -146,8 +202,10 @@ export function HomeView(props: HomeViewProps) {
                 type="text"
                 value={props.sessionTicket}
                 onInput={(e) => props.onTicketInput(e.currentTarget.value)}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 placeholder="输入会话票据..."
-                class="input input-bordered w-full"
+                class="input input-bordered w-full text-base"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && props.sessionTicket.trim()) {
                     props.onConnect();

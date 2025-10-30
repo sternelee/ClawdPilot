@@ -5,6 +5,7 @@ import App from "./App";
 import "./index.css";
 import "./fonts.css";
 import "./styles/adaptive-layout.css";
+import { initializeDeviceDetection } from "./stores/deviceStore";
 import { initializeMobileUtils } from "./utils/mobile";
 import { getViewportManager } from "./utils/mobile/ViewportManager";
 import { getAdaptiveLayoutManager } from "./utils/mobile/AdaptiveLayoutManager";
@@ -12,6 +13,9 @@ import { initializeTheme } from "./utils/theme";
 import { initializePerformanceOptimizations } from "./utils/performance";
 
 new VConsole();
+
+// Initialize device detection first (Tauri OS plugin)
+initializeDeviceDetection();
 
 // Initialize mobile utilities and optimizations with ViewportManager integration
 initializeMobileUtils({ integrateViewportManager: true });
