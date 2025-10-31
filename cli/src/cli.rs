@@ -18,6 +18,27 @@ pub struct Cli {
 
     #[arg(long, help = "Authentication token for ticket submission")]
     pub auth: Option<String>,
+
+    #[arg(
+        long,
+        help = "Disable output batching (send immediately, may increase network overhead)",
+        default_value = "false"
+    )]
+    pub no_batch: bool,
+
+    #[arg(
+        long,
+        help = "Maximum batch size in bytes",
+        default_value = "4096"
+    )]
+    pub batch_size: usize,
+
+    #[arg(
+        long,
+        help = "Maximum batch delay in milliseconds",
+        default_value = "16"
+    )]
+    pub batch_delay: u64,
 }
 
 pub struct CliApp {
@@ -39,12 +60,12 @@ impl CliApp {
         })
     }
 
-    pub async fn run(&mut self, _cli: Cli) -> Result<()> {
-        self.start_terminal_host().await
+    pub async fn run(&mut self, cli: Cli) -> Result<()> {
+        self.start_terminal_host(cli).await
     }
 
     /// 启动终端主机模式 - 创建P2P会话并管理本地终端
-    async fn start_terminal_host(&mut self) -> Result<()> {
+    async fn start_terminal_host(&mut self, cli: Cli) -> Result<()> {
         use riterm_shared::SessionHeader;
         use tracing::info;
 
@@ -149,13 +170,25 @@ impl CliApp {
         // 保存gossip sender的引用用于后续发送响应
         let gossip_sender_for_responses = sender.clone();
 
-        // Phase 2: Configure TerminalManager with direct P2P integration
-        // This removes the callback chain: Runner -> Manager -> CLI -> Network
-        // New simplified flow: Runner -> Manager -> Network (direct)
-        self.terminal_manager = self.terminal_manager.clone().with_network(
+        // Phase 3: Configure TerminalManager with batching support
+        // Create batch configuration from CLI args
+        use crate::output_batcher::BatchConfig;
+        let batch_config = BatchConfig {
+            max_batch_size: cli.batch_size,
+            max_delay_ms: cli.batch_delay,
+            enabled: !cli.no_batch,
+        };
+
+        info!(
+            "Configuring output batching: enabled={}, batch_size={}, delay={}ms",
+            batch_config.enabled, batch_config.max_batch_size, batch_config.max_delay_ms
+        );
+
+        self.terminal_manager = self.terminal_manager.clone().with_batch_config(
             Arc::new(self.network.clone()),
             header.session_id.clone(),
             gossip_sender_for_responses.clone(),
+            batch_config,
         );
 
         // 设置终端管理消息处理器

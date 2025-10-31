@@ -5298,6 +5298,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "brotli 6.0.0",
+ "bytes",
  "chacha20poly1305",
  "data-encoding",
  "futures",

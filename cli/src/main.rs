@@ -1,4 +1,5 @@
 mod cli;
+mod output_batcher;
 mod shell;
 mod terminal;
 mod terminal_driver;

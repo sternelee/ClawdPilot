@@ -8,6 +8,7 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info};
 
 use crate::terminal_runner::{TerminalCommand, TerminalRunner};
+use crate::output_batcher::{OutputBatcher, BatchConfig};
 use riterm_shared::p2p::TerminalInfo;
 use riterm_shared::P2PNetwork;
 use iroh_gossip::api::GossipSender;
@@ -16,12 +17,8 @@ use iroh_gossip::api::GossipSender;
 #[derive(Clone)]
 pub struct TerminalManager {
     terminals: Arc<RwLock<HashMap<String, TerminalSession>>>,
-    /// Optional P2P network for sending outputs directly
-    network: Option<Arc<P2PNetwork>>,
-    /// Session ID for P2P communication
-    session_id: Option<String>,
-    /// Gossip sender for P2P communication
-    gossip_sender: Option<GossipSender>,
+    /// Optional output batcher for improved network efficiency
+    batcher: Option<Arc<OutputBatcher>>,
 }
 
 /// Terminal session information
@@ -35,34 +32,44 @@ impl TerminalManager {
     pub fn new() -> Self {
         Self {
             terminals: Arc::new(RwLock::new(HashMap::new())),
-            network: None,
-            session_id: None,
-            gossip_sender: None,
+            batcher: None,
         }
     }
 
-    /// Configure with P2P network (enables direct output sending)
+    /// Configure with P2P network and output batching (enables direct output sending)
     pub fn with_network(
         mut self,
         network: Arc<P2PNetwork>,
         session_id: String,
         gossip_sender: GossipSender,
     ) -> Self {
-        self.network = Some(network);
-        self.session_id = Some(session_id);
-        self.gossip_sender = Some(gossip_sender);
+        // Create output batcher with default config
+        let config = BatchConfig::default();
+        let batcher = OutputBatcher::new(config, network, session_id, gossip_sender);
+        self.batcher = Some(Arc::new(batcher));
         self
     }
 
-    /// Internal method: send terminal output directly to P2P network
-    async fn send_output_to_network(&self, terminal_id: &str, data: Vec<u8>) -> Result<()> {
-        if let (Some(network), Some(session_id), Some(sender)) =
-            (&self.network, &self.session_id, &self.gossip_sender)
-        {
-            network
-                .send_terminal_output(session_id, sender, terminal_id.to_string(), data)
+    /// Configure with custom batch configuration
+    pub fn with_batch_config(
+        mut self,
+        network: Arc<P2PNetwork>,
+        session_id: String,
+        gossip_sender: GossipSender,
+        config: BatchConfig,
+    ) -> Self {
+        let batcher = OutputBatcher::new(config, network, session_id, gossip_sender);
+        self.batcher = Some(Arc::new(batcher));
+        self
+    }
+
+    /// Internal method: send terminal output (with batching if enabled)
+    async fn send_output(&self, terminal_id: &str, data: Vec<u8>) -> Result<()> {
+        if let Some(batcher) = &self.batcher {
+            batcher
+                .queue_output(terminal_id.to_string(), data)
                 .await
-                .context("Failed to send terminal output to network")?;
+                .context("Failed to queue terminal output")?;
         }
         Ok(())
     }
@@ -119,7 +126,7 @@ impl TerminalManager {
                 let tid = tid_for_callback.clone();
                 tokio::spawn(async move {
                     if let Err(e) = manager
-                        .send_output_to_network(&tid, data.into_bytes())
+                        .send_output(&tid, data.into_bytes())
                         .await
                     {
                         error!("Failed to send terminal output: {}", e);
