@@ -294,7 +294,7 @@ pub struct P2PNetwork {
             >,
         >,
     >,
-    // 终端输入处理回调
+    // 终端输入处理回调 (DEPRECATED - use terminal_command_callback)
     terminal_input_callback: Arc<
         RwLock<
             Option<
@@ -304,6 +304,23 @@ pub struct P2PNetwork {
                             String,
                         )
                             -> tokio::task::JoinHandle<anyhow::Result<Option<String>>>
+                        + Send
+                        + Sync,
+                >,
+            >,
+        >,
+    >,
+    // 终端命令处理回调 (handles all TerminalCommand types)
+    terminal_command_callback: Arc<
+        RwLock<
+            Option<
+                Box<
+                    dyn Fn(
+                            TerminalCommand,
+                            String, // session_id
+                            GossipSender,
+                        )
+                            -> tokio::task::JoinHandle<anyhow::Result<()>>
                         + Send
                         + Sync,
                 >,
@@ -321,6 +338,7 @@ impl Clone for P2PNetwork {
             sessions: Arc::clone(&self.sessions),
             history_callback: self.history_callback.clone(),
             terminal_input_callback: self.terminal_input_callback.clone(),
+            terminal_command_callback: self.terminal_command_callback.clone(),
         }
     }
 }
@@ -458,6 +476,7 @@ impl P2PNetwork {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             history_callback: Arc::new(RwLock::new(None)),
             terminal_input_callback: Arc::new(RwLock::new(None)),
+            terminal_command_callback: Arc::new(RwLock::new(None)), // Initialize new callback
         };
 
         Ok(network)
@@ -814,13 +833,17 @@ impl P2PNetwork {
             NetworkMessage::Command {
                 from,
                 command,
-                request_id: _,
+                request_id,
             } => {
                 // Only host processes commands
                 if !session.is_host {
                     return Ok(());
                 }
 
+                let session_id = session_id.to_string();
+                let gossip_sender = session.gossip_sender.clone()
+                    .ok_or_else(|| anyhow::anyhow!("No gossip sender available"))?;
+                
                 drop(sessions_guard); // Release lock before async operations
 
                 info!(
@@ -829,20 +852,29 @@ impl P2PNetwork {
                     command
                 );
 
-                // Get callback and process command
-                let callback_guard = self.terminal_input_callback.read().await;
-                if let Some(callback) = &*callback_guard {
-                    match command {
-                        TerminalCommand::Input { terminal_id, data } => {
-                            // Convert bytes to string for backward compatibility
-                            let data_str = String::from_utf8_lossy(&data).to_string();
-                            let _ = callback(terminal_id, data_str);
+                // Try new command callback first
+                let command_callback_guard = self.terminal_command_callback.read().await;
+                if let Some(command_callback) = &*command_callback_guard {
+                    // New command handler - handles all command types
+                    let _ = command_callback(command, session_id, gossip_sender);
+                    drop(command_callback_guard);
+                } else {
+                    drop(command_callback_guard);
+                    
+                    // Fall back to old input callback for backward compatibility
+                    let input_callback_guard = self.terminal_input_callback.read().await;
+                    if let Some(input_callback) = &*input_callback_guard {
+                        match &command {
+                            TerminalCommand::Input { terminal_id, data } => {
+                                let data_str = String::from_utf8_lossy(data).to_string();
+                                let _ = input_callback(terminal_id.clone(), data_str);
+                            }
+                            _ => {
+                                debug!("Command {:?} not handled - no command callback set", command);
+                            }
                         }
-                        _ => {
-                            // Other commands should be handled by dedicated callbacks
-                            // For now, we'll rely on the existing event system
-                            debug!("Command {:?} requires dedicated handler", command);
-                        }
+                    } else {
+                        warn!("Received command but no callback is set: {:?}", command);
                     }
                 }
             }
@@ -1020,7 +1052,7 @@ impl P2PNetwork {
         *history_callback = Some(Box::new(callback));
     }
 
-    /// 设置终端输入处理回调函数
+    /// 设置终端输入处理回调函数 (DEPRECATED - use set_terminal_command_callback)
     pub async fn set_terminal_input_callback<F>(&self, callback: F)
     where
         F: Fn(String, String) -> tokio::task::JoinHandle<anyhow::Result<Option<String>>>
@@ -1030,6 +1062,18 @@ impl P2PNetwork {
     {
         let mut terminal_input_callback = self.terminal_input_callback.write().await;
         *terminal_input_callback = Some(Box::new(callback));
+    }
+
+    /// 设置终端命令处理回调函数 (handles all TerminalCommand types)
+    pub async fn set_terminal_command_callback<F>(&self, callback: F)
+    where
+        F: Fn(TerminalCommand, String, GossipSender) -> tokio::task::JoinHandle<anyhow::Result<()>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let mut terminal_command_callback = self.terminal_command_callback.write().await;
+        *terminal_command_callback = Some(Box::new(callback));
     }
 
     // === Terminal Management Methods ===

@@ -862,22 +862,33 @@
   overflow-y: scroll !important;
   overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch;
-  /* 关键：固定 viewport 高度 */
+  /* 关键：固定 viewport 高度，防止无限扩展 */
   position: absolute !important;
   top: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
   left: 0 !important;
+  /* 防止内容溢出 */
+  max-height: 100% !important;
 }
 
 .xterm .xterm-screen {
   /* 移除固定高度，让它自然布局 */
   position: relative;
+  /* 限制最大高度 */
+  max-height: 100%;
+  overflow: hidden;
 }
 
 /* 关键修复：限制滚动区域高度 */
 .xterm .xterm-rows {
   position: relative;
+}
+
+/* 防止 xterm-scroll-area 过度扩展 */
+.xterm .xterm-scroll-area {
+  /* 不设置高度，让 viewport 控制 */
+  visibility: hidden;
 }
 
 .xterm canvas {

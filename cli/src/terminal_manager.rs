@@ -7,10 +7,10 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info};
 
-use crate::terminal_runner::{TerminalCommand, TerminalRunner};
+use crate::terminal_runner::{TerminalCommand as RunnerCommand, TerminalRunner};
 use crate::output_batcher::{OutputBatcher, BatchConfig};
-use riterm_shared::p2p::TerminalInfo;
-use riterm_shared::P2PNetwork;
+use riterm_shared::p2p::{TerminalInfo, TerminalStatus};
+use riterm_shared::{P2PNetwork, TerminalCommand, TerminalResponse};
 use iroh_gossip::api::GossipSender;
 
 /// Simplified terminal manager with direct P2P integration
@@ -24,7 +24,7 @@ pub struct TerminalManager {
 /// Terminal session information
 pub struct TerminalSession {
     pub info: TerminalInfo,
-    pub sender: mpsc::Sender<TerminalCommand>,
+    pub sender: mpsc::Sender<RunnerCommand>,
 }
 
 impl TerminalManager {
@@ -154,7 +154,7 @@ impl TerminalManager {
         if let Some(session) = terminals.get(terminal_id) {
             session
                 .sender
-                .send(TerminalCommand::Input(data))
+                .send(RunnerCommand::Input(data))
                 .await
                 .context("Failed to send input to terminal")?;
             debug!("Sent input to terminal: {}", terminal_id);
@@ -170,7 +170,7 @@ impl TerminalManager {
         if let Some(session) = terminals.get(terminal_id) {
             session
                 .sender
-                .send(TerminalCommand::Resize(rows, cols))
+                .send(RunnerCommand::Resize(rows, cols))
                 .await
                 .context("Failed to send resize command to terminal")?;
             info!("Resized terminal {} to {}x{}", terminal_id, rows, cols);
@@ -186,7 +186,7 @@ impl TerminalManager {
         if let Some(session) = terminals.get(terminal_id) {
             session
                 .sender
-                .send(TerminalCommand::Close)
+                .send(RunnerCommand::Close)
                 .await
                 .context("Failed to send close command to terminal")?;
             info!("Closed terminal: {}", terminal_id);
@@ -211,6 +211,62 @@ impl TerminalManager {
             .iter()
             .map(|(_, session)| session.info.clone())
             .collect()
+    }
+
+    /// Handle terminal command from P2P network
+    /// This is the main entry point for processing TerminalCommand messages
+    pub async fn handle_terminal_command(
+        &self,
+        command: TerminalCommand,
+    ) -> Result<TerminalResponse> {
+        info!("Handling terminal command: {:?}", command);
+        
+        match command {
+            TerminalCommand::Create {
+                name,
+                shell_path,
+                working_dir,
+                size,
+            } => {
+                let terminal_id = self.create_terminal(name, shell_path, working_dir, size).await?;
+                let info = self
+                    .get_terminal_info(&terminal_id)
+                    .await
+                    .ok_or_else(|| anyhow::anyhow!("Terminal not found after creation"))?;
+                Ok(TerminalResponse::Created { terminal_id, info })
+            }
+
+            TerminalCommand::Input { terminal_id, data } => {
+                self.send_input(&terminal_id, data).await?;
+                // Input doesn't return a direct response, output is sent via callback
+                Ok(TerminalResponse::StatusUpdate {
+                    terminal_id,
+                    status: TerminalStatus::Running,
+                })
+            }
+
+            TerminalCommand::Resize {
+                terminal_id,
+                rows,
+                cols,
+            } => {
+                self.resize_terminal(&terminal_id, rows, cols).await?;
+                Ok(TerminalResponse::StatusUpdate {
+                    terminal_id,
+                    status: TerminalStatus::Running,
+                })
+            }
+
+            TerminalCommand::Stop { terminal_id } => {
+                self.close_terminal(&terminal_id).await?;
+                Ok(TerminalResponse::Stopped { terminal_id })
+            }
+
+            TerminalCommand::List => {
+                let terminals = self.list_terminals().await;
+                Ok(TerminalResponse::List { terminals })
+            }
+        }
     }
 
     /// Create terminal via P2P request (for remote participants)

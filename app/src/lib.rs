@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 use iroh_gossip::api::GossipSender;
-use riterm_shared::{EventType, P2PNetwork, SessionTicket, TerminalEvent};
+use riterm_shared::{EventType, P2PNetwork, SessionTicket, TerminalEvent, TerminalCommand};
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
 const MAX_CONCURRENT_SESSIONS: usize = 50;
@@ -25,7 +25,9 @@ fn is_valid_session_ticket(ticket: &str) -> bool {
     ticket.parse::<SessionTicket>().is_ok()
 }
 
-// Parse structured events from terminal data
+// Parse structured events from terminal data - DEPRECATED
+// Events are now structured in EventType enum
+#[allow(dead_code)]
 fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     // Handle terminal list response
     if data.starts_with("[Terminal List Response:") {
@@ -326,15 +328,72 @@ async fn connect_to_peer(
                                     session_id_clone_events, current_count, MAX_EVENTS_PER_SESSION);
                             }
 
-                            // Parse structured events for terminal management
-                            if let Ok(structured_event) = parse_structured_event(&event.data) {
-                                let structured_event_name = format!("structured-event-{}", session_id_clone_events);
-                                let _ = app_handle_clone.emit(&structured_event_name, &structured_event);
+                            // Parse structured events for terminal management and emit appropriate events
+                            match &event.event_type {
+                                EventType::TerminalCreated { terminal_id, info } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-created-{}", session_id_clone_events),
+                                        &serde_json::json!({
+                                            "terminal_id": terminal_id,
+                                            "info": info,
+                                        })
+                                    );
+                                }
+                                EventType::TerminalOutput { terminal_id } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-output-{}", session_id_clone_events),
+                                        &serde_json::json!({
+                                            "terminal_id": terminal_id,
+                                            "data": event.data.clone(),
+                                        })
+                                    );
+                                }
+                                EventType::TerminalList { terminals } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-list-{}", session_id_clone_events),
+                                        &terminals
+                                    );
+                                }
+                                EventType::TerminalStatusUpdate { terminal_id, status } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-status-{}", session_id_clone_events),
+                                        &serde_json::json!({
+                                            "terminal_id": terminal_id,
+                                            "status": status,
+                                        })
+                                    );
+                                }
+                                EventType::TerminalDirectoryChanged { terminal_id, new_dir } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-directory-{}", session_id_clone_events),
+                                        &serde_json::json!({
+                                            "terminal_id": terminal_id,
+                                            "new_dir": new_dir,
+                                        })
+                                    );
+                                }
+                                EventType::TerminalStopped { terminal_id } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-stopped-{}", session_id_clone_events),
+                                        &serde_json::json!({
+                                            "terminal_id": terminal_id,
+                                        })
+                                    );
+                                }
+                                EventType::TerminalError { terminal_id, error } => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-error-{}", session_id_clone_events),
+                                        &serde_json::json!({
+                                            "terminal_id": terminal_id,
+                                            "error": error,
+                                        })
+                                    );
+                                }
+                                _ => {}
                             }
 
+                            // Keep backward compatibility for now
                             let event_name = format!("terminal-event-{}", session_id_clone_events);
-                            #[cfg(debug_assertions)]
-                            // println!("Broadcasting event to: {}", event_name);
                             let _ = app_handle_clone.emit(&event_name, &event);
                         }
                         Err(_) => {
@@ -353,9 +412,10 @@ async fn connect_to_peer(
         }
     });
 
-    // Handle outgoing input events with cancellation support
-    let network_clone = network.clone();
-    let sender_clone = sender.clone();
+    // Handle outgoing input events - deprecated, kept for compatibility
+    // Input now goes through send_terminal_input_to_terminal command
+    let _network_clone = network.clone();
+    let _sender_clone = sender.clone();
     let session_id_clone_input = session_id.clone();
     let cancellation_token_input = cancellation_token.clone();
     let last_activity_input = terminal_session.last_activity.clone();
@@ -365,22 +425,16 @@ async fn connect_to_peer(
             tokio::select! {
                 event_opt = rx.recv() => {
                     match event_opt {
-                        Some(event) => {
+                        Some(_event) => {
                             // Update activity tracking
                             {
                                 let mut activity = last_activity_input.write().await;
                                 *activity = Instant::now();
                             }
 
-                            if let EventType::Input = event.event_type {
-                                if let Err(e) = network_clone
-                                    .send_input(&session_id_clone_input, &sender_clone, event.data)
-                                    .await
-                                {
-                                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                                    tracing::error!("Failed to send input: {}", e);
-                                }
-                            }
+                            // Input events are now deprecated
+                            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                            tracing::debug!("Received deprecated input event for session: {}", session_id_clone_input);
                         }
                         None => {
                             #[cfg(any(debug_assertions, not(feature = "release-logging")))]
@@ -445,24 +499,9 @@ async fn send_terminal_input(
         return Err("Session not found".to_string());
     }
 
-    let sessions = state.sessions.read().await;
-    let session = sessions.get(&session_id).unwrap(); // We know it exists from above
-
-    let event = TerminalEvent {
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-        event_type: EventType::Input,
-        data: input.clone(), // Clone for logging
-    };
-
+    // This command is deprecated, use send_terminal_input_to_terminal instead
     #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-    tracing::debug!("Sending event: {:?}", event);
-    session
-        .event_sender
-        .send(event)
-        .map_err(|e| format!("Failed to send input event: {}", e))?;
+    tracing::warn!("send_terminal_input is deprecated. Use send_terminal_input_to_terminal for specific terminal input.");
 
     Ok(())
 }
@@ -470,24 +509,30 @@ async fn send_terminal_input(
 #[tauri::command]
 async fn send_directed_message(
     request: DirectedMessageRequest,
+    _state: State<'_, AppState>,
+) -> Result<(), String> {
+    let _session_sender = request.session_id; // Keep for API compatibility
+    
+    // Note: send_directed_message is no longer available in the new message system
+    // This functionality has been replaced by the Command/Response pattern
+    Err("Directed messages are deprecated. Use terminal commands instead.".to_string())
+}
+
+#[tauri::command]
+async fn execute_remote_command(
+    command: String,
+    session_id: String,
+    terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // Clone the session sender to avoid holding the lock across await
     let session_sender = {
         let sessions = state.sessions.read().await;
         sessions
-            .get(&request.session_id)
+            .get(&session_id)
             .map(|s| s.sender.clone())
             .ok_or("Session not found")?
     };
 
-    // Parse target node ID
-    let target_node_id = request
-        .target_node_id
-        .parse()
-        .map_err(|e| format!("Invalid target node ID: {}", e))?;
-
-    // Send directed message
     let network = {
         let network_guard = state.network.read().await;
         match network_guard.as_ref() {
@@ -496,43 +541,16 @@ async fn send_directed_message(
         }
     };
 
-    if let Err(e) = network
-        .send_directed_message(
-            &request.session_id,
-            &session_sender,
-            target_node_id,
-            request.message,
-        )
-        .await
-    {
-        return Err(format!("Failed to send directed message: {}", e));
-    }
-
-    Ok(())
-}
-
-#[tauri::command]
-async fn execute_remote_command(
-    command: String,
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let sessions = state.sessions.read().await;
-    let session = sessions.get(&session_id).ok_or("Session not found")?;
-
-    let event = TerminalEvent {
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-        event_type: EventType::Input,
-        data: format!("{}\n", command),
+    // Send command using new message system
+    let cmd = TerminalCommand::Input {
+        terminal_id,
+        data: format!("{}\n", command).as_bytes().to_vec(),
     };
 
-    session
-        .event_sender
-        .send(event)
-        .map_err(|e| format!("Failed to send command event: {}", e))?;
+    network
+        .send_command(&session_id, &session_sender, cmd, None)
+        .await
+        .map_err(|e| format!("Failed to send command: {}", e))?;
 
     Ok(())
 }
@@ -741,13 +759,13 @@ async fn send_terminal_input_to_terminal(
         }
     };
 
+    let command = TerminalCommand::Input {
+        terminal_id: request.terminal_id,
+        data: request.input.as_bytes().to_vec(),
+    };
+    
     network
-        .send_terminal_input(
-            &request.session_id,
-            &session_sender,
-            request.terminal_id,
-            request.input,
-        )
+        .send_command(&request.session_id, &session_sender, command, None)
         .await
         .map_err(|e| format!("Failed to send terminal input: {}", e))?;
 
@@ -798,43 +816,15 @@ async fn get_terminal_list(session_id: String, state: State<'_, AppState>) -> Re
 async fn connect_to_terminal(
     session_id: String,
     terminal_id: String,
-    state: State<'_, AppState>,
+    _state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // This command tells the remote CLI that we want to connect to a specific terminal
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
-        }
-    };
-
-    // Send a directed message to connect to the specific terminal
-    // This is a placeholder - the actual implementation depends on how the CLI handles terminal selection
-    let connect_message = format!("CONNECT_TO_TERMINAL:{}", terminal_id);
-
-    network
-        .send_directed_message(
-            &session_id,
-            &session_sender,
-            network
-                .get_node_id()
-                .await
-                .parse()
-                .map_err(|e| format!("Failed to parse node ID: {}", e))?,
-            connect_message,
-        )
-        .await
-        .map_err(|e| format!("Failed to connect to terminal: {}", e))?;
-
+    // With the new Command/Response system, connecting is implicit
+    // The terminal should already be receiving outputs via TerminalResponse::Output
+    // This command is now a no-op but kept for API compatibility
+    
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::info!("connect_to_terminal called for session {} terminal {}", session_id, terminal_id);
+    
     Ok(())
 }
 

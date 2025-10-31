@@ -120,51 +120,56 @@ impl CliApp {
         println!("💡 Remote users can scan the QR code or copy the ticket text");
         println!("⚠️  Press Ctrl+C to stop the host");
 
-        // 设置终端输入处理器回调
-        let terminal_manager_for_input = self.terminal_manager.clone();
+        // 设置终端命令处理器回调
+        let terminal_manager_for_commands = self.terminal_manager.clone();
+        let network_for_commands = Arc::new(self.network.clone());
 
-        // 创建终端输入处理器回调
-        let input_processor =
-            move |terminal_id: String,
-                  data: String|
-                  -> tokio::task::JoinHandle<anyhow::Result<Option<String>>> {
-                let terminal_manager = terminal_manager_for_input.clone();
-                // let session_id = session_id_for_input.clone();
-                // let network = network_for_input.clone();
+        // 创建终端命令处理器回调
+        let command_processor =
+            move |command: riterm_shared::TerminalCommand,
+                  session_id: String,
+                  sender: iroh_gossip::api::GossipSender|
+                  -> tokio::task::JoinHandle<anyhow::Result<()>> {
+                let terminal_manager = terminal_manager_for_commands.clone();
+                let network = network_for_commands.clone();
 
                 tokio::spawn(async move {
-                    // info!(
-                    //     "🔥 RECEIVED TERMINAL INPUT: terminal_id={}, data='{}'",
-                    //     terminal_id, data
-                    // );
+                    info!("Processing terminal command: {:?}", command);
 
-                    // 将输入发送到实际的终端会话
-                    // let data_clone = data.clone();
-                    if let Err(e) = terminal_manager
-                        .send_input(&terminal_id, data.into_bytes())
-                        .await
-                    {
-                        error!("Failed to send input to terminal {}: {}", terminal_id, e);
-                        return Ok(None);
+                    // Handle the command using TerminalManager
+                    let response = terminal_manager.handle_terminal_command(command).await;
+
+                    // Send response back to client
+                    match response {
+                        Ok(resp) => {
+                            if let Err(e) = network
+                                .send_response(&session_id, &sender, resp, None)
+                                .await
+                            {
+                                error!("Failed to send response: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to handle command: {}", e);
+                            // Send error response
+                            let error_resp = riterm_shared::TerminalResponse::Error {
+                                terminal_id: None,
+                                message: e.to_string(),
+                            };
+                            network
+                                .send_response(&session_id, &sender, error_resp, None)
+                                .await
+                                .ok();
+                        }
                     }
 
-                    // info!(
-                    //     "✅ Successfully sent input '{}' to terminal {}",
-                    //     data_clone, terminal_id
-                    // );
-
-                    // 这里暂时返回 None，实际的输出将由终端会话通过其他方式发送
-                    // 未来可以在这里等待终端的输出响应
-                    // info!(
-                    //     "⏭️ Terminal input callback returning None (output will be sent via callback chain)"
-                    // );
-                    Ok(None)
+                    Ok(())
                 })
             };
 
-        // 设置终端输入处理回调
+        // 设置终端命令处理回调
         self.network
-            .set_terminal_input_callback(input_processor)
+            .set_terminal_command_callback(command_processor)
             .await;
 
         // 保存gossip sender的引用用于后续发送响应

@@ -1,11 +1,12 @@
-import { createSignal, createEffect, onMount, Show, For } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup, Show, For } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { getDeviceCapabilities } from "../utils/mobile";
+import { getDeviceCapabilities } from "../stores/deviceStore";
 import { useTerminalSessions } from "../stores/terminalSessionStore";
 import { useTerminalSession } from "../hooks/useTerminalSession";
+import { MobileKeyboard, InputFocusManager } from "../utils/mobile";
 // Import types from the shared library
 interface TerminalInfo {
   id: string;
@@ -63,6 +64,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
   let containerRef: HTMLDivElement | undefined;
   let tabsContainerRef: HTMLDivElement | undefined;
+  let terminalContainerRef: HTMLDivElement | undefined;
 
   // 发送快捷键到终端
   const sendShortcut = (key: string) => {
@@ -605,18 +607,17 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       { key: 'tab', label: 'Tab', color: 'bg-base-200' },
       { key: 'up', label: '↑', color: 'bg-base-200' },
       { key: 'down', label: '↓', color: 'bg-base-200' },
-      { key: 'enter', label: 'Enter', color: 'bg-base-200' },
-      { key: 'ctrl-c', label: 'Ctrl-C', color: 'bg-base-200' },
-      { key: 'ctrl-t', label: 'Ctrl-T', color: 'bg-base-200' },
+      { key: 'enter', label: '↵', color: 'bg-primary text-primary-content' },
+      { key: 'ctrl-c', label: '^C', color: 'bg-error/80 text-error-content' },
     ];
 
     return (
-      <div class="border-t bg-base-100 px-2 py-2 safe-area-bottom">
-        <div class="flex items-center justify-between gap-1 max-w-full overflow-x-auto">
+      <div class="border-t bg-base-100 px-2 py-2 flex-shrink-0" style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}>
+        <div class="flex items-center justify-between gap-1 max-w-full overflow-x-auto scrollbar-hide">
           <For each={shortcuts}>
             {(shortcut) => (
               <button
-                class={`btn btn-sm ${shortcut.color} hover:bg-base-300 border-base-300 text-base-content flex-1 min-w-0 px-2`}
+                class={`btn btn-sm ${shortcut.color} hover:brightness-90 border-base-300 flex-1 min-w-0 px-2 transition-transform active:scale-95`}
                 onClick={() => sendShortcut(shortcut.key)}
                 onTouchStart={(e) => {
                   e.currentTarget.classList.add('scale-95');
@@ -625,7 +626,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                   e.currentTarget.classList.remove('scale-95');
                 }}
               >
-                <span class="text-xs sm:text-sm truncate">{shortcut.label}</span>
+                <span class="text-xs sm:text-sm truncate font-mono">{shortcut.label}</span>
               </button>
             )}
           </For>
@@ -644,16 +645,21 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     if (!session) return null;
 
     return (
-      <div class="absolute inset-0 bg-black">
-        {/* 终端显示区域 */}
+      <div class="w-full h-full bg-black flex flex-col">
+        {/* 终端显示区域 - 固定高度避免 xterm-scroll-area 溢出 */}
         <div
           ref={(el) => {
+            terminalContainerRef = el;
             if (el && el.children.length === 0) {
               try {
                 console.log("Opening terminal in container:", el);
 
                 // 打开终端
                 session.terminal.open(el);
+
+                // 立即设置容器样式防止滚动问题
+                el.style.height = '100%';
+                el.style.overflow = 'hidden';
 
                 // 等待 DOM 更新后再 fit
                 requestAnimationFrame(() => {
@@ -670,6 +676,18 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                         rows: session.terminal.rows,
                         cols: session.terminal.cols
                       });
+
+                      // 强制设置 xterm-screen 的高度
+                      const xtermElement = el.querySelector('.xterm');
+                      if (xtermElement) {
+                        (xtermElement as HTMLElement).style.height = '100%';
+                      }
+
+                      // 限制 xterm-viewport 的高度
+                      const viewportElement = el.querySelector('.xterm-viewport');
+                      if (viewportElement) {
+                        (viewportElement as HTMLElement).style.height = '100%';
+                      }
                     } catch (error) {
                       console.error("Error fitting terminal:", error);
                     }
@@ -680,7 +698,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               }
             }
           }}
-          class="absolute inset-0 overflow-hidden"
+          class="flex-1 w-full overflow-hidden"
+          style={{
+            height: '100%',
+            'min-height': '0'
+          }}
         />
       </div>
     );
@@ -705,13 +727,23 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       {/* 创建终端对话框 */}
       <Show when={showCreateDialog()}>
         <div
-          class="modal modal-open transition-all duration-300"
-          classList={{
-            "items-end md:items-center": !dialogInputFocused() || !isMobile,
-            "items-start pt-12": dialogInputFocused() && isMobile
+          class="modal modal-open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowCreateDialog(false);
+            }
           }}
         >
-          <div class="modal-box transition-all duration-300">
+          <div 
+            class="modal-box transition-all duration-300 max-w-md"
+            classList={{
+              "translate-y-0": !dialogInputFocused() || !isMobile,
+              "-translate-y-32": dialogInputFocused() && isMobile
+            }}
+            style={{
+              "margin-bottom": dialogInputFocused() && isMobile ? `${MobileKeyboard.getKeyboardHeight()}px` : "0"
+            }}
+          >
             <h3
               class="font-bold transition-all duration-300"
               classList={{
@@ -731,8 +763,16 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 class="input input-bordered text-base"
                 value={terminalName()}
                 onInput={(e) => setTerminalName(e.currentTarget.value)}
-                onFocus={() => setDialogInputFocused(true)}
-                onBlur={() => setDialogInputFocused(false)}
+                onFocus={() => {
+                  setDialogInputFocused(true);
+                  // 延迟调整以等待键盘弹出
+                  setTimeout(() => {
+                    MobileKeyboard.forceScrollAdjustment();
+                  }, 300);
+                }}
+                onBlur={() => {
+                  setTimeout(() => setDialogInputFocused(false), 100);
+                }}
                 onKeyPress={(e) => {
                   if (e.key === "Enter") {
                     confirmCreateTerminal();
@@ -761,10 +801,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               </button>
             </div>
           </div>
-          <div
-            class="modal-backdrop"
-            onClick={() => setShowCreateDialog(false)}
-          />
         </div>
       </Show>
 
@@ -1090,15 +1126,15 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
 
       {/* 主内容 */}
-      <div ref={containerRef} class="flex-1 flex overflow-hidden flex-col">
+      <div ref={containerRef} class="flex-1 flex overflow-hidden flex-col min-h-0">
         {/* 终端显示区域 */}
-        <div class="flex-1 relative overflow-hidden">
+        <div class="flex-1 flex overflow-hidden min-h-0">
           {/* 桌面端和移动端终端显示 */}
           {renderActiveTerminal()}
 
           {/* 无活动终端时的占位符 */}
           {!activeTerminalId() && (
-            <div class="absolute inset-0 flex items-center justify-center bg-base-200">
+            <div class="flex-1 flex items-center justify-center bg-base-200">
               <div class="text-center opacity-50 px-4">
                 <div class="text-6xl mb-4">💻</div>
                 <div class="text-xl">选择一个终端开始</div>
@@ -1122,8 +1158,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           )}
         </div>
 
-        {/* 底部快捷键栏 */}
-        {renderShortcutBar()}
+        {/* 底部快捷键栏 - 移动端显示 */}
+        <Show when={isMobile}>
+          {renderShortcutBar()}
+        </Show>
       </div>
 
     </div>
