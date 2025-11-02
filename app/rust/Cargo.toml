@@ -39,6 +39,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Shared workspace dependencies
 riterm-shared = { path = "../../shared" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# SystemConfiguration framework for macOS networking APIs (transitive dependency)
+system-configuration = "0.6"
+
 [build-dependencies]
 flutter_rust_bridge_codegen = "2.11.1"
 

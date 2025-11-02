@@ -4,18 +4,14 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/iroh_client.dart';
+import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
-import 'lib.dart';
 import 'message_bridge.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'third_party/rust_lib_app/api/iroh_client.dart';
-import 'third_party/rust_lib_app/api/simple.dart';
-import 'third_party/rust_lib_app/message_bridge.dart';
-import 'third_party/rust_lib_app/quic_bridge.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -61,7 +57,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   @override
   Future<void> executeRustInitializers() async {
-    await api.rustLibAppApiSimpleInitApp();
+    await api.crateApiSimpleInitApp();
   }
 
   @override
@@ -72,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 382551315;
+  int get rustContentHash => 659993924;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -87,37 +83,37 @@ abstract class RustLibApi extends BaseApi {
 
   Future<FlutterMessageClient> crateMessageBridgeFlutterMessageClientNew();
 
-  Future<String> rustLibAppMessageBridgeConnectByNodeId({
+  Future<String> crateMessageBridgeConnectByNodeId({
     required FlutterMessageClient client,
     required String nodeIdStr,
     String? relayUrl,
   });
 
-  Future<String> rustLibAppMessageBridgeConnectByTicket({
+  Future<String> crateMessageBridgeConnectByTicket({
     required FlutterMessageClient client,
     required String ticket,
   });
 
-  Future<String> rustLibAppMessageBridgeConnectToCliServer({
+  Future<String> crateMessageBridgeConnectToCliServer({
     required FlutterMessageClient client,
     required String endpointAddrStr,
     String? relayUrl,
   });
 
-  Future<String> rustLibAppApiIrohClientConnectToPeer({required String ticket});
+  Future<String> crateApiIrohClientConnectToPeer({required String ticket});
 
-  String rustLibAppMessageBridgeConstructEndpointAddrFromNodeInfo({
+  String crateMessageBridgeConstructEndpointAddrFromNodeInfo({
     required String nodeIdHex,
     String? relayUrl,
   });
 
-  Future<IrohSessionInfo> rustLibAppApiIrohClientCreateIrohClient({
+  Future<IrohSessionInfo> crateApiIrohClientCreateIrohClient({
     String? relayUrl,
   });
 
-  FlutterMessageClient rustLibAppMessageBridgeCreateMessageClient();
+  FlutterMessageClient crateMessageBridgeCreateMessageClient();
 
-  Future<String> rustLibAppMessageBridgeCreateRemoteTerminal({
+  Future<String> crateMessageBridgeCreateRemoteTerminal({
     required FlutterMessageClient client,
     required String sessionId,
     String? name,
@@ -127,7 +123,7 @@ abstract class RustLibApi extends BaseApi {
     required int cols,
   });
 
-  Future<String> rustLibAppMessageBridgeCreateTcpForwardingSession({
+  Future<String> crateMessageBridgeCreateTcpForwardingSession({
     required FlutterMessageClient client,
     required String sessionId,
     required String localAddr,
@@ -136,7 +132,7 @@ abstract class RustLibApi extends BaseApi {
     required String forwardingType,
   });
 
-  Future<String> rustLibAppApiIrohClientCreateTerminal({
+  Future<String> crateApiIrohClientCreateTerminal({
     String? name,
     String? shellPath,
     String? workingDir,
@@ -144,53 +140,48 @@ abstract class RustLibApi extends BaseApi {
     int? cols,
   });
 
-  Future<void> rustLibAppMessageBridgeDisconnectFromCliServer({
+  Future<void> crateMessageBridgeDisconnectFromCliServer({
     required FlutterMessageClient client,
     required String sessionId,
   });
 
-  Future<void> rustLibAppApiIrohClientDisconnectSession({
-    required String sessionId,
-  });
+  Future<void> crateApiIrohClientDisconnectSession({required String sessionId});
 
-  String rustLibAppMessageBridgeFormatForwardingType({
+  String crateMessageBridgeFormatForwardingType({
     required TcpForwardingType forwardingType,
   });
 
-  Future<String> rustLibAppApiIrohClientGenerateQrCode({required String data});
+  Future<String> crateApiIrohClientGenerateQrCode({required String data});
 
-  Future<List<FlutterSession>> rustLibAppMessageBridgeGetActiveSessions({
+  Future<List<FlutterSession>> crateMessageBridgeGetActiveSessions({
     required FlutterMessageClient client,
   });
 
-  Future<FlutterSystemStatus> rustLibAppMessageBridgeGetSystemStatus({
+  Future<FlutterSystemStatus> crateMessageBridgeGetSystemStatus({
     required FlutterMessageClient client,
     required String sessionId,
   });
 
   Future<List<FlutterTcpForwardingSession>>
-  rustLibAppMessageBridgeGetTcpForwardingSessions({
+  crateMessageBridgeGetTcpForwardingSessions({
     required FlutterMessageClient client,
     required String sessionId,
   });
 
-  String rustLibAppApiSimpleGreet({required String name});
+  String crateApiSimpleGreet({required String name});
 
-  Future<void> rustLibAppApiSimpleInitApp();
+  Future<void> crateApiSimpleInitApp();
 
-  Future<String> rustLibAppQuicBridgeLegacyQuicDeprecatedNotice();
-
-  Future<List<FlutterRemoteTerminal>>
-  rustLibAppMessageBridgeListRemoteTerminals({
+  Future<List<FlutterRemoteTerminal>> crateMessageBridgeListRemoteTerminals({
     required FlutterMessageClient client,
     required String sessionId,
   });
 
-  String rustLibAppMessageBridgeParseConnectionTicket({required String ticket});
+  String crateMessageBridgeParseConnectionTicket({required String ticket});
 
-  String rustLibAppMessageBridgeParseEndpointAddr({required String addr});
+  String crateMessageBridgeParseEndpointAddr({required String addr});
 
-  Future<void> rustLibAppMessageBridgeResizeRemoteTerminal({
+  Future<void> crateMessageBridgeResizeRemoteTerminal({
     required FlutterMessageClient client,
     required String sessionId,
     required String terminalId,
@@ -198,41 +189,39 @@ abstract class RustLibApi extends BaseApi {
     required int cols,
   });
 
-  Future<void> rustLibAppApiIrohClientResizeTerminal({
+  Future<void> crateApiIrohClientResizeTerminal({
     required String terminalId,
     required int rows,
     required int cols,
   });
 
-  Future<void> rustLibAppApiIrohClientSendTerminalInput({
+  Future<void> crateApiIrohClientSendTerminalInput({
     required String terminalId,
     required String input,
   });
 
-  Future<void> rustLibAppMessageBridgeSendTerminalInput({
+  Future<void> crateMessageBridgeSendTerminalInput({
     required FlutterMessageClient client,
     required String sessionId,
     required String terminalId,
     required String input,
   });
 
-  Future<void> rustLibAppMessageBridgeStopRemoteTerminal({
+  Future<void> crateMessageBridgeStopRemoteTerminal({
     required FlutterMessageClient client,
     required String sessionId,
     required String terminalId,
   });
 
-  Future<void> rustLibAppMessageBridgeStopTcpForwardingSession({
+  Future<void> crateMessageBridgeStopTcpForwardingSession({
     required FlutterMessageClient client,
     required String sessionId,
     required String tcpSessionId,
   });
 
-  Future<void> rustLibAppApiIrohClientStopTerminal({
-    required String terminalId,
-  });
+  Future<void> crateApiIrohClientStopTerminal({required String terminalId});
 
-  void rustLibAppMessageBridgeValidateTerminalSize({
+  void crateMessageBridgeValidateTerminalSize({
     required int rows,
     required int cols,
   });
@@ -324,7 +313,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "FlutterMessageClient_new", argNames: []);
 
   @override
-  Future<String> rustLibAppMessageBridgeConnectByNodeId({
+  Future<String> crateMessageBridgeConnectByNodeId({
     required FlutterMessageClient client,
     required String nodeIdStr,
     String? relayUrl,
@@ -350,21 +339,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeConnectByNodeIdConstMeta,
+        constMeta: kCrateMessageBridgeConnectByNodeIdConstMeta,
         argValues: [client, nodeIdStr, relayUrl],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeConnectByNodeIdConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeConnectByNodeIdConstMeta =>
       const TaskConstMeta(
         debugName: "connect_by_node_id",
         argNames: ["client", "nodeIdStr", "relayUrl"],
       );
 
   @override
-  Future<String> rustLibAppMessageBridgeConnectByTicket({
+  Future<String> crateMessageBridgeConnectByTicket({
     required FlutterMessageClient client,
     required String ticket,
   }) {
@@ -388,21 +377,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeConnectByTicketConstMeta,
+        constMeta: kCrateMessageBridgeConnectByTicketConstMeta,
         argValues: [client, ticket],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeConnectByTicketConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeConnectByTicketConstMeta =>
       const TaskConstMeta(
         debugName: "connect_by_ticket",
         argNames: ["client", "ticket"],
       );
 
   @override
-  Future<String> rustLibAppMessageBridgeConnectToCliServer({
+  Future<String> crateMessageBridgeConnectToCliServer({
     required FlutterMessageClient client,
     required String endpointAddrStr,
     String? relayUrl,
@@ -428,23 +417,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeConnectToCliServerConstMeta,
+        constMeta: kCrateMessageBridgeConnectToCliServerConstMeta,
         argValues: [client, endpointAddrStr, relayUrl],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeConnectToCliServerConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeConnectToCliServerConstMeta =>
       const TaskConstMeta(
         debugName: "connect_to_cli_server",
         argNames: ["client", "endpointAddrStr", "relayUrl"],
       );
 
   @override
-  Future<String> rustLibAppApiIrohClientConnectToPeer({
-    required String ticket,
-  }) {
+  Future<String> crateApiIrohClientConnectToPeer({required String ticket}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -461,18 +448,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientConnectToPeerConstMeta,
+        constMeta: kCrateApiIrohClientConnectToPeerConstMeta,
         argValues: [ticket],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientConnectToPeerConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientConnectToPeerConstMeta =>
       const TaskConstMeta(debugName: "connect_to_peer", argNames: ["ticket"]);
 
   @override
-  String rustLibAppMessageBridgeConstructEndpointAddrFromNodeInfo({
+  String crateMessageBridgeConstructEndpointAddrFromNodeInfo({
     required String nodeIdHex,
     String? relayUrl,
   }) {
@@ -489,7 +476,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_AnyhowException,
         ),
         constMeta:
-            kRustLibAppMessageBridgeConstructEndpointAddrFromNodeInfoConstMeta,
+            kCrateMessageBridgeConstructEndpointAddrFromNodeInfoConstMeta,
         argValues: [nodeIdHex, relayUrl],
         apiImpl: this,
       ),
@@ -497,14 +484,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   TaskConstMeta
-  get kRustLibAppMessageBridgeConstructEndpointAddrFromNodeInfoConstMeta =>
+  get kCrateMessageBridgeConstructEndpointAddrFromNodeInfoConstMeta =>
       const TaskConstMeta(
         debugName: "construct_endpoint_addr_from_node_info",
         argNames: ["nodeIdHex", "relayUrl"],
       );
 
   @override
-  Future<IrohSessionInfo> rustLibAppApiIrohClientCreateIrohClient({
+  Future<IrohSessionInfo> crateApiIrohClientCreateIrohClient({
     String? relayUrl,
   }) {
     return handler.executeNormal(
@@ -523,21 +510,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_iroh_session_info,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientCreateIrohClientConstMeta,
+        constMeta: kCrateApiIrohClientCreateIrohClientConstMeta,
         argValues: [relayUrl],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientCreateIrohClientConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientCreateIrohClientConstMeta =>
       const TaskConstMeta(
         debugName: "create_iroh_client",
         argNames: ["relayUrl"],
       );
 
   @override
-  FlutterMessageClient rustLibAppMessageBridgeCreateMessageClient() {
+  FlutterMessageClient crateMessageBridgeCreateMessageClient() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -549,18 +536,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
               sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient,
           decodeErrorData: null,
         ),
-        constMeta: kRustLibAppMessageBridgeCreateMessageClientConstMeta,
+        constMeta: kCrateMessageBridgeCreateMessageClientConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeCreateMessageClientConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeCreateMessageClientConstMeta =>
       const TaskConstMeta(debugName: "create_message_client", argNames: []);
 
   @override
-  Future<String> rustLibAppMessageBridgeCreateRemoteTerminal({
+  Future<String> crateMessageBridgeCreateRemoteTerminal({
     required FlutterMessageClient client,
     required String sessionId,
     String? name,
@@ -594,14 +581,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeCreateRemoteTerminalConstMeta,
+        constMeta: kCrateMessageBridgeCreateRemoteTerminalConstMeta,
         argValues: [client, sessionId, name, shellPath, workingDir, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeCreateRemoteTerminalConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeCreateRemoteTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "create_remote_terminal",
         argNames: [
@@ -616,7 +603,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> rustLibAppMessageBridgeCreateTcpForwardingSession({
+  Future<String> crateMessageBridgeCreateTcpForwardingSession({
     required FlutterMessageClient client,
     required String sessionId,
     required String localAddr,
@@ -648,7 +635,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeCreateTcpForwardingSessionConstMeta,
+        constMeta: kCrateMessageBridgeCreateTcpForwardingSessionConstMeta,
         argValues: [
           client,
           sessionId,
@@ -662,8 +649,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     );
   }
 
-  TaskConstMeta
-  get kRustLibAppMessageBridgeCreateTcpForwardingSessionConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeCreateTcpForwardingSessionConstMeta =>
       const TaskConstMeta(
         debugName: "create_tcp_forwarding_session",
         argNames: [
@@ -677,7 +663,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
-  Future<String> rustLibAppApiIrohClientCreateTerminal({
+  Future<String> crateApiIrohClientCreateTerminal({
     String? name,
     String? shellPath,
     String? workingDir,
@@ -704,21 +690,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientCreateTerminalConstMeta,
+        constMeta: kCrateApiIrohClientCreateTerminalConstMeta,
         argValues: [name, shellPath, workingDir, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientCreateTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientCreateTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "create_terminal",
         argNames: ["name", "shellPath", "workingDir", "rows", "cols"],
       );
 
   @override
-  Future<void> rustLibAppMessageBridgeDisconnectFromCliServer({
+  Future<void> crateMessageBridgeDisconnectFromCliServer({
     required FlutterMessageClient client,
     required String sessionId,
   }) {
@@ -742,21 +728,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeDisconnectFromCliServerConstMeta,
+        constMeta: kCrateMessageBridgeDisconnectFromCliServerConstMeta,
         argValues: [client, sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeDisconnectFromCliServerConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeDisconnectFromCliServerConstMeta =>
       const TaskConstMeta(
         debugName: "disconnect_from_cli_server",
         argNames: ["client", "sessionId"],
       );
 
   @override
-  Future<void> rustLibAppApiIrohClientDisconnectSession({
+  Future<void> crateApiIrohClientDisconnectSession({
     required String sessionId,
   }) {
     return handler.executeNormal(
@@ -775,21 +761,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientDisconnectSessionConstMeta,
+        constMeta: kCrateApiIrohClientDisconnectSessionConstMeta,
         argValues: [sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientDisconnectSessionConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientDisconnectSessionConstMeta =>
       const TaskConstMeta(
         debugName: "disconnect_session",
         argNames: ["sessionId"],
       );
 
   @override
-  String rustLibAppMessageBridgeFormatForwardingType({
+  String crateMessageBridgeFormatForwardingType({
     required TcpForwardingType forwardingType,
   }) {
     return handler.executeSync(
@@ -806,21 +792,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
         ),
-        constMeta: kRustLibAppMessageBridgeFormatForwardingTypeConstMeta,
+        constMeta: kCrateMessageBridgeFormatForwardingTypeConstMeta,
         argValues: [forwardingType],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeFormatForwardingTypeConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeFormatForwardingTypeConstMeta =>
       const TaskConstMeta(
         debugName: "format_forwarding_type",
         argNames: ["forwardingType"],
       );
 
   @override
-  Future<String> rustLibAppApiIrohClientGenerateQrCode({required String data}) {
+  Future<String> crateApiIrohClientGenerateQrCode({required String data}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -837,18 +823,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientGenerateQrCodeConstMeta,
+        constMeta: kCrateApiIrohClientGenerateQrCodeConstMeta,
         argValues: [data],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientGenerateQrCodeConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientGenerateQrCodeConstMeta =>
       const TaskConstMeta(debugName: "generate_qr_code", argNames: ["data"]);
 
   @override
-  Future<List<FlutterSession>> rustLibAppMessageBridgeGetActiveSessions({
+  Future<List<FlutterSession>> crateMessageBridgeGetActiveSessions({
     required FlutterMessageClient client,
   }) {
     return handler.executeNormal(
@@ -870,21 +856,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_flutter_session,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeGetActiveSessionsConstMeta,
+        constMeta: kCrateMessageBridgeGetActiveSessionsConstMeta,
         argValues: [client],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeGetActiveSessionsConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeGetActiveSessionsConstMeta =>
       const TaskConstMeta(
         debugName: "get_active_sessions",
         argNames: ["client"],
       );
 
   @override
-  Future<FlutterSystemStatus> rustLibAppMessageBridgeGetSystemStatus({
+  Future<FlutterSystemStatus> crateMessageBridgeGetSystemStatus({
     required FlutterMessageClient client,
     required String sessionId,
   }) {
@@ -908,14 +894,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_flutter_system_status,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeGetSystemStatusConstMeta,
+        constMeta: kCrateMessageBridgeGetSystemStatusConstMeta,
         argValues: [client, sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeGetSystemStatusConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeGetSystemStatusConstMeta =>
       const TaskConstMeta(
         debugName: "get_system_status",
         argNames: ["client", "sessionId"],
@@ -923,7 +909,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   @override
   Future<List<FlutterTcpForwardingSession>>
-  rustLibAppMessageBridgeGetTcpForwardingSessions({
+  crateMessageBridgeGetTcpForwardingSessions({
     required FlutterMessageClient client,
     required String sessionId,
   }) {
@@ -947,21 +933,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_flutter_tcp_forwarding_session,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeGetTcpForwardingSessionsConstMeta,
+        constMeta: kCrateMessageBridgeGetTcpForwardingSessionsConstMeta,
         argValues: [client, sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeGetTcpForwardingSessionsConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeGetTcpForwardingSessionsConstMeta =>
       const TaskConstMeta(
         debugName: "get_tcp_forwarding_sessions",
         argNames: ["client", "sessionId"],
       );
 
   @override
-  String rustLibAppApiSimpleGreet({required String name}) {
+  String crateApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -973,18 +959,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
         ),
-        constMeta: kRustLibAppApiSimpleGreetConstMeta,
+        constMeta: kCrateApiSimpleGreetConstMeta,
         argValues: [name],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiSimpleGreetConstMeta =>
+  TaskConstMeta get kCrateApiSimpleGreetConstMeta =>
       const TaskConstMeta(debugName: "greet", argNames: ["name"]);
 
   @override
-  Future<void> rustLibAppApiSimpleInitApp() {
+  Future<void> crateApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -1000,49 +986,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
         ),
-        constMeta: kRustLibAppApiSimpleInitAppConstMeta,
+        constMeta: kCrateApiSimpleInitAppConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiSimpleInitAppConstMeta =>
+  TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
-  Future<String> rustLibAppQuicBridgeLegacyQuicDeprecatedNotice() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 22,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kRustLibAppQuicBridgeLegacyQuicDeprecatedNoticeConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppQuicBridgeLegacyQuicDeprecatedNoticeConstMeta =>
-      const TaskConstMeta(
-        debugName: "legacy_quic_deprecated_notice",
-        argNames: [],
-      );
-
-  @override
-  Future<List<FlutterRemoteTerminal>>
-  rustLibAppMessageBridgeListRemoteTerminals({
+  Future<List<FlutterRemoteTerminal>> crateMessageBridgeListRemoteTerminals({
     required FlutterMessageClient client,
     required String sessionId,
   }) {
@@ -1058,7 +1013,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 22,
             port: port_,
           );
         },
@@ -1066,72 +1021,70 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_list_flutter_remote_terminal,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeListRemoteTerminalsConstMeta,
+        constMeta: kCrateMessageBridgeListRemoteTerminalsConstMeta,
         argValues: [client, sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeListRemoteTerminalsConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeListRemoteTerminalsConstMeta =>
       const TaskConstMeta(
         debugName: "list_remote_terminals",
         argNames: ["client", "sessionId"],
       );
 
   @override
-  String rustLibAppMessageBridgeParseConnectionTicket({
-    required String ticket,
-  }) {
+  String crateMessageBridgeParseConnectionTicket({required String ticket}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(ticket, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeParseConnectionTicketConstMeta,
+        constMeta: kCrateMessageBridgeParseConnectionTicketConstMeta,
         argValues: [ticket],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeParseConnectionTicketConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeParseConnectionTicketConstMeta =>
       const TaskConstMeta(
         debugName: "parse_connection_ticket",
         argNames: ["ticket"],
       );
 
   @override
-  String rustLibAppMessageBridgeParseEndpointAddr({required String addr}) {
+  String crateMessageBridgeParseEndpointAddr({required String addr}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(addr, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeParseEndpointAddrConstMeta,
+        constMeta: kCrateMessageBridgeParseEndpointAddrConstMeta,
         argValues: [addr],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeParseEndpointAddrConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeParseEndpointAddrConstMeta =>
       const TaskConstMeta(debugName: "parse_endpoint_addr", argNames: ["addr"]);
 
   @override
-  Future<void> rustLibAppMessageBridgeResizeRemoteTerminal({
+  Future<void> crateMessageBridgeResizeRemoteTerminal({
     required FlutterMessageClient client,
     required String sessionId,
     required String terminalId,
@@ -1147,6 +1100,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(sessionId, serializer);
+          sse_encode_String(terminalId, serializer);
+          sse_encode_u_16(rows, serializer);
+          sse_encode_u_16(cols, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 25,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateMessageBridgeResizeRemoteTerminalConstMeta,
+        argValues: [client, sessionId, terminalId, rows, cols],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateMessageBridgeResizeRemoteTerminalConstMeta =>
+      const TaskConstMeta(
+        debugName: "resize_remote_terminal",
+        argNames: ["client", "sessionId", "terminalId", "rows", "cols"],
+      );
+
+  @override
+  Future<void> crateApiIrohClientResizeTerminal({
+    required String terminalId,
+    required int rows,
+    required int cols,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(terminalId, serializer);
           sse_encode_u_16(rows, serializer);
           sse_encode_u_16(cols, serializer);
@@ -1159,34 +1149,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
+          decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppMessageBridgeResizeRemoteTerminalConstMeta,
-        argValues: [client, sessionId, terminalId, rows, cols],
+        constMeta: kCrateApiIrohClientResizeTerminalConstMeta,
+        argValues: [terminalId, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeResizeRemoteTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientResizeTerminalConstMeta =>
       const TaskConstMeta(
-        debugName: "resize_remote_terminal",
-        argNames: ["client", "sessionId", "terminalId", "rows", "cols"],
+        debugName: "resize_terminal",
+        argNames: ["terminalId", "rows", "cols"],
       );
 
   @override
-  Future<void> rustLibAppApiIrohClientResizeTerminal({
+  Future<void> crateApiIrohClientSendTerminalInput({
     required String terminalId,
-    required int rows,
-    required int cols,
+    required String input,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(terminalId, serializer);
-          sse_encode_u_16(rows, serializer);
-          sse_encode_u_16(cols, serializer);
+          sse_encode_String(input, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1198,21 +1186,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientResizeTerminalConstMeta,
-        argValues: [terminalId, rows, cols],
+        constMeta: kCrateApiIrohClientSendTerminalInputConstMeta,
+        argValues: [terminalId, input],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientResizeTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientSendTerminalInputConstMeta =>
       const TaskConstMeta(
-        debugName: "resize_terminal",
-        argNames: ["terminalId", "rows", "cols"],
+        debugName: "send_terminal_input",
+        argNames: ["terminalId", "input"],
       );
 
   @override
-  Future<void> rustLibAppApiIrohClientSendTerminalInput({
+  Future<void> crateMessageBridgeSendTerminalInput({
+    required FlutterMessageClient client,
+    required String sessionId,
     required String terminalId,
     required String input,
   }) {
@@ -1220,6 +1210,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
+            client,
+            serializer,
+          );
+          sse_encode_String(sessionId, serializer);
           sse_encode_String(terminalId, serializer);
           sse_encode_String(input, serializer);
           pdeCallFfi(
@@ -1231,27 +1226,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppApiIrohClientSendTerminalInputConstMeta,
-        argValues: [terminalId, input],
+        constMeta: kCrateMessageBridgeSendTerminalInputConstMeta,
+        argValues: [client, sessionId, terminalId, input],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientSendTerminalInputConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeSendTerminalInputConstMeta =>
       const TaskConstMeta(
         debugName: "send_terminal_input",
-        argNames: ["terminalId", "input"],
+        argNames: ["client", "sessionId", "terminalId", "input"],
       );
 
   @override
-  Future<void> rustLibAppMessageBridgeSendTerminalInput({
+  Future<void> crateMessageBridgeStopRemoteTerminal({
     required FlutterMessageClient client,
     required String sessionId,
     required String terminalId,
-    required String input,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -1263,7 +1257,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
           sse_encode_String(sessionId, serializer);
           sse_encode_String(terminalId, serializer);
-          sse_encode_String(input, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1275,61 +1268,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeSendTerminalInputConstMeta,
-        argValues: [client, sessionId, terminalId, input],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeSendTerminalInputConstMeta =>
-      const TaskConstMeta(
-        debugName: "send_terminal_input",
-        argNames: ["client", "sessionId", "terminalId", "input"],
-      );
-
-  @override
-  Future<void> rustLibAppMessageBridgeStopRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String terminalId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_String(terminalId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 30,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeStopRemoteTerminalConstMeta,
+        constMeta: kCrateMessageBridgeStopRemoteTerminalConstMeta,
         argValues: [client, sessionId, terminalId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeStopRemoteTerminalConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeStopRemoteTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "stop_remote_terminal",
         argNames: ["client", "sessionId", "terminalId"],
       );
 
   @override
-  Future<void> rustLibAppMessageBridgeStopTcpForwardingSession({
+  Future<void> crateMessageBridgeStopTcpForwardingSession({
     required FlutterMessageClient client,
     required String sessionId,
     required String tcpSessionId,
@@ -1347,7 +1300,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1355,23 +1308,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeStopTcpForwardingSessionConstMeta,
+        constMeta: kCrateMessageBridgeStopTcpForwardingSessionConstMeta,
         argValues: [client, sessionId, tcpSessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeStopTcpForwardingSessionConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeStopTcpForwardingSessionConstMeta =>
       const TaskConstMeta(
         debugName: "stop_tcp_forwarding_session",
         argNames: ["client", "sessionId", "tcpSessionId"],
       );
 
   @override
-  Future<void> rustLibAppApiIrohClientStopTerminal({
-    required String terminalId,
-  }) {
+  Future<void> crateApiIrohClientStopTerminal({required String terminalId}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -1380,7 +1331,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1388,18 +1339,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientStopTerminalConstMeta,
+        constMeta: kCrateApiIrohClientStopTerminalConstMeta,
         argValues: [terminalId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientStopTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientStopTerminalConstMeta =>
       const TaskConstMeta(debugName: "stop_terminal", argNames: ["terminalId"]);
 
   @override
-  void rustLibAppMessageBridgeValidateTerminalSize({
+  void crateMessageBridgeValidateTerminalSize({
     required int rows,
     required int cols,
   }) {
@@ -1409,20 +1360,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_16(rows, serializer);
           sse_encode_u_16(cols, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_AnyhowException,
         ),
-        constMeta: kRustLibAppMessageBridgeValidateTerminalSizeConstMeta,
+        constMeta: kCrateMessageBridgeValidateTerminalSizeConstMeta,
         argValues: [rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppMessageBridgeValidateTerminalSizeConstMeta =>
+  TaskConstMeta get kCrateMessageBridgeValidateTerminalSizeConstMeta =>
       const TaskConstMeta(
         debugName: "validate_terminal_size",
         argNames: ["rows", "cols"],

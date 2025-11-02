@@ -3752,6 +3752,7 @@ dependencies = [
  "riterm-shared",
  "serde",
  "serde_json",
+ "system-configuration",
  "tokio",
  "tracing",
  "tracing-subscriber",

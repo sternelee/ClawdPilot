@@ -5,7 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 // 启用 Rust bridge
 import 'bridge_generated.dart/frb_generated.dart';
-import 'bridge_generated.dart/third_party/rust_lib_app/message_bridge.dart';
+import 'bridge_generated.dart/message_bridge.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

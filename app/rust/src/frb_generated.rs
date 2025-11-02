@@ -26,11 +26,10 @@
 // Section: imports
 
 use crate::message_bridge::*;
-use crate::*;
-use riterm_shared::TcpForwardingType;
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
+use riterm_shared::TcpForwardingType;
 
 // Section: boilerplate
 
@@ -40,12 +39,11 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 382551315;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 659993924;
 
 // Section: executor
 
 flutter_rust_bridge::frb_generated_default_handler!();
-
 
 // Section: wire_funcs
 
@@ -116,7 +114,7 @@ fn wire__crate__message_bridge__FlutterMessageClient_new_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__connect_by_node_id_impl(
+fn wire__crate__message_bridge__connect_by_node_id_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -159,7 +157,7 @@ fn wire__rust_lib_app__message_bridge__connect_by_node_id_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__connect_by_ticket_impl(
+fn wire__crate__message_bridge__connect_by_ticket_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -198,7 +196,7 @@ fn wire__rust_lib_app__message_bridge__connect_by_ticket_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__connect_to_cli_server_impl(
+fn wire__crate__message_bridge__connect_to_cli_server_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -241,7 +239,7 @@ fn wire__rust_lib_app__message_bridge__connect_to_cli_server_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__connect_to_peer_impl(
+fn wire__crate__api__iroh_client__connect_to_peer_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -278,7 +276,7 @@ fn wire__rust_lib_app__api__iroh_client__connect_to_peer_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__construct_endpoint_addr_from_node_info_impl(
+fn wire__crate__message_bridge__construct_endpoint_addr_from_node_info_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -304,18 +302,17 @@ fn wire__rust_lib_app__message_bridge__construct_endpoint_addr_from_node_info_im
             deserializer.end();
             transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                 (move || {
-                    let output_ok =
-                        crate::message_bridge::construct_endpoint_addr_from_node_info(
-                            api_node_id_hex,
-                            api_relay_url,
-                        )?;
+                    let output_ok = crate::message_bridge::construct_endpoint_addr_from_node_info(
+                        api_node_id_hex,
+                        api_relay_url,
+                    )?;
                     Ok(output_ok)
                 })(),
             )
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
+fn wire__crate__api__iroh_client__create_iroh_client_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -343,8 +340,7 @@ fn wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
                 transform_result_sse::<_, String>(
                     (move || async move {
                         let output_ok =
-                            crate::api::iroh_client::create_iroh_client(api__relay_url)
-                                .await?;
+                            crate::api::iroh_client::create_iroh_client(api__relay_url).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -353,7 +349,7 @@ fn wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__create_message_client_impl(
+fn wire__crate__message_bridge__create_message_client_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -383,7 +379,7 @@ fn wire__rust_lib_app__message_bridge__create_message_client_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__create_remote_terminal_impl(
+fn wire__crate__message_bridge__create_remote_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -434,7 +430,7 @@ fn wire__rust_lib_app__message_bridge__create_remote_terminal_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__create_tcp_forwarding_session_impl(
+fn wire__crate__message_bridge__create_tcp_forwarding_session_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -466,16 +462,15 @@ fn wire__rust_lib_app__message_bridge__create_tcp_forwarding_session_impl(
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok =
-                            crate::message_bridge::create_tcp_forwarding_session(
-                                api_client,
-                                api_session_id,
-                                api_local_addr,
-                                api_remote_host,
-                                api_remote_port,
-                                api_forwarding_type,
-                            )
-                            .await?;
+                        let output_ok = crate::message_bridge::create_tcp_forwarding_session(
+                            api_client,
+                            api_session_id,
+                            api_local_addr,
+                            api_remote_host,
+                            api_remote_port,
+                            api_forwarding_type,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -484,7 +479,7 @@ fn wire__rust_lib_app__message_bridge__create_tcp_forwarding_session_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__create_terminal_impl(
+fn wire__crate__api__iroh_client__create_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -531,7 +526,7 @@ fn wire__rust_lib_app__api__iroh_client__create_terminal_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__disconnect_from_cli_server_impl(
+fn wire__crate__message_bridge__disconnect_from_cli_server_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -572,7 +567,7 @@ fn wire__rust_lib_app__message_bridge__disconnect_from_cli_server_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
+fn wire__crate__api__iroh_client__disconnect_session_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -600,8 +595,7 @@ fn wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
                 transform_result_sse::<_, String>(
                     (move || async move {
                         let output_ok =
-                            crate::api::iroh_client::disconnect_session(api__session_id)
-                                .await?;
+                            crate::api::iroh_client::disconnect_session(api__session_id).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -610,7 +604,7 @@ fn wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__format_forwarding_type_impl(
+fn wire__crate__message_bridge__format_forwarding_type_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -642,7 +636,7 @@ fn wire__rust_lib_app__message_bridge__format_forwarding_type_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__generate_qr_code_impl(
+fn wire__crate__api__iroh_client__generate_qr_code_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -675,7 +669,7 @@ fn wire__rust_lib_app__api__iroh_client__generate_qr_code_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__get_active_sessions_impl(
+fn wire__crate__message_bridge__get_active_sessions_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -712,7 +706,7 @@ fn wire__rust_lib_app__message_bridge__get_active_sessions_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__get_system_status_impl(
+fn wire__crate__message_bridge__get_system_status_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -740,11 +734,9 @@ fn wire__rust_lib_app__message_bridge__get_system_status_impl(
             move |context| async move {
                 transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                     (move || async move {
-                        let output_ok = crate::message_bridge::get_system_status(
-                            api_client,
-                            api_session_id,
-                        )
-                        .await?;
+                        let output_ok =
+                            crate::message_bridge::get_system_status(api_client, api_session_id)
+                                .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -753,7 +745,7 @@ fn wire__rust_lib_app__message_bridge__get_system_status_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__get_tcp_forwarding_sessions_impl(
+fn wire__crate__message_bridge__get_tcp_forwarding_sessions_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -794,7 +786,7 @@ fn wire__rust_lib_app__message_bridge__get_tcp_forwarding_sessions_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__simple__greet_impl(
+fn wire__crate__api__simple__greet_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -824,7 +816,7 @@ fn wire__rust_lib_app__api__simple__greet_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__simple__init_app_impl(
+fn wire__crate__api__simple__init_app_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -858,43 +850,7 @@ fn wire__rust_lib_app__api__simple__init_app_impl(
         },
     )
 }
-fn wire__rust_lib_app__quic_bridge__legacy_quic_deprecated_notice_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "legacy_quic_deprecated_notice",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            deserializer.end();
-            move |context| async move {
-                transform_result_sse::<_, String>(
-                    (move || async move {
-                        let output_ok =
-                            crate::quic_bridge::legacy_quic_deprecated_notice().await?;
-                        Ok(output_ok)
-                    })()
-                    .await,
-                )
-            }
-        },
-    )
-}
-fn wire__rust_lib_app__message_bridge__list_remote_terminals_impl(
+fn wire__crate__message_bridge__list_remote_terminals_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -935,7 +891,7 @@ fn wire__rust_lib_app__message_bridge__list_remote_terminals_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__parse_connection_ticket_impl(
+fn wire__crate__message_bridge__parse_connection_ticket_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -960,15 +916,14 @@ fn wire__rust_lib_app__message_bridge__parse_connection_ticket_impl(
             deserializer.end();
             transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
                 (move || {
-                    let output_ok =
-                        crate::message_bridge::parse_connection_ticket(api_ticket)?;
+                    let output_ok = crate::message_bridge::parse_connection_ticket(api_ticket)?;
                     Ok(output_ok)
                 })(),
             )
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__parse_endpoint_addr_impl(
+fn wire__crate__message_bridge__parse_endpoint_addr_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -1000,7 +955,7 @@ fn wire__rust_lib_app__message_bridge__parse_endpoint_addr_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__resize_remote_terminal_impl(
+fn wire__crate__message_bridge__resize_remote_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1047,7 +1002,7 @@ fn wire__rust_lib_app__message_bridge__resize_remote_terminal_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__resize_terminal_impl(
+fn wire__crate__api__iroh_client__resize_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1090,7 +1045,7 @@ fn wire__rust_lib_app__api__iroh_client__resize_terminal_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__send_terminal_input_impl(
+fn wire__crate__api__iroh_client__send_terminal_input_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1131,7 +1086,7 @@ fn wire__rust_lib_app__api__iroh_client__send_terminal_input_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__send_terminal_input_impl(
+fn wire__crate__message_bridge__send_terminal_input_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1176,7 +1131,7 @@ fn wire__rust_lib_app__message_bridge__send_terminal_input_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__stop_remote_terminal_impl(
+fn wire__crate__message_bridge__stop_remote_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1219,7 +1174,7 @@ fn wire__rust_lib_app__message_bridge__stop_remote_terminal_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__stop_tcp_forwarding_session_impl(
+fn wire__crate__message_bridge__stop_tcp_forwarding_session_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1262,7 +1217,7 @@ fn wire__rust_lib_app__message_bridge__stop_tcp_forwarding_session_impl(
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__stop_terminal_impl(
+fn wire__crate__api__iroh_client__stop_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1299,7 +1254,7 @@ fn wire__rust_lib_app__api__iroh_client__stop_terminal_impl(
         },
     )
 }
-fn wire__rust_lib_app__message_bridge__validate_terminal_size_impl(
+fn wire__crate__message_bridge__validate_terminal_size_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -1675,145 +1630,103 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        3 => wire__rust_lib_app__message_bridge__connect_by_node_id_impl(
+        3 => {
+            wire__crate__message_bridge__connect_by_node_id_impl(port, ptr, rust_vec_len, data_len)
+        }
+        4 => wire__crate__message_bridge__connect_by_ticket_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__message_bridge__connect_to_cli_server_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        4 => wire__rust_lib_app__message_bridge__connect_by_ticket_impl(
+        6 => wire__crate__api__iroh_client__connect_to_peer_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__iroh_client__create_iroh_client_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__rust_lib_app__message_bridge__connect_to_cli_server_impl(
+        10 => wire__crate__message_bridge__create_remote_terminal_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        6 => wire__rust_lib_app__api__iroh_client__connect_to_peer_impl(
+        11 => wire__crate__message_bridge__create_tcp_forwarding_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        8 => wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
+        12 => {
+            wire__crate__api__iroh_client__create_terminal_impl(port, ptr, rust_vec_len, data_len)
+        }
+        13 => wire__crate__message_bridge__disconnect_from_cli_server_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        10 => wire__rust_lib_app__message_bridge__create_remote_terminal_impl(
+        14 => wire__crate__api__iroh_client__disconnect_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__rust_lib_app__message_bridge__create_tcp_forwarding_session_impl(
+        16 => {
+            wire__crate__api__iroh_client__generate_qr_code_impl(port, ptr, rust_vec_len, data_len)
+        }
+        17 => {
+            wire__crate__message_bridge__get_active_sessions_impl(port, ptr, rust_vec_len, data_len)
+        }
+        18 => {
+            wire__crate__message_bridge__get_system_status_impl(port, ptr, rust_vec_len, data_len)
+        }
+        19 => wire__crate__message_bridge__get_tcp_forwarding_sessions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__rust_lib_app__api__iroh_client__create_terminal_impl(
+        21 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__message_bridge__list_remote_terminals_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        13 => wire__rust_lib_app__message_bridge__disconnect_from_cli_server_impl(
+        25 => wire__crate__message_bridge__resize_remote_terminal_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
+        26 => {
+            wire__crate__api__iroh_client__resize_terminal_impl(port, ptr, rust_vec_len, data_len)
+        }
+        27 => wire__crate__api__iroh_client__send_terminal_input_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__rust_lib_app__api__iroh_client__generate_qr_code_impl(
+        28 => {
+            wire__crate__message_bridge__send_terminal_input_impl(port, ptr, rust_vec_len, data_len)
+        }
+        29 => wire__crate__message_bridge__stop_remote_terminal_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        17 => wire__rust_lib_app__message_bridge__get_active_sessions_impl(
+        30 => wire__crate__message_bridge__stop_tcp_forwarding_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__rust_lib_app__message_bridge__get_system_status_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        19 => wire__rust_lib_app__message_bridge__get_tcp_forwarding_sessions_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        21 => wire__rust_lib_app__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__rust_lib_app__quic_bridge__legacy_quic_deprecated_notice_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        23 => wire__rust_lib_app__message_bridge__list_remote_terminals_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        26 => wire__rust_lib_app__message_bridge__resize_remote_terminal_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        27 => wire__rust_lib_app__api__iroh_client__resize_terminal_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        28 => wire__rust_lib_app__api__iroh_client__send_terminal_input_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        29 => wire__rust_lib_app__message_bridge__send_terminal_input_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        30 => wire__rust_lib_app__message_bridge__stop_remote_terminal_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        31 => wire__rust_lib_app__message_bridge__stop_tcp_forwarding_session_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        32 => wire__rust_lib_app__api__iroh_client__stop_terminal_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
+        31 => wire__crate__api__iroh_client__stop_terminal_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1826,37 +1739,19 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        7 => wire__rust_lib_app__message_bridge__construct_endpoint_addr_from_node_info_impl(
+        7 => wire__crate__message_bridge__construct_endpoint_addr_from_node_info_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__rust_lib_app__message_bridge__create_message_client_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        15 => wire__rust_lib_app__message_bridge__format_forwarding_type_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        20 => wire__rust_lib_app__api__simple__greet_impl(ptr, rust_vec_len, data_len),
-        24 => wire__rust_lib_app__message_bridge__parse_connection_ticket_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        25 => wire__rust_lib_app__message_bridge__parse_endpoint_addr_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        33 => wire__rust_lib_app__message_bridge__validate_terminal_size_impl(
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
+        9 => wire__crate__message_bridge__create_message_client_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__message_bridge__format_forwarding_type_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        23 => {
+            wire__crate__message_bridge__parse_connection_ticket_impl(ptr, rust_vec_len, data_len)
+        }
+        24 => wire__crate__message_bridge__parse_endpoint_addr_impl(ptr, rust_vec_len, data_len),
+        32 => wire__crate__message_bridge__validate_terminal_size_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2310,8 +2205,6 @@ mod io {
 
     use super::*;
     use crate::message_bridge::*;
-    use crate::*;
-    use riterm_shared::TcpForwardingType;
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
@@ -2363,7 +2256,6 @@ mod web {
 
     use super::*;
     use crate::message_bridge::*;
-    use crate::*;
     use flutter_rust_bridge::for_generated::byteorder::{
         NativeEndian, ReadBytesExt, WriteBytesExt,
     };
