@@ -1285,6 +1285,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "examples"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "data-encoding",
+ "riterm-shared",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "fast_qr"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
