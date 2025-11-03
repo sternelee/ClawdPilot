@@ -365,7 +365,7 @@ class _TcpForwardingViewState extends State<TcpForwardingView> {
 
     try {
       final client = createMessageClient();
-      final sessionId = await RustLib.instance.api.crateMessageBridgeCreateTcpForwardingSession(
+      final sessionId = await RustLib.instance.api.rustLibAppMessageBridgeCreateTcpForwardingSession(
         client: client,
         sessionId: store.currentSession!.id,
         localAddr: localAddr,

@@ -4,17 +4,13 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/iroh_client.dart';
+import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
-import 'message_bridge.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'third_party/rust_lib_app/api/iroh_client.dart';
-import 'third_party/rust_lib_app/api/simple.dart';
-import 'third_party/rust_lib_app/message_bridge.dart';
-import 'third_party/rust_lib_app/quic_bridge.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -60,7 +56,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   @override
   Future<void> executeRustInitializers() async {
-    await api.rustLibAppApiSimpleInitApp();
+    await api.crateApiSimpleInitApp();
   }
 
   @override
@@ -71,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => 382551315;
+  int get rustContentHash => -623661905;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -82,60 +78,13 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<FlutterMessageClient> crateMessageBridgeFlutterMessageClientDefault();
+  Future<String> crateApiIrohClientConnectToPeer({required String ticket});
 
-  Future<FlutterMessageClient> crateMessageBridgeFlutterMessageClientNew();
-
-  Future<String> rustLibAppMessageBridgeConnectByNodeId({
-    required FlutterMessageClient client,
-    required String nodeIdStr,
+  Future<IrohSessionInfo> crateApiIrohClientCreateIrohClient({
     String? relayUrl,
   });
 
-  Future<String> rustLibAppMessageBridgeConnectByTicket({
-    required FlutterMessageClient client,
-    required String ticket,
-  });
-
-  Future<String> rustLibAppMessageBridgeConnectToCliServer({
-    required FlutterMessageClient client,
-    required String endpointAddrStr,
-    String? relayUrl,
-  });
-
-  Future<String> rustLibAppApiIrohClientConnectToPeer({required String ticket});
-
-  String rustLibAppMessageBridgeConstructEndpointAddrFromNodeInfo({
-    required String nodeIdHex,
-    String? relayUrl,
-  });
-
-  Future<IrohSessionInfo> rustLibAppApiIrohClientCreateIrohClient({
-    String? relayUrl,
-  });
-
-  FlutterMessageClient rustLibAppMessageBridgeCreateMessageClient();
-
-  Future<String> rustLibAppMessageBridgeCreateRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
-    String? name,
-    String? shellPath,
-    String? workingDir,
-    required int rows,
-    required int cols,
-  });
-
-  Future<String> rustLibAppMessageBridgeCreateTcpForwardingSession({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String localAddr,
-    String? remoteHost,
-    int? remotePort,
-    required String forwardingType,
-  });
-
-  Future<String> rustLibAppApiIrohClientCreateTerminal({
+  Future<String> crateApiIrohClientCreateTerminal({
     String? name,
     String? shellPath,
     String? workingDir,
@@ -143,116 +92,26 @@ abstract class RustLibApi extends BaseApi {
     int? cols,
   });
 
-  Future<void> rustLibAppMessageBridgeDisconnectFromCliServer({
-    required FlutterMessageClient client,
-    required String sessionId,
-  });
+  Future<void> crateApiIrohClientDisconnectSession({required String sessionId});
 
-  Future<void> rustLibAppApiIrohClientDisconnectSession({
-    required String sessionId,
-  });
+  Future<String> crateApiIrohClientGenerateQrCode({required String data});
 
-  String rustLibAppMessageBridgeFormatForwardingType({
-    required TcpForwardingType forwardingType,
-  });
+  String crateApiSimpleGreet({required String name});
 
-  Future<String> rustLibAppApiIrohClientGenerateQrCode({required String data});
+  Future<void> crateApiSimpleInitApp();
 
-  Future<List<FlutterSession>> rustLibAppMessageBridgeGetActiveSessions({
-    required FlutterMessageClient client,
-  });
-
-  Future<FlutterSystemStatus> rustLibAppMessageBridgeGetSystemStatus({
-    required FlutterMessageClient client,
-    required String sessionId,
-  });
-
-  Future<List<FlutterTcpForwardingSession>>
-  rustLibAppMessageBridgeGetTcpForwardingSessions({
-    required FlutterMessageClient client,
-    required String sessionId,
-  });
-
-  String rustLibAppApiSimpleGreet({required String name});
-
-  Future<void> rustLibAppApiSimpleInitApp();
-
-  Future<String> rustLibAppQuicBridgeLegacyQuicDeprecatedNotice();
-
-  Future<List<FlutterRemoteTerminal>>
-  rustLibAppMessageBridgeListRemoteTerminals({
-    required FlutterMessageClient client,
-    required String sessionId,
-  });
-
-  String rustLibAppMessageBridgeParseConnectionTicket({required String ticket});
-
-  String rustLibAppMessageBridgeParseEndpointAddr({required String addr});
-
-  Future<void> rustLibAppMessageBridgeResizeRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
+  Future<void> crateApiIrohClientResizeTerminal({
     required String terminalId,
     required int rows,
     required int cols,
   });
 
-  Future<void> rustLibAppApiIrohClientResizeTerminal({
-    required String terminalId,
-    required int rows,
-    required int cols,
-  });
-
-  Future<void> rustLibAppApiIrohClientSendTerminalInput({
+  Future<void> crateApiIrohClientSendTerminalInput({
     required String terminalId,
     required String input,
   });
 
-  Future<void> rustLibAppMessageBridgeSendTerminalInput({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String terminalId,
-    required String input,
-  });
-
-  Future<void> rustLibAppMessageBridgeStopRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String terminalId,
-  });
-
-  Future<void> rustLibAppMessageBridgeStopTcpForwardingSession({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String tcpSessionId,
-  });
-
-  Future<void> rustLibAppApiIrohClientStopTerminal({
-    required String terminalId,
-  });
-
-  void rustLibAppMessageBridgeValidateTerminalSize({
-    required int rows,
-    required int cols,
-  });
-
-  RustArcIncrementStrongCountFnType
-  get rust_arc_increment_strong_count_FlutterMessageClient;
-
-  RustArcDecrementStrongCountFnType
-  get rust_arc_decrement_strong_count_FlutterMessageClient;
-
-  CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_FlutterMessageClientPtr;
-
-  RustArcIncrementStrongCountFnType
-  get rust_arc_increment_strong_count_TcpForwardingType;
-
-  RustArcDecrementStrongCountFnType
-  get rust_arc_decrement_strong_count_TcpForwardingType;
-
-  CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_TcpForwardingTypePtr;
+  Future<void> crateApiIrohClientStopTerminal({required String terminalId});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -264,11 +123,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<FlutterMessageClient> crateMessageBridgeFlutterMessageClientDefault() {
+  Future<String> crateApiIrohClientConnectToPeer({required String ticket}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(ticket, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -277,29 +137,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData:
-              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient,
-          decodeErrorData: null,
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateMessageBridgeFlutterMessageClientDefaultConstMeta,
-        argValues: [],
+        constMeta: kCrateApiIrohClientConnectToPeerConstMeta,
+        argValues: [ticket],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateMessageBridgeFlutterMessageClientDefaultConstMeta =>
-      const TaskConstMeta(
-        debugName: "FlutterMessageClient_default",
-        argNames: [],
-      );
+  TaskConstMeta get kCrateApiIrohClientConnectToPeerConstMeta =>
+      const TaskConstMeta(debugName: "connect_to_peer", argNames: ["ticket"]);
 
   @override
-  Future<FlutterMessageClient> crateMessageBridgeFlutterMessageClientNew() {
+  Future<IrohSessionInfo> crateApiIrohClientCreateIrohClient({
+    String? relayUrl,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_opt_String(relayUrl, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -308,375 +167,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
-          decodeSuccessData:
-              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient,
-          decodeErrorData: null,
-        ),
-        constMeta: kCrateMessageBridgeFlutterMessageClientNewConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kCrateMessageBridgeFlutterMessageClientNewConstMeta =>
-      const TaskConstMeta(debugName: "FlutterMessageClient_new", argNames: []);
-
-  @override
-  Future<String> rustLibAppMessageBridgeConnectByNodeId({
-    required FlutterMessageClient client,
-    required String nodeIdStr,
-    String? relayUrl,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(nodeIdStr, serializer);
-          sse_encode_opt_String(relayUrl, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 3,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeConnectByNodeIdConstMeta,
-        argValues: [client, nodeIdStr, relayUrl],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeConnectByNodeIdConstMeta =>
-      const TaskConstMeta(
-        debugName: "connect_by_node_id",
-        argNames: ["client", "nodeIdStr", "relayUrl"],
-      );
-
-  @override
-  Future<String> rustLibAppMessageBridgeConnectByTicket({
-    required FlutterMessageClient client,
-    required String ticket,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(ticket, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 4,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeConnectByTicketConstMeta,
-        argValues: [client, ticket],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeConnectByTicketConstMeta =>
-      const TaskConstMeta(
-        debugName: "connect_by_ticket",
-        argNames: ["client", "ticket"],
-      );
-
-  @override
-  Future<String> rustLibAppMessageBridgeConnectToCliServer({
-    required FlutterMessageClient client,
-    required String endpointAddrStr,
-    String? relayUrl,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(endpointAddrStr, serializer);
-          sse_encode_opt_String(relayUrl, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 5,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeConnectToCliServerConstMeta,
-        argValues: [client, endpointAddrStr, relayUrl],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeConnectToCliServerConstMeta =>
-      const TaskConstMeta(
-        debugName: "connect_to_cli_server",
-        argNames: ["client", "endpointAddrStr", "relayUrl"],
-      );
-
-  @override
-  Future<String> rustLibAppApiIrohClientConnectToPeer({
-    required String ticket,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(ticket, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 6,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kRustLibAppApiIrohClientConnectToPeerConstMeta,
-        argValues: [ticket],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppApiIrohClientConnectToPeerConstMeta =>
-      const TaskConstMeta(debugName: "connect_to_peer", argNames: ["ticket"]);
-
-  @override
-  String rustLibAppMessageBridgeConstructEndpointAddrFromNodeInfo({
-    required String nodeIdHex,
-    String? relayUrl,
-  }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(nodeIdHex, serializer);
-          sse_encode_opt_String(relayUrl, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta:
-            kRustLibAppMessageBridgeConstructEndpointAddrFromNodeInfoConstMeta,
-        argValues: [nodeIdHex, relayUrl],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta
-  get kRustLibAppMessageBridgeConstructEndpointAddrFromNodeInfoConstMeta =>
-      const TaskConstMeta(
-        debugName: "construct_endpoint_addr_from_node_info",
-        argNames: ["nodeIdHex", "relayUrl"],
-      );
-
-  @override
-  Future<IrohSessionInfo> rustLibAppApiIrohClientCreateIrohClient({
-    String? relayUrl,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_opt_String(relayUrl, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 8,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
           decodeSuccessData: sse_decode_iroh_session_info,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientCreateIrohClientConstMeta,
+        constMeta: kCrateApiIrohClientCreateIrohClientConstMeta,
         argValues: [relayUrl],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientCreateIrohClientConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientCreateIrohClientConstMeta =>
       const TaskConstMeta(
         debugName: "create_iroh_client",
         argNames: ["relayUrl"],
       );
 
   @override
-  FlutterMessageClient rustLibAppMessageBridgeCreateMessageClient() {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData:
-              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient,
-          decodeErrorData: null,
-        ),
-        constMeta: kRustLibAppMessageBridgeCreateMessageClientConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeCreateMessageClientConstMeta =>
-      const TaskConstMeta(debugName: "create_message_client", argNames: []);
-
-  @override
-  Future<String> rustLibAppMessageBridgeCreateRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
-    String? name,
-    String? shellPath,
-    String? workingDir,
-    required int rows,
-    required int cols,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_opt_String(name, serializer);
-          sse_encode_opt_String(shellPath, serializer);
-          sse_encode_opt_String(workingDir, serializer);
-          sse_encode_u_16(rows, serializer);
-          sse_encode_u_16(cols, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 10,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeCreateRemoteTerminalConstMeta,
-        argValues: [client, sessionId, name, shellPath, workingDir, rows, cols],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeCreateRemoteTerminalConstMeta =>
-      const TaskConstMeta(
-        debugName: "create_remote_terminal",
-        argNames: [
-          "client",
-          "sessionId",
-          "name",
-          "shellPath",
-          "workingDir",
-          "rows",
-          "cols",
-        ],
-      );
-
-  @override
-  Future<String> rustLibAppMessageBridgeCreateTcpForwardingSession({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String localAddr,
-    String? remoteHost,
-    int? remotePort,
-    required String forwardingType,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_String(localAddr, serializer);
-          sse_encode_opt_String(remoteHost, serializer);
-          sse_encode_opt_box_autoadd_u_16(remotePort, serializer);
-          sse_encode_String(forwardingType, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 11,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeCreateTcpForwardingSessionConstMeta,
-        argValues: [
-          client,
-          sessionId,
-          localAddr,
-          remoteHost,
-          remotePort,
-          forwardingType,
-        ],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta
-  get kRustLibAppMessageBridgeCreateTcpForwardingSessionConstMeta =>
-      const TaskConstMeta(
-        debugName: "create_tcp_forwarding_session",
-        argNames: [
-          "client",
-          "sessionId",
-          "localAddr",
-          "remoteHost",
-          "remotePort",
-          "forwardingType",
-        ],
-      );
-
-  @override
-  Future<String> rustLibAppApiIrohClientCreateTerminal({
+  Future<String> crateApiIrohClientCreateTerminal({
     String? name,
     String? shellPath,
     String? workingDir,
@@ -695,7 +203,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 3,
             port: port_,
           );
         },
@@ -703,59 +211,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientCreateTerminalConstMeta,
+        constMeta: kCrateApiIrohClientCreateTerminalConstMeta,
         argValues: [name, shellPath, workingDir, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientCreateTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientCreateTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "create_terminal",
         argNames: ["name", "shellPath", "workingDir", "rows", "cols"],
       );
 
   @override
-  Future<void> rustLibAppMessageBridgeDisconnectFromCliServer({
-    required FlutterMessageClient client,
-    required String sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 13,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeDisconnectFromCliServerConstMeta,
-        argValues: [client, sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeDisconnectFromCliServerConstMeta =>
-      const TaskConstMeta(
-        debugName: "disconnect_from_cli_server",
-        argNames: ["client", "sessionId"],
-      );
-
-  @override
-  Future<void> rustLibAppApiIrohClientDisconnectSession({
+  Future<void> crateApiIrohClientDisconnectSession({
     required String sessionId,
   }) {
     return handler.executeNormal(
@@ -766,7 +236,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 4,
             port: port_,
           );
         },
@@ -774,52 +244,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientDisconnectSessionConstMeta,
+        constMeta: kCrateApiIrohClientDisconnectSessionConstMeta,
         argValues: [sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientDisconnectSessionConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientDisconnectSessionConstMeta =>
       const TaskConstMeta(
         debugName: "disconnect_session",
         argNames: ["sessionId"],
       );
 
   @override
-  String rustLibAppMessageBridgeFormatForwardingType({
-    required TcpForwardingType forwardingType,
-  }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-            forwardingType,
-            serializer,
-          );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
-        ),
-        constMeta: kRustLibAppMessageBridgeFormatForwardingTypeConstMeta,
-        argValues: [forwardingType],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeFormatForwardingTypeConstMeta =>
-      const TaskConstMeta(
-        debugName: "format_forwarding_type",
-        argNames: ["forwardingType"],
-      );
-
-  @override
-  Future<String> rustLibAppApiIrohClientGenerateQrCode({required String data}) {
+  Future<String> crateApiIrohClientGenerateQrCode({required String data}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -828,7 +267,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 5,
             port: port_,
           );
         },
@@ -836,154 +275,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientGenerateQrCodeConstMeta,
+        constMeta: kCrateApiIrohClientGenerateQrCodeConstMeta,
         argValues: [data],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientGenerateQrCodeConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientGenerateQrCodeConstMeta =>
       const TaskConstMeta(debugName: "generate_qr_code", argNames: ["data"]);
 
   @override
-  Future<List<FlutterSession>> rustLibAppMessageBridgeGetActiveSessions({
-    required FlutterMessageClient client,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 17,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_flutter_session,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeGetActiveSessionsConstMeta,
-        argValues: [client],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeGetActiveSessionsConstMeta =>
-      const TaskConstMeta(
-        debugName: "get_active_sessions",
-        argNames: ["client"],
-      );
-
-  @override
-  Future<FlutterSystemStatus> rustLibAppMessageBridgeGetSystemStatus({
-    required FlutterMessageClient client,
-    required String sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 18,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_flutter_system_status,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeGetSystemStatusConstMeta,
-        argValues: [client, sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeGetSystemStatusConstMeta =>
-      const TaskConstMeta(
-        debugName: "get_system_status",
-        argNames: ["client", "sessionId"],
-      );
-
-  @override
-  Future<List<FlutterTcpForwardingSession>>
-  rustLibAppMessageBridgeGetTcpForwardingSessions({
-    required FlutterMessageClient client,
-    required String sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 19,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_flutter_tcp_forwarding_session,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeGetTcpForwardingSessionsConstMeta,
-        argValues: [client, sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeGetTcpForwardingSessionsConstMeta =>
-      const TaskConstMeta(
-        debugName: "get_tcp_forwarding_sessions",
-        argNames: ["client", "sessionId"],
-      );
-
-  @override
-  String rustLibAppApiSimpleGreet({required String name}) {
+  String crateApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
         ),
-        constMeta: kRustLibAppApiSimpleGreetConstMeta,
+        constMeta: kCrateApiSimpleGreetConstMeta,
         argValues: [name],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiSimpleGreetConstMeta =>
+  TaskConstMeta get kCrateApiSimpleGreetConstMeta =>
       const TaskConstMeta(debugName: "greet", argNames: ["name"]);
 
   @override
-  Future<void> rustLibAppApiSimpleInitApp() {
+  Future<void> crateApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -991,7 +317,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 7,
             port: port_,
           );
         },
@@ -999,182 +325,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
         ),
-        constMeta: kRustLibAppApiSimpleInitAppConstMeta,
+        constMeta: kCrateApiSimpleInitAppConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiSimpleInitAppConstMeta =>
+  TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
-  Future<String> rustLibAppQuicBridgeLegacyQuicDeprecatedNotice() {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 22,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_String,
-        ),
-        constMeta: kRustLibAppQuicBridgeLegacyQuicDeprecatedNoticeConstMeta,
-        argValues: [],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppQuicBridgeLegacyQuicDeprecatedNoticeConstMeta =>
-      const TaskConstMeta(
-        debugName: "legacy_quic_deprecated_notice",
-        argNames: [],
-      );
-
-  @override
-  Future<List<FlutterRemoteTerminal>>
-  rustLibAppMessageBridgeListRemoteTerminals({
-    required FlutterMessageClient client,
-    required String sessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 23,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_list_flutter_remote_terminal,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeListRemoteTerminalsConstMeta,
-        argValues: [client, sessionId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeListRemoteTerminalsConstMeta =>
-      const TaskConstMeta(
-        debugName: "list_remote_terminals",
-        argNames: ["client", "sessionId"],
-      );
-
-  @override
-  String rustLibAppMessageBridgeParseConnectionTicket({
-    required String ticket,
-  }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(ticket, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeParseConnectionTicketConstMeta,
-        argValues: [ticket],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeParseConnectionTicketConstMeta =>
-      const TaskConstMeta(
-        debugName: "parse_connection_ticket",
-        argNames: ["ticket"],
-      );
-
-  @override
-  String rustLibAppMessageBridgeParseEndpointAddr({required String addr}) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(addr, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeParseEndpointAddrConstMeta,
-        argValues: [addr],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeParseEndpointAddrConstMeta =>
-      const TaskConstMeta(debugName: "parse_endpoint_addr", argNames: ["addr"]);
-
-  @override
-  Future<void> rustLibAppMessageBridgeResizeRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String terminalId,
-    required int rows,
-    required int cols,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_String(terminalId, serializer);
-          sse_encode_u_16(rows, serializer);
-          sse_encode_u_16(cols, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 26,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeResizeRemoteTerminalConstMeta,
-        argValues: [client, sessionId, terminalId, rows, cols],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeResizeRemoteTerminalConstMeta =>
-      const TaskConstMeta(
-        debugName: "resize_remote_terminal",
-        argNames: ["client", "sessionId", "terminalId", "rows", "cols"],
-      );
-
-  @override
-  Future<void> rustLibAppApiIrohClientResizeTerminal({
+  Future<void> crateApiIrohClientResizeTerminal({
     required String terminalId,
     required int rows,
     required int cols,
@@ -1189,7 +351,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 8,
             port: port_,
           );
         },
@@ -1197,21 +359,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientResizeTerminalConstMeta,
+        constMeta: kCrateApiIrohClientResizeTerminalConstMeta,
         argValues: [terminalId, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientResizeTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientResizeTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "resize_terminal",
         argNames: ["terminalId", "rows", "cols"],
       );
 
   @override
-  Future<void> rustLibAppApiIrohClientSendTerminalInput({
+  Future<void> crateApiIrohClientSendTerminalInput({
     required String terminalId,
     required String input,
   }) {
@@ -1224,7 +386,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 9,
             port: port_,
           );
         },
@@ -1232,145 +394,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientSendTerminalInputConstMeta,
+        constMeta: kCrateApiIrohClientSendTerminalInputConstMeta,
         argValues: [terminalId, input],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientSendTerminalInputConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientSendTerminalInputConstMeta =>
       const TaskConstMeta(
         debugName: "send_terminal_input",
         argNames: ["terminalId", "input"],
       );
 
   @override
-  Future<void> rustLibAppMessageBridgeSendTerminalInput({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String terminalId,
-    required String input,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_String(terminalId, serializer);
-          sse_encode_String(input, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 29,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeSendTerminalInputConstMeta,
-        argValues: [client, sessionId, terminalId, input],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeSendTerminalInputConstMeta =>
-      const TaskConstMeta(
-        debugName: "send_terminal_input",
-        argNames: ["client", "sessionId", "terminalId", "input"],
-      );
-
-  @override
-  Future<void> rustLibAppMessageBridgeStopRemoteTerminal({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String terminalId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_String(terminalId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 30,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeStopRemoteTerminalConstMeta,
-        argValues: [client, sessionId, terminalId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeStopRemoteTerminalConstMeta =>
-      const TaskConstMeta(
-        debugName: "stop_remote_terminal",
-        argNames: ["client", "sessionId", "terminalId"],
-      );
-
-  @override
-  Future<void> rustLibAppMessageBridgeStopTcpForwardingSession({
-    required FlutterMessageClient client,
-    required String sessionId,
-    required String tcpSessionId,
-  }) {
-    return handler.executeNormal(
-      NormalTask(
-        callFfi: (port_) {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-            client,
-            serializer,
-          );
-          sse_encode_String(sessionId, serializer);
-          sse_encode_String(tcpSessionId, serializer);
-          pdeCallFfi(
-            generalizedFrbRustBinding,
-            serializer,
-            funcId: 31,
-            port: port_,
-          );
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeStopTcpForwardingSessionConstMeta,
-        argValues: [client, sessionId, tcpSessionId],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeStopTcpForwardingSessionConstMeta =>
-      const TaskConstMeta(
-        debugName: "stop_tcp_forwarding_session",
-        argNames: ["client", "sessionId", "tcpSessionId"],
-      );
-
-  @override
-  Future<void> rustLibAppApiIrohClientStopTerminal({
-    required String terminalId,
-  }) {
+  Future<void> crateApiIrohClientStopTerminal({required String terminalId}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -1379,7 +417,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 10,
             port: port_,
           );
         },
@@ -1387,103 +425,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kRustLibAppApiIrohClientStopTerminalConstMeta,
+        constMeta: kCrateApiIrohClientStopTerminalConstMeta,
         argValues: [terminalId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kRustLibAppApiIrohClientStopTerminalConstMeta =>
+  TaskConstMeta get kCrateApiIrohClientStopTerminalConstMeta =>
       const TaskConstMeta(debugName: "stop_terminal", argNames: ["terminalId"]);
-
-  @override
-  void rustLibAppMessageBridgeValidateTerminalSize({
-    required int rows,
-    required int cols,
-  }) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
-          final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_16(rows, serializer);
-          sse_encode_u_16(cols, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
-        },
-        codec: SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: sse_decode_AnyhowException,
-        ),
-        constMeta: kRustLibAppMessageBridgeValidateTerminalSizeConstMeta,
-        argValues: [rows, cols],
-        apiImpl: this,
-      ),
-    );
-  }
-
-  TaskConstMeta get kRustLibAppMessageBridgeValidateTerminalSizeConstMeta =>
-      const TaskConstMeta(
-        debugName: "validate_terminal_size",
-        argNames: ["rows", "cols"],
-      );
-
-  RustArcIncrementStrongCountFnType
-  get rust_arc_increment_strong_count_FlutterMessageClient => wire
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient;
-
-  RustArcDecrementStrongCountFnType
-  get rust_arc_decrement_strong_count_FlutterMessageClient => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient;
-
-  RustArcIncrementStrongCountFnType
-  get rust_arc_increment_strong_count_TcpForwardingType => wire
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType;
-
-  RustArcDecrementStrongCountFnType
-  get rust_arc_decrement_strong_count_TcpForwardingType => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType;
-
-  @protected
-  AnyhowException dco_decode_AnyhowException(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return AnyhowException(raw as String);
-  }
-
-  @protected
-  FlutterMessageClient
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return FlutterMessageClientImpl.frbInternalDcoDecode(raw as List<dynamic>);
-  }
-
-  @protected
-  TcpForwardingType
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return TcpForwardingTypeImpl.frbInternalDcoDecode(raw as List<dynamic>);
-  }
-
-  @protected
-  FlutterMessageClient
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return FlutterMessageClientImpl.frbInternalDcoDecode(raw as List<dynamic>);
-  }
-
-  @protected
-  TcpForwardingType
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return TcpForwardingTypeImpl.frbInternalDcoDecode(raw as List<dynamic>);
-  }
 
   @protected
   String dco_decode_String(dynamic raw) {
@@ -1504,86 +454,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterRemoteTerminal dco_decode_flutter_remote_terminal(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
-    return FlutterRemoteTerminal(
-      id: dco_decode_String(arr[0]),
-      name: dco_decode_opt_String(arr[1]),
-      shellType: dco_decode_String(arr[2]),
-      currentDir: dco_decode_String(arr[3]),
-      size: dco_decode_record_u_16_u_16(arr[4]),
-      running: dco_decode_bool(arr[5]),
-      createdAt: dco_decode_u_64(arr[6]),
-    );
-  }
-
-  @protected
-  FlutterSession dco_decode_flutter_session(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
-    return FlutterSession(
-      id: dco_decode_String(arr[0]),
-      nodeId: dco_decode_String(arr[1]),
-      endpointAddr: dco_decode_String(arr[2]),
-      connectionId: dco_decode_String(arr[3]),
-      createdAt: dco_decode_u_64(arr[4]),
-      sessionType: dco_decode_flutter_session_type(arr[5]),
-    );
-  }
-
-  @protected
-  FlutterSessionType dco_decode_flutter_session_type(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return FlutterSessionType.values[raw as int];
-  }
-
-  @protected
-  FlutterSystemStatus dco_decode_flutter_system_status(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
-    return FlutterSystemStatus(
-      status: dco_decode_String(arr[0]),
-      uptime: dco_decode_u_64(arr[1]),
-      activeTerminals: dco_decode_u_32(arr[2]),
-      activeTcpSessions: dco_decode_u_32(arr[3]),
-      memoryUsage: dco_decode_u_64(arr[4]),
-    );
-  }
-
-  @protected
-  FlutterTcpForwardingSession dco_decode_flutter_tcp_forwarding_session(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
-    return FlutterTcpForwardingSession(
-      id: dco_decode_String(arr[0]),
-      localAddr: dco_decode_String(arr[1]),
-      remoteEndpoint: dco_decode_String(arr[2]),
-      forwardingType: dco_decode_String(arr[3]),
-      activeConnections: dco_decode_u_32(arr[4]),
-      bytesSent: dco_decode_u_64(arr[5]),
-      bytesReceived: dco_decode_u_64(arr[6]),
-      createdAt: dco_decode_u_64(arr[7]),
-    );
-  }
-
-  @protected
-  int dco_decode_i_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
   IrohSessionInfo dco_decode_iroh_session_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1595,31 +465,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       relayUrl: dco_decode_opt_String(arr[2]),
       isConnected: dco_decode_bool(arr[3]),
     );
-  }
-
-  @protected
-  List<FlutterRemoteTerminal> dco_decode_list_flutter_remote_terminal(
-    dynamic raw,
-  ) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>)
-        .map(dco_decode_flutter_remote_terminal)
-        .toList();
-  }
-
-  @protected
-  List<FlutterSession> dco_decode_list_flutter_session(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_flutter_session).toList();
-  }
-
-  @protected
-  List<FlutterTcpForwardingSession>
-  dco_decode_list_flutter_tcp_forwarding_session(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>)
-        .map(dco_decode_flutter_tcp_forwarding_session)
-        .toList();
   }
 
   @protected
@@ -1641,31 +486,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  (int, int) dco_decode_record_u_16_u_16(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    final arr = raw as List<dynamic>;
-    if (arr.length != 2) {
-      throw Exception('Expected 2 elements, got ${arr.length}');
-    }
-    return (dco_decode_u_16(arr[0]), dco_decode_u_16(arr[1]));
-  }
-
-  @protected
   int dco_decode_u_16(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
-  }
-
-  @protected
-  int dco_decode_u_32(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
-  }
-
-  @protected
-  BigInt dco_decode_u_64(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dcoDecodeU64(raw);
   }
 
   @protected
@@ -1678,67 +501,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
-  }
-
-  @protected
-  BigInt dco_decode_usize(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dcoDecodeU64(raw);
-  }
-
-  @protected
-  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var inner = sse_decode_String(deserializer);
-    return AnyhowException(inner);
-  }
-
-  @protected
-  FlutterMessageClient
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return FlutterMessageClientImpl.frbInternalSseDecode(
-      sse_decode_usize(deserializer),
-      sse_decode_i_32(deserializer),
-    );
-  }
-
-  @protected
-  TcpForwardingType
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return TcpForwardingTypeImpl.frbInternalSseDecode(
-      sse_decode_usize(deserializer),
-      sse_decode_i_32(deserializer),
-    );
-  }
-
-  @protected
-  FlutterMessageClient
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return FlutterMessageClientImpl.frbInternalSseDecode(
-      sse_decode_usize(deserializer),
-      sse_decode_i_32(deserializer),
-    );
-  }
-
-  @protected
-  TcpForwardingType
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return TcpForwardingTypeImpl.frbInternalSseDecode(
-      sse_decode_usize(deserializer),
-      sse_decode_i_32(deserializer),
-    );
   }
 
   @protected
@@ -1761,107 +523,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  FlutterRemoteTerminal sse_decode_flutter_remote_terminal(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_id = sse_decode_String(deserializer);
-    var var_name = sse_decode_opt_String(deserializer);
-    var var_shellType = sse_decode_String(deserializer);
-    var var_currentDir = sse_decode_String(deserializer);
-    var var_size = sse_decode_record_u_16_u_16(deserializer);
-    var var_running = sse_decode_bool(deserializer);
-    var var_createdAt = sse_decode_u_64(deserializer);
-    return FlutterRemoteTerminal(
-      id: var_id,
-      name: var_name,
-      shellType: var_shellType,
-      currentDir: var_currentDir,
-      size: var_size,
-      running: var_running,
-      createdAt: var_createdAt,
-    );
-  }
-
-  @protected
-  FlutterSession sse_decode_flutter_session(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_id = sse_decode_String(deserializer);
-    var var_nodeId = sse_decode_String(deserializer);
-    var var_endpointAddr = sse_decode_String(deserializer);
-    var var_connectionId = sse_decode_String(deserializer);
-    var var_createdAt = sse_decode_u_64(deserializer);
-    var var_sessionType = sse_decode_flutter_session_type(deserializer);
-    return FlutterSession(
-      id: var_id,
-      nodeId: var_nodeId,
-      endpointAddr: var_endpointAddr,
-      connectionId: var_connectionId,
-      createdAt: var_createdAt,
-      sessionType: var_sessionType,
-    );
-  }
-
-  @protected
-  FlutterSessionType sse_decode_flutter_session_type(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var inner = sse_decode_i_32(deserializer);
-    return FlutterSessionType.values[inner];
-  }
-
-  @protected
-  FlutterSystemStatus sse_decode_flutter_system_status(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_status = sse_decode_String(deserializer);
-    var var_uptime = sse_decode_u_64(deserializer);
-    var var_activeTerminals = sse_decode_u_32(deserializer);
-    var var_activeTcpSessions = sse_decode_u_32(deserializer);
-    var var_memoryUsage = sse_decode_u_64(deserializer);
-    return FlutterSystemStatus(
-      status: var_status,
-      uptime: var_uptime,
-      activeTerminals: var_activeTerminals,
-      activeTcpSessions: var_activeTcpSessions,
-      memoryUsage: var_memoryUsage,
-    );
-  }
-
-  @protected
-  FlutterTcpForwardingSession sse_decode_flutter_tcp_forwarding_session(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_id = sse_decode_String(deserializer);
-    var var_localAddr = sse_decode_String(deserializer);
-    var var_remoteEndpoint = sse_decode_String(deserializer);
-    var var_forwardingType = sse_decode_String(deserializer);
-    var var_activeConnections = sse_decode_u_32(deserializer);
-    var var_bytesSent = sse_decode_u_64(deserializer);
-    var var_bytesReceived = sse_decode_u_64(deserializer);
-    var var_createdAt = sse_decode_u_64(deserializer);
-    return FlutterTcpForwardingSession(
-      id: var_id,
-      localAddr: var_localAddr,
-      remoteEndpoint: var_remoteEndpoint,
-      forwardingType: var_forwardingType,
-      activeConnections: var_activeConnections,
-      bytesSent: var_bytesSent,
-      bytesReceived: var_bytesReceived,
-      createdAt: var_createdAt,
-    );
-  }
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
-  }
-
-  @protected
   IrohSessionInfo sse_decode_iroh_session_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_nodeId = sse_decode_String(deserializer);
@@ -1874,47 +535,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       relayUrl: var_relayUrl,
       isConnected: var_isConnected,
     );
-  }
-
-  @protected
-  List<FlutterRemoteTerminal> sse_decode_list_flutter_remote_terminal(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <FlutterRemoteTerminal>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_flutter_remote_terminal(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<FlutterSession> sse_decode_list_flutter_session(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <FlutterSession>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_flutter_session(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
-  List<FlutterTcpForwardingSession>
-  sse_decode_list_flutter_tcp_forwarding_session(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <FlutterTcpForwardingSession>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_flutter_tcp_forwarding_session(deserializer));
-    }
-    return ans_;
   }
 
   @protected
@@ -1947,29 +567,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  (int, int) sse_decode_record_u_16_u_16(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_field0 = sse_decode_u_16(deserializer);
-    var var_field1 = sse_decode_u_16(deserializer);
-    return (var_field0, var_field1);
-  }
-
-  @protected
   int sse_decode_u_16(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint16();
-  }
-
-  @protected
-  int sse_decode_u_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint32();
-  }
-
-  @protected
-  BigInt sse_decode_u_64(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -1984,70 +584,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  BigInt sse_decode_usize(SseDeserializer deserializer) {
+  int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getBigUint64();
-  }
-
-  @protected
-  void sse_encode_AnyhowException(
-    AnyhowException self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.message, serializer);
-  }
-
-  @protected
-  void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    FlutterMessageClient self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(
-      (self as FlutterMessageClientImpl).frbInternalSseEncode(move: true),
-      serializer,
-    );
-  }
-
-  @protected
-  void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    TcpForwardingType self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(
-      (self as TcpForwardingTypeImpl).frbInternalSseEncode(move: true),
-      serializer,
-    );
-  }
-
-  @protected
-  void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    FlutterMessageClient self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(
-      (self as FlutterMessageClientImpl).frbInternalSseEncode(move: null),
-      serializer,
-    );
-  }
-
-  @protected
-  void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    TcpForwardingType self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_usize(
-      (self as TcpForwardingTypeImpl).frbInternalSseEncode(move: null),
-      serializer,
-    );
+    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -2069,79 +608,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_flutter_remote_terminal(
-    FlutterRemoteTerminal self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.id, serializer);
-    sse_encode_opt_String(self.name, serializer);
-    sse_encode_String(self.shellType, serializer);
-    sse_encode_String(self.currentDir, serializer);
-    sse_encode_record_u_16_u_16(self.size, serializer);
-    sse_encode_bool(self.running, serializer);
-    sse_encode_u_64(self.createdAt, serializer);
-  }
-
-  @protected
-  void sse_encode_flutter_session(
-    FlutterSession self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.id, serializer);
-    sse_encode_String(self.nodeId, serializer);
-    sse_encode_String(self.endpointAddr, serializer);
-    sse_encode_String(self.connectionId, serializer);
-    sse_encode_u_64(self.createdAt, serializer);
-    sse_encode_flutter_session_type(self.sessionType, serializer);
-  }
-
-  @protected
-  void sse_encode_flutter_session_type(
-    FlutterSessionType self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.index, serializer);
-  }
-
-  @protected
-  void sse_encode_flutter_system_status(
-    FlutterSystemStatus self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.status, serializer);
-    sse_encode_u_64(self.uptime, serializer);
-    sse_encode_u_32(self.activeTerminals, serializer);
-    sse_encode_u_32(self.activeTcpSessions, serializer);
-    sse_encode_u_64(self.memoryUsage, serializer);
-  }
-
-  @protected
-  void sse_encode_flutter_tcp_forwarding_session(
-    FlutterTcpForwardingSession self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.id, serializer);
-    sse_encode_String(self.localAddr, serializer);
-    sse_encode_String(self.remoteEndpoint, serializer);
-    sse_encode_String(self.forwardingType, serializer);
-    sse_encode_u_32(self.activeConnections, serializer);
-    sse_encode_u_64(self.bytesSent, serializer);
-    sse_encode_u_64(self.bytesReceived, serializer);
-    sse_encode_u_64(self.createdAt, serializer);
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
-  }
-
-  @protected
   void sse_encode_iroh_session_info(
     IrohSessionInfo self,
     SseSerializer serializer,
@@ -2151,42 +617,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.nodeAddr, serializer);
     sse_encode_opt_String(self.relayUrl, serializer);
     sse_encode_bool(self.isConnected, serializer);
-  }
-
-  @protected
-  void sse_encode_list_flutter_remote_terminal(
-    List<FlutterRemoteTerminal> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_flutter_remote_terminal(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_flutter_session(
-    List<FlutterSession> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_flutter_session(item, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_list_flutter_tcp_forwarding_session(
-    List<FlutterTcpForwardingSession> self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_flutter_tcp_forwarding_session(item, serializer);
-    }
   }
 
   @protected
@@ -2220,28 +650,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_record_u_16_u_16((int, int) self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_16(self.$1, serializer);
-    sse_encode_u_16(self.$2, serializer);
-  }
-
-  @protected
   void sse_encode_u_16(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint16(self);
-  }
-
-  @protected
-  void sse_encode_u_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint32(self);
-  }
-
-  @protected
-  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putBigUint64(self);
   }
 
   @protected
@@ -2256,61 +667,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_usize(BigInt self, SseSerializer serializer) {
+  void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putBigUint64(self);
+    serializer.buffer.putInt32(self);
   }
-}
-
-@sealed
-class FlutterMessageClientImpl extends RustOpaque
-    implements FlutterMessageClient {
-  // Not to be used by end users
-  FlutterMessageClientImpl.frbInternalDcoDecode(List<dynamic> wire)
-    : super.frbInternalDcoDecode(wire, _kStaticData);
-
-  // Not to be used by end users
-  FlutterMessageClientImpl.frbInternalSseDecode(
-    BigInt ptr,
-    int externalSizeOnNative,
-  ) : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
-
-  static final _kStaticData = RustArcStaticData(
-    rustArcIncrementStrongCount: RustLib
-        .instance
-        .api
-        .rust_arc_increment_strong_count_FlutterMessageClient,
-    rustArcDecrementStrongCount: RustLib
-        .instance
-        .api
-        .rust_arc_decrement_strong_count_FlutterMessageClient,
-    rustArcDecrementStrongCountPtr: RustLib
-        .instance
-        .api
-        .rust_arc_decrement_strong_count_FlutterMessageClientPtr,
-  );
-}
-
-@sealed
-class TcpForwardingTypeImpl extends RustOpaque implements TcpForwardingType {
-  // Not to be used by end users
-  TcpForwardingTypeImpl.frbInternalDcoDecode(List<dynamic> wire)
-    : super.frbInternalDcoDecode(wire, _kStaticData);
-
-  // Not to be used by end users
-  TcpForwardingTypeImpl.frbInternalSseDecode(
-    BigInt ptr,
-    int externalSizeOnNative,
-  ) : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
-
-  static final _kStaticData = RustArcStaticData(
-    rustArcIncrementStrongCount:
-        RustLib.instance.api.rust_arc_increment_strong_count_TcpForwardingType,
-    rustArcDecrementStrongCount:
-        RustLib.instance.api.rust_arc_decrement_strong_count_TcpForwardingType,
-    rustArcDecrementStrongCountPtr: RustLib
-        .instance
-        .api
-        .rust_arc_decrement_strong_count_TcpForwardingTypePtr,
-  );
 }

@@ -28,7 +28,6 @@
 use flutter_rust_bridge::for_generated::byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use flutter_rust_bridge::for_generated::{transform_result_dco, Lifetimeable, Lockable};
 use flutter_rust_bridge::{Handler, IntoIntoDart};
-use crate::api::iroh_client::IrohSessionInfo;
 
 // Section: boilerplate
 
@@ -38,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.1";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -287811492;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -623661905;
 
 // Section: executor
 
@@ -46,7 +45,7 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
-fn wire__rust_lib_app__api__iroh_client__connect_to_peer_impl(
+fn wire__crate__api__iroh_client__connect_to_peer_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -71,14 +70,19 @@ fn wire__rust_lib_app__api__iroh_client__connect_to_peer_impl(
             let api__ticket = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<String, String>(
-                    crate::api::iroh_client::connect_to_peer(api__ticket).await
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::iroh_client::connect_to_peer(api__ticket).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
+fn wire__crate__api__iroh_client__create_iroh_client_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -103,14 +107,19 @@ fn wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
             let api__relay_url = <Option<String>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<IrohSessionInfo, String>(
-                    crate::api::iroh_client::create_iroh_client(api__relay_url).await
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::iroh_client::create_iroh_client(api__relay_url).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__create_terminal_impl(
+fn wire__crate__api__iroh_client__create_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -139,21 +148,25 @@ fn wire__rust_lib_app__api__iroh_client__create_terminal_impl(
             let api__cols = <Option<u16>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<String, String>(
-                    crate::api::iroh_client::create_terminal(
-                        api__name,
-                        api__shell_path,
-                        api__working_dir,
-                        api__rows,
-                        api__cols,
-                    )
-                    .await
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::iroh_client::create_terminal(
+                            api__name,
+                            api__shell_path,
+                            api__working_dir,
+                            api__rows,
+                            api__cols,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
+fn wire__crate__api__iroh_client__disconnect_session_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -178,12 +191,19 @@ fn wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
             let api__session_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<(), String>(crate::api::iroh_client::disconnect_session(api__session_id).await)
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::iroh_client::disconnect_session(api__session_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__generate_qr_code_impl(
+fn wire__crate__api__iroh_client__generate_qr_code_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -208,12 +228,15 @@ fn wire__rust_lib_app__api__iroh_client__generate_qr_code_impl(
             let api__data = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
-                transform_result_sse::<String, String>(crate::api::iroh_client::generate_qr_code(api__data))
+                transform_result_sse::<_, String>((move || {
+                    let output_ok = crate::api::iroh_client::generate_qr_code(api__data)?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
 }
-fn wire__rust_lib_app__api__simple__greet_impl(
+fn wire__crate__api__simple__greet_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
@@ -236,11 +259,14 @@ fn wire__rust_lib_app__api__simple__greet_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_name = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<String, ()>(Ok(crate::api::simple::greet(api_name)))
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::simple::greet(api_name))?;
+                Ok(output_ok)
+            })())
         },
     )
 }
-fn wire__rust_lib_app__api__simple__init_app_impl(
+fn wire__crate__api__simple__init_app_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -264,12 +290,17 @@ fn wire__rust_lib_app__api__simple__init_app_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
             move |context| {
-                transform_result_sse::<(), ()>(Ok(crate::api::simple::init_app()))
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok({
+                        crate::api::simple::init_app();
+                    })?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__resize_terminal_impl(
+fn wire__crate__api__iroh_client__resize_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -296,18 +327,23 @@ fn wire__rust_lib_app__api__iroh_client__resize_terminal_impl(
             let api__cols = <u16>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<(), String>(crate::api::iroh_client::resize_terminal(
-                        api__terminal_id,
-                        api__rows,
-                        api__cols,
-                    )
-                    .await
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::iroh_client::resize_terminal(
+                            api__terminal_id,
+                            api__rows,
+                            api__cols,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__send_terminal_input_impl(
+fn wire__crate__api__iroh_client__send_terminal_input_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -333,17 +369,22 @@ fn wire__rust_lib_app__api__iroh_client__send_terminal_input_impl(
             let api__input = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<(), String>(crate::api::iroh_client::send_terminal_input(
-                        api__terminal_id,
-                        api__input,
-                    )
-                    .await
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok = crate::api::iroh_client::send_terminal_input(
+                            api__terminal_id,
+                            api__input,
+                        )
+                        .await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
                 )
             }
         },
     )
 }
-fn wire__rust_lib_app__api__iroh_client__stop_terminal_impl(
+fn wire__crate__api__iroh_client__stop_terminal_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -368,7 +409,14 @@ fn wire__rust_lib_app__api__iroh_client__stop_terminal_impl(
             let api__terminal_id = <String>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
-                transform_result_sse::<(), String>(crate::api::iroh_client::stop_terminal(api__terminal_id).await)
+                transform_result_sse::<_, String>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::iroh_client::stop_terminal(api__terminal_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -476,55 +524,32 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__rust_lib_app__api__iroh_client__connect_to_peer_impl(
+        1 => wire__crate__api__iroh_client__connect_to_peer_impl(port, ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__iroh_client__create_iroh_client_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        2 => wire__rust_lib_app__api__iroh_client__create_iroh_client_impl(
+        3 => wire__crate__api__iroh_client__create_terminal_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__iroh_client__disconnect_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        3 => wire__rust_lib_app__api__iroh_client__create_terminal_impl(
+        5 => {
+            wire__crate__api__iroh_client__generate_qr_code_impl(port, ptr, rust_vec_len, data_len)
+        }
+        7 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__iroh_client__resize_terminal_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__iroh_client__send_terminal_input_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        4 => wire__rust_lib_app__api__iroh_client__disconnect_session_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        5 => wire__rust_lib_app__api__iroh_client__generate_qr_code_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        7 => wire__rust_lib_app__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__rust_lib_app__api__iroh_client__resize_terminal_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        9 => wire__rust_lib_app__api__iroh_client__send_terminal_input_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        10 => wire__rust_lib_app__api__iroh_client__stop_terminal_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
+        10 => wire__crate__api__iroh_client__stop_terminal_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -537,7 +562,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        6 => wire__rust_lib_app__api__simple__greet_impl(ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__simple__greet_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

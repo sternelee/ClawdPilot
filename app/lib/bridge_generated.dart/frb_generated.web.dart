@@ -7,15 +7,11 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/iroh_client.dart';
+import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
-import 'message_bridge.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
-import 'third_party/rust_lib_app/api/iroh_client.dart';
-import 'third_party/rust_lib_app/api/simple.dart';
-import 'third_party/rust_lib_app/message_bridge.dart';
-import 'third_party/rust_lib_app/quic_bridge.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RustLibApiImplPlatform({
@@ -24,41 +20,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.generalizedFrbRustBinding,
     required super.portManager,
   });
-
-  CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_FlutterMessageClientPtr => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient;
-
-  CrossPlatformFinalizerArg
-  get rust_arc_decrement_strong_count_TcpForwardingTypePtr => wire
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType;
-
-  @protected
-  AnyhowException dco_decode_AnyhowException(dynamic raw);
-
-  @protected
-  FlutterMessageClient
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    dynamic raw,
-  );
-
-  @protected
-  TcpForwardingType
-  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    dynamic raw,
-  );
-
-  @protected
-  FlutterMessageClient
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    dynamic raw,
-  );
-
-  @protected
-  TcpForwardingType
-  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    dynamic raw,
-  );
 
   @protected
   String dco_decode_String(dynamic raw);
@@ -70,39 +31,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_box_autoadd_u_16(dynamic raw);
 
   @protected
-  FlutterRemoteTerminal dco_decode_flutter_remote_terminal(dynamic raw);
-
-  @protected
-  FlutterSession dco_decode_flutter_session(dynamic raw);
-
-  @protected
-  FlutterSessionType dco_decode_flutter_session_type(dynamic raw);
-
-  @protected
-  FlutterSystemStatus dco_decode_flutter_system_status(dynamic raw);
-
-  @protected
-  FlutterTcpForwardingSession dco_decode_flutter_tcp_forwarding_session(
-    dynamic raw,
-  );
-
-  @protected
-  int dco_decode_i_32(dynamic raw);
-
-  @protected
   IrohSessionInfo dco_decode_iroh_session_info(dynamic raw);
-
-  @protected
-  List<FlutterRemoteTerminal> dco_decode_list_flutter_remote_terminal(
-    dynamic raw,
-  );
-
-  @protected
-  List<FlutterSession> dco_decode_list_flutter_session(dynamic raw);
-
-  @protected
-  List<FlutterTcpForwardingSession>
-  dco_decode_list_flutter_tcp_forwarding_session(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -114,52 +43,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
 
   @protected
-  (int, int) dco_decode_record_u_16_u_16(dynamic raw);
-
-  @protected
   int dco_decode_u_16(dynamic raw);
-
-  @protected
-  int dco_decode_u_32(dynamic raw);
-
-  @protected
-  BigInt dco_decode_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
 
   @protected
   void dco_decode_unit(dynamic raw);
-
-  @protected
-  BigInt dco_decode_usize(dynamic raw);
-
-  @protected
-  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
-
-  @protected
-  FlutterMessageClient
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  TcpForwardingType
-  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  FlutterMessageClient
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  TcpForwardingType
-  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    SseDeserializer deserializer,
-  );
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -171,47 +61,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
-  FlutterRemoteTerminal sse_decode_flutter_remote_terminal(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  FlutterSession sse_decode_flutter_session(SseDeserializer deserializer);
-
-  @protected
-  FlutterSessionType sse_decode_flutter_session_type(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  FlutterSystemStatus sse_decode_flutter_system_status(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  FlutterTcpForwardingSession sse_decode_flutter_tcp_forwarding_session(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
-
-  @protected
   IrohSessionInfo sse_decode_iroh_session_info(SseDeserializer deserializer);
-
-  @protected
-  List<FlutterRemoteTerminal> sse_decode_list_flutter_remote_terminal(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  List<FlutterSession> sse_decode_list_flutter_session(
-    SseDeserializer deserializer,
-  );
-
-  @protected
-  List<FlutterTcpForwardingSession>
-  sse_decode_list_flutter_tcp_forwarding_session(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -223,16 +73,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
-  (int, int) sse_decode_record_u_16_u_16(SseDeserializer deserializer);
-
-  @protected
   int sse_decode_u_16(SseDeserializer deserializer);
-
-  @protected
-  int sse_decode_u_32(SseDeserializer deserializer);
-
-  @protected
-  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -241,41 +82,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  BigInt sse_decode_usize(SseDeserializer deserializer);
-
-  @protected
-  void sse_encode_AnyhowException(
-    AnyhowException self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    FlutterMessageClient self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void
-  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    TcpForwardingType self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    FlutterMessageClient self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void
-  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    TcpForwardingType self,
-    SseSerializer serializer,
-  );
+  int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -287,59 +94,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
-  void sse_encode_flutter_remote_terminal(
-    FlutterRemoteTerminal self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_flutter_session(
-    FlutterSession self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_flutter_session_type(
-    FlutterSessionType self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_flutter_system_status(
-    FlutterSystemStatus self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_flutter_tcp_forwarding_session(
-    FlutterTcpForwardingSession self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
-
-  @protected
   void sse_encode_iroh_session_info(
     IrohSessionInfo self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_flutter_remote_terminal(
-    List<FlutterRemoteTerminal> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_flutter_session(
-    List<FlutterSession> self,
-    SseSerializer serializer,
-  );
-
-  @protected
-  void sse_encode_list_flutter_tcp_forwarding_session(
-    List<FlutterTcpForwardingSession> self,
     SseSerializer serializer,
   );
 
@@ -356,16 +112,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_record_u_16_u_16((int, int) self, SseSerializer serializer);
-
-  @protected
   void sse_encode_u_16(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_u_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
@@ -374,45 +121,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_usize(BigInt self, SseSerializer serializer);
+  void sse_encode_i_32(int self, SseSerializer serializer);
 }
 
 // Section: wire_class
 
 class RustLibWire implements BaseWire {
   RustLibWire.fromExternalLibrary(ExternalLibrary lib);
-
-  void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    int ptr,
-  ) => wasmModule
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-        ptr,
-      );
-
-  void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    int ptr,
-  ) => wasmModule
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-        ptr,
-      );
-
-  void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    int ptr,
-  ) => wasmModule
-      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-        ptr,
-      );
-
-  void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    int ptr,
-  ) => wasmModule
-      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-        ptr,
-      );
 }
 
 @JS('wasm_bindgen')
@@ -420,24 +135,4 @@ external RustLibWasmModule get wasmModule;
 
 @JS()
 @anonymous
-extension type RustLibWasmModule._(JSObject _) implements JSObject {
-  external void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    int ptr,
-  );
-
-  external void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerFlutterMessageClient(
-    int ptr,
-  );
-
-  external void
-  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    int ptr,
-  );
-
-  external void
-  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerTcpForwardingType(
-    int ptr,
-  );
-}
+extension type RustLibWasmModule._(JSObject _) implements JSObject {}

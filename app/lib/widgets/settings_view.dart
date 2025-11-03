@@ -69,17 +69,17 @@ class _HeaderSection extends StatelessWidget {
   void _resetSettings(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => ShadDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Reset Settings'),
-        description: const Text(
+        content: const Text(
           'Are you sure you want to reset all settings to their default values?',
         ),
         actions: [
-          ShadButton.outline(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          ShadButton.destructive(
+          TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               final store = appStore;
@@ -244,17 +244,17 @@ class _ConnectionSettings extends StatelessWidget {
   void _disconnect(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => ShadDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Disconnect'),
-        description: const Text(
+        content: const Text(
           'Are you sure you want to disconnect from the current session?',
         ),
         actions: [
-          ShadButton.outline(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          ShadButton.destructive(
+          TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               final store = appStore;
@@ -367,10 +367,11 @@ class _TerminalSettings extends StatelessWidget {
   void _showTerminalPreferences(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => ShadDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Terminal Preferences'),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Terminal preferences configuration will be available in a future update.\n\n'
@@ -381,14 +382,13 @@ class _TerminalSettings extends StatelessWidget {
               '• Color themes',
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFFD1D5DB),
                 height: 1.5,
               ),
             ),
           ],
         ),
         actions: [
-          ShadButton(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('OK'),
           ),
@@ -480,11 +480,10 @@ class _AppearanceSettings extends StatelessWidget {
   }
 
   void _showThemeNotAvailable(BuildContext context) {
-    ShadToaster.of(context).show(
-      ShadToast(
-        title: const Text('Coming Soon'),
-        description: const Text('Light theme will be available in a future update'),
-        icon: const Icon(LucideIcons.info),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Light theme will be available in a future update'),
+        backgroundColor: Color(0xFF00D4FF),
       ),
     );
   }
@@ -595,7 +594,7 @@ class _AboutSection extends StatelessWidget {
   void _showLicenses(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => ShadDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Open Source Licenses'),
         content: const SingleChildScrollView(
           child: Column(
@@ -614,7 +613,6 @@ class _AboutSection extends StatelessWidget {
                 'All licenses are compatible with the MIT license.',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Color(0xFFD1D5DB),
                   height: 1.5,
                 ),
               ),
@@ -622,7 +620,7 @@ class _AboutSection extends StatelessWidget {
           ),
         ),
         actions: [
-          ShadButton(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
           ),
@@ -634,7 +632,7 @@ class _AboutSection extends StatelessWidget {
   void _showChangelog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => ShadDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Changelog'),
         content: const SingleChildScrollView(
           child: Column(
@@ -662,7 +660,6 @@ class _AboutSection extends StatelessWidget {
                 '• Memory-efficient terminal emulation',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Color(0xFFD1D5DB),
                   height: 1.5,
                 ),
               ),
@@ -670,7 +667,7 @@ class _AboutSection extends StatelessWidget {
           ),
         ),
         actions: [
-          ShadButton(
+          TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),
           ),
