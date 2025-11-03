@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 class AppTheme {
@@ -97,80 +96,93 @@ class AppTheme {
         color: _borderColor,
         thickness: 1,
       ),
-      textTheme: GoogleFonts.interTextTheme(
-        ThemeData.dark().textTheme,
-      ).copyWith(
-        displayLarge: GoogleFonts.inter(
+      textTheme: ThemeData.dark().textTheme.copyWith(
+        displayLarge: const TextStyle(
           fontSize: 32,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        displayMedium: GoogleFonts.inter(
+        displayMedium: const TextStyle(
           fontSize: 28,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        displaySmall: GoogleFonts.inter(
+        displaySmall: const TextStyle(
           fontSize: 24,
           fontWeight: FontWeight.bold,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        headlineLarge: GoogleFonts.inter(
+        headlineLarge: const TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        headlineMedium: GoogleFonts.inter(
+        headlineMedium: const TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        headlineSmall: GoogleFonts.inter(
+        headlineSmall: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        titleLarge: GoogleFonts.inter(
+        titleLarge: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w500,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        titleMedium: GoogleFonts.inter(
+        titleMedium: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        titleSmall: GoogleFonts.inter(
+        titleSmall: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        bodyLarge: GoogleFonts.inter(
+        bodyLarge: const TextStyle(
           fontSize: 16,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        bodyMedium: GoogleFonts.inter(
+        bodyMedium: const TextStyle(
           fontSize: 14,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        bodySmall: GoogleFonts.inter(
+        bodySmall: TextStyle(
           fontSize: 12,
           color: _mutedColor,
+          fontFamily: 'San Francisco',
         ),
-        labelLarge: GoogleFonts.inter(
+        labelLarge: const TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w500,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        labelMedium: GoogleFonts.inter(
+        labelMedium: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
           color: Colors.white,
+          fontFamily: 'San Francisco',
         ),
-        labelSmall: GoogleFonts.inter(
+        labelSmall: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w500,
           color: _mutedColor,
+          fontFamily: 'San Francisco',
         ),
       ),
     );

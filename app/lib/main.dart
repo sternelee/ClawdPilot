@@ -17,13 +17,18 @@ import 'stores/app_store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 初始化 Rust bridge
-  await RustLib.init();
+  // 初始化 Rust bridge (禁用内容哈希检查)
+  await RustLib.init(forceSameCodegenVersion: false);
 
-  // Initialize Google Fonts
-  await GoogleFonts.pendingFonts([
-    GoogleFonts.inter(),
-  ]);
+  // Initialize Google Fonts (with error handling)
+  try {
+    await GoogleFonts.pendingFonts([
+      GoogleFonts.inter(),
+    ]);
+  } catch (e) {
+    // If fonts fail to load, continue with system fonts
+    debugPrint('Failed to load Google Fonts: $e');
+  }
 
   // Handle app lifecycle
   AppLifecycleBinding.instance.init();

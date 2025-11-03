@@ -4,13 +4,14 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/iroh_client.dart';
-import 'api/simple.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
 import 'frb_generated.io.dart'
     if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'third_party/rust_lib_app/api/iroh_client.dart';
+import 'third_party/rust_lib_app/api/simple.dart';
 
 /// Main entrypoint of the Rust API
 class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
@@ -56,7 +57,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 
   @override
   Future<void> executeRustInitializers() async {
-    await api.crateApiSimpleInitApp();
+    await api.rustLibAppApiSimpleInitApp();
   }
 
   @override
@@ -67,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.1';
 
   @override
-  int get rustContentHash => -623661905;
+  int get rustContentHash => -287811492;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -78,13 +79,13 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  Future<String> crateApiIrohClientConnectToPeer({required String ticket});
+  Future<String> rustLibAppApiIrohClientConnectToPeer({required String ticket});
 
-  Future<IrohSessionInfo> crateApiIrohClientCreateIrohClient({
+  Future<IrohSessionInfo> rustLibAppApiIrohClientCreateIrohClient({
     String? relayUrl,
   });
 
-  Future<String> crateApiIrohClientCreateTerminal({
+  Future<String> rustLibAppApiIrohClientCreateTerminal({
     String? name,
     String? shellPath,
     String? workingDir,
@@ -92,26 +93,30 @@ abstract class RustLibApi extends BaseApi {
     int? cols,
   });
 
-  Future<void> crateApiIrohClientDisconnectSession({required String sessionId});
+  Future<void> rustLibAppApiIrohClientDisconnectSession({
+    required String sessionId,
+  });
 
-  Future<String> crateApiIrohClientGenerateQrCode({required String data});
+  Future<String> rustLibAppApiIrohClientGenerateQrCode({required String data});
 
-  String crateApiSimpleGreet({required String name});
+  String rustLibAppApiSimpleGreet({required String name});
 
-  Future<void> crateApiSimpleInitApp();
+  Future<void> rustLibAppApiSimpleInitApp();
 
-  Future<void> crateApiIrohClientResizeTerminal({
+  Future<void> rustLibAppApiIrohClientResizeTerminal({
     required String terminalId,
     required int rows,
     required int cols,
   });
 
-  Future<void> crateApiIrohClientSendTerminalInput({
+  Future<void> rustLibAppApiIrohClientSendTerminalInput({
     required String terminalId,
     required String input,
   });
 
-  Future<void> crateApiIrohClientStopTerminal({required String terminalId});
+  Future<void> rustLibAppApiIrohClientStopTerminal({
+    required String terminalId,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -123,7 +128,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  Future<String> crateApiIrohClientConnectToPeer({required String ticket}) {
+  Future<String> rustLibAppApiIrohClientConnectToPeer({
+    required String ticket,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -140,18 +147,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientConnectToPeerConstMeta,
+        constMeta: kRustLibAppApiIrohClientConnectToPeerConstMeta,
         argValues: [ticket],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientConnectToPeerConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientConnectToPeerConstMeta =>
       const TaskConstMeta(debugName: "connect_to_peer", argNames: ["ticket"]);
 
   @override
-  Future<IrohSessionInfo> crateApiIrohClientCreateIrohClient({
+  Future<IrohSessionInfo> rustLibAppApiIrohClientCreateIrohClient({
     String? relayUrl,
   }) {
     return handler.executeNormal(
@@ -170,21 +177,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_iroh_session_info,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientCreateIrohClientConstMeta,
+        constMeta: kRustLibAppApiIrohClientCreateIrohClientConstMeta,
         argValues: [relayUrl],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientCreateIrohClientConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientCreateIrohClientConstMeta =>
       const TaskConstMeta(
         debugName: "create_iroh_client",
         argNames: ["relayUrl"],
       );
 
   @override
-  Future<String> crateApiIrohClientCreateTerminal({
+  Future<String> rustLibAppApiIrohClientCreateTerminal({
     String? name,
     String? shellPath,
     String? workingDir,
@@ -211,21 +218,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientCreateTerminalConstMeta,
+        constMeta: kRustLibAppApiIrohClientCreateTerminalConstMeta,
         argValues: [name, shellPath, workingDir, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientCreateTerminalConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientCreateTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "create_terminal",
         argNames: ["name", "shellPath", "workingDir", "rows", "cols"],
       );
 
   @override
-  Future<void> crateApiIrohClientDisconnectSession({
+  Future<void> rustLibAppApiIrohClientDisconnectSession({
     required String sessionId,
   }) {
     return handler.executeNormal(
@@ -244,21 +251,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientDisconnectSessionConstMeta,
+        constMeta: kRustLibAppApiIrohClientDisconnectSessionConstMeta,
         argValues: [sessionId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientDisconnectSessionConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientDisconnectSessionConstMeta =>
       const TaskConstMeta(
         debugName: "disconnect_session",
         argNames: ["sessionId"],
       );
 
   @override
-  Future<String> crateApiIrohClientGenerateQrCode({required String data}) {
+  Future<String> rustLibAppApiIrohClientGenerateQrCode({required String data}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -275,18 +282,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientGenerateQrCodeConstMeta,
+        constMeta: kRustLibAppApiIrohClientGenerateQrCodeConstMeta,
         argValues: [data],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientGenerateQrCodeConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientGenerateQrCodeConstMeta =>
       const TaskConstMeta(debugName: "generate_qr_code", argNames: ["data"]);
 
   @override
-  String crateApiSimpleGreet({required String name}) {
+  String rustLibAppApiSimpleGreet({required String name}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
@@ -298,18 +305,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
         ),
-        constMeta: kCrateApiSimpleGreetConstMeta,
+        constMeta: kRustLibAppApiSimpleGreetConstMeta,
         argValues: [name],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSimpleGreetConstMeta =>
+  TaskConstMeta get kRustLibAppApiSimpleGreetConstMeta =>
       const TaskConstMeta(debugName: "greet", argNames: ["name"]);
 
   @override
-  Future<void> crateApiSimpleInitApp() {
+  Future<void> rustLibAppApiSimpleInitApp() {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -325,18 +332,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
         ),
-        constMeta: kCrateApiSimpleInitAppConstMeta,
+        constMeta: kRustLibAppApiSimpleInitAppConstMeta,
         argValues: [],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
+  TaskConstMeta get kRustLibAppApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
-  Future<void> crateApiIrohClientResizeTerminal({
+  Future<void> rustLibAppApiIrohClientResizeTerminal({
     required String terminalId,
     required int rows,
     required int cols,
@@ -359,21 +366,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientResizeTerminalConstMeta,
+        constMeta: kRustLibAppApiIrohClientResizeTerminalConstMeta,
         argValues: [terminalId, rows, cols],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientResizeTerminalConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientResizeTerminalConstMeta =>
       const TaskConstMeta(
         debugName: "resize_terminal",
         argNames: ["terminalId", "rows", "cols"],
       );
 
   @override
-  Future<void> crateApiIrohClientSendTerminalInput({
+  Future<void> rustLibAppApiIrohClientSendTerminalInput({
     required String terminalId,
     required String input,
   }) {
@@ -394,21 +401,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientSendTerminalInputConstMeta,
+        constMeta: kRustLibAppApiIrohClientSendTerminalInputConstMeta,
         argValues: [terminalId, input],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientSendTerminalInputConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientSendTerminalInputConstMeta =>
       const TaskConstMeta(
         debugName: "send_terminal_input",
         argNames: ["terminalId", "input"],
       );
 
   @override
-  Future<void> crateApiIrohClientStopTerminal({required String terminalId}) {
+  Future<void> rustLibAppApiIrohClientStopTerminal({
+    required String terminalId,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
@@ -425,14 +434,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: sse_decode_String,
         ),
-        constMeta: kCrateApiIrohClientStopTerminalConstMeta,
+        constMeta: kRustLibAppApiIrohClientStopTerminalConstMeta,
         argValues: [terminalId],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiIrohClientStopTerminalConstMeta =>
+  TaskConstMeta get kRustLibAppApiIrohClientStopTerminalConstMeta =>
       const TaskConstMeta(debugName: "stop_terminal", argNames: ["terminalId"]);
 
   @protected

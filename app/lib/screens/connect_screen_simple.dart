@@ -505,7 +505,7 @@ void _connectWithTicket(BuildContext context) async {
   appStore.setStatusMessage('Connecting using ticket...');
 
   try {
-    final client = createMessageClient();
+    final client = await createMessageClient();
     final sessionId = await connectByTicket(client: client, ticket: ticket);
 
     // Check if context is still valid before proceeding
@@ -558,7 +558,7 @@ void _connectWithEndpoint(BuildContext context) async {
   appStore.setStatusMessage('Connecting to CLI server...');
 
   try {
-    final client = createMessageClient();
+    final client = await createMessageClient();
     String sessionId;
 
     if (endpoint.startsWith('ticket:')) {
