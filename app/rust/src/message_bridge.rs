@@ -7,9 +7,12 @@
 use anyhow::Result;
 use flutter_rust_bridge::frb;
 use riterm_shared::{
-    CommunicationManager, MessageBuilder, TerminalAction, TcpForwardingAction,
-    TcpForwardingType, QuicMessageClient, QuicMessageHandler,
+    CommunicationManager, MessageBuilder, QuicMessageClient, QuicMessageHandler,
+    TcpForwardingAction, TerminalAction,
 };
+// Re-export for generated code
+pub use riterm_shared::TcpForwardingType;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -26,7 +29,10 @@ pub struct FlutterMessageClient {
 impl std::fmt::Debug for FlutterMessageClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FlutterMessageClient")
-            .field("communication_manager", &self.communication_manager.is_some())
+            .field(
+                "communication_manager",
+                &self.communication_manager.is_some(),
+            )
             .field("quic_client", &self.quic_client.is_some())
             .field("server_connections", &"...")
             .field("active_sessions", &"...")
@@ -73,9 +79,10 @@ impl FlutterMessageClient {
     async fn ensure_initialized(&mut self, relay_url: Option<String>) -> Result<()> {
         if self.communication_manager.is_none() {
             // 创建通信管理器
-            let comm_manager = Arc::new(CommunicationManager::new(
-                format!("flutter_app_{}", uuid::Uuid::new_v4())
-            ));
+            let comm_manager = Arc::new(CommunicationManager::new(format!(
+                "flutter_app_{}",
+                uuid::Uuid::new_v4()
+            )));
 
             // 初始化通信管理器
             comm_manager.initialize().await?;
@@ -107,55 +114,37 @@ pub async fn connect_to_cli_server(
     endpoint_addr_str: String,
     relay_url: Option<String>,
 ) -> Result<String> {
-    info!("Flutter: Connecting to CLI server: {}", endpoint_addr_str);
+    info!("=== Connect to CLI Server Start ===");
+    info!("Endpoint address string: {}", endpoint_addr_str);
+    info!("Relay URL: {:?}", relay_url);
 
     // 确保客户端已初始化
-    client.ensure_initialized(relay_url).await?;
+    info!("Initializing client...");
+    client.ensure_initialized(relay_url.clone()).await?;
+    info!("Client initialized successfully");
 
-    // 暂时使用模拟连接，真实连接需要更复杂的 EndpointAddr 处理
-    // 在生产环境中，CLI 应该提供连接票据或完整的节点信息
-    info!("Using mock connection for address: {}", endpoint_addr_str);
-
-    // 创建模拟连接
-    let connection_id = format!("mock_conn_{}", uuid::Uuid::new_v4());
-
-    // TODO: 实现真实的 QUIC 连接
-    // 1. 解析 CLI 输出的地址格式
-    // 2. 构造正确的 EndpointAddr
-    // 3. 建立真实的 QUIC 连接
-    info!("Mock connection established: {}", connection_id);
-
-    // 创建会话
-    let session_id = format!("session_{}", uuid::Uuid::new_v4());
-    let node_id = format!("{:?}", client.quic_client.as_ref()
-        .map(|c| c.get_node_id())
-        .unwrap_or_else(|| client.quic_client.as_ref().unwrap().get_node_id()));
-
-    let session = FlutterSession {
-        id: session_id.clone(),
-        node_id,
-        endpoint_addr: endpoint_addr_str.clone(),
-        connection_id: connection_id.clone(),
-        created_at: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-        session_type: FlutterSessionType::Terminal,
-    };
-
-    // 存储连接和会话
-    {
-        let mut connections = client.server_connections.write().await;
-        connections.insert(session_id.clone(), connection_id);
-    }
-
-    {
-        let mut sessions = client.active_sessions.write().await;
-        sessions.insert(session_id.clone(), session);
-    }
-
-    info!("Flutter: Connected to CLI server, session: {}", session_id);
-    Ok(session_id)
+    // 尝试解析 endpoint_addr_str
+    // 可能的格式：
+    // 1. Node ID (hex string)
+    // 2. EndpointAddr (iroh format)
+    // 3. IP:Port (legacy format)
+    
+    info!("Parsing endpoint address...");
+    
+    // 尝试作为 Node ID 解析
+    use iroh::PublicKey;
+    use std::str::FromStr;
+    
+    let node_id = PublicKey::from_str(&endpoint_addr_str)
+        .map_err(|e| {
+            tracing::error!("Failed to parse as node ID: {}", e);
+            anyhow::anyhow!("Invalid endpoint address format. Expected node ID (hex string): {}", e)
+        })?;
+    
+    info!("Parsed as node ID: {:?}", node_id);
+    
+    // 使用 connect_by_node_id 建立连接
+    connect_by_node_id(client, endpoint_addr_str, relay_url).await
 }
 
 #[frb]
@@ -168,11 +157,15 @@ pub async fn create_remote_terminal(
     rows: u16,
     cols: u16,
 ) -> Result<String> {
-    info!("Flutter: Creating remote terminal in session: {}", session_id);
+    info!(
+        "Flutter: Creating remote terminal in session: {}",
+        session_id
+    );
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建终端管理消息
@@ -187,17 +180,23 @@ pub async fn create_remote_terminal(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send terminal creation request: {}", e))?;
     }
 
     // 暂时返回一个终端ID，实际应该在响应中获取
     let terminal_id = format!("term_{}", uuid::Uuid::new_v4());
-    info!("Flutter: Terminal creation request sent, terminal_id: {}", terminal_id);
+    info!(
+        "Flutter: Terminal creation request sent, terminal_id: {}",
+        terminal_id
+    );
 
     Ok(terminal_id)
 }
@@ -209,11 +208,16 @@ pub async fn send_terminal_input(
     terminal_id: String,
     input: String,
 ) -> Result<()> {
-    debug!("Flutter: Sending input to terminal {}: {} bytes", terminal_id, input.len());
+    debug!(
+        "Flutter: Sending input to terminal {}: {} bytes",
+        terminal_id,
+        input.len()
+    );
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建终端I/O消息
@@ -222,11 +226,14 @@ pub async fn send_terminal_input(
         terminal_id,
         riterm_shared::IODataType::Input,
         input.into_bytes(),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send terminal input: {}", e))?;
     }
 
@@ -241,25 +248,36 @@ pub async fn resize_remote_terminal(
     rows: u16,
     cols: u16,
 ) -> Result<()> {
-    debug!("Flutter: Resizing remote terminal {} to {}x{}", terminal_id, rows, cols);
+    debug!(
+        "Flutter: Resizing remote terminal {} to {}x{}",
+        terminal_id, rows, cols
+    );
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建终端管理消息
-    let action = TerminalAction::Resize { terminal_id, rows, cols };
+    let action = TerminalAction::Resize {
+        terminal_id,
+        rows,
+        cols,
+    };
 
     let message = MessageBuilder::terminal_management(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send resize request: {}", e))?;
     }
 
@@ -276,7 +294,8 @@ pub async fn stop_remote_terminal(
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建终端管理消息
@@ -286,11 +305,14 @@ pub async fn stop_remote_terminal(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send stop request: {}", e))?;
     }
 
@@ -306,18 +328,27 @@ pub async fn create_tcp_forwarding_session(
     remote_port: Option<u16>,
     forwarding_type: String, // "ListenToRemote" or "ConnectToRemote"
 ) -> Result<String> {
-    info!("Flutter: Creating TCP forwarding session in session: {}", session_id);
+    info!(
+        "Flutter: Creating TCP forwarding session in session: {}",
+        session_id
+    );
 
     // 解析转发类型
     let forwarding_type = match forwarding_type.as_str() {
         "ListenToRemote" => TcpForwardingType::ListenToRemote,
         "ConnectToRemote" => TcpForwardingType::ConnectToRemote,
-        _ => return Err(anyhow::anyhow!("Invalid forwarding type: {}", forwarding_type)),
+        _ => {
+            return Err(anyhow::anyhow!(
+                "Invalid forwarding type: {}",
+                forwarding_type
+            ))
+        }
     };
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建TCP转发消息
@@ -332,17 +363,23 @@ pub async fn create_tcp_forwarding_session(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send TCP forwarding request: {}", e))?;
     }
 
     // 暂时返回一个会话ID
     let tcp_session_id = format!("tcp_session_{}", uuid::Uuid::new_v4());
-    info!("Flutter: TCP forwarding session creation request sent, session_id: {}", tcp_session_id);
+    info!(
+        "Flutter: TCP forwarding session creation request sent, session_id: {}",
+        tcp_session_id
+    );
 
     Ok(tcp_session_id)
 }
@@ -353,25 +390,34 @@ pub async fn stop_tcp_forwarding_session(
     session_id: String,
     tcp_session_id: String,
 ) -> Result<()> {
-    info!("Flutter: Stopping TCP forwarding session: {}", tcp_session_id);
+    info!(
+        "Flutter: Stopping TCP forwarding session: {}",
+        tcp_session_id
+    );
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建TCP转发消息
-    let action = TcpForwardingAction::StopSession { session_id: tcp_session_id };
+    let action = TcpForwardingAction::StopSession {
+        session_id: tcp_session_id,
+    };
 
     let message = MessageBuilder::tcp_forwarding(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send TCP stop request: {}", e))?;
     }
 
@@ -383,11 +429,15 @@ pub async fn list_remote_terminals(
     mut client: FlutterMessageClient,
     session_id: String,
 ) -> Result<Vec<FlutterRemoteTerminal>> {
-    info!("Flutter: Listing remote terminals in session: {}", session_id);
+    info!(
+        "Flutter: Listing remote terminals in session: {}",
+        session_id
+    );
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建终端管理消息
@@ -397,11 +447,14 @@ pub async fn list_remote_terminals(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send list request: {}", e))?;
     }
 
@@ -414,7 +467,10 @@ pub async fn disconnect_from_cli_server(
     mut client: FlutterMessageClient,
     session_id: String,
 ) -> Result<()> {
-    info!("Flutter: Disconnecting from CLI server, session: {}", session_id);
+    info!(
+        "Flutter: Disconnecting from CLI server, session: {}",
+        session_id
+    );
 
     // 获取连接ID并断开连接
     let connection_id = {
@@ -424,7 +480,9 @@ pub async fn disconnect_from_cli_server(
 
     if let Some(conn_id) = connection_id {
         if let Some(quic_client) = &mut client.quic_client {
-            quic_client.disconnect_from_server(&conn_id).await
+            quic_client
+                .disconnect_from_server(&conn_id)
+                .await
                 .map_err(|e| anyhow::anyhow!("Failed to disconnect: {}", e))?;
         }
     }
@@ -476,11 +534,15 @@ pub async fn get_tcp_forwarding_sessions(
     mut client: FlutterMessageClient,
     session_id: String,
 ) -> Result<Vec<FlutterTcpForwardingSession>> {
-    info!("Flutter: Getting TCP forwarding sessions in session: {}", session_id);
+    info!(
+        "Flutter: Getting TCP forwarding sessions in session: {}",
+        session_id
+    );
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建TCP转发消息
@@ -490,11 +552,14 @@ pub async fn get_tcp_forwarding_sessions(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send list request: {}", e))?;
     }
 
@@ -512,7 +577,8 @@ pub async fn get_system_status(
 
     // 确保连接存在
     let connections = client.server_connections.read().await;
-    let connection_id = connections.get(&session_id)
+    let connection_id = connections
+        .get(&session_id)
         .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
     // 创建系统控制消息
@@ -522,11 +588,14 @@ pub async fn get_system_status(
         format!("flutter_app_{}", uuid::Uuid::new_v4()),
         action,
         Some(format!("req_{}", uuid::Uuid::new_v4())),
-    ).with_receiver(connection_id.clone());
+    )
+    .with_receiver(connection_id.clone());
 
     // 发送消息
     if let Some(quic_client) = &mut client.quic_client {
-        quic_client.send_message_to_server(connection_id, message).await
+        quic_client
+            .send_message_to_server(connection_id, message)
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to send status request: {}", e))?;
     }
 
@@ -550,7 +619,6 @@ pub struct FlutterSystemStatus {
     pub memory_usage: u64,
 }
 
-
 /// 工具函数
 
 #[frb(sync)]
@@ -562,47 +630,158 @@ pub fn parse_endpoint_addr(addr: String) -> Result<String> {
     Ok(addr)
 }
 
+/// 测试 ticket 解析（用于调试）
+#[frb(sync)]
+pub fn test_ticket_parsing(ticket: String) -> Result<String> {
+    info!("=== Testing Ticket Parsing ===");
+
+    if !ticket.starts_with("ticket:") {
+        return Err(anyhow::anyhow!(
+            "Ticket must start with 'ticket:', got: {}",
+            &ticket[..std::cmp::min(20, ticket.len())]
+        ));
+    }
+
+    let encoded_data = &ticket[7..];
+    info!("Encoded data length: {}", encoded_data.len());
+
+    use data_encoding::BASE32;
+    match BASE32.decode(encoded_data.as_bytes()) {
+        Ok(decoded_data) => {
+            info!(
+                "✓ Base32 decode successful, decoded length: {}",
+                decoded_data.len()
+            );
+
+            match serde_json::from_slice::<serde_json::Value>(&decoded_data) {
+                Ok(ticket_data) => {
+                    let result = serde_json::to_string_pretty(&ticket_data)?;
+                    info!("✓ JSON parse successful");
+                    info!("Ticket data:\n{}", result);
+
+                    // 验证必需字段
+                    if ticket_data.get("node_id").is_some() {
+                        info!("✓ node_id field present");
+                    } else {
+                        return Err(anyhow::anyhow!("✗ Missing node_id field"));
+                    }
+
+                    if ticket_data.get("alpn").is_some() {
+                        info!("✓ alpn field present");
+                    } else {
+                        info!("⚠ alpn field missing (will use default)");
+                    }
+
+                    Ok(format!("✓ Ticket is valid!\n\n{}", result))
+                }
+                Err(e) => Err(anyhow::anyhow!(
+                    "✗ Failed to parse JSON: {}\nDecoded data (hex): {}",
+                    e,
+                    hex::encode(&decoded_data)
+                )),
+            }
+        }
+        Err(e) => Err(anyhow::anyhow!(
+            "✗ Failed to decode Base32: {}\nEncoded data prefix: {}",
+            e,
+            &encoded_data[..std::cmp::min(50, encoded_data.len())]
+        )),
+    }
+}
+
 /// 解析 iroh 连接票据
 #[frb(sync)]
 pub fn parse_connection_ticket(ticket: String) -> Result<String> {
-    info!("Parsing iroh connection ticket: {}", ticket);
+    debug!("=== Parsing Connection Ticket ===");
+    debug!("Ticket full length: {}", ticket.len());
+    debug!(
+        "Ticket starts with 'ticket:': {}",
+        ticket.starts_with("ticket:")
+    );
 
     // 检查票据格式
     if !ticket.starts_with("ticket:") {
-        return Err(anyhow::anyhow!("Invalid ticket format: must start with 'ticket:'"));
+        tracing::error!("Invalid ticket format: does not start with 'ticket:'");
+        return Err(anyhow::anyhow!(
+            "Invalid ticket format: must start with 'ticket:'"
+        ));
     }
 
     // 移除前缀
     let encoded_data = &ticket[7..];
+    debug!("Encoded data length: {}", encoded_data.len());
+    debug!(
+        "Encoded data prefix: {}",
+        &encoded_data[..std::cmp::min(20, encoded_data.len())]
+    );
 
     // Base32 解码
     use data_encoding::BASE32;
-    let decoded_data = BASE32.decode(encoded_data.as_bytes())
-        .map_err(|e| anyhow::anyhow!("Failed to decode ticket: {}", e))?;
+    let decoded_data = match BASE32.decode(encoded_data.as_bytes()) {
+        Ok(data) => {
+            debug!("Base32 decode successful, decoded length: {}", data.len());
+            data
+        }
+        Err(e) => {
+            tracing::error!("Failed to decode Base32: {}", e);
+            return Err(anyhow::anyhow!(
+                "Failed to decode ticket (Base32 error): {}",
+                e
+            ));
+        }
+    };
 
     // 解析 JSON
-    let ticket_data: serde_json::Value = serde_json::from_slice(&decoded_data)
-        .map_err(|e| anyhow::anyhow!("Failed to parse ticket JSON: {}", e))?;
+    let ticket_data: serde_json::Value = match serde_json::from_slice(&decoded_data) {
+        Ok(data) => {
+            debug!("JSON parse successful");
+            debug!(
+                "Ticket JSON: {}",
+                serde_json::to_string_pretty(&data).unwrap_or_default()
+            );
+            data
+        }
+        Err(e) => {
+            tracing::error!("Failed to parse JSON: {}", e);
+            return Err(anyhow::anyhow!("Failed to parse ticket JSON: {}", e));
+        }
+    };
 
     // 验证必要的字段
-    let node_id = ticket_data.get("node_id")
-        .ok_or_else(|| anyhow::anyhow!("Missing node_id in ticket"))?
+    let node_id = ticket_data
+        .get("node_id")
+        .ok_or_else(|| {
+            tracing::error!("Missing 'node_id' field in ticket");
+            anyhow::anyhow!("Missing node_id in ticket")
+        })?
         .as_str()
-        .ok_or_else(|| anyhow::anyhow!("Invalid node_id format"))?;
+        .ok_or_else(|| {
+            tracing::error!("Invalid 'node_id' format (not a string)");
+            anyhow::anyhow!("Invalid node_id format")
+        })?;
 
-    let relay_url = ticket_data.get("relay_url")
-        .and_then(|v| v.as_str());
+    let relay_url = ticket_data.get("relay_url").and_then(|v| v.as_str());
 
-    let alpn = ticket_data.get("alpn")
+    let alpn = ticket_data
+        .get("alpn")
         .and_then(|v| v.as_str())
         .unwrap_or("riterm_quic");
 
+    debug!("Node ID: {}", node_id);
+    debug!("Relay URL: {:?}", relay_url);
+    debug!("ALPN: {}", alpn);
+
     // 验证 ALPN
     if alpn != "riterm_quic" {
+        tracing::error!("Unsupported ALPN: {}", alpn);
         return Err(anyhow::anyhow!("Unsupported ALPN: {}", alpn));
     }
 
-    info!("Ticket parsed successfully - Node ID: {}, Relay: {:?}", node_id, relay_url);
+    info!(
+        "Ticket parsed successfully - Node ID: {}, Relay: {:?}",
+        node_id, relay_url
+    );
+    debug!("=== Ticket Parsing Complete ===");
 
     // 返回节点ID用于连接
     Ok(node_id.to_string())
@@ -610,25 +789,57 @@ pub fn parse_connection_ticket(ticket: String) -> Result<String> {
 
 /// 使用票据连接到 CLI 服务器
 #[frb]
-pub async fn connect_by_ticket(
-    mut client: FlutterMessageClient,
-    ticket: String,
-) -> Result<String> {
-    info!("Flutter: Connecting to CLI server using ticket");
+pub async fn connect_by_ticket(mut client: FlutterMessageClient, ticket: String) -> Result<String> {
+    info!("=== Connect by Ticket Debug Start ===");
+    info!("Ticket length: {}", ticket.len());
+    info!(
+        "Ticket prefix: {}",
+        &ticket[..std::cmp::min(30, ticket.len())]
+    );
 
     // 解析票据
-    let node_id_str = parse_connection_ticket(ticket)?;
+    info!("Step 1: Parsing connection ticket...");
+    let node_id_str = match parse_connection_ticket(ticket.clone()) {
+        Ok(node_id) => {
+            info!("Step 1: Ticket parsed successfully, Node ID: {}", node_id);
+            node_id
+        }
+        Err(e) => {
+            tracing::error!("Step 1: Failed to parse ticket: {}", e);
+            return Err(anyhow::anyhow!("Failed to parse ticket: {}", e));
+        }
+    };
 
     // 确保客户端已初始化
-    client.ensure_initialized(None).await?;
+    info!("Step 2: Initializing client...");
+    match client.ensure_initialized(None).await {
+        Ok(_) => info!("Step 2: Client initialized successfully"),
+        Err(e) => {
+            tracing::error!("Step 2: Failed to initialize client: {}", e);
+            return Err(anyhow::anyhow!("Failed to initialize client: {}", e));
+        }
+    }
 
     // 创建连接
-    let session_id = connect_by_node_id(client, node_id_str, None).await?;
+    info!("Step 3: Connecting by node ID...");
+    let session_id = match connect_by_node_id(client, node_id_str.clone(), None).await {
+        Ok(session_id) => {
+            info!("Step 3: Connected successfully, session: {}", session_id);
+            session_id
+        }
+        Err(e) => {
+            tracing::error!("Step 3: Failed to connect by node ID: {}", e);
+            return Err(anyhow::anyhow!("Failed to connect by node ID: {}", e));
+        }
+    };
 
-    info!("Flutter: Connected to CLI server using ticket, session: {}", session_id);
+    info!("=== Connect by Ticket Debug End (Success) ===");
+    info!(
+        "Flutter: Connected to CLI server using ticket, session: {}",
+        session_id
+    );
     Ok(session_id)
 }
-
 
 /// 简化的连接方法 - 使用节点ID直接连接
 pub async fn connect_by_node_id(
@@ -636,35 +847,80 @@ pub async fn connect_by_node_id(
     node_id_str: String,
     relay_url: Option<String>,
 ) -> Result<String> {
-    info!("Flutter: Connecting to CLI server by node ID: {}", node_id_str);
+    info!("=== Connect by Node ID Start ===");
+    info!("Node ID: {}", node_id_str);
+    info!("Relay URL: {:?}", relay_url);
 
     // 确保客户端已初始化
-    client.ensure_initialized(relay_url).await?;
+    info!("Ensuring client is initialized...");
+    client.ensure_initialized(relay_url.clone()).await?;
 
     // 解析节点ID
     use iroh::PublicKey;
     use std::str::FromStr;
 
-    let _node_id = PublicKey::from_str(&node_id_str)
-        .map_err(|e| anyhow::anyhow!("Invalid node ID: {}", e))?;
+    info!("Parsing node ID...");
+    let node_id = PublicKey::from_str(&node_id_str)
+        .map_err(|e| {
+            tracing::error!("Failed to parse node ID: {}", e);
+            anyhow::anyhow!("Invalid node ID format: {}", e)
+        })?;
+    info!("Node ID parsed successfully: {:?}", node_id);
 
-    // 创建临时连接ID
-    let connection_id = format!("conn_{}", uuid::Uuid::new_v4());
+    // 获取 quic_client 的可变引用
+    let quic_client = client.quic_client.as_mut()
+        .ok_or_else(|| anyhow::anyhow!("QUIC client not initialized"))?;
 
-    // 存储连接（暂时不建立真实连接）
-    // TODO: 实现真实的节点连接
-    info!("Node-based connection established: {}", connection_id);
+    // 构建 EndpointAddr
+    info!("Building endpoint address...");
+    
+    // 使用 PublicKey 直接构建 EndpointAddr
+    // iroh 0.94 中，EndpointAddr 可以从 PublicKey 构建
+    if let Some(relay) = &relay_url {
+        info!("Using relay URL: {}", relay);
+        info!("Note: Relay URL support may require additional configuration");
+    } else {
+        info!("No relay URL, using direct connection");
+    }
+    
+    // 直接从 PublicKey 创建 EndpointAddr
+    let endpoint_addr = iroh::EndpointAddr::from(node_id);
+    info!("Endpoint address built: {:?}", endpoint_addr);
+
+    // 建立真实的 QUIC 连接
+    info!("Establishing QUIC connection...");
+    info!("Using ALPN: {:?}", riterm_shared::QUIC_MESSAGE_ALPN);
+    
+    let connection_result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        quic_client.connect_to_server(&endpoint_addr)
+    ).await;
+
+    let connection_id = match connection_result {
+        Ok(Ok(conn_id)) => {
+            info!("✓ QUIC connection established successfully!");
+            info!("Connection ID: {}", conn_id);
+            conn_id
+        }
+        Ok(Err(e)) => {
+            tracing::error!("✗ Failed to establish QUIC connection: {}", e);
+            return Err(anyhow::anyhow!("Failed to connect to server: {}", e));
+        }
+        Err(_) => {
+            tracing::error!("✗ Connection timeout after 30 seconds");
+            return Err(anyhow::anyhow!("Connection timeout: server did not respond within 30 seconds"));
+        }
+    };
 
     // 创建会话
     let session_id = format!("session_{}", uuid::Uuid::new_v4());
-    let client_node_id = format!("{:?}", client.quic_client.as_ref()
-        .map(|c| c.get_node_id())
-        .unwrap_or_else(|| client.quic_client.as_ref().unwrap().get_node_id()));
+    let client_node_id = format!("{:?}", quic_client.get_node_id());
 
+    info!("Creating session...");
     let session = FlutterSession {
         id: session_id.clone(),
         node_id: client_node_id,
-        endpoint_addr: node_id_str,
+        endpoint_addr: node_id_str.clone(),
         connection_id: connection_id.clone(),
         created_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -674,17 +930,25 @@ pub async fn connect_by_node_id(
     };
 
     // 存储连接和会话
+    info!("Storing connection and session...");
     {
         let mut connections = client.server_connections.write().await;
-        connections.insert(session_id.clone(), connection_id);
+        connections.insert(session_id.clone(), connection_id.clone());
+        info!("Connection stored: {} -> {}", session_id, connection_id);
     }
 
     {
         let mut sessions = client.active_sessions.write().await;
-        sessions.insert(session_id.clone(), session);
+        sessions.insert(session_id.clone(), session.clone());
+        info!("Session stored: {}", session_id);
     }
 
-    info!("Flutter: Connected to CLI server by node ID, session: {}", session_id);
+    info!("=== Connect by Node ID Complete ===");
+    info!("✓ Successfully connected to CLI server!");
+    info!("Session ID: {}", session_id);
+    info!("Connection ID: {}", connection_id);
+    info!("Node ID: {}", node_id_str);
+    
     Ok(session_id)
 }
 
@@ -698,8 +962,8 @@ pub fn construct_endpoint_addr_from_node_info(
     use std::str::FromStr;
 
     // 解析节点ID
-    let node_id = PublicKey::from_str(&node_id_hex)
-        .map_err(|e| anyhow::anyhow!("Invalid node ID: {}", e))?;
+    let node_id =
+        PublicKey::from_str(&node_id_hex).map_err(|e| anyhow::anyhow!("Invalid node ID: {}", e))?;
 
     // 构造地址字符串
     let addr_str = if let Some(relay) = relay_url {
@@ -762,7 +1026,10 @@ mod tests {
     #[test]
     fn test_session_type() {
         assert_eq!(FlutterSessionType::Terminal, FlutterSessionType::Terminal);
-        assert_ne!(FlutterSessionType::Terminal, FlutterSessionType::TcpForwarding);
+        assert_ne!(
+            FlutterSessionType::Terminal,
+            FlutterSessionType::TcpForwarding
+        );
     }
 
     #[tokio::test]
@@ -779,3 +1046,4 @@ mod tests {
         assert!(validate_terminal_size(300, 80).is_err()); // Too many rows
     }
 }
+

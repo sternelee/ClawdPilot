@@ -17,8 +17,8 @@ import 'stores/app_store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 初始化 Rust bridge (禁用内容哈希检查)
-  await RustLib.init(forceSameCodegenVersion: false);
+  // 初始化 Rust bridge
+  await RustLib.init();
 
   // Initialize Google Fonts (with error handling)
   try {

@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:flutter_solidart/flutter_solidart.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
-import 'dart:io';
+// import 'package:flutter_solidart/flutter_solidart.dart';
+// import 'package:qr_code_scanner/qr_code_scanner.dart';
+// import 'dart:io';
 
 import '../stores/app_store.dart';
 import '../bridge_generated.dart/third_party/rust_lib_app/message_bridge.dart';
@@ -248,11 +249,11 @@ class _TicketConnectionForm extends StatelessWidget {
                   borderSide: const BorderSide(color: Color(0xFF00D4FF)),
                 ),
                 prefixIcon: const Icon(LucideIcons.ticket),
-                suffixIcon: IconButton(
-                  icon: const Icon(LucideIcons.qrCode),
-                  onPressed: () => _showQRScanner(context),
-                  tooltip: 'Scan QR Code',
-                ),
+                // suffixIcon: IconButton(
+                //   icon: const Icon(LucideIcons.qrCode),
+                //   onPressed: () => _showQRScanner(context),
+                //   tooltip: 'Scan QR Code',
+                // ),
               ),
               maxLines: 2,
               style: const TextStyle(color: Colors.white),
@@ -492,7 +493,14 @@ void _connectWithTicket(BuildContext context) async {
     return;
   }
 
+  // ?????????
+  debugPrint('=== Connection Debug Start ===');
+  debugPrint('Ticket length: ${ticket.length}');
+  debugPrint('Ticket prefix: ${ticket.substring(0, ticket.length > 20 ? 20 : ticket.length)}...');
+  debugPrint('Ticket format valid: ${_validateTicket(ticket)}');
+
   if (!_validateTicket(ticket)) {
+    debugPrint('Ticket validation failed');
     appStore.setError(
       'Invalid ticket format. Ticket should start with "ticket:"',
     );
@@ -505,8 +513,13 @@ void _connectWithTicket(BuildContext context) async {
   appStore.setStatusMessage('Connecting using ticket...');
 
   try {
-    final client = await createMessageClient();
+    debugPrint('Step 1: Creating message client...');
+    final client = createMessageClient(); // ??????????
+    debugPrint('Step 2: Message client created successfully');
+    
+    debugPrint('Step 3: Connecting by ticket...');
     final sessionId = await connectByTicket(client: client, ticket: ticket);
+    debugPrint('Step 4: Connected! Session ID: $sessionId');
 
     // Check if context is still valid before proceeding
     if (!context.mounted) return;
@@ -529,14 +542,32 @@ void _connectWithTicket(BuildContext context) async {
       appStore.setTicketInput('');
     }
 
+    debugPrint('Step 5: Navigating to main screen...');
     // Navigate to main app
     if (context.mounted) {
       Navigator.of(context).pushReplacementNamed('/main');
     }
-  } catch (e) {
+    debugPrint('=== Connection Debug End (Success) ===');
+  } catch (e, stackTrace) {
+    // ?????????
+    debugPrint('=== Connection Error ===');
+    debugPrint('Error type: ${e.runtimeType}');
+    debugPrint('Error message: $e');
+    debugPrint('Stack trace:');
+    debugPrint(stackTrace.toString());
+    debugPrint('=== Connection Debug End (Failed) ===');
+    
     if (context.mounted) {
-      appStore.setError('Failed to connect via ticket: $e');
-      appStore.setStatusMessage('Connection failed');
+      // ??????????
+      final errorMessage = e.toString();
+      appStore.setError('Failed to connect via ticket: $errorMessage');
+      
+      // ???????????????
+      String shortError = errorMessage;
+      if (errorMessage.length > 100) {
+        shortError = '${errorMessage.substring(0, 100)}...';
+      }
+      appStore.setStatusMessage('Connection failed: $shortError');
     }
   } finally {
     if (context.mounted) {
@@ -558,7 +589,7 @@ void _connectWithEndpoint(BuildContext context) async {
   appStore.setStatusMessage('Connecting to CLI server...');
 
   try {
-    final client = await createMessageClient();
+    final client = createMessageClient(); // ??????????
     String sessionId;
 
     if (endpoint.startsWith('ticket:')) {
@@ -608,25 +639,26 @@ void _connectWithEndpoint(BuildContext context) async {
   }
 }
 
-void _showQRScanner(BuildContext context) async {
-  if (!Platform.isIOS && !Platform.isAndroid) {
-    if (context.mounted) {
-      appStore.setError('QR scanning only available on mobile');
-      appStore.setStatusMessage('QR scanning only available on mobile');
-    }
-    return;
-  }
+// QR Scanner ????
+// void _showQRScanner(BuildContext context) async {
+//   if (!Platform.isIOS && !Platform.isAndroid) {
+//     if (context.mounted) {
+//       appStore.setError('QR scanning only available on mobile');
+//       appStore.setStatusMessage('QR scanning only available on mobile');
+//     }
+//     return;
+//   }
 
-  // Show QR scanner implementation would go here
-  if (context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('QR scanner implementation needed'),
-        backgroundColor: Colors.orange,
-      ),
-    );
-  }
-}
+//   // Show QR scanner implementation would go here
+//   if (context.mounted) {
+//     ScaffoldMessenger.of(context).showSnackBar(
+//       const SnackBar(
+//         content: Text('QR scanner implementation needed'),
+//         backgroundColor: Colors.orange,
+//       ),
+//     );
+//   }
+// }
 
 bool _validateTicket(String ticket) {
   if (ticket.isEmpty) return false;

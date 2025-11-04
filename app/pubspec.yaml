@@ -39,8 +39,8 @@ dependencies:
   flutter_rust_bridge: 2.11.1
   xterm: ^4.0.0
   shadcn_ui: ^0.39.0
-  qr_code_scanner: ^1.0.1
-  permission_handler: ^12.0.1
+  # qr_code_scanner: ^1.0.1  # ??????????
+  # permission_handler: ^12.0.1
 
   # State management
   flutter_solidart: ^2.7.0
