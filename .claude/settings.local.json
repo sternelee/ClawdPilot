@@ -40,7 +40,15 @@
       "Bash(RUST_LOG=debug ./target/debug/iroh-code-remote:*)",
       "WebFetch(domain:docs.tauri.app)",
       "WebFetch(domain:crates.io)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "mcp__jean-memory__jean_memory",
+      "Bash(python3:*)",
+      "Bash(./target/debug/cli:*)",
+      "Bash(./quick_test)",
+      "Bash(RUSTDOCFLAGS='-Zunstable-options' cargo doc:*)",
+      "Bash(echo:*)",
+      "Bash(RUST_LOG=debug cargo run:*)",
+      "Bash(debug_ticket.rs)"
     ],
     "deny": []
   },

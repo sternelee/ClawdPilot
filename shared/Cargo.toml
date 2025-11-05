@@ -16,10 +16,30 @@ rand = { workspace = true }
 data-encoding = "2.6"
 url = "2.5"
 futures = { workspace = true }
+futures-util = "0.3"
 tokio = { workspace = true }
 tracing = { workspace = true }
 regex = "1.10"
 base64 = { workspace = true }
-brotli = { workspace = true }
 hex = { workspace = true }
-bytes = "1.5"
+uuid = { workspace = true }
+async-trait = "0.1"
+dashmap = "6.1"
+tracing-subscriber = "0.3"
+
+[[bin]]
+name = "test_ticket_connection"
+path = "../test_ticket_connection.rs"
+
+[[bin]]
+name = "test_new_ticket"
+path = "../test_new_ticket.rs"
+
+[[bin]]
+name = "test_connection"
+path = "../test_connection.rs"
+
+[[bin]]
+name = "debug_ticket"
+path = "../debug_ticket.rs"
+

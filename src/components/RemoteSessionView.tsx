@@ -326,6 +326,48 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
   // 监听终端输出
   const setupTerminalEventListeners = async () => {
+    // 监听响应消息
+    await listen(`session-response-${props.sessionId}`, (event: any) => {
+      console.log("Received response message:", event.payload);
+      
+      const response = event.payload;
+      if (response.success && response.data) {
+        try {
+          // 解析 JSON 字符串
+          const data = JSON.parse(response.data);
+          console.log("Parsed response data:", data);
+          
+          // 如果是终端列表响应
+          if (data.terminals) {
+            console.log("Setting terminal list:", data.terminals);
+            setTerminals(data.terminals);
+            setLoading(false);
+          }
+          
+          // 如果是终端创建响应
+          if (data.terminal_id) {
+            console.log("Terminal created:", data.terminal_id);
+            // 重新获取终端列表
+            fetchTerminals();
+            // 自动连接到新创建的终端
+            setTimeout(() => {
+              console.log("Auto-connecting to newly created terminal:", data.terminal_id);
+              connectToTerminal(data.terminal_id);
+            }, 500); // 等待终端列表更新
+          }
+        } catch (error) {
+          console.error("Failed to parse response data:", error, response.data);
+        }
+      }
+    });
+    
+    // 监听终端管理消息
+    await listen(`terminal-management-${props.sessionId}`, (event: any) => {
+      console.log("Received terminal management message:", event.payload);
+      // 终端创建、停止等操作后，重新获取列表
+      fetchTerminals();
+    });
+    
     await listen(`terminal-output-${props.sessionId}`, (event) => {
       const { terminalId, data } = event.payload;
       const sessions = terminalSessions();
@@ -504,10 +546,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     const hasActiveTerminal = activeTerminalId();
     const availableTerminalIds = availableTerminals.map(t => t.id);
 
-    // 如果没有活动终端但有可用终端，自动选择第一个
+    // 如果没有活动终端但有可用终端，自动连接到第一个
     if (!hasActiveTerminal && availableTerminalIds.length > 0) {
       const firstTerminalId = availableTerminalIds[0];
-      setActiveTerminalId(firstTerminalId);
+      console.log("Auto-connecting to first terminal:", firstTerminalId);
+      connectToTerminal(firstTerminalId);
     }
 
     // 如果当前活动终端不在可用列表中，清空选择

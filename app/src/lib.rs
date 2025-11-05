@@ -6,12 +6,14 @@ use std::time::Instant;
 
 use tauri::Manager;
 use tauri::{Emitter, State};
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-use iroh_gossip::api::GossipSender;
-use riterm_shared::{EventType, P2PNetwork, SessionTicket, TerminalCommand, TerminalEvent};
+use riterm_shared::{
+    CommunicationManager, Event, EventListener, EventType, IODataType, Message, MessageBuilder,
+    MessagePayload, NodeAddr, QuicMessageClientHandle, SerializableEndpointAddr, TerminalAction,
+};
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
 const MAX_CONCURRENT_SESSIONS: usize = 50;
@@ -22,7 +24,40 @@ const CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
 
 // Helper function to validate session ticket format
 fn is_valid_session_ticket(ticket: &str) -> bool {
-    ticket.parse::<SessionTicket>().is_ok()
+    // Basic validation for the new ticket format
+    ticket.starts_with("ticket:") && ticket.len() > 20
+}
+
+// Parse ticket and extract NodeAddr (推荐，包含relay信息)
+fn parse_ticket_node_addr(
+    ticket: &str,
+) -> Result<riterm_shared::NodeAddr, Box<dyn std::error::Error>> {
+    use data_encoding::BASE32;
+    use serde_json;
+
+    // Remove "ticket:" prefix
+    let encoded = ticket
+        .strip_prefix("ticket:")
+        .ok_or("Invalid ticket format")?;
+
+    // Decode base32
+    let ticket_json_bytes = BASE32.decode(encoded.as_bytes())?;
+    let ticket_json = String::from_utf8(ticket_json_bytes)?;
+
+    // Parse JSON
+    let ticket_data: serde_json::Value = serde_json::from_str(&ticket_json)?;
+
+    // Extract endpoint_addr
+    let endpoint_addr_b64 = ticket_data
+        .get("endpoint_addr")
+        .and_then(|v| v.as_str())
+        .ok_or("Missing endpoint_addr in ticket")?;
+
+    // Parse the SerializableEndpointAddr from base64
+    let serializable_addr = SerializableEndpointAddr::from_base64(endpoint_addr_b64)?;
+
+    // Try to reconstruct NodeAddr with relay information
+    Ok(serializable_addr.try_to_node_addr()?)
 }
 
 // Parse structured events from terminal data - DEPRECATED
@@ -116,18 +151,147 @@ fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::
 #[derive(Default)]
 pub struct AppState {
     sessions: RwLock<HashMap<String, TerminalSession>>,
-    network: RwLock<Option<P2PNetwork>>,
+    communication_manager: RwLock<Option<Arc<CommunicationManager>>>,
+    quic_client: RwLock<Option<QuicMessageClientHandle>>,
     cleanup_token: RwLock<Option<CancellationToken>>,
 }
 
 #[derive(Clone)]
 pub struct TerminalSession {
     pub id: String,
-    pub sender: GossipSender,
-    pub event_sender: mpsc::UnboundedSender<TerminalEvent>,
+    pub connection_id: String,
+    pub node_id: String,
     pub last_activity: Arc<RwLock<Instant>>,
     pub cancellation_token: CancellationToken,
     pub event_count: Arc<std::sync::atomic::AtomicUsize>,
+    // Note: message_receiver is not included here as it can't be cloned
+    // It's managed separately in the connection task
+}
+
+/// App Event Listener that converts events to Tauri emissions
+pub struct AppEventListener {
+    app_handle: tauri::AppHandle,
+    session_id: String,
+    last_activity: Arc<RwLock<Instant>>,
+    event_count: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl AppEventListener {
+    pub fn new(
+        app_handle: tauri::AppHandle,
+        session_id: String,
+        last_activity: Arc<RwLock<Instant>>,
+        event_count: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        Self {
+            app_handle,
+            session_id,
+            last_activity,
+            event_count,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl EventListener for AppEventListener {
+    async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
+        // Update activity tracking
+        {
+            let mut activity = self.last_activity.write().await;
+            *activity = std::time::Instant::now();
+        }
+
+        // Increment event counter
+        let current_count = self
+            .event_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Check if we're approaching event limit and warn
+        if current_count > MAX_EVENTS_PER_SESSION * 9 / 10 {
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::warn!(
+                "Session {} approaching event limit: {}/{}",
+                self.session_id,
+                current_count,
+                MAX_EVENTS_PER_SESSION
+            );
+        }
+
+        // Convert events to Tauri emissions
+        match event.event_type {
+            EventType::TerminalCreated => {
+                let _ = self.app_handle.emit(
+                    &format!("terminal-created-{}", self.session_id),
+                    &event.data,
+                );
+            }
+            EventType::TerminalStopped => {
+                let _ = self.app_handle.emit(
+                    &format!("terminal-stopped-{}", self.session_id),
+                    &event.data,
+                );
+            }
+            EventType::TerminalInput => {
+                let _ = self
+                    .app_handle
+                    .emit(&format!("terminal-input-{}", self.session_id), &event.data);
+            }
+            EventType::TerminalOutput => {
+                let _ = self
+                    .app_handle
+                    .emit(&format!("terminal-output-{}", self.session_id), &event.data);
+            }
+            EventType::TerminalError => {
+                let _ = self
+                    .app_handle
+                    .emit(&format!("terminal-error-{}", self.session_id), &event.data);
+            }
+            EventType::TcpSessionCreated => {
+                let _ = self.app_handle.emit(
+                    &format!("tcp-session-created-{}", self.session_id),
+                    &event.data,
+                );
+            }
+            EventType::TcpSessionStopped => {
+                let _ = self.app_handle.emit(
+                    &format!("tcp-session-stopped-{}", self.session_id),
+                    &event.data,
+                );
+            }
+            EventType::PeerConnected => {
+                let _ = self
+                    .app_handle
+                    .emit(&format!("peer-connected-{}", self.session_id), &event.data);
+            }
+            EventType::PeerDisconnected => {
+                let _ = self.app_handle.emit(
+                    &format!("peer-disconnected-{}", self.session_id),
+                    &event.data,
+                );
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn name(&self) -> &str {
+        &self.session_id
+    }
+
+    fn supported_events(&self) -> Vec<EventType> {
+        vec![
+            EventType::TerminalCreated,
+            EventType::TerminalStopped,
+            EventType::TerminalInput,
+            EventType::TerminalOutput,
+            EventType::TerminalError,
+            EventType::TcpSessionCreated,
+            EventType::TcpSessionStopped,
+            EventType::PeerConnected,
+            EventType::PeerDisconnected,
+        ]
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -190,14 +354,29 @@ async fn initialize_network_with_relay(
     relay_url: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let network = P2PNetwork::new(relay_url)
+    // Create communication manager
+    let communication_manager = Arc::new(CommunicationManager::new("riterm_app".to_string()));
+    communication_manager
+        .initialize()
         .await
-        .map_err(|e| format!("Failed to initialize P2P network: {}", e))?;
+        .map_err(|e| format!("Failed to initialize communication manager: {}", e))?;
 
-    let node_id = network.get_node_id().await;
+    // Create QUIC client
+    let quic_client = QuicMessageClientHandle::new(relay_url, communication_manager.clone())
+        .await
+        .map_err(|e| format!("Failed to initialize QUIC client: {}", e))?;
 
-    let mut network_guard = state.network.write().await;
-    *network_guard = Some(network);
+    let node_id = format!("{:?}", quic_client.get_node_id().await);
+
+    // Store in state
+    {
+        let mut comm_guard = state.communication_manager.write().await;
+        *comm_guard = Some(communication_manager);
+    }
+    {
+        let mut client_guard = state.quic_client.write().await;
+        *client_guard = Some(quic_client);
+    }
 
     // Start cleanup task if not already running
     start_cleanup_task(&state).await;
@@ -216,22 +395,41 @@ async fn connect_to_peer(
         return Err("Session ticket cannot be empty".to_string());
     }
 
-    // Parse session ticket
-    let ticket = session_ticket
-        .parse::<SessionTicket>()
-        .map_err(|e| format!("Invalid session ticket format: {}", e))?;
+    // Validate session ticket format
+    if !is_valid_session_ticket(&session_ticket) {
+        return Err("Invalid session ticket format".to_string());
+    }
 
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
             None => {
-                return Err("Network not initialized. Please restart the application.".to_string());
+                return Err(
+                    "QUIC client not initialized. Please restart the application.".to_string(),
+                );
             }
         }
     };
 
-    let session_id = format!("session_{}", ticket.topic_id);
+    let communication_manager = {
+        let comm_guard = state.communication_manager.read().await;
+        match comm_guard.as_ref() {
+            Some(cm) => cm.clone(),
+            None => {
+                return Err(
+                    "Communication manager not initialized. Please restart the application."
+                        .to_string(),
+                );
+            }
+        }
+    };
+
+    // Parse the ticket to extract NodeAddr (包含relay信息)
+    let node_addr = parse_ticket_node_addr(&session_ticket)
+        .map_err(|e| format!("Failed to parse session ticket: {}", e))?;
+
+    let session_id = format!("session_{}", uuid::Uuid::new_v4());
 
     // Check session limits before creating new session
     {
@@ -242,56 +440,56 @@ async fn connect_to_peer(
                 MAX_CONCURRENT_SESSIONS
             ));
         }
-
-        // Check if session already exists and clean it up
-        if sessions.contains_key(&session_id) {
-            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-            tracing::info!(
-                "Session {} already exists, cleaning up and reconnecting...",
-                session_id
-            );
-            // Remove the existing session to allow reconnection
-            drop(sessions); // Drop the read lock before acquiring write lock
-            let mut sessions = state.sessions.write().await;
-            if let Some(existing_session) = sessions.remove(&session_id) {
-                // Cancel all async tasks for the existing session
-                existing_session.cancellation_token.cancel();
-
-                // End the P2P session
-                if let Some(network) = &*state.network.read().await {
-                    if let Err(e) = network
-                        .end_session(&session_id, &existing_session.sender)
-                        .await
-                    {
-                        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                        tracing::error!("Failed to end existing P2P session: {}", e);
-                    }
-                }
-
-                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::info!("Cleaned up existing session: {}", session_id);
-            }
-            // Release write lock before continuing
-            drop(sessions);
-
-            // Wait a moment to ensure cleanup is complete
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        }
     }
 
-    // Join session
-    let (sender, mut event_receiver) = network
-        .join_session_with_buffer_limit(ticket, MAX_EVENTS_PER_SESSION)
-        .await
-        .map_err(|e| format!("Failed to join session: {}", e))?;
+    // Establish QUIC connection to the CLI server using NodeAddr (包含relay信息)
+    let (connection_id, message_receiver) = {
+        let client_guard = state.quic_client.read().await;
+        if let Some(quic_client) = client_guard.as_ref() {
+            #[cfg(debug_assertions)]
+            tracing::info!("🔗 Establishing connection to server via NodeAddr");
+            #[cfg(debug_assertions)]
+            tracing::info!("🔗 Node ID: {:?}", node_addr.node_id);
+            #[cfg(debug_assertions)]
+            tracing::info!("🔗 Relay URL: {:?}", node_addr.relay_url);
+            #[cfg(debug_assertions)]
+            tracing::info!("🔗 Direct addresses: {:?}", node_addr.direct_addresses);
+
+            // Get message receiver
+            let receiver = quic_client.get_message_receiver().await;
+
+            // Establish actual QUIC connection using NodeAddr
+            let connection_id = match quic_client
+                .connect_to_server_with_node_addr(&node_addr)
+                .await
+            {
+                Ok(actual_connection_id) => {
+                    #[cfg(debug_assertions)]
+                    tracing::info!(
+                        "🎉 Real QUIC connection established with ID: {}",
+                        actual_connection_id
+                    );
+                    actual_connection_id
+                }
+                Err(e) => {
+                    #[cfg(debug_assertions)]
+                    tracing::error!("❌ Failed to establish QUIC connection: {}", e);
+                    return Err(format!("Failed to connect to server: {}", e));
+                }
+            };
+
+            (connection_id, receiver)
+        } else {
+            return Err("QUIC client not available".to_string());
+        }
+    };
 
     // Create terminal session with enhanced tracking
-    let (tx, mut rx) = mpsc::unbounded_channel();
     let cancellation_token = CancellationToken::new();
     let terminal_session = TerminalSession {
         id: session_id.clone(),
-        sender: sender.clone(),
-        event_sender: tx,
+        connection_id: connection_id.clone(),
+        node_id: node_addr.node_id.to_string(),
         last_activity: Arc::new(RwLock::new(Instant::now())),
         cancellation_token: cancellation_token.clone(),
         event_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
@@ -302,224 +500,232 @@ async fn connect_to_peer(
         sessions.insert(session_id.clone(), terminal_session.clone());
     }
 
-    // Handle incoming terminal events with cancellation support
+    // Create and register event listener for this session
+    let event_listener = Arc::new(AppEventListener::new(
+        app_handle.clone(),
+        session_id.clone(),
+        terminal_session.last_activity.clone(),
+        terminal_session.event_count.clone(),
+    ));
+
+    communication_manager
+        .register_event_listener(event_listener.clone())
+        .await;
+
+    // Start message receiver task
     let app_handle_clone = app_handle.clone();
-    let session_id_clone_events = session_id.clone();
-    let cancellation_token_events = cancellation_token.clone();
-    let last_activity_events = terminal_session.last_activity.clone();
-    let event_count_events = terminal_session.event_count.clone();
+    let session_id_clone = session_id.clone();
+    let cancellation_token_receiver = cancellation_token.clone();
+    let last_activity_receiver = terminal_session.last_activity.clone();
+    let event_count_receiver = terminal_session.event_count.clone();
 
     tokio::spawn(async move {
+        let mut receiver = message_receiver;
+        #[cfg(debug_assertions)]
+        tracing::info!(
+            "Starting message receiver task for session: {}",
+            session_id_clone
+        );
+
         loop {
             tokio::select! {
-                event_result = event_receiver.recv() => {
-                    match event_result {
-                        Ok(event) => {
+                message_result = receiver.recv() => {
+                    match message_result {
+                        Ok(message) => {
                             // Update activity tracking
                             {
-                                let mut activity = last_activity_events.write().await;
+                                let mut activity = last_activity_receiver.write().await;
                                 *activity = Instant::now();
                             }
 
                             // Increment event counter
-                            let current_count = event_count_events.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let current_count = event_count_receiver.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                             // Check if we're approaching event limit and warn
                             if current_count > MAX_EVENTS_PER_SESSION * 9 / 10 {
                                 #[cfg(any(debug_assertions, not(feature = "release-logging")))]
                                 tracing::warn!("Session {} approaching event limit: {}/{}",
-                                    session_id_clone_events, current_count, MAX_EVENTS_PER_SESSION);
+                                    session_id_clone, current_count, MAX_EVENTS_PER_SESSION);
                             }
 
-                            // Parse structured events for terminal management and emit appropriate events
-                            match &event.event_type {
-                                EventType::TerminalCreated { terminal_id, info } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-created-{}", session_id_clone_events),
-                                        &serde_json::json!({
-                                            "terminal_id": terminal_id,
-                                            "info": info,
-                                        })
-                                    );
-                                }
-                                EventType::TerminalOutput { terminal_id } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-output-{}", session_id_clone_events),
-                                        &serde_json::json!({
-                                            "terminal_id": terminal_id,
-                                            "data": event.data.clone(),
-                                        })
-                                    );
-                                }
-                                EventType::TerminalList { terminals } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-list-{}", session_id_clone_events),
-                                        &terminals
-                                    );
-                                }
-                                EventType::TerminalStatusUpdate { terminal_id, status } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-status-{}", session_id_clone_events),
-                                        &serde_json::json!({
-                                            "terminal_id": terminal_id,
-                                            "status": status,
-                                        })
-                                    );
-                                }
-                                EventType::TerminalDirectoryChanged { terminal_id, new_dir } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-directory-{}", session_id_clone_events),
-                                        &serde_json::json!({
-                                            "terminal_id": terminal_id,
-                                            "new_dir": new_dir,
-                                        })
-                                    );
-                                }
-                                EventType::TerminalStopped { terminal_id } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-stopped-{}", session_id_clone_events),
-                                        &serde_json::json!({
-                                            "terminal_id": terminal_id,
-                                        })
-                                    );
-                                }
-                                EventType::TerminalError { terminal_id, error } => {
-                                    let _ = app_handle_clone.emit(
-                                        &format!("terminal-error-{}", session_id_clone_events),
-                                        &serde_json::json!({
-                                            "terminal_id": terminal_id,
-                                            "error": error,
-                                        })
-                                    );
-                                }
-                                _ => {}
-                            }
+                            // Process incoming message
+                            #[cfg(debug_assertions)]
+                            tracing::debug!("Received message for session {}: {:?}", session_id_clone, message.message_type);
 
-                            // Keep backward compatibility for now
-                            let event_name = format!("terminal-event-{}", session_id_clone_events);
-                            let _ = app_handle_clone.emit(&event_name, &event);
+                            // Convert message to event and emit to frontend
+                            match &message.payload {
+                                MessagePayload::Response(response) => {
+                                    // Handle response messages
+                                    #[cfg(debug_assertions)]
+                                    tracing::debug!("Received response for session {}: success={}",
+                                        session_id_clone, response.success);
+
+                                    // Emit response to frontend
+                                    let _ = app_handle_clone.emit(
+                                        &format!("session-response-{}", session_id_clone),
+                                        &serde_json::json!({
+                                            "request_id": response.request_id,
+                                            "success": response.success,
+                                            "data": response.data,
+                                            "message": response.message,
+                                        })
+                                    );
+                                }
+                                MessagePayload::Error(error) => {
+                                    let _ = app_handle_clone.emit(
+                                        &format!("session-error-{}", session_id_clone),
+                                        &serde_json::json!({
+                                            "code": error.code,
+                                            "message": error.message,
+                                            "details": error.details,
+                                        })
+                                    );
+                                }
+                                MessagePayload::TerminalIO(io_message) => {
+                                    match &io_message.data_type {
+                                        IODataType::Output => {
+                                            let _ = app_handle_clone.emit(
+                                                &format!("terminal-output-{}", session_id_clone),
+                                                &serde_json::json!({
+                                                    "terminal_id": io_message.terminal_id,
+                                                    "data": String::from_utf8_lossy(&io_message.data),
+                                                })
+                                            );
+                                        }
+                                        IODataType::Error => {
+                                            let _ = app_handle_clone.emit(
+                                                &format!("terminal-error-{}", session_id_clone),
+                                                &serde_json::json!({
+                                                    "terminal_id": io_message.terminal_id,
+                                                    "error": String::from_utf8_lossy(&io_message.data),
+                                                })
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                MessagePayload::TerminalManagement(mgmt_message) => {
+                                    // Handle terminal management messages (created, stopped, etc.)
+                                    #[cfg(debug_assertions)]
+                                    tracing::debug!("Received terminal management message: {:?}", mgmt_message.action);
+
+                                    // Emit management event to frontend
+                                    let _ = app_handle_clone.emit(
+                                        &format!("terminal-management-{}", session_id_clone),
+                                        &serde_json::json!({
+                                            "action": format!("{:?}", mgmt_message.action),
+                                            "request_id": mgmt_message.request_id,
+                                        })
+                                    );
+                                }
+                                _ => {
+                                    #[cfg(debug_assertions)]
+                                    tracing::debug!("Unhandled message type: {:?}", message.message_type);
+                                }
+                            }
                         }
                         Err(_) => {
                             #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                            tracing::info!("Event receiver closed for session: {}", session_id_clone_events);
+                            tracing::info!("Message receiver closed for session: {}", session_id_clone);
                             break;
                         }
                     }
                 }
-                _ = cancellation_token_events.cancelled() => {
+                _ = cancellation_token_receiver.cancelled() => {
                     #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                    tracing::info!("Event handling task cancelled for session: {}", session_id_clone_events);
+                    tracing::info!("Message receiver task cancelled for session: {}", session_id_clone);
                     break;
                 }
             }
         }
+
+        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+        tracing::info!(
+            "Message receiver task ended for session: {}",
+            session_id_clone
+        );
     });
 
-    // Handle outgoing input events - deprecated, kept for compatibility
-    // Input now goes through send_terminal_input_to_terminal command
-    let _network_clone = network.clone();
-    let _sender_clone = sender.clone();
-    let session_id_clone_input = session_id.clone();
-    let cancellation_token_input = cancellation_token.clone();
-    let last_activity_input = terminal_session.last_activity.clone();
+    // Send a test message to establish the connection
+    let test_message =
+        MessageBuilder::heartbeat("riterm_app".to_string(), 0, "connected".to_string())
+            .with_session(session_id.clone());
 
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                event_opt = rx.recv() => {
-                    match event_opt {
-                        Some(_event) => {
-                            // Update activity tracking
-                            {
-                                let mut activity = last_activity_input.write().await;
-                                *activity = Instant::now();
-                            }
-
-                            // Input events are now deprecated
-                            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                            tracing::debug!("Received deprecated input event for session: {}", session_id_clone_input);
-                        }
-                        None => {
-                            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                            tracing::info!("Input receiver closed for session: {}", session_id_clone_input);
-                            break;
-                        }
-                    }
-                }
-                _ = cancellation_token_input.cancelled() => {
-                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                    tracing::info!("Input handling task cancelled for session: {}", session_id_clone_input);
-                    break;
-                }
+    {
+        let client_guard = state.quic_client.read().await;
+        if let Some(quic_client) = client_guard.as_ref() {
+            if let Err(e) = quic_client
+                .send_message_to_server(&connection_id, test_message)
+                .await
+            {
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::error!("Failed to send test message: {}", e);
+            } else {
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::info!("Test message sent successfully for session: {}", session_id);
             }
         }
-    });
+    }
+
+    // Session is now ready to handle terminal operations
+    // Terminal input/output will be handled through the new message protocol
 
     Ok(session_id)
 }
 
-#[tauri::command]
-async fn send_terminal_input(
-    session_id: String,
-    input: String,
-    state: State<'_, AppState>,
+// Helper function to send messages via QUIC client
+async fn send_message_via_client(
+    state: &State<'_, AppState>,
+    connection_id: &str,
+    message: Message,
+    operation_name: &str,
 ) -> Result<(), String> {
-    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-    tracing::debug!(
-        "send_terminal_input called with session_id: {}, input: {:?}",
-        session_id,
-        input
-    );
+    let client_guard = state.quic_client.read().await;
+    if let Some(quic_client) = client_guard.as_ref() {
+        if let Err(e) = quic_client
+            .send_message_to_server(connection_id, message)
+            .await
+        {
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::error!("Failed to send {} message: {}", operation_name, e);
 
-    // Update activity and check session limits
-    let session_exists = {
-        let sessions = state.sessions.read().await;
-        if let Some(session) = sessions.get(&session_id) {
-            // Update last activity
-            {
-                let mut activity = session.last_activity.write().await;
-                *activity = Instant::now();
+            // 如果是连接不存在的错误，提供更友好的错误信息
+            let error_str = e.to_string();
+            if error_str.contains("Connection not found") {
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::warn!(
+                    "Connection {} not found. This indicates the placeholder connection was not established properly.",
+                    connection_id
+                );
+
+                Err(format!(
+                    "Failed to send {} message: Connection '{}' is not properly established. This is a known limitation of the current placeholder connection system. The terminal session is created, but actual message sending requires a real QUIC connection implementation.",
+                    operation_name, connection_id
+                ))
+            } else {
+                Err(format!("Failed to send {} message: {}", operation_name, e))
             }
-
-            // Check event count limit
-            let current_count = session
-                .event_count
-                .load(std::sync::atomic::Ordering::Relaxed);
-            if current_count >= MAX_EVENTS_PER_SESSION {
-                return Err(format!(
-                    "Session event limit reached ({}/{}). Session will be disconnected.",
-                    current_count, MAX_EVENTS_PER_SESSION
-                ));
-            }
-
-            true
         } else {
-            false
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::info!("{} message sent successfully", operation_name);
+            Ok(())
         }
-    };
-
-    if !session_exists {
-        return Err("Session not found".to_string());
+    } else {
+        Err("QUIC client not available".to_string())
     }
-
-    // This command is deprecated, use send_terminal_input_to_terminal instead
-    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-    tracing::warn!(
-        "send_terminal_input is deprecated. Use send_terminal_input_to_terminal for specific terminal input."
-    );
-
-    Ok(())
 }
+
+// DEPRECATED: This command is no longer needed with the new message protocol
+// Use send_terminal_input_to_terminal instead
+
+// DEPRECATED: These commands are no longer needed with the new message protocol
+// Terminal commands are now handled through send_terminal_input_to_terminal
 
 #[tauri::command]
 async fn send_directed_message(
-    request: DirectedMessageRequest,
+    _request: DirectedMessageRequest,
     _state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let _session_sender = request.session_id; // Keep for API compatibility
-
-    // Note: send_directed_message is no longer available in the new message system
-    // This functionality has been replaced by the Command/Response pattern
     Err("Directed messages are deprecated. Use terminal commands instead.".to_string())
 }
 
@@ -530,34 +736,14 @@ async fn execute_remote_command(
     terminal_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
-        }
-    };
-
-    // Send command using new message system
-    let cmd = TerminalCommand::Input {
+    // Convert to use the new terminal input protocol
+    let input_request = TerminalInputRequest {
+        session_id,
         terminal_id,
-        data: format!("{}\n", command).as_bytes().to_vec(),
+        input: format!("{}\n", command),
     };
 
-    network
-        .send_command(&session_id, &session_sender, cmd, None)
-        .await
-        .map_err(|e| format!("Failed to send command: {}", e))?;
-
-    Ok(())
+    send_terminal_input_to_terminal(input_request, state).await
 }
 
 #[tauri::command]
@@ -577,15 +763,22 @@ async fn disconnect_session(session_id: String, state: State<'_, AppState>) -> R
         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
         tracing::info!("Cancelled async tasks for session: {}", session_id);
 
-        let network = {
-            let network_guard = state.network.read().await;
-            network_guard.as_ref().cloned()
+        let quic_client = {
+            let client_guard = state.quic_client.read().await;
+            client_guard.as_ref().cloned()
         };
 
-        if let Some(network) = network {
-            if let Err(e) = network.end_session(&session_id, &session.sender).await {
+        // Disconnect from QUIC server
+        if let Some(quic_client) = quic_client {
+            if let Err(e) = quic_client
+                .disconnect_from_server(&session.connection_id)
+                .await
+            {
                 #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::error!("Failed to end P2P session gracefully: {}", e);
+                tracing::error!("Failed to disconnect from QUIC server: {}", e);
+            } else {
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::info!("Successfully disconnected from QUIC server");
             }
         }
 
@@ -607,14 +800,14 @@ async fn get_active_sessions(state: State<'_, AppState>) -> Result<Vec<String>, 
 
 #[tauri::command]
 async fn get_node_info(state: State<'_, AppState>) -> Result<String, String> {
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
         }
     };
-    Ok(network.get_node_id().await)
+    Ok(format!("{:?}", quic_client.get_node_id().await))
 }
 
 #[tauri::command]
@@ -657,33 +850,39 @@ async fn create_terminal(
     request: TerminalCreateRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
         }
     };
 
-    network
-        .send_terminal_create(
-            &request.session_id,
-            &session_sender,
-            request.name,
-            request.shell_path,
-            request.working_dir,
-            request.size,
-        )
-        .await
-        .map_err(|e| format!("Failed to create terminal: {}", e))?;
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&request.session_id)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // Create terminal management message
+    let action = TerminalAction::Create {
+        name: request.name,
+        shell_path: request.shell_path,
+        working_dir: request.working_dir,
+        size: request.size.unwrap_or((24, 80)),
+    };
+
+    let message = MessageBuilder::terminal_management(
+        "riterm_app".to_string(),
+        action,
+        Some(request.session_id.clone()),
+    )
+    .with_session(request.session_id.clone());
+
+    // Send message via QUIC client
+    send_message_via_client(&state, &session.connection_id, message, "terminal creation").await?;
 
     Ok(())
 }
@@ -693,52 +892,68 @@ async fn stop_terminal(
     request: TerminalStopRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
         }
     };
 
-    network
-        .send_terminal_stop(&request.session_id, &session_sender, request.terminal_id)
-        .await
-        .map_err(|e| format!("Failed to stop terminal: {}", e))?;
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&request.session_id)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // Create terminal management message for stopping terminal
+    let action = TerminalAction::Stop {
+        terminal_id: request.terminal_id,
+    };
+
+    let message = MessageBuilder::terminal_management(
+        "riterm_app".to_string(),
+        action,
+        Some(request.session_id.clone()),
+    )
+    .with_session(request.session_id.clone());
+
+    // Send message via QUIC client
+    send_message_via_client(&state, &session.connection_id, message, "terminal stop").await?;
 
     Ok(())
 }
 
 #[tauri::command]
 async fn list_terminals(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
         }
     };
 
-    network
-        .send_terminal_list_request(&session_id, &session_sender)
-        .await
-        .map_err(|e| format!("Failed to list terminals: {}", e))?;
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // Create terminal management message for listing terminals
+    let message = MessageBuilder::terminal_management(
+        "riterm_app".to_string(),
+        TerminalAction::List,
+        Some(session_id.clone()),
+    )
+    .with_session(session_id.clone());
+
+    // Send message via QUIC client
+    send_message_via_client(&state, &session.connection_id, message, "terminal list").await?;
 
     Ok(())
 }
@@ -748,31 +963,33 @@ async fn send_terminal_input_to_terminal(
     request: TerminalInputRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
         }
     };
 
-    let command = TerminalCommand::Input {
-        terminal_id: request.terminal_id,
-        data: request.input.as_bytes().to_vec(),
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&request.session_id)
+            .cloned()
+            .ok_or("Session not found")?
     };
 
-    network
-        .send_command(&request.session_id, &session_sender, command, None)
-        .await
-        .map_err(|e| format!("Failed to send terminal input: {}", e))?;
+    // Create terminal I/O message
+    let message = MessageBuilder::terminal_io(
+        "riterm_app".to_string(),
+        request.terminal_id,
+        IODataType::Input,
+        request.input.as_bytes().to_vec(),
+    )
+    .with_session(request.session_id.clone());
+
+    // Send message via QUIC client
+    send_message_via_client(&state, &session.connection_id, message, "terminal input").await?;
 
     Ok(())
 }
@@ -782,32 +999,38 @@ async fn resize_terminal(
     request: TerminalResizeRequest,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session_sender = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&request.session_id)
-            .map(|s| s.sender.clone())
-            .ok_or("Session not found")?
-    };
-
-    let network = {
-        let network_guard = state.network.read().await;
-        match network_guard.as_ref() {
-            Some(n) => n.clone(),
-            None => return Err("Network not initialized".to_string()),
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
         }
     };
 
-    network
-        .send_terminal_resize(
-            &request.session_id,
-            &session_sender,
-            request.terminal_id,
-            request.rows,
-            request.cols,
-        )
-        .await
-        .map_err(|e| format!("Failed to resize terminal: {}", e))?;
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&request.session_id)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // Create terminal management message for resizing terminal
+    let action = TerminalAction::Resize {
+        terminal_id: request.terminal_id,
+        rows: request.rows,
+        cols: request.cols,
+    };
+
+    let message = MessageBuilder::terminal_management(
+        "riterm_app".to_string(),
+        action,
+        Some(request.session_id.clone()),
+    )
+    .with_session(request.session_id.clone());
+
+    // Send message via QUIC client
+    send_message_via_client(&state, &session.connection_id, message, "terminal resize").await?;
 
     Ok(())
 }
@@ -817,19 +1040,18 @@ async fn get_terminal_list(session_id: String, state: State<'_, AppState>) -> Re
     list_terminals(session_id, state).await
 }
 
+// DEPRECATED: Terminal connection is now implicit with the new message protocol
+// No separate connection step is needed
+
 #[tauri::command]
 async fn connect_to_terminal(
     session_id: String,
     terminal_id: String,
     _state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // With the new Command/Response system, connecting is implicit
-    // The terminal should already be receiving outputs via TerminalResponse::Output
-    // This command is now a no-op but kept for API compatibility
-
     #[cfg(any(debug_assertions, not(feature = "release-logging")))]
     tracing::info!(
-        "connect_to_terminal called for session {} terminal {}",
+        "connect_to_terminal called for session {} terminal {} (now a no-op)",
         session_id,
         terminal_id
     );
@@ -885,9 +1107,7 @@ pub fn run() {
             initialize_network,
             initialize_network_with_relay,
             connect_to_peer,
-            send_terminal_input,
-            send_directed_message,
-            execute_remote_command,
+            execute_remote_command, // Kept for compatibility but redirects to terminal input
             disconnect_session,
             get_active_sessions,
             get_node_info,
@@ -899,7 +1119,7 @@ pub fn run() {
             get_terminal_list,
             send_terminal_input_to_terminal,
             resize_terminal,
-            connect_to_terminal,
+            connect_to_terminal, // Kept as no-op for compatibility
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())
