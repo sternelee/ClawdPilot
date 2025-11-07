@@ -280,7 +280,7 @@ function App() {
   return (
     <div
       class="w-full font-mono mobile-viewport"
-      data-theme="riterm-mobile"
+      data-theme="dark"
       style={{
         height: keyboardVisible() ? `${effectiveViewportHeight()}px` : "100vh",
         "max-height": keyboardVisible()

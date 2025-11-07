@@ -60,6 +60,26 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 桌面端终端标签栏下拉状态
   const [showDesktopTerminalDropdown, setShowDesktopTerminalDropdown] = createSignal(false);
 
+  // AI Chat 相关状态
+  const [aiChatInput, setAiChatInput] = createSignal("");
+  const [showAiChat, setShowAiChat] = createSignal(true);
+  const [aiChatFocused, setAiChatFocused] = createSignal(false);
+  const [chatMessages, setChatMessages] = createSignal<Array<{
+    id: string;
+    role: 'user' | 'ai';
+    content: string;
+    timestamp: number;
+    command?: string;
+  }>>([]);
+  const [isAiThinking, setIsAiThinking] = createSignal(false);
+  const [showChatHistory, setShowChatHistory] = createSignal(false);
+
+  // 侧边栏标签页状态
+  const [activeSidebarTab, setActiveSidebarTab] = createSignal<'terminals' | 'services'>('terminals');
+
+  // 侧边栏状态
+  const [sidebarOpen, setSidebarOpen] = createSignal(true); // 默认开启，由CSS控制响应式
+
   const deviceCapabilities = getDeviceCapabilities();
   const isMobile = deviceCapabilities.isMobile;
 
@@ -223,6 +243,17 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       if (sessions.has(terminalId)) {
         setActiveTerminalId(terminalId);
         terminalSessionManager.setActiveTerminal(terminalId);
+        // 重新 fit 终端以确保正确显示
+        const existingSession = sessions.get(terminalId);
+        if (existingSession && terminalContainerRef) {
+          setTimeout(() => {
+            try {
+              existingSession.fitAddon.fit();
+            } catch (error) {
+              console.error("Error refitting existing terminal:", error);
+            }
+          }, 100);
+        }
         return;
       }
 
@@ -232,14 +263,16 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         fontSize: 14,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         theme: {
-          background: "#1a1a1a",
-          foreground: "#f0f0f0",
+          background: "#000000",
+          foreground: "#ffffff",
+          cursor: "#ffffff",
+          selection: "#ffffff40",
         },
         scrollback: 1000,
         convertEol: true,
         allowProposedApi: true,
-        rows: 24,  // 默认行数
-        cols: 80,  // 默认列数
+        rows: 30,  // 增加默认行数
+        cols: 100, // 增加默认列数
       });
 
       const fitAddon = new FitAddon();
@@ -320,6 +353,16 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       // 更新连接状态
       terminalSessionManager.updateConnectionState(terminalId, 'connected');
 
+      // 发送终端初始化信号
+      console.log("📡 Sending terminal initialization signal to:", terminalId);
+
+      // 确保终端焦点
+      setTimeout(() => {
+        if (session && session.terminal) {
+          session.terminal.focus();
+        }
+      }, 100);
+
     } catch (error) {
       console.error("Failed to connect to terminal:", error);
       // 更新连接状态为失败
@@ -375,22 +418,36 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const payload = event.payload;
       const terminalId = payload.terminal_id || payload.terminalId;
       const data = payload.data;
-      
-      console.log("📤 Received terminal output:", { terminalId, dataLength: data?.length });
-      
+
+      console.log("📤 Received terminal output:", {
+        terminalId,
+        dataLength: data?.length,
+        dataPreview: data?.substring(0, 100)
+      });
+
       const sessions = terminalSessions();
       const session = sessions.get(terminalId);
 
-      if (session) {
+      if (session && session.isActive) {
         console.log("✅ Writing to terminal:", terminalId);
-        session.terminal.write(data);
+
+        // 确保数据是字符串类型
+        const outputData = typeof data === 'string' ? data : String(data || '');
+
+        // 写入数据到终端
+        session.terminal.write(outputData);
 
         // 触发会话保存（通过解析输出更新工作目录等）
         if (session.terminalSession) {
-          session.terminalSession.updateWorkingDirectory(data);
+          session.terminalSession.updateWorkingDirectory(outputData);
         }
       } else {
-        console.warn("⚠️ Terminal session not found for output:", terminalId);
+        console.warn("⚠️ Terminal session not found or inactive for output:", terminalId);
+        // 如果没有找到对应的终端会话，尝试自动创建一个
+        if (terminalId && !sessions.has(terminalId)) {
+          console.log("🔄 Auto-connecting to terminal for output:", terminalId);
+          connectToTerminal(terminalId);
+        }
       }
     });
 
@@ -426,56 +483,45 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       ) {
         try {
           // 新的结构化格式直接从event_type中提取数据
-          console.log(
-            "Received structured TerminalOutput event:",
-            event.payload
-          );
+          console.log("Received structured TerminalOutput event:", event.payload);
 
-          const terminalOutput = (event.payload.event_type as any)
-            .TerminalOutput;
-          if (
-            terminalOutput &&
-            terminalOutput.terminal_id &&
-            terminalOutput.data
-          ) {
+          const terminalOutput = (event.payload.event_type as any).TerminalOutput;
+          if (terminalOutput && terminalOutput.terminal_id && terminalOutput.data) {
             const terminalId = terminalOutput.terminal_id;
             const outputData = terminalOutput.data;
 
-            console.log(
-              "🔥 Terminal output for terminal:",
+            console.log("🔥 Structured terminal output:", {
               terminalId,
-              "data:",
-              outputData
-            );
-            console.log(
-              "🔥 Available terminal sessions:",
-              Array.from(terminalSessions().keys())
-            );
+              dataLength: outputData?.length,
+              dataPreview: outputData?.substring(0, 100)
+            });
 
             const sessions = terminalSessions();
             const session = sessions.get(terminalId);
 
             if (session && session.isActive) {
-              console.log("✅ Writing to terminal session:", terminalId);
-              session.terminal.write(outputData);
+              console.log("✅ Writing structured data to terminal session:", terminalId);
+
+              // 确保数据是字符串类型
+              const dataStr = typeof outputData === 'string' ? outputData : String(outputData || '');
+
+              session.terminal.write(dataStr);
+
+              // 触发会话保存
+              if (session.terminalSession) {
+                session.terminalSession.updateWorkingDirectory(dataStr);
+              }
             } else {
-              console.warn(
-                "⚠️ No active terminal session found for:",
-                terminalId
-              );
-              // 如果没有找到对应的终端会话，可能需要自动创建一个
-              console.log(
-                "🔄 Attempting to auto-connect to terminal:",
-                terminalId
-              );
-              connectToTerminal(terminalId);
+              console.warn("⚠️ No active terminal session found for:", terminalId);
+              // 自动连接到终端
+              if (!sessions.has(terminalId)) {
+                console.log("🔄 Auto-connecting to terminal for structured output:", terminalId);
+                connectToTerminal(terminalId);
+              }
             }
           }
         } catch (error) {
-          console.error(
-            "Failed to parse structured terminal output event:",
-            error
-          );
+          console.error("Failed to parse structured terminal output event:", error);
         }
       }
     });
@@ -570,7 +616,220 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   });
 
-  // 渲染终端列表
+  // 渲染左侧边栏内容
+  const renderDesktopSidebar = () => (
+    <>
+      {/* 侧边栏头部 */}
+      <div class="p-4 border-b border-base-300 bg-base-200">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-3 h-3 rounded-full bg-success animate-pulse" />
+            <h2 class="text-lg font-bold">RiTerm</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            {/* 桌面端侧边栏切换按钮 */}
+            <Show when={!isMobile}>
+              <label for="left-sidebar-drawer" class="btn btn-ghost btn-sm btn-square cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </label>
+            </Show>
+            <button
+              class="btn btn-ghost btn-sm btn-circle"
+              onClick={props.onBack}
+              title="返回主页"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div class="tabs tabs-boxed bg-base-300 p-1">
+          <a
+            class={`tab tab-sm ${activeSidebarTab() === 'terminals' ? 'tab-active' : ''}`}
+            onClick={() => setActiveSidebarTab('terminals')}
+          >
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              终端
+              <div class="badge badge-neutral badge-xs">{terminals().length}</div>
+            </div>
+          </a>
+          <a
+            class={`tab tab-sm ${activeSidebarTab() === 'services' ? 'tab-active' : ''}`}
+            onClick={() => setActiveSidebarTab('services')}
+          >
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+              TCP 服务
+              <div class="badge badge-neutral badge-xs">0</div>
+            </div>
+          </a>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div class="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent">
+        {/* 终端标签页内容 */}
+        <Show when={activeSidebarTab() === 'terminals'}>
+          <div class="p-4">
+            {/* 新建终端按钮 */}
+            <button
+              class="btn btn-primary w-full gap-2 mb-4"
+              onClick={() => openCreateDialog()}
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              新建终端
+            </button>
+
+            {/* 终端列表 */}
+            <div class="space-y-3">
+              <For each={terminals()}>
+                {(terminal) => {
+                  const isActive = activeTerminalId() === terminal.id;
+                  return (
+                    <div class={`card card-compact p-0 cursor-pointer transition-all duration-200 group ${
+                      isActive ? "bg-primary/5 border border-primary shadow-sm" : "bg-base-200 hover:bg-base-300"
+                    }`}
+                    onClick={() => {
+                      if (terminal.status === "Running") {
+                        connectToTerminal(terminal.id);
+                      }
+                    }}
+                  >
+                      <div class="card-body p-3">
+                        <div class="flex items-start justify-between gap-2">
+                          <div class="flex items-start gap-3 flex-1 min-w-0">
+                            <div class={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${
+                              terminal.status === "Running"
+                                ? "bg-success"
+                                : terminal.status === "Starting"
+                                ? "bg-warning animate-pulse"
+                                : "bg-base-300"
+                            }`} />
+                            <div class="flex-1 min-w-0">
+                              <div class={`font-semibold truncate text-sm ${
+                                isActive ? "text-primary" : "text-base-content"
+                              }`}>
+                                {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
+                              </div>
+                              <div class="text-xs text-base-content/60 truncate mt-1">
+                                {terminal.shell_type}
+                              </div>
+                              <div class="text-xs text-base-content/50 truncate">
+                                {terminal.current_dir}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            class={`btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-opacity ${
+                              isActive ? "opacity-100 hover:bg-error/20 hover:text-error" : ""
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              stopTerminal(terminal.id);
+                            }}
+                            title="停止终端"
+                          >
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }}
+              </For>
+
+              {terminals().length === 0 && (
+                <div class="text-center py-8 px-4">
+                  <div class="mask mask-squircle w-16 h-16 mx-auto mb-4 bg-base-200 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div class="text-sm text-base-content/60 mb-4">暂无终端</div>
+                  <button
+                    class="btn btn-primary btn-sm"
+                    onClick={() => openCreateDialog()}
+                  >
+                    创建第一个终端
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Show>
+
+        {/* TCP 服务标签页内容 */}
+        <Show when={activeSidebarTab() === 'services'}>
+          <div class="p-4">
+            {/* 服务操作按钮 */}
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-bold text-sm uppercase tracking-wide text-base-content/70">TCP 服务管理</h3>
+              <button
+                class="btn btn-primary btn-sm"
+                title="添加服务"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 服务列表 */}
+            <div class="text-center py-8">
+              <div class="mask mask-squircle w-14 h-14 mx-auto mb-3 bg-base-200 flex items-center justify-center">
+                <svg class="w-7 h-7 text-base-content/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+              </div>
+              <div class="text-sm text-base-content/50 mb-3">暂无TCP服务</div>
+              <div class="text-xs text-base-content/40 space-y-1">
+                <p>可以在此管理TCP端口转发服务</p>
+                <p>支持本地端口映射到远程服务</p>
+              </div>
+            </div>
+          </div>
+        </Show>
+      </div>
+
+      {/* 侧边栏底部操作 */}
+      <div class="p-4 border-t border-base-300 space-y-2 bg-base-200">
+        <button
+          class="btn btn-ghost btn-sm w-full justify-start gap-2"
+          onClick={() => fetchTerminals()}
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          刷新列表
+        </button>
+        <button
+          class="btn btn-ghost btn-sm w-full justify-start gap-2 hover:bg-error/10 hover:text-error"
+          onClick={props.onDisconnect}
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+          断开连接
+        </button>
+      </div>
+    </>
+  );
+
+  // 渲染终端列表 - 移动端用
   const renderTerminalList = (inDropdown = false) => (
     <div class={inDropdown ? "space-y-2" : "space-y-2"}>
       <div class="flex justify-between items-center mb-4">
@@ -666,26 +925,94 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     ];
 
     return (
-      <div class="border-t bg-base-100 px-2 py-2 flex-shrink-0" style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}>
-        <div class="flex items-center justify-between gap-1 max-w-full overflow-x-auto scrollbar-hide">
-          <For each={shortcuts}>
-            {(shortcut) => (
-              <button
-                class={`btn btn-sm ${shortcut.color} hover:brightness-90 border-base-300 flex-1 min-w-0 px-2 transition-transform active:scale-95`}
-                onClick={() => sendShortcut(shortcut.key)}
-                onTouchStart={(e) => {
-                  e.currentTarget.classList.add('scale-95');
-                }}
-                onTouchEnd={(e) => {
-                  e.currentTarget.classList.remove('scale-95');
-                }}
-              >
-                <span class="text-xs sm:text-sm truncate font-mono">{shortcut.label}</span>
-              </button>
-            )}
-          </For>
+      <>
+        {/* Mobile AI Chat Bar */}
+        <div class="border-t bg-base-200 p-2">
+          <div class="flex items-center gap-2">
+            <button
+              class={`btn btn-sm btn-square ${
+                showChatHistory() ? 'btn-primary' : 'btn-ghost'
+              }`}
+              onClick={() => setShowChatHistory(!showChatHistory())}
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </button>
+
+            <div class="flex-1">
+              <input
+                type="text"
+                placeholder="询问AI助手..."
+                class="input input-bordered input-sm w-full"
+                value={aiChatInput()}
+                onInput={(e) => setAiChatInput(e.currentTarget.value)}
+                onKeyPress={handleAiChatKeyPress}
+                disabled={isAiThinking()}
+              />
+            </div>
+
+            <button
+              class="btn btn-primary btn-sm"
+              onClick={handleAiChatSubmit}
+              disabled={!aiChatInput().trim() || !activeTerminalId() || isAiThinking()}
+            >
+              <Show when={isAiThinking()} fallback={
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              }>
+                <span class="loading loading-spinner loading-xs"></span>
+              </Show>
+            </button>
+          </div>
+
+          {/* Mobile Chat History */}
+          <Show when={showChatHistory() && chatMessages().length > 0}>
+            <div class="max-h-32 overflow-y-auto mt-2 p-2 bg-base-100 rounded-lg">
+              <div class="space-y-1">
+                <For each={chatMessages()}>
+                  {(message) => (
+                    <div class={`text-xs ${
+                      message.role === 'user' ? 'text-right' : 'text-left'
+                    }`}>
+                      <div class={`inline-block px-2 py-1 rounded ${
+                        message.role === 'user'
+                          ? 'bg-primary text-primary-content'
+                          : 'bg-base-300 text-base-content'
+                      }`}>
+                        {message.content}
+                      </div>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
-      </div>
+
+        {/* Traditional Shortcut Bar */}
+        <div class="border-t bg-base-100 px-2 py-2 flex-shrink-0" style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}>
+          <div class="flex items-center justify-between gap-1 max-w-full overflow-x-auto scrollbar-hide">
+            <For each={shortcuts}>
+              {(shortcut) => (
+                <button
+                  class={`btn btn-sm ${shortcut.color} hover:brightness-90 border-base-300 flex-1 min-w-0 px-2 transition-transform active:scale-95`}
+                  onClick={() => sendShortcut(shortcut.key)}
+                  onTouchStart={(e) => {
+                    e.currentTarget.classList.add('scale-95');
+                  }}
+                  onTouchEnd={(e) => {
+                    e.currentTarget.classList.remove('scale-95');
+                  }}
+                >
+                  <span class="text-xs sm:text-sm truncate font-mono">{shortcut.label}</span>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+      </>
     );
   };
 
@@ -700,7 +1027,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
     return (
       <div class="w-full h-full bg-black flex flex-col">
-        {/* 终端显示区域 - 固定高度避免 xterm-scroll-area 溢出 */}
+        {/* 终端显示区域 */}
         <div
           ref={(el) => {
             terminalContainerRef = el;
@@ -708,45 +1035,55 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               try {
                 console.log("Opening terminal in container:", el);
 
+                // 确保容器样式正确
+                el.style.height = '100%';
+                el.style.width = '100%';
+                el.style.overflow = 'hidden';
+                el.style.backgroundColor = '#000000';
+                el.style.padding = '10px';
+                el.style.boxSizing = 'border-box';
+
                 // 打开终端
                 session.terminal.open(el);
 
-                // 立即设置容器样式防止滚动问题
-                el.style.height = '100%';
-                el.style.overflow = 'hidden';
+                // 清除初始内容
+                session.terminal.clear();
 
-                // 等待 DOM 更新后再 fit
-                requestAnimationFrame(() => {
-                  requestAnimationFrame(() => {
-                    try {
-                      console.log("Fitting terminal, container size:", {
-                        width: el.clientWidth,
-                        height: el.clientHeight
-                      });
-                      session.fitAddon.fit();
+                // 立即 fit 一次
+                setTimeout(() => {
+                  try {
+                    session.fitAddon.fit();
+                    console.log("Initial terminal fit:", {
+                      width: el.clientWidth,
+                      height: el.clientHeight,
+                      rows: session.terminal.rows,
+                      cols: session.terminal.cols
+                    });
+                  } catch (error) {
+                    console.error("Error in initial fit:", error);
+                  }
+                }, 50);
 
-                      // 获取终端实际的行列数
-                      console.log("Terminal fitted to:", {
-                        rows: session.terminal.rows,
-                        cols: session.terminal.cols
-                      });
-
-                      // 强制设置 xterm-screen 的高度
-                      const xtermElement = el.querySelector('.xterm');
-                      if (xtermElement) {
-                        (xtermElement as HTMLElement).style.height = '100%';
-                      }
-
-                      // 限制 xterm-viewport 的高度
-                      const viewportElement = el.querySelector('.xterm-viewport');
-                      if (viewportElement) {
-                        (viewportElement as HTMLElement).style.height = '100%';
-                      }
-                    } catch (error) {
-                      console.error("Error fitting terminal:", error);
-                    }
-                  });
+                // 设置定时 resize 监听
+                const resizeObserver = new ResizeObserver(() => {
+                  try {
+                    session.fitAddon.fit();
+                    console.log("Terminal resized:", {
+                      rows: session.terminal.rows,
+                      cols: session.terminal.cols
+                    });
+                  } catch (error) {
+                    console.error("Error in resize observer:", error);
+                  }
                 });
+
+                resizeObserver.observe(el);
+
+                // 清理函数
+                setTimeout(() => {
+                  resizeObserver.disconnect();
+                }, 10000); // 10秒后断开观察者，避免内存泄漏
+
               } catch (error) {
                 console.error("Error opening terminal:", error);
               }
@@ -755,7 +1092,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           class="flex-1 w-full overflow-hidden"
           style={{
             height: '100%',
-            'min-height': '0'
+            'min-height': '0',
+            'background-color': '#000000',
+            'font-family': 'Menlo, Monaco, "Courier New", monospace'
           }}
         />
       </div>
@@ -776,8 +1115,163 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   };
 
+  // AI Chat 处理函数
+  const handleAiChatSubmit = async () => {
+    const message = aiChatInput().trim();
+    if (!message) return;
+
+    const activeId = activeTerminalId();
+    if (!activeId) return;
+
+    // 添加用户消息到聊天历史
+    const userMessage = {
+      id: Date.now().toString(),
+      role: 'user' as const,
+      content: message,
+      timestamp: Date.now()
+    };
+    setChatMessages(prev => [...prev, userMessage]);
+
+    // 清空输入框
+    setAiChatInput("");
+    setIsAiThinking(true);
+
+    try {
+      // 生成AI响应和终端命令
+      const aiResponse = await generateAiResponse(message);
+
+      // 添加AI响应到聊天历史
+      const aiMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'ai' as const,
+        content: aiResponse.explanation,
+        timestamp: Date.now(),
+        command: aiResponse.command
+      };
+      setChatMessages(prev => [...prev, aiMessage]);
+
+      // 如果生成了命令，发送到终端
+      if (aiResponse.command) {
+        await sendCommandToTerminal(aiResponse.command);
+      }
+
+    } catch (error) {
+      console.error("Failed to generate AI response:", error);
+
+      // 添加错误消息
+      const errorMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'ai' as const,
+        content: "抱歉，我遇到了一些问题。请直接输入终端命令。",
+        timestamp: Date.now()
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
+  // 生成AI响应和终端命令
+  const generateAiResponse = async (userMessage: string): Promise<{
+    explanation: string;
+    command: string;
+  }> => {
+    // 简单的AI响应逻辑（在实际项目中，这里会调用真正的AI API）
+    const message = userMessage.toLowerCase();
+
+    // 基于关键词生成响应
+    if (message.includes('list') || message.includes('文件') || message.includes('目录')) {
+      return {
+        explanation: "我来帮您列出当前目录的文件和文件夹。",
+        command: "ls -la"
+      };
+    } else if (message.includes('当前目录') || message.includes('pwd')) {
+      return {
+        explanation: "显示当前工作目录的完整路径。",
+        command: "pwd"
+      };
+    } else if (message.includes('创建目录') || message.includes('mkdir')) {
+      const match = message.match(/创建\s*目录\s*["']?([^"'\s]+)["']?/);
+      const dirName = match ? match[1] : 'new_folder';
+      return {
+        explanation: `创建一个名为 "${dirName}" 的新目录。`,
+        command: `mkdir ${dirName}`
+      };
+    } else if (message.includes('删除') || message.includes('rm')) {
+      return {
+        explanation: "⚠️ 删除操作不可逆，请确认您要删除的内容。您可以使用 'rm filename' 删除文件或 'rm -rf dirname' 删除目录。",
+        command: "echo '请确认删除操作'"
+      };
+    } else if (message.includes('git')) {
+      if (message.includes('状态') || message.includes('status')) {
+        return {
+          explanation: "检查Git仓库的状态，显示修改的文件。",
+          command: "git status"
+        };
+      } else if (message.includes('提交') || message.includes('commit')) {
+        return {
+          explanation: "提交当前的更改到Git仓库。",
+          command: "git add . && git commit -m 'Update files'"
+        };
+      }
+    } else if (message.includes('运行') || message.includes('执行') || message.includes('启动')) {
+      if (message.includes('npm')) {
+        return {
+          explanation: "使用npm运行项目。",
+          command: "npm start"
+        };
+      } else if (message.includes('python') || message.includes('py')) {
+        return {
+          explanation: "运行Python脚本。",
+          command: "python main.py"
+        };
+      }
+    } else if (message.includes('帮助') || message.includes('help')) {
+      return {
+        explanation: "显示常用命令帮助。您可以询问关于：\n• 列出文件 (ls)\n• 查看当前目录 (pwd)\n• 创建目录 (mkdir)\n• Git操作 (git status, git commit)\n• 运行程序",
+        command: "echo 'RiTerm AI助手 - 您可以用自然语言描述您想要执行的操作'"
+      };
+    }
+
+    // 默认响应
+    return {
+      explanation: "我理解您想要执行相关操作。如果需要帮助，请输入'帮助'查看支持的命令。",
+      command: `echo "用户询问: ${userMessage}"`
+    };
+  };
+
+  // 发送命令到终端
+  const sendCommandToTerminal = async (command: string) => {
+    const activeId = activeTerminalId();
+    if (!activeId) return;
+
+    try {
+      await invoke("send_terminal_input_to_terminal", {
+        request: {
+          session_id: props.sessionId,
+          terminal_id: activeId,
+          input: command + '\n',
+        },
+      });
+    } catch (error) {
+      console.error("Failed to send command to terminal:", error);
+    }
+  };
+
+  // 清空聊天历史
+  const clearChatHistory = () => {
+    setChatMessages([]);
+  };
+
+  const handleAiChatKeyPress = (e: KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleAiChatSubmit();
+    }
+  };
+
   return (
-    <div class="h-full flex flex-col" onKeyDown={handleKeyboardShortcuts} tabIndex={0}>
+    <div class={`drawer ${sidebarOpen() ? 'drawer-open' : ''}`} onKeyDown={handleKeyboardShortcuts} tabIndex={0}>
       {/* 创建终端对话框 */}
       <Show when={showCreateDialog()}>
         <div
@@ -858,366 +1352,531 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         </div>
       </Show>
 
-      {/* 头部 */}
-      <div class="bg-base-100 border-b">
-        {/* 导航栏 */}
-        <div class="navbar min-h-[48px] px-2 sm:px-4">
-          <div class="flex-1">
-            <button class="btn btn-ghost btn-sm" onClick={props.onBack}>
-              ← 返回
-            </button>
-            <span class="ml-2 font-medium hidden sm:inline">远程会话</span>
-          </div>
-          <div class="flex-none flex items-center space-x-1">
-            {/* 移动端：创建按钮 */}
-            <Show when={isMobile}>
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={() => openCreateDialog()}
-                title="新建终端"
-              >
-                ➕
-              </button>
-            </Show>
+      {/* 侧边栏 */}
+      <input
+        id="left-sidebar-drawer"
+        type="checkbox"
+        class="drawer-toggle"
+        checked={sidebarOpen()}
+        onChange={(e) => setSidebarOpen(e.target.checked)}
+      />
 
-            {/* 桌面端按钮 */}
-            <Show when={!isMobile}>
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={() => fetchTerminals()}
-                title="刷新"
-              >
-                🔄
-              </button>
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={() => openCreateDialog()}
-                title="新建终端"
-              >
-                ➕ 新建
-              </button>
-              <button
-                class="btn btn-ghost btn-sm"
-                onClick={props.onDisconnect}
-                title="断开连接"
-              >
-                🔌 断开
-              </button>
-            </Show>
+      {/* 左侧边栏内容 */}
+      <div class="drawer-side">
+        <label for="left-sidebar-drawer" class="drawer-overlay"></label>
+        <aside class="w-72 min-h-full bg-base-100 border-r border-base-300 flex flex-col">
+          {renderDesktopSidebar()}
+        </aside>
+      </div>
 
-            {/* 移动端：菜单按钮 */}
-            <Show when={isMobile}>
-              <div class="dropdown dropdown-end">
+      {/* 主内容区域 */}
+      <div class="drawer-content flex flex-col overflow-hidden">
+        {/* 桌面端顶部栏 */}
+        <Show when={!isMobile}>
+          <div class="bg-base-100 border-b border-base-300 px-4 py-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                {/* 侧边栏切换按钮 */}
+                <label for="left-sidebar-drawer" class="btn btn-ghost btn-sm btn-square cursor-pointer swap swap-rotate">
+                  <input type="checkbox" checked={sidebarOpen()} onChange={(e) => setSidebarOpen(e.target.checked)} />
+                  <svg class="swap-off fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512"><path d="M16 132h416c8.837 0 16-7.163 16-16V76c0-8.837-7.163-16-16-16H16C7.163 60 0 67.163 0 76v40c0 8.837 7.163 16 16 16zm0 160h416c8.837 0 16-7.163 16-16v-40c0-8.837-7.163-16-16-16H16c-8.837 0-16 7.163-16 16v40c0 8.837 7.163 16 16 16zm0 160h416c8.837 0 16-7.163 16-16v-40c0-8.837-7.163-16-16-16H16c-8.837 0-16 7.163-16 16v40c0 8.837 7.163 16 16 16z"/></svg>
+                  <svg class="swap-on fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512"><path d="M64 192v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16H80c-8.837 0-16 7.163-16 16zm0 160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16H80c-8.837 0-16 7.163-16 16zm192-160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm192 0v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm-192 160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm192 0v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16z"/></svg>
+                </label>
                 <button
-                  class="btn btn-ghost btn-sm"
+                  class="btn btn-ghost btn-sm btn-square"
                   onClick={() => setShowMainMenu(!showMainMenu())}
+                  title="菜单"
                 >
-                  ☰
+                  <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current md:h-6 md:w-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                  </svg>
                 </button>
-                <Show when={showMainMenu()}>
-                  <ul class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-72 max-h-[80vh] overflow-y-auto z-50 mt-2">
-                    <li class="menu-title">
-                      <span>终端管理</span>
-                    </li>
+                <h1 class="text-lg font-semibold">
+                  {(() => {
+                    const activeId = activeTerminalId();
+                    if (activeId) {
+                      const sessions = terminalSessions();
+                      const session = sessions.get(activeId);
+                      if (session) {
+                        const terminal = terminals().find(t => t.id === activeId);
+                        return terminal?.name || `Terminal ${activeId.slice(0, 8)}`;
+                      }
+                    }
+                    return "选择一个终端";
+                  })()}
+                </h1>
+              </div>
+
+              {/* 桌面端快速操作 */}
+              <div class="flex items-center gap-2">
+                <div class="dropdown dropdown-end">
+                  <div
+                    role="button"
+                    class="btn btn-primary btn-sm btn-square"
+                    tabIndex={0}
+                    title="添加"
+                  >
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <ul class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-52 mt-2 z-50">
                     <li>
                       <button
-                        onClick={() => {
-                          setShowTerminalMenu(true);
-                          setShowMainMenu(false);
-                        }}
+                        onClick={() => openCreateDialog()}
+                        class="flex items-center gap-3"
                       >
-                        💻 终端列表 ({terminals().length})
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <div class="flex flex-col items-start">
+                          <span class="font-medium">添加终端</span>
+                          <span class="text-xs opacity-60">创建新的终端会话</span>
+                        </div>
                       </button>
                     </li>
-                    <li class="menu-title">
-                      <span>操作</span>
-                    </li>
                     <li>
                       <button
-                        onClick={() => {
-                          openCreateDialog();
-                          setShowMainMenu(false);
-                        }}
+                        class="flex items-center gap-3 opacity-50 cursor-not-allowed"
+                        disabled
+                        title="TCP转发功能开发中"
                       >
-                        ➕ 新建终端
-                      </button>
-                    </li>
-                    <li>
-                      <button
-                        onClick={() => {
-                          props.onDisconnect();
-                          setShowMainMenu(false);
-                        }}
-                      >
-                        🔌 断开连接
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div class="flex flex-col items-start">
+                          <span class="font-medium">TCP转发</span>
+                          <span class="text-xs opacity-60">添加端口转发服务</span>
+                        </div>
                       </button>
                     </li>
                   </ul>
-                </Show>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 桌面端菜单下拉 */}
+          <Show when={showMainMenu()}>
+            <div
+              class="fixed inset-0 z-50"
+              onClick={() => setShowMainMenu(false)}
+            >
+              <div
+                class="fixed top-16 left-72 z-50"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-80 max-h-[80vh] overflow-y-auto">
+                  <li class="menu-title">
+                    <span>终端管理</span>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        setShowTerminalMenu(true);
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      终端列表 ({terminals().length})
+                    </button>
+                  </li>
+                  <li class="menu-title">
+                    <span>操作</span>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        openCreateDialog();
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      新建终端
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        fetchTerminals();
+                        setShowMainMenu(false);
+                      }}
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      刷新列表
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      onClick={() => {
+                        props.onDisconnect();
+                        setShowMainMenu(false);
+                      }}
+                      class="text-error"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      断开连接
+                    </button>
+                  </li>
+                </div>
+              </div>
+            </div>
+          </Show>
+        </Show>
+
+        {/* 移动端头部 */}
+        <Show when={isMobile}>
+          <div class="bg-base-100 border-b">
+            {/* 导航栏 */}
+            <div class="navbar min-h-[48px] px-2">
+              <div class="flex-1 flex items-center gap-2">
+                <label for="left-sidebar-drawer" class="btn btn-ghost btn-sm btn-square cursor-pointer">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                  </svg>
+                </label>
+                <button class="btn btn-ghost btn-sm" onClick={props.onBack}>
+                  ← 返回
+                </button>
+                <span class="ml-2 font-medium">远程会话</span>
+              </div>
+              <div class="flex-none flex items-center space-x-1">
+                {/* 创建按钮 */}
+                <button
+                  class="btn btn-ghost btn-sm"
+                  onClick={() => openCreateDialog()}
+                  title="新建终端"
+                >
+                  ➕
+                </button>
+
+                {/* 菜单按钮 */}
+                <div class="dropdown dropdown-end">
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    onClick={() => setShowMainMenu(!showMainMenu())}
+                  >
+                    ☰
+                  </button>
+                  <Show when={showMainMenu()}>
+                    <ul class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-72 max-h-[80vh] overflow-y-auto z-50 mt-2">
+                      <li class="menu-title">
+                        <span>终端管理</span>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            setShowTerminalMenu(true);
+                            setShowMainMenu(false);
+                          }}
+                        >
+                          💻 终端列表 ({terminals().length})
+                        </button>
+                      </li>
+                      <li class="menu-title">
+                        <span>操作</span>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            openCreateDialog();
+                            setShowMainMenu(false);
+                          }}
+                        >
+                          ➕ 新建终端
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            props.onDisconnect();
+                            setShowMainMenu(false);
+                          }}
+                        >
+                          🔌 断开连接
+                        </button>
+                      </li>
+                    </ul>
+                  </Show>
+                </div>
+              </div>
+            </div>
+
+            {/* 移动端终端标签栏 - 水平滚动 */}
+            <Show when={terminals().length > 0}>
+              <div class="border-t bg-base-100 overflow-x-auto scrollbar-hide">
+                <div class="flex px-2 py-1 min-w-max">
+                  <For each={terminals()}>
+                    {(terminal) => {
+                      const isActive = activeTerminalId() === terminal.id;
+                      return (
+                        <button
+                          class={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap mr-2 ${isActive
+                            ? "bg-primary text-primary-content shadow-md"
+                            : "bg-base-200 hover:bg-base-300 text-base-content"
+                            }`}
+                          onClick={() => {
+                            setActiveTerminalId(terminal.id);
+                            terminalSessionManager.setActiveTerminal(terminal.id);
+                          }}
+                        >
+                          <span
+                            class={`w-2 h-2 rounded-full ${terminal.status === "Running"
+                              ? "bg-green-400"
+                              : terminal.status === "Starting"
+                                ? "bg-yellow-400"
+                                : "bg-gray-400"
+                              }`}
+                          />
+                          <span class="truncate max-w-[120px]">
+                            {terminal.name || `Term ${terminal.id.slice(0, 6)}`}
+                          </span>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
               </div>
             </Show>
           </div>
-        </div>
+        </Show>
 
-        {/* 移动端终端标签栏 - 水平滚动 */}
-        <Show when={isMobile && terminals().length > 0}>
-          <div class="border-t bg-base-100 overflow-x-auto scrollbar-hide">
-            <div class="flex px-2 py-1 min-w-max">
-              <For each={terminals()}>
-                {(terminal) => {
-                  const isActive = activeTerminalId() === terminal.id;
-                  return (
-                    <button
-                      class={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap mr-2 ${isActive
-                        ? "bg-primary text-primary-content shadow-md"
-                        : "bg-base-200 hover:bg-base-300 text-base-content"
-                        }`}
-                      onClick={() => {
-                        setActiveTerminalId(terminal.id);
-                        terminalSessionManager.setActiveTerminal(terminal.id);
-                      }}
-                    >
-                      <span
-                        class={`w-2 h-2 rounded-full ${terminal.status === "Running"
-                          ? "bg-green-400"
-                          : terminal.status === "Starting"
-                            ? "bg-yellow-400"
-                            : "bg-gray-400"
-                          }`}
-                      />
-                      <span class="truncate max-w-[120px]">
-                        {terminal.name || `Term ${terminal.id.slice(0, 6)}`}
-                      </span>
-                    </button>
-                  );
-                }}
-              </For>
+        {/* 移动端终端列表下拉菜单 */}
+        <Show when={showTerminalMenu()}>
+          <div
+            class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowTerminalMenu(false)}
+          >
+            <div
+              class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
+                <h2 class="text-lg font-semibold">终端列表</h2>
+                <button
+                  class="btn btn-ghost btn-sm btn-circle"
+                  onClick={() => setShowTerminalMenu(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div class="p-4">
+                {loading() ? (
+                  <div class="text-center py-8">
+                    <div class="loading loading-spinner"></div>
+                    <div class="mt-2">加载中...</div>
+                  </div>
+                ) : (
+                  renderTerminalList(true)
+                )}
+              </div>
             </div>
           </div>
         </Show>
 
-        {/* 桌面端终端标签页 */}
-        <Show when={!isMobile}>
-          <div class="border-t bg-base-200 relative">
-            <div class="flex items-center">
-              {/* 标签容器 - 隐藏滚动条 */}
-              <div
-                ref={tabsContainerRef}
-                class="flex-1 overflow-x-auto scrollbar-hide"
-              >
-                <Show
-                  when={terminals().length > 0}
-                  fallback={
-                    <div class="text-sm text-gray-500 px-3 py-2">
-                      暂无终端，点击"新建"创建第一个终端
-                    </div>
-                  }
-                >
-                  <div class="flex space-x-1 px-2 py-1">
-                    <For each={terminals()}>
-                      {(terminal, index) => {
-                        const isActive = activeTerminalId() === terminal.id;
-                        const tabIndex = index() + 1;
-                        const session = terminalSessionManager.getSession(terminal.id);
-                        const hasSessionData = session && (session.terminalContent || session.commandHistory?.length);
+        {/* 主终端显示区域 */}
+        <div ref={containerRef} class="flex-1 flex overflow-hidden flex-col min-h-0">
+          {/* 终端显示区域 */}
+          <div class="flex-1 flex overflow-hidden min-h-0">
+            {/* 桌面端和移动端终端显示 */}
+            {renderActiveTerminal()}
 
-                        return (
-                          <button
-                            class={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm font-medium transition-colors whitespace-nowrap group ${isActive
-                              ? "bg-base-100 border border-b-0 border-gray-300 text-base-content shadow-sm"
-                              : "bg-base-300/50 hover:bg-base-300 text-base-content/70"
-                              }`}
-                            onClick={() => {
-                              setActiveTerminalId(terminal.id);
-                              terminalSessionManager.setActiveTerminal(terminal.id);
-                            }}
-                            title={`终端 ${tabIndex} - ${terminal.name || `Terminal ${terminal.id.slice(0, 8)}`} (${isActive ? "Ctrl+" + tabIndex + " 切换" : "Ctrl+" + tabIndex + " 打开"})${hasSessionData ? " - 有保存的会话数据" : ""}`}
-                          >
-                            <span class="flex items-center space-x-1">
-                              <span
-                                class={`w-2 h-2 rounded-full ${terminal.status === "Running" ? "bg-green-500" :
-                                  terminal.status === "Starting" ? "bg-yellow-500" :
-                                    terminal.status === "Stopped" ? "bg-gray-500" :
-                                      "bg-red-500"
-                                  }`}
-                              />
-                              <span class="flex items-center space-x-1">
-                                <Show when={tabIndex <= 9}>
-                                  <span class={`text-xs ${isActive ? "text-gray-600" : "text-gray-500"} font-mono`}>
-                                    {tabIndex}
-                                  </span>
-                                </Show>
-                                <span>{terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}</span>
-                                {hasSessionData && (
-                                  <span class="text-xs text-blue-500" title="有保存的会话数据">
-                                    💾
-                                  </span>
-                                )}
-                              </span>
-                            </span>
-                            <Show when={isActive}>
-                              <button
-                                class="ml-1 text-gray-500 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // TODO: 实现关闭终端功能
-                                }}
-                                title="关闭终端"
-                              >
-                                ✕
-                              </button>
-                            </Show>
-                          </button>
-                        );
-                      }}
-                    </For>
+            {/* 无活动终端时的占位符 */}
+            {!activeTerminalId() && (
+              <div class="flex-1 flex items-center justify-center bg-base-200">
+                <div class="text-center opacity-50 px-4">
+                  <div class="text-6xl mb-4">💻</div>
+                  <div class="text-xl">选择一个终端开始</div>
+                  <div class="text-sm mt-2">
+                    {isMobile
+                      ? "点击顶部标签或菜单选择终端"
+                      : terminals().length > 0
+                        ? "从左侧边栏选择终端"
+                        : "点击左侧边栏新建按钮创建第一个终端"}
                   </div>
-                </Show>
-              </div>
-
-              {/* 下拉菜单按钮 - 仅在终端超过一定数量时显示 */}
-              <Show when={terminals().length > 5}>
-                <div class="relative border-l border-base-300">
-                  <button
-                    class="btn btn-ghost btn-sm h-full rounded-none px-3"
-                    onClick={() => setShowDesktopTerminalDropdown(!showDesktopTerminalDropdown())}
-                    title="显示所有终端"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {/* 下拉列表 */}
-                  <Show when={showDesktopTerminalDropdown()}>
-                    <div
-                      class="absolute right-0 top-full mt-1 w-64 max-h-96 overflow-y-auto bg-base-100 border border-base-300 rounded-lg shadow-xl z-50"
-                      onClick={(e) => e.stopPropagation()}
+                  <Show when={isMobile && terminals().length === 0}>
+                    <button
+                      class="btn btn-primary btn-sm mt-4"
+                      onClick={() => setShowMainMenu(true)}
                     >
-                      <div class="p-2">
-                        <For each={terminals()}>
-                          {(terminal, index) => {
-                            const isActive = activeTerminalId() === terminal.id;
-                            const tabIndex = index() + 1;
-
-                            return (
-                              <button
-                                class={`w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-colors ${isActive
-                                  ? "bg-primary text-primary-content"
-                                  : "hover:bg-base-200"
-                                  }`}
-                                onClick={() => {
-                                  setActiveTerminalId(terminal.id);
-                                  terminalSessionManager.setActiveTerminal(terminal.id);
-                                  setShowDesktopTerminalDropdown(false);
-                                }}
-                              >
-                                <span
-                                  class={`w-2 h-2 rounded-full flex-shrink-0 ${terminal.status === "Running" ? "bg-green-500" :
-                                    terminal.status === "Starting" ? "bg-yellow-500" :
-                                      terminal.status === "Stopped" ? "bg-gray-500" :
-                                        "bg-red-500"
-                                    }`}
-                                />
-                                <span class="text-xs font-mono flex-shrink-0">{tabIndex}</span>
-                                <span class="truncate flex-1 text-left">
-                                  {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
-                                </span>
-                              </button>
-                            );
-                          }}
-                        </For>
-                      </div>
-                    </div>
+                      打开菜单
+                    </button>
                   </Show>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* AI Chat 工具栏 - 桌面端显示 */}
+          <Show when={!isMobile && activeTerminalId()}>
+            <div class="border-t border-base-300 bg-base-200">
+              {/* Chat History - 可展开 */}
+              <Show when={showChatHistory() && chatMessages().length > 0}>
+                <div class="max-h-48 overflow-y-auto p-3 bg-base-100 border-b border-base-300">
+                  <div class="space-y-2">
+                    <For each={chatMessages()}>
+                      {(message) => (
+                        <div class={`flex gap-2 ${
+                          message.role === 'user' ? 'justify-end' : 'justify-start'
+                        }`}>
+                          <div class={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg ${
+                            message.role === 'user'
+                              ? 'bg-primary text-primary-content'
+                              : 'bg-base-300 text-base-content'
+                          }`}>
+                            <div class="text-sm">{message.content}</div>
+                            {message.command && (
+                              <div class="text-xs opacity-70 mt-1 font-mono bg-black/20 px-2 py-1 rounded">
+                                {message.command}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                </div>
               </Show>
-            </div>
-          </div>
-        </Show>
-      </div>
 
-      {/* 点击外部关闭桌面端下拉菜单 */}
-      <Show when={showDesktopTerminalDropdown()}>
-        <div
-          class="fixed inset-0 z-40"
-          onClick={() => setShowDesktopTerminalDropdown(false)}
-        />
-      </Show>
-
-      {/* 移动端终端列表下拉菜单 */}
-      <Show when={showTerminalMenu()}>
-        <div
-          class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-          onClick={() => setShowTerminalMenu(false)}
-        >
-          <div
-            class="absolute top-0 right-0 w-full sm:w-96 h-full bg-base-100 shadow-xl overflow-y-auto animate-slide-in-right"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div class="sticky top-0 bg-base-100 border-b p-4 flex justify-between items-center z-10">
-              <h2 class="text-lg font-semibold">终端列表</h2>
-              <button
-                class="btn btn-ghost btn-sm btn-circle"
-                onClick={() => setShowTerminalMenu(false)}
-              >
-                ✕
-              </button>
-            </div>
-            <div class="p-4">
-              {loading() ? (
-                <div class="text-center py-8">
-                  <div class="loading loading-spinner"></div>
-                  <div class="mt-2">加载中...</div>
-                </div>
-              ) : (
-                renderTerminalList(true)
-              )}
-            </div>
-          </div>
-        </div>
-      </Show>
-
-
-      {/* 主内容 */}
-      <div ref={containerRef} class="flex-1 flex overflow-hidden flex-col min-h-0">
-        {/* 终端显示区域 */}
-        <div class="flex-1 flex overflow-hidden min-h-0">
-          {/* 桌面端和移动端终端显示 */}
-          {renderActiveTerminal()}
-
-          {/* 无活动终端时的占位符 */}
-          {!activeTerminalId() && (
-            <div class="flex-1 flex items-center justify-center bg-base-200">
-              <div class="text-center opacity-50 px-4">
-                <div class="text-6xl mb-4">💻</div>
-                <div class="text-xl">选择一个终端开始</div>
-                <div class="text-sm mt-2">
-                  {isMobile
-                    ? "点击右上角菜单选择或创建终端"
-                    : terminals().length > 0
-                      ? "点击顶部标签页选择终端"
-                      : "点击顶部新建按钮创建第一个终端"}
-                </div>
-                <Show when={isMobile}>
+              {/* Main Chat Input */}
+              <div class="p-3">
+                <div class="flex items-center gap-2 max-w-4xl mx-auto">
+                  {/* Chat Toggle Button */}
                   <button
-                    class="btn btn-primary btn-sm mt-4"
-                    onClick={() => setShowMainMenu(true)}
+                    class={`btn btn-sm btn-square ${
+                      showChatHistory() ? 'btn-primary' : 'btn-ghost'
+                    }`}
+                    onClick={() => setShowChatHistory(!showChatHistory())}
+                    title="聊天历史"
                   >
-                    打开菜单
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    {chatMessages().length > 0 && (
+                      <div class="badge badge-xs badge-primary absolute -top-1 -right-1">
+                        {chatMessages().length}
+                      </div>
+                    )}
                   </button>
-                </Show>
+
+                  {/* AI Status Indicator */}
+                  <div class="flex items-center gap-1">
+                    <div class={`w-2 h-2 rounded-full ${
+                      isAiThinking() ? 'bg-warning animate-pulse' : 'bg-success'
+                    }`} />
+                    <span class="text-xs text-base-content/60">
+                      {isAiThinking() ? 'AI思考中...' : 'AI助手'}
+                    </span>
+                  </div>
+
+                  {/* Input Field */}
+                  <div class="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="用自然语言描述你想要执行的操作..."
+                      class="input input-bordered input-sm w-full"
+                      value={aiChatInput()}
+                      onInput={(e) => setAiChatInput(e.currentTarget.value)}
+                      onKeyPress={handleAiChatKeyPress}
+                      onFocus={() => setAiChatFocused(true)}
+                      onBlur={() => setTimeout(() => setAiChatFocused(false), 200)}
+                      disabled={isAiThinking()}
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div class="flex items-center gap-1">
+                    {/* Clear History */}
+                    <Show when={chatMessages().length > 0}>
+                      <button
+                        class="btn btn-ghost btn-xs btn-square"
+                        onClick={clearChatHistory}
+                        title="清空聊天历史"
+                      >
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </Show>
+
+                    {/* Send Button */}
+                    <button
+                      class="btn btn-primary btn-sm"
+                      onClick={handleAiChatSubmit}
+                      disabled={!aiChatInput().trim() || !activeTerminalId() || isAiThinking()}
+                    >
+                      <Show when={isAiThinking()} fallback={
+                        <>
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                          发送
+                        </>
+                      }>
+                        <span class="loading loading-spinner loading-xs"></span>
+                      </Show>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div class="flex items-center gap-2 mt-2 max-w-4xl mx-auto">
+                  <span class="text-xs text-base-content/50">快捷操作:</span>
+                  <button
+                    class="badge badge-outline badge-xs hover:badge-primary cursor-pointer"
+                    onClick={() => {
+                      setAiChatInput("列出当前目录的文件");
+                      handleAiChatSubmit();
+                    }}
+                  >
+                    列出文件
+                  </button>
+                  <button
+                    class="badge badge-outline badge-xs hover:badge-primary cursor-pointer"
+                    onClick={() => {
+                      setAiChatInput("查看当前目录");
+                      handleAiChatSubmit();
+                    }}
+                  >
+                    当前目录
+                  </button>
+                  <button
+                    class="badge badge-outline badge-xs hover:badge-primary cursor-pointer"
+                    onClick={() => {
+                      setAiChatInput("检查Git状态");
+                      handleAiChatSubmit();
+                    }}
+                  >
+                    Git状态
+                  </button>
+                  <button
+                    class="badge badge-outline badge-xs hover:badge-primary cursor-pointer"
+                    onClick={() => {
+                      setAiChatInput("帮助");
+                      handleAiChatSubmit();
+                    }}
+                  >
+                    帮助
+                  </button>
+                </div>
               </div>
             </div>
-          )}
+          </Show>
+
+          {/* 底部快捷键栏 - 移动端显示 */}
+          <Show when={isMobile}>
+            {renderShortcutBar()}
+          </Show>
         </div>
-
-        {/* 底部快捷键栏 - 移动端显示 */}
-        <Show when={isMobile}>
-          {renderShortcutBar()}
-        </Show>
       </div>
-
     </div>
   );
 }
