@@ -43,8 +43,8 @@ function getScreenSize(): DeviceCapabilities["screenSize"] {
 
 function detectCapabilities(): DeviceCapabilities {
   const platform = detectPlatform();
-  const isMobile = platform === "android" || platform === "ios";
   const screenWidth = window.screen.width;
+  const isMobile = platform === "android" || platform === "ios" || screenWidth <= 768;
   const isTablet = isMobile && screenWidth >= 768;
   const isDesktop = !isMobile;
 

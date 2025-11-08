@@ -35,6 +35,12 @@ interface TerminalSession {
   terminalSession?: ReturnType<typeof useTerminalSession>;
 }
 
+// 截断路径，显示末尾部分，前面用...省略
+const truncatePath = (path: string, maxLength: number = 24): string => {
+  if (path.length <= maxLength) return path;
+  return '...' + path.slice(-(maxLength - 3));
+};
+
 export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [terminals, setTerminals] = createSignal<TerminalInfo[]>([]);
   const [loading, setLoading] = createSignal(true);
@@ -57,12 +63,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [showTerminalMenu, setShowTerminalMenu] = createSignal(false);
   const [showMainMenu, setShowMainMenu] = createSignal(false);
 
-  // 桌面端终端标签栏下拉状态
-  const [showDesktopTerminalDropdown, setShowDesktopTerminalDropdown] = createSignal(false);
-
   // AI Chat 相关状态
   const [aiChatInput, setAiChatInput] = createSignal("");
-  const [showAiChat, setShowAiChat] = createSignal(true);
   const [aiChatFocused, setAiChatFocused] = createSignal(false);
   const [chatMessages, setChatMessages] = createSignal<Array<{
     id: string;
@@ -84,7 +86,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const isMobile = deviceCapabilities.isMobile;
 
   let containerRef: HTMLDivElement | undefined;
-  let tabsContainerRef: HTMLDivElement | undefined;
   let terminalContainerRef: HTMLDivElement | undefined;
 
   // 发送快捷键到终端
@@ -375,21 +376,21 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     // 监听响应消息
     await listen(`session-response-${props.sessionId}`, (event: any) => {
       console.log("Received response message:", event.payload);
-      
+
       const response = event.payload;
       if (response.success && response.data) {
         try {
           // 解析 JSON 字符串
           const data = JSON.parse(response.data);
           console.log("Parsed response data:", data);
-          
+
           // 如果是终端列表响应
           if (data.terminals) {
             console.log("Setting terminal list:", data.terminals);
             setTerminals(data.terminals);
             setLoading(false);
           }
-          
+
           // 如果是终端创建响应
           if (data.terminal_id) {
             console.log("Terminal created:", data.terminal_id);
@@ -406,14 +407,14 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         }
       }
     });
-    
+
     // 监听终端管理消息
     await listen(`terminal-management-${props.sessionId}`, (event: any) => {
       console.log("Received terminal management message:", event.payload);
       // 终端创建、停止等操作后，重新获取列表
       fetchTerminals();
     });
-    
+
     await listen(`terminal-output-${props.sessionId}`, (event: any) => {
       const payload = event.payload;
       const terminalId = payload.terminal_id || payload.terminalId;
@@ -422,15 +423,13 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       console.log("📤 Received terminal output:", {
         terminalId,
         dataLength: data?.length,
-        dataPreview: data?.substring(0, 100)
       });
+      console.log("   Preview:", data);
 
       const sessions = terminalSessions();
       const session = sessions.get(terminalId);
 
       if (session && session.isActive) {
-        console.log("✅ Writing to terminal:", terminalId);
-
         // 确保数据是字符串类型
         const outputData = typeof data === 'string' ? data : String(data || '');
 
@@ -493,8 +492,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             console.log("🔥 Structured terminal output:", {
               terminalId,
               dataLength: outputData?.length,
-              dataPreview: outputData?.substring(0, 100)
             });
+            console.log("   Preview:", outputData?.substring(0, 100));
 
             const sessions = terminalSessions();
             const session = sessions.get(terminalId);
@@ -635,21 +634,13 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 </svg>
               </label>
             </Show>
-            <button
-              class="btn btn-ghost btn-sm btn-circle"
-              onClick={props.onBack}
-              title="返回主页"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div class="tabs tabs-boxed bg-base-300 p-1">
+        <div role="tablist" class="tabs">
           <a
+            role="tab"
             class={`tab tab-sm ${activeSidebarTab() === 'terminals' ? 'tab-active' : ''}`}
             onClick={() => setActiveSidebarTab('terminals')}
           >
@@ -673,6 +664,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               <div class="badge badge-neutral badge-xs">0</div>
             </div>
           </a>
+        </div>
+        <div class="tabs tabs-boxed bg-base-300 p-1">
         </div>
       </div>
 
@@ -698,53 +691,38 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 {(terminal) => {
                   const isActive = activeTerminalId() === terminal.id;
                   return (
-                    <div class={`card card-compact p-0 cursor-pointer transition-all duration-200 group ${
-                      isActive ? "bg-primary/5 border border-primary shadow-sm" : "bg-base-200 hover:bg-base-300"
-                    }`}
-                    onClick={() => {
-                      if (terminal.status === "Running") {
-                        connectToTerminal(terminal.id);
-                      }
-                    }}
-                  >
-                      <div class="card-body p-3">
-                        <div class="flex items-start justify-between gap-2">
-                          <div class="flex items-start gap-3 flex-1 min-w-0">
-                            <div class={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${
-                              terminal.status === "Running"
-                                ? "bg-success"
-                                : terminal.status === "Starting"
-                                ? "bg-warning animate-pulse"
-                                : "bg-base-300"
-                            }`} />
-                            <div class="flex-1 min-w-0">
-                              <div class={`font-semibold truncate text-sm ${
-                                isActive ? "text-primary" : "text-base-content"
+                    <div class={`card card-compact p-0! cursor-pointer transition-all duration-200 group ${isActive ? "bg-primary/5 border border-primary shadow-sm" : "bg-base-200 hover:bg-base-300"
+                      }`}
+                      onClick={() => {
+                        if (terminal.status === "Running") {
+                          connectToTerminal(terminal.id);
+                        }
+                      }}
+                    >
+                      <div class="card-body pt-0!">
+                        <div class="flex flex-col gap-1">
+                          <div class="flex items-center justify-between gap-2">
+                            <div class={`font-semibold truncate text-base flex-1 ${isActive ? "text-primary" : "text-base-content"
                               }`}>
-                                {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
-                              </div>
-                              <div class="text-xs text-base-content/60 truncate mt-1">
-                                {terminal.shell_type}
-                              </div>
-                              <div class="text-xs text-base-content/50 truncate">
-                                {terminal.current_dir}
-                              </div>
+                              {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
                             </div>
+                            <button
+                              class={`btn btn-ghost btn-error btn-xs p-0 btn-square opacity-0 group-hover:opacity-100 transition-opacity ${isActive ? "opacity-100 hover:bg-error/20 hover:text-error" : ""
+                                }`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                stopTerminal(terminal.id);
+                              }}
+                              title="停止终端"
+                            >
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
                           </div>
-                          <button
-                            class={`btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-opacity ${
-                              isActive ? "opacity-100 hover:bg-error/20 hover:text-error" : ""
-                            }`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              stopTerminal(terminal.id);
-                            }}
-                            title="停止终端"
-                          >
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
+                          <div class="text-xs text-base-content/50 truncate">
+                            {truncatePath(terminal.current_dir)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -760,12 +738,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                     </svg>
                   </div>
                   <div class="text-sm text-base-content/60 mb-4">暂无终端</div>
-                  <button
-                    class="btn btn-primary btn-sm"
-                    onClick={() => openCreateDialog()}
-                  >
-                    创建第一个终端
-                  </button>
                 </div>
               )}
             </div>
@@ -852,40 +824,40 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             class={`card bg-base-200 shadow-sm p-3 ${activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
               }`}
           >
-            <div class="flex justify-between items-start">
-              <div class="flex-1 min-w-0">
-                <div class="font-medium truncate">
+            <div class="flex flex-col gap-1">
+              <div class="flex justify-between items-center">
+                <div class="font-medium truncate flex-1">
                   {terminal.name || `Terminal ${terminal.id.slice(0, 8)}`}
                 </div>
-                <div class="text-xs opacity-70 truncate">
-                  {terminal.shell_type} • {terminal.current_dir}
-                </div>
-                <div class="text-xs opacity-50 mt-1">
-                  {terminal.status} • {terminal.size[0]}x{terminal.size[1]}
+                <div class="flex space-x-1 ml-2">
+                  {activeTerminalId() === terminal.id ? (
+                    <div class="badge badge-primary badge-sm">活动</div>
+                  ) : (
+                    <button
+                      class="btn btn-primary btn-xs"
+                      onClick={() => {
+                        connectToTerminal(terminal.id);
+                        if (inDropdown) setShowTerminalMenu(false);
+                      }}
+                      disabled={terminal.status !== "Running"}
+                    >
+                      连接
+                    </button>
+                  )}
+                  <button
+                    class="btn btn-ghost btn-xs"
+                    onClick={() => stopTerminal(terminal.id)}
+                    title="停止终端"
+                  >
+                    🛑
+                  </button>
                 </div>
               </div>
-              <div class="flex space-x-1 ml-2">
-                {activeTerminalId() === terminal.id ? (
-                  <div class="badge badge-primary badge-sm">活动</div>
-                ) : (
-                  <button
-                    class="btn btn-primary btn-xs"
-                    onClick={() => {
-                      connectToTerminal(terminal.id);
-                      if (inDropdown) setShowTerminalMenu(false);
-                    }}
-                    disabled={terminal.status !== "Running"}
-                  >
-                    连接
-                  </button>
-                )}
-                <button
-                  class="btn btn-ghost btn-xs"
-                  onClick={() => stopTerminal(terminal.id)}
-                  title="停止终端"
-                >
-                  🛑
-                </button>
+              <div class="text-xs opacity-70 truncate">
+                {terminal.shell_type} • {truncatePath(terminal.current_dir)}
+              </div>
+              <div class="text-xs opacity-50">
+                {terminal.status} • {terminal.size[0]}x{terminal.size[1]}
               </div>
             </div>
           </div>
@@ -896,15 +868,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         <div class="text-center py-8 opacity-50">
           <div class="text-4xl mb-2">💻</div>
           <div>暂无终端</div>
-          <button
-            class="btn btn-primary btn-sm mt-4"
-            onClick={() => {
-              openCreateDialog();
-              if (inDropdown) setShowTerminalMenu(false);
-            }}
-          >
-            创建第一个终端
-          </button>
         </div>
       )}
     </div>
@@ -930,9 +893,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         <div class="border-t bg-base-200 p-2">
           <div class="flex items-center gap-2">
             <button
-              class={`btn btn-sm btn-square ${
-                showChatHistory() ? 'btn-primary' : 'btn-ghost'
-              }`}
+              class={`btn btn-sm btn-square ${showChatHistory() ? 'btn-primary' : 'btn-ghost'
+                }`}
               onClick={() => setShowChatHistory(!showChatHistory())}
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -973,14 +935,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               <div class="space-y-1">
                 <For each={chatMessages()}>
                   {(message) => (
-                    <div class={`text-xs ${
-                      message.role === 'user' ? 'text-right' : 'text-left'
-                    }`}>
-                      <div class={`inline-block px-2 py-1 rounded ${
-                        message.role === 'user'
-                          ? 'bg-primary text-primary-content'
-                          : 'bg-base-300 text-base-content'
+                    <div class={`text-xs ${message.role === 'user' ? 'text-right' : 'text-left'
                       }`}>
+                      <div class={`inline-block px-2 py-1 rounded ${message.role === 'user'
+                        ? 'bg-primary text-primary-content'
+                        : 'bg-base-300 text-base-content'
+                        }`}>
                         {message.content}
                       </div>
                     </div>
@@ -992,7 +952,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         </div>
 
         {/* Traditional Shortcut Bar */}
-        <div class="border-t bg-base-100 px-2 py-2 flex-shrink-0" style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}>
+        <div class="border-t bg-base-100 px-2 py-2 shrink-0" style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}>
           <div class="flex items-center justify-between gap-1 max-w-full overflow-x-auto scrollbar-hide">
             <For each={shortcuts}>
               {(shortcut) => (
@@ -1026,78 +986,74 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     if (!session) return null;
 
     return (
-      <div class="w-full h-full bg-black flex flex-col">
-        {/* 终端显示区域 */}
-        <div
-          ref={(el) => {
-            terminalContainerRef = el;
-            if (el && el.children.length === 0) {
-              try {
-                console.log("Opening terminal in container:", el);
+      <div
+        ref={(el) => {
+          terminalContainerRef = el;
+          if (el && el.children.length === 0) {
+            try {
+              console.log("Opening terminal in container:", el);
 
-                // 确保容器样式正确
-                el.style.height = '100%';
-                el.style.width = '100%';
-                el.style.overflow = 'hidden';
-                el.style.backgroundColor = '#000000';
-                el.style.padding = '10px';
-                el.style.boxSizing = 'border-box';
+              // 确保容器样式正确
+              el.style.height = '100%';
+              el.style.width = '100%';
+              el.style.overflow = 'hidden';
+              el.style.backgroundColor = '#000000';
+              el.style.padding = '10px';
+              el.style.boxSizing = 'border-box';
 
-                // 打开终端
-                session.terminal.open(el);
+              // 打开终端
+              session.terminal.open(el);
 
-                // 清除初始内容
-                session.terminal.clear();
+              // 清除初始内容
+              session.terminal.clear();
 
-                // 立即 fit 一次
-                setTimeout(() => {
-                  try {
-                    session.fitAddon.fit();
-                    console.log("Initial terminal fit:", {
-                      width: el.clientWidth,
-                      height: el.clientHeight,
-                      rows: session.terminal.rows,
-                      cols: session.terminal.cols
-                    });
-                  } catch (error) {
-                    console.error("Error in initial fit:", error);
-                  }
-                }, 50);
+              // 立即 fit 一次
+              setTimeout(() => {
+                try {
+                  session.fitAddon.fit();
+                  console.log("Initial terminal fit:", {
+                    width: el.clientWidth,
+                    height: el.clientHeight,
+                    rows: session.terminal.rows,
+                    cols: session.terminal.cols
+                  });
+                } catch (error) {
+                  console.error("Error in initial fit:", error);
+                }
+              }, 50);
 
-                // 设置定时 resize 监听
-                const resizeObserver = new ResizeObserver(() => {
-                  try {
-                    session.fitAddon.fit();
-                    console.log("Terminal resized:", {
-                      rows: session.terminal.rows,
-                      cols: session.terminal.cols
-                    });
-                  } catch (error) {
-                    console.error("Error in resize observer:", error);
-                  }
-                });
+              // 设置定时 resize 监听
+              const resizeObserver = new ResizeObserver(() => {
+                try {
+                  session.fitAddon.fit();
+                  console.log("Terminal resized:", {
+                    rows: session.terminal.rows,
+                    cols: session.terminal.cols
+                  });
+                } catch (error) {
+                  console.error("Error in resize observer:", error);
+                }
+              });
 
-                resizeObserver.observe(el);
+              resizeObserver.observe(el);
 
-                // 清理函数
-                setTimeout(() => {
-                  resizeObserver.disconnect();
-                }, 10000); // 10秒后断开观察者，避免内存泄漏
+              // 清理函数
+              setTimeout(() => {
+                resizeObserver.disconnect();
+              }, 10000); // 10秒后断开观察者，避免内存泄漏
 
-              } catch (error) {
-                console.error("Error opening terminal:", error);
-              }
+            } catch (error) {
+              console.error("Error opening terminal:", error);
             }
-          }}
-          class="flex-1 w-full overflow-hidden"
-          style={{
-            height: '100%',
-            'min-height': '0',
-            'background-color': '#000000',
-            'font-family': 'Menlo, Monaco, "Courier New", monospace'
-          }}
-        />
-      </div>
+          }
+        }}
+        class="w-full h-full"
+        style={{
+          overflow: 'hidden',
+          'background-color': '#000000',
+          'font-family': 'Menlo, Monaco, "Courier New", monospace'
+        }}
+      />
     );
   };
 
@@ -1271,7 +1227,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   };
 
   return (
-    <div class={`drawer ${sidebarOpen() ? 'drawer-open' : ''}`} onKeyDown={handleKeyboardShortcuts} tabIndex={0}>
+    <div class="drawer lg:drawer-open" onKeyDown={handleKeyboardShortcuts} tabIndex={0}>
       {/* 创建终端对话框 */}
       <Show when={showCreateDialog()}>
         <div
@@ -1282,7 +1238,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             }
           }}
         >
-          <div 
+          <div
             class="modal-box transition-all duration-300 max-w-md"
             classList={{
               "translate-y-0": !dialogInputFocused() || !isMobile,
@@ -1352,7 +1308,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         </div>
       </Show>
 
-      {/* 侧边栏 */}
+      {/* 侧边栏控制 */}
       <input
         id="left-sidebar-drawer"
         type="checkbox"
@@ -1361,16 +1317,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         onChange={(e) => setSidebarOpen(e.target.checked)}
       />
 
-      {/* 左侧边栏内容 */}
-      <div class="drawer-side">
-        <label for="left-sidebar-drawer" class="drawer-overlay"></label>
-        <aside class="w-72 min-h-full bg-base-100 border-r border-base-300 flex flex-col">
-          {renderDesktopSidebar()}
-        </aside>
-      </div>
-
-      {/* 主内容区域 */}
-      <div class="drawer-content flex flex-col overflow-hidden">
+      {/* 主内容区域 - 必须在 drawer-side 之前 */}
+      <div class="drawer-content flex flex-col overflow-hidden h-screen">
         {/* 桌面端顶部栏 */}
         <Show when={!isMobile}>
           <div class="bg-base-100 border-b border-base-300 px-4 py-3">
@@ -1379,18 +1327,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 {/* 侧边栏切换按钮 */}
                 <label for="left-sidebar-drawer" class="btn btn-ghost btn-sm btn-square cursor-pointer swap swap-rotate">
                   <input type="checkbox" checked={sidebarOpen()} onChange={(e) => setSidebarOpen(e.target.checked)} />
-                  <svg class="swap-off fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512"><path d="M16 132h416c8.837 0 16-7.163 16-16V76c0-8.837-7.163-16-16-16H16C7.163 60 0 67.163 0 76v40c0 8.837 7.163 16 16 16zm0 160h416c8.837 0 16-7.163 16-16v-40c0-8.837-7.163-16-16-16H16c-8.837 0-16 7.163-16 16v40c0 8.837 7.163 16 16 16zm0 160h416c8.837 0 16-7.163 16-16v-40c0-8.837-7.163-16-16-16H16c-8.837 0-16 7.163-16 16v40c0 8.837 7.163 16 16 16z"/></svg>
-                  <svg class="swap-on fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512"><path d="M64 192v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16H80c-8.837 0-16 7.163-16 16zm0 160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16H80c-8.837 0-16 7.163-16 16zm192-160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm192 0v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm-192 160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm192 0v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16z"/></svg>
+                  <svg class="swap-off fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512"><path d="M16 132h416c8.837 0 16-7.163 16-16V76c0-8.837-7.163-16-16-16H16C7.163 60 0 67.163 0 76v40c0 8.837 7.163 16 16 16zm0 160h416c8.837 0 16-7.163 16-16v-40c0-8.837-7.163-16-16-16H16c-8.837 0-16 7.163-16 16v40c0 8.837 7.163 16 16 16zm0 160h416c8.837 0 16-7.163 16-16v-40c0-8.837-7.163-16-16-16H16c-8.837 0-16 7.163-16 16v40c0 8.837 7.163 16 16 16z" /></svg>
+                  <svg class="swap-on fill-current" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512"><path d="M64 192v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16H80c-8.837 0-16 7.163-16 16zm0 160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16H80c-8.837 0-16 7.163-16 16zm192-160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm192 0v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm-192 160v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16zm192 0v64c0 8.837 7.163 16 16 16h32c8.837 0 16-7.163 16-16v-64c0-8.837-7.163-16-16-16h-32c-8.837 0-16 7.163-16 16z" /></svg>
                 </label>
-                <button
-                  class="btn btn-ghost btn-sm btn-square"
-                  onClick={() => setShowMainMenu(!showMainMenu())}
-                  title="菜单"
-                >
-                  <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-5 w-5 stroke-current md:h-6 md:w-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                  </svg>
-                </button>
                 <h1 class="text-lg font-semibold">
                   {(() => {
                     const activeId = activeTerminalId();
@@ -1682,41 +1621,40 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           </div>
         </Show>
 
-        {/* 主终端显示区域 */}
-        <div ref={containerRef} class="flex-1 flex overflow-hidden flex-col min-h-0">
-          {/* 终端显示区域 */}
-          <div class="flex-1 flex overflow-hidden min-h-0">
-            {/* 桌面端和移动端终端显示 */}
-            {renderActiveTerminal()}
-
-            {/* 无活动终端时的占位符 */}
-            {!activeTerminalId() && (
-              <div class="flex-1 flex items-center justify-center bg-base-200">
-                <div class="text-center opacity-50 px-4">
-                  <div class="text-6xl mb-4">💻</div>
-                  <div class="text-xl">选择一个终端开始</div>
-                  <div class="text-sm mt-2">
-                    {isMobile
-                      ? "点击顶部标签或菜单选择终端"
-                      : terminals().length > 0
-                        ? "从左侧边栏选择终端"
-                        : "点击左侧边栏新建按钮创建第一个终端"}
-                  </div>
-                  <Show when={isMobile && terminals().length === 0}>
-                    <button
-                      class="btn btn-primary btn-sm mt-4"
-                      onClick={() => setShowMainMenu(true)}
-                    >
-                      打开菜单
-                    </button>
-                  </Show>
+        {/* 主终端显示区域 - 占据剩余空间 */}
+        <div class="flex-1 overflow-hidden min-h-0">
+          <Show when={activeTerminalId()} fallback={
+            <div class="w-full h-full flex items-center justify-center bg-base-200">
+              <div class="text-center opacity-50 px-4">
+                <div class="text-6xl mb-4">💻</div>
+                <div class="text-xl">选择一个终端开始</div>
+                <div class="text-sm mt-2">
+                  {isMobile
+                    ? "点击顶部标签或菜单选择终端"
+                    : terminals().length > 0
+                      ? "从左侧边栏选择终端"
+                      : "点击左侧边栏新建按钮创建第一个终端"}
                 </div>
+                <Show when={isMobile && terminals().length === 0}>
+                  <button
+                    class="btn btn-primary btn-sm mt-4"
+                    onClick={() => setShowMainMenu(true)}
+                  >
+                    打开菜单
+                  </button>
+                </Show>
               </div>
-            )}
-          </div>
+            </div>
+          }>
+            {/* 终端显示容器 - 直接填充父容器 */}
+            {renderActiveTerminal()}
+          </Show>
+        </div>
 
+        {/* 底部工具栏区域 - 固定在底部 */}
+        <div class="shrink-0">
           {/* AI Chat 工具栏 - 桌面端显示 */}
-          <Show when={!isMobile && activeTerminalId()}>
+          <Show when={activeTerminalId()}>
             <div class="border-t border-base-300 bg-base-200">
               {/* Chat History - 可展开 */}
               <Show when={showChatHistory() && chatMessages().length > 0}>
@@ -1724,14 +1662,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                   <div class="space-y-2">
                     <For each={chatMessages()}>
                       {(message) => (
-                        <div class={`flex gap-2 ${
-                          message.role === 'user' ? 'justify-end' : 'justify-start'
-                        }`}>
-                          <div class={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg ${
-                            message.role === 'user'
-                              ? 'bg-primary text-primary-content'
-                              : 'bg-base-300 text-base-content'
+                        <div class={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'
                           }`}>
+                          <div class={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg ${message.role === 'user'
+                            ? 'bg-primary text-primary-content'
+                            : 'bg-base-300 text-base-content'
+                            }`}>
                             <div class="text-sm">{message.content}</div>
                             {message.command && (
                               <div class="text-xs opacity-70 mt-1 font-mono bg-black/20 px-2 py-1 rounded">
@@ -1751,9 +1687,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 <div class="flex items-center gap-2 max-w-4xl mx-auto">
                   {/* Chat Toggle Button */}
                   <button
-                    class={`btn btn-sm btn-square ${
-                      showChatHistory() ? 'btn-primary' : 'btn-ghost'
-                    }`}
+                    class={`btn btn-sm btn-square ${showChatHistory() ? 'btn-primary' : 'btn-ghost'
+                      }`}
                     onClick={() => setShowChatHistory(!showChatHistory())}
                     title="聊天历史"
                   >
@@ -1769,9 +1704,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
                   {/* AI Status Indicator */}
                   <div class="flex items-center gap-1">
-                    <div class={`w-2 h-2 rounded-full ${
-                      isAiThinking() ? 'bg-warning animate-pulse' : 'bg-success'
-                    }`} />
+                    <div class={`w-2 h-2 rounded-full ${isAiThinking() ? 'bg-warning animate-pulse' : 'bg-success'
+                      }`} />
                     <span class="text-xs text-base-content/60">
                       {isAiThinking() ? 'AI思考中...' : 'AI助手'}
                     </span>
@@ -1872,10 +1806,18 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           </Show>
 
           {/* 底部快捷键栏 - 移动端显示 */}
-          <Show when={isMobile}>
+          <Show when={isMobile && activeTerminalId()}>
             {renderShortcutBar()}
           </Show>
         </div>
+      </div>
+
+      {/* 左侧边栏 - 必须在 drawer-content 之后 */}
+      <div class="drawer-side z-40">
+        <label for="left-sidebar-drawer" class="drawer-overlay"></label>
+        <aside class="w-72 min-h-full bg-base-100 border-r border-base-300 flex flex-col">
+          {renderDesktopSidebar()}
+        </aside>
       </div>
     </div>
   );

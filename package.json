@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@tauri-apps/api": "2.7.0",
+    "@tauri-apps/api": "2.8.0",
     "@tauri-apps/plugin-barcode-scanner": "~2",
     "@tauri-apps/plugin-clipboard-manager": "~2.3.0",
     "@tauri-apps/plugin-http": "~2.5.2",
@@ -37,7 +37,8 @@
     "dev": "vite",
     "tsc": "tsc && vite build",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "browserslist": {
     "production": [

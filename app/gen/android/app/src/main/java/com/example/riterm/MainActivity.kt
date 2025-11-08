@@ -1,4 +1,4 @@
-package com.riterm.app
+package com.example.riterm
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

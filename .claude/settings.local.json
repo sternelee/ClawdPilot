@@ -55,7 +55,11 @@
       "Bash(npm run tsc:*)",
       "Bash(npm run build:*)",
       "Bash(./test_cli_output.sh:*)",
-      "Read(//Users/sternelee/www/github/**)"
+      "Read(//Users/sternelee/www/github/**)",
+      "Bash(npm run tauri:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm view:*)",
+      "Bash(pnpm tauri android build:*)"
     ],
     "deny": []
   },
