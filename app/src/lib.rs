@@ -660,27 +660,7 @@ async fn connect_to_peer(
         );
     });
 
-    // Send a test message to establish the connection
-    let test_message =
-        MessageBuilder::heartbeat("riterm_app".to_string(), 0, "connected".to_string())
-            .with_session(session_id.clone());
-
-    {
-        let client_guard = state.quic_client.read().await;
-        if let Some(quic_client) = client_guard.as_ref() {
-            if let Err(e) = quic_client
-                .send_message_to_server(&connection_id, test_message)
-                .await
-            {
-                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::error!("Failed to send test message: {}", e);
-            } else {
-                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::info!("Test message sent successfully for session: {}", session_id);
-            }
-        }
-    }
-
+    
     // Session is now ready to handle terminal operations
     // Terminal input/output will be handled through the new message protocol
 
