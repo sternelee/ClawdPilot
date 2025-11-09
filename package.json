@@ -1,6 +1,6 @@
 {
   "name": "riterm",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "dependencies": {
     "@tauri-apps/api": "2.8.0",
