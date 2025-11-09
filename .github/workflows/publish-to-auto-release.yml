@@ -1,13 +1,15 @@
-name: "publish-auto-release"
+name: "Release RiTerm CLI and Tauri App"
 
 on:
   push:
     tags:
       - "v*"
 
-# This workflow builds both CLI and Tauri app, then creates a GitHub release with both artifacts
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
+  # Build CLI for multiple platforms
   build-cli:
     permissions:
       contents: write
@@ -15,47 +17,39 @@ jobs:
       matrix:
         include:
           - binary_name: riterm-x86_64-unknown-linux-musl
-            binary_path: target/x86_64-unknown-linux-musl/release/riterm
-            cross: 'true'
+            binary_path: target/x86_64-unknown-linux-musl/release/cli
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
           - binary_name: riterm-aarch64-unknown-linux-musl
-            binary_path: target/aarch64-unknown-linux-musl/release/riterm
-            cross: 'true'
+            binary_path: target/aarch64-unknown-linux-musl/release/cli
             os: ubuntu-latest
             target: aarch64-unknown-linux-musl
           - binary_name: riterm-x86_64-unknown-linux-gnu
-            binary_path: target/x86_64-unknown-linux-gnu/release/riterm
-            cross: 'false'
+            binary_path: target/x86_64-unknown-linux-gnu/release/cli
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - binary_name: riterm-aarch64-unknown-linux-gnu
-            binary_path: target/aarch64-unknown-linux-gnu/release/riterm
-            cross: 'true'
+            binary_path: target/aarch64-unknown-linux-gnu/release/cli
             os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
           - binary_name: riterm-x86_64-apple-darwin
-            binary_path: target/x86_64-apple-darwin/release/riterm
-            cross: 'false'
+            binary_path: target/x86_64-apple-darwin/release/cli
             os: macos-latest
             target: x86_64-apple-darwin
           - binary_name: riterm-aarch64-apple-darwin
-            binary_path: target/aarch64-apple-darwin/release/riterm
-            cross: 'false'
+            binary_path: target/aarch64-apple-darwin/release/cli
             os: macos-latest
             target: aarch64-apple-darwin
           - binary_name: riterm-x86_64-pc-windows-msvc.exe
-            binary_path: target/x86_64-pc-windows-msvc/release/riterm.exe
-            cross: 'false'
+            binary_path: target/x86_64-pc-windows-msvc/release/cli.exe
             os: windows-latest
             target: x86_64-pc-windows-msvc
           - binary_name: riterm-aarch64-pc-windows-msvc.exe
-            binary_path: target/aarch64-pc-windows-msvc/release/riterm.exe
-            cross: 'false'
+            binary_path: target/aarch64-pc-windows-msvc/release/cli.exe
             os: windows-latest
             target: aarch64-pc-windows-msvc
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,18 +61,46 @@ jobs:
       - name: Add Rust target
         run: rustup target add ${{ matrix.target }}
 
+      - name: Install cross-compilation tools (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
       - name: Build CLI
         run: cargo build -p cli --release --target ${{ matrix.target }}
+
+      - name: Rename CLI binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cp "${{ matrix.binary_path }}" "riterm.exe"
+          else
+            cp "${{ matrix.binary_path }}" "riterm"
+          fi
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.target }}
           path: |
-            target/${{ matrix.target }}/release/cli
-            target/${{ matrix.target }}/release/cli.exe
+            riterm
+            riterm.exe
+          retention-days: 30
 
-  publish-tauri:
+  # Build Tauri App for desktop platforms
+  build-desktop-app:
     permissions:
       contents: write
     needs: build-cli
@@ -86,50 +108,53 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest" # for Arm based macs (M1 and above).
+          - platform: "macos-latest"
             args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest" # for Intel based macs.
+            arch: "arm64"
+          - platform: "macos-latest"
             args: "--target x86_64-apple-darwin"
-          - platform: "ubuntu-22.04" # for Tauri v1 you could replace this with ubuntu-20.04.
+            arch: "x64"
+          - platform: "ubuntu-22.04"
             args: ""
+            arch: "x64"
           - platform: "windows-latest"
             args: ""
+            arch: "x64"
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 10
-          run_install: false
-
       - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
-          cache: "pnpm"
+          node-version: "20"
+          cache: "npm"
 
-      - name: install Rust stable
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Those targets are only used on macos runners so it's in an `if` to slightly speed up windows and linux builds.
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04' # This must match the platform value defined above.
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-        # webkitgtk 4.0 is for Tauri v1 - webkitgtk 4.1 is for Tauri v2.
-        # You can remove the one that doesn't apply to your app to speed up the workflow a bit.
 
-      - name: install frontend dependencies
-        run: pnpm install # change this to npm, pnpm or bun depending on which one you use.
+      - name: Install frontend dependencies
+        run: npm ci
 
-      - name: build frontend dist
-        run: pnpm build
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Build frontend
+        run: npm run build
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
@@ -137,85 +162,256 @@ jobs:
           pattern: cli-*
           path: cli-artifacts
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
-          releaseName: "App v__VERSION__"
-          releaseBody: "See the assets to download this version and install."
-          releaseDraft: true
-          prerelease: false
+          tagName: ${{ github.ref_name }}
+          releaseName: "RiTerm ${{ github.ref_name }}"
+          releaseBody: |
+            ## RiTerm ${{ github.ref_name }}
+
+            ### 🖥️ Desktop Apps
+            - **macOS**: Download `.dmg` for Intel or Apple Silicon Macs
+            - **Windows**: Download `.msi` installer
+            - **Linux**: Download `.AppImage` or `.deb` package
+
+            ### 💻 CLI Tools
+            - Pre-compiled binaries for multiple platforms are included
+            - Extract and use the appropriate binary for your system
+
+            ### ✨ Features
+            - Dynamic system information collection
+            - AI-powered terminal command suggestions
+            - Cross-platform P2P terminal sharing
+            - Mobile app support (see mobile releases)
+
+            ---
+            Full changelog and documentation available in the repository.
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
           args: ${{ matrix.args }}
 
-      - name: Upload CLI to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: cli-artifacts/**/*
-          tag: ${{ github.ref }}
-          file_glob: true
-          overwrite: true
-
-  publish-to-release:
-    # This job publishes the compiled artifacts to a separate release repository (sternelee/riterm-release).
-    # It depends on 'publish-tauri' to ensure all artifacts are built and uploaded to the primary release first.
-    needs: publish-tauri
-    runs-on: ubuntu-latest
+  # Build Mobile Apps (optional, requires additional setup)
+  build-mobile-app:
     permissions:
-      contents: write # Required to create and upload assets to a GitHub Release.
-    steps:
-      - name: Checkout current repository
-        uses: actions/checkout@v4
-        # This step checks out the current repository to access the workflow context
-        # (e.g., GITHUB_REF for the tag name that triggered the workflow).
+      contents: write
+    needs: build-cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"
+            type: "android"
+          - platform: "macos-latest"
+            type: "ios"
 
-      - name: Download all workflow artifacts
-        uses: actions/download-artifact@v4
+    runs-on: ${{ matrix.platform }}
+    if: ${{ !contains(github.ref, '-test') }} # Skip mobile builds for test releases
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
         with:
-          # Downloads all artifacts generated by previous jobs in this workflow run.
-          # These artifacts (CLI and Tauri app builds) will be placed into the 'downloaded-artifacts' directory.
-          path: downloaded-artifacts
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Setup Android environment
+        if: matrix.type == 'android'
+        uses: android-actions/setup-android@v3
+
+      - name: Setup iOS environment
+        if: matrix.type == 'ios'
+        run: |
+          brew install xcodegen
+          xcode-select --install
+
+      - name: Build mobile app
+        run: npm run tauri ${{ matrix.type }} build
+
+      - name: Upload mobile artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-${{ matrix.type }}
+          path: |
+            app/gen/android/**/*.apk
+            app/gen/apple/**/*.ipa
+          retention-days: 30
+
+  # Finalize release with all artifacts
+  finalize-release:
+    permissions:
+      contents: write
+    needs: [build-cli, build-desktop-app]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Get tag name
         id: get_tag_name
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        # Extracts the release tag name (e.g., 'v1.0.0' from 'refs/tags/v1.0.0').
+
+      - name: Download all CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          path: cli-binaries
+          merge-multiple: true
+
+      - name: Download mobile artifacts (if available)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mobile-*
+          path: mobile-apps
+          merge-multiple: true
+        continue-on-error: true
+
+      - name: Create release directory
+        run: |
+          mkdir -p release-artifacts
+
+          # Organize CLI binaries
+          cd cli-binaries
+          for binary in riterm*; do
+            if [ -f "$binary" ]; then
+              chmod +x "$binary"
+              mv "$binary" "../release-artifacts/"
+            fi
+          done
+
+          # Add mobile apps if they exist
+          if [ -d "../mobile-apps" ]; then
+            cp -r ../mobile-apps/* ../release-artifacts/
+          fi
+
+      - name: Create checksums
+        run: |
+          cd release-artifacts
+          sha256sum * > checksums.txt || true
+
+      - name: Upload CLI binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: release-artifacts/*
+          tag: ${{ github.ref_name }}
+          file_glob: true
+          overwrite: true
+
+      - name: Update release notes
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "RiTerm ${{ steps.get_tag_name.outputs.TAG_NAME }}"
+          body: |
+            ## RiTerm ${{ steps.get_tag_name.outputs.TAG_NAME }}
+
+            ### 🖥️ Desktop Applications
+            The desktop apps are automatically attached to this release by Tauri.
+            - **macOS**: Download `.dmg` for your architecture (Intel or Apple Silicon)
+            - **Windows**: Download `.msi` installer
+            - **Linux**: Download `.AppImage` or `.deb` package
+
+            ### 💻 CLI Tools
+            Pre-compiled CLI binaries are available below:
+            - **Linux x64**: `riterm-x86_64-unknown-linux-gnu`
+            - **Linux ARM64**: `riterm-aarch64-unknown-linux-gnu`
+            - **Linux x64 (musl)**: `riterm-x86_64-unknown-linux-musl`
+            - **Linux ARM64 (musl)**: `riterm-aarch64-unknown-linux-musl`
+            - **macOS Intel**: `riterm-x86_64-apple-darwin`
+            - **macOS Apple Silicon**: `riterm-aarch64-apple-darwin`
+            - **Windows x64**: `riterm-x86_64-pc-windows-msvc.exe`
+            - **Windows ARM64**: `riterm-aarch64-pc-windows-msvc.exe`
+
+            ### 📱 Mobile Applications
+            Mobile apps are available when built:
+            - **Android**: `.apk` files for installation
+            - **iOS**: `.ipa` files (requires TestFlight or App Store)
+
+            ### 🚀 Quick Start
+            1. **CLI**: Download the appropriate binary for your system, make it executable (`chmod +x riterm-*`), and run `./riterm host`
+            2. **Desktop**: Install the appropriate app for your platform
+            3. **Mobile**: Install the APK or IPA file on your device
+
+            ### ✨ New Features
+            - 🔍 **Dynamic System Information Collection**: Automatically detects your OS, shell, and available tools
+            - 🧠 **AI-Powered Commands**: Get intelligent terminal command suggestions based on your actual system
+            - 🌐 **Cross-Platform P2P**: Share terminal sessions securely across any platform
+            - 📱 **Mobile Support**: Connect to terminal sessions from your mobile device
+
+            ### 🛠️ Technical Improvements
+            - Enhanced message protocol with SystemInfo support
+            - Comprehensive tool detection (git, vim, ripgrep, etc.)
+            - Platform-specific AI prompts and command recommendations
+            - Improved mobile UI with gesture controls and keyboard management
+
+            ### 🔗 Links
+            - [Documentation](https://github.com/sternelee/riterm)
+            - [Report Issues](https://github.com/sternelee/riterm/issues)
+            - [Discussions](https://github.com/sternelee/riterm/discussions)
+
+            ---
+            **SHA256 Checksums**: `checksums.txt` contains the checksums for all CLI binaries.
+            **Mobile Apps**: Available when built successfully. Check the assets section.
+
+            Thank you for using RiTerm! 🎉
+          files: release-artifacts/checksums.txt
+          draft: false
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+          generate_release_notes: true
+
+  # Optional: Sync to separate release repository
+  sync-to-release-repo:
+    if: ${{ !contains(github.ref, '-test') }} # Skip for test releases
+    permissions:
+      contents: write
+    needs: finalize-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+          merge-multiple: true
+
+      - name: Get tag name
+        id: get_tag_name
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Install GitHub CLI
         run: |
-          # The GitHub CLI 'gh' is used to interact with GitHub API for release management.
-          # It's usually pre-installed on GitHub Actions runners, but this ensures its presence.
           sudo apt-get update
           sudo apt-get install -y gh
 
       - name: Create GitHub Release in sternelee/riterm-release
         env:
-          # IMPORTANT: Ensure 'GITHUB_TOKEN' is configured as a repository secret
-          # with write access to the 'sternelee/riterm-release' repository.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_TAG="${{ steps.get_tag_name.outputs.TAG_NAME }}"
-          echo "Attempting to create release '$RELEASE_TAG' in sternelee/riterm-release..."
-          # Creates a new GitHub Release in the specified target repository.
-          # --target links the release to the commit SHA from the *source* repository.
-          # --prerelease flag is set if the tag contains 'beta' or 'alpha'.
-          # The '|| true' allows the workflow to continue even if the release already exists (e.g., on re-run).
+          echo "Syncing release '$RELEASE_TAG' to sternelee/riterm-release..."
+
           gh release create "$RELEASE_TAG" \
             --repo sternelee/riterm-release \
-            --title "Release $RELEASE_TAG" \
-            --notes "Automated release of iroh-code-remote assets. See original repository for more details." \
-            --prerelease=${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') }} \
+            --title "RiTerm $RELEASE_TAG" \
+            --notes "Synced from main repository. See https://github.com/sternelee/riterm/releases/tag/$RELEASE_TAG for details and assets." \
+            --prerelease=${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }} \
             --target "${{ github.sha }}" || true
 
-      - name: Upload artifacts to sternelee/riterm-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          RELEASE_TAG="${{ steps.get_tag_name.outputs.TAG_NAME }}"
-          echo "Uploading artifacts to release '$RELEASE_TAG' in sternelee/riterm-release..."
-          # Finds all downloaded artifact files and uploads them to the newly created (or existing) release.
-          # The --clobber flag ensures that if an asset with the same name already exists, it will be overwritten.
-          find downloaded-artifacts -type f -print0 | xargs -0 -I {} \
+          find downloaded-artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.apk" -o -name "*.ipa" \) -print0 | xargs -0 -I {} \
             gh release upload "$RELEASE_TAG" "{}" --repo sternelee/riterm-release \
             --clobber

@@ -37,8 +37,15 @@
     "dev": "vite",
     "tsc": "tsc && vite build",
     "build": "vite build",
+    "build:release": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "tauri:dev": "tauri dev",
+    "tauri:android:dev": "tauri android dev",
+    "tauri:android:build": "tauri android build",
+    "tauri:ios:dev": "tauri ios dev",
+    "tauri:ios:build": "tauri ios build"
   },
   "browserslist": {
     "production": [
