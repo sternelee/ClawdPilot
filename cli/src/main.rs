@@ -80,7 +80,7 @@ fn setup_logging() -> Result<()> {
         if cfg!(debug_assertions) {
             "info".into()
         } else {
-            "error".into()  // Release模式下默认只显示错误日志
+            "error".into() // Release模式下默认只显示错误日志
         }
     });
 

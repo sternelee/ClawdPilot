@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 iroh = { workspace = true }
-iroh-gossip = { workspace = true }
 bincode = { workspace = true }
 chacha20poly1305 = { workspace = true }
 aead = { workspace = true }
@@ -25,22 +24,4 @@ base64 = { workspace = true }
 hex = { workspace = true }
 uuid = { workspace = true }
 async-trait = "0.1"
-dashmap = "6.1"
 tracing-subscriber = "0.3"
-
-[[bin]]
-name = "test_ticket_connection"
-path = "../test_ticket_connection.rs"
-
-[[bin]]
-name = "test_new_ticket"
-path = "../test_new_ticket.rs"
-
-[[bin]]
-name = "test_connection"
-path = "../test_connection.rs"
-
-[[bin]]
-name = "debug_ticket"
-path = "../debug_ticket.rs"
-

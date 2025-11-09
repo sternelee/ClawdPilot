@@ -59,7 +59,8 @@
       "Bash(npm run tauri:*)",
       "Bash(pnpm install:*)",
       "Bash(pnpm view:*)",
-      "Bash(pnpm tauri android build:*)"
+      "Bash(pnpm tauri android build:*)",
+      "Bash(npm ls:*)"
     ],
     "deny": []
   },

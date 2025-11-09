@@ -6,10 +6,10 @@
 use anyhow::Result;
 use portable_pty::{CommandBuilder, MasterPty, PtySize};
 use riterm_shared::{
-    CommunicationManager, IODataType, Message, MessageHandler, MessagePayload, MessageType,
-    QuicMessageServer, QuicMessageServerConfig, ResponseMessage, SystemAction, TcpForwardingAction,
-    TcpForwardingType, TerminalAction, SystemInfoAction, SystemInfo, OSInfo, ShellInfo, AvailableTools,
-    PackageManager, Tool, UserInfo,
+    AvailableTools, CommunicationManager, IODataType, Message, MessageHandler, MessagePayload,
+    MessageType, OSInfo, PackageManager, QuicMessageServer, QuicMessageServerConfig,
+    ResponseMessage, ShellInfo, SystemAction, SystemInfo, SystemInfoAction, TcpForwardingAction,
+    TcpForwardingType, TerminalAction, Tool, UserInfo,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,8 +17,8 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener as TokioTcpListener, TcpStream as TokioTcpStream};
-use tokio::sync::{RwLock, mpsc};
 use tokio::process::Command;
+use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -195,9 +195,12 @@ impl CliMessageServer {
         // 获取默认终端路径
         let shell_config = ShellDetector::get_shell_config();
         let default_shell_path = shell_config.shell_path.clone();
-        
+
         #[cfg(debug_assertions)]
-        info!("🐚 Detected shell: {} at {}", shell_config.shell_type, default_shell_path);
+        info!(
+            "🐚 Detected shell: {} at {}",
+            shell_config.shell_type, default_shell_path
+        );
 
         // 创建通信管理器
         let communication_manager =
@@ -352,13 +355,6 @@ impl CliMessageServer {
         );
         tracing::info!("🎫 Ticket preview: {}...", &ticket[..50.min(ticket.len())]);
 
-        // Save full ticket to file for testing
-        if let Ok(mut file) = std::fs::File::create("current_ticket.txt") {
-            use std::io::Write;
-            let _ = file.write_all(ticket.as_bytes());
-            tracing::info!("💾 Full ticket saved to current_ticket.txt");
-        }
-
         Ok(ticket)
     }
 
@@ -446,7 +442,10 @@ impl TerminalMessageHandler {
             if let Some(custom_shell) = &shell_path {
                 info!("✨ Using custom shell: {}", custom_shell);
             } else {
-                info!("🐚 Using default shell from CLI startup: {}", self.default_shell_path);
+                info!(
+                    "🐚 Using default shell from CLI startup: {}",
+                    self.default_shell_path
+                );
             }
         }
 
@@ -464,7 +463,12 @@ impl TerminalMessageHandler {
             cmd.cwd(&work_dir);
         } else {
             // 如果没有指定工作目录，使用CLI启动时的工作目录
-            cmd.cwd(&std::env::current_dir().unwrap_or_default().to_string_lossy().as_ref());
+            cmd.cwd(
+                &std::env::current_dir()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .as_ref(),
+            );
         }
 
         // 启动 shell
@@ -1722,11 +1726,19 @@ impl SystemInfoMessageHandler {
             // macOS 特定的信息收集
             match self.run_command("sw_vers", &["-productName"]).await {
                 Ok(product_name) => {
-                    let version = self.run_command("sw_vers", &["-productVersion"]).await.unwrap_or_default();
-                    let kernel_version = self.run_command("uname", &["-r"]).await.unwrap_or_default();
+                    let version = self
+                        .run_command("sw_vers", &["-productVersion"])
+                        .await
+                        .unwrap_or_default();
+                    let kernel_version =
+                        self.run_command("uname", &["-r"]).await.unwrap_or_default();
                     (product_name, version, kernel_version)
                 }
-                Err(_) => ("macOS".to_string(), "Unknown".to_string(), "Unknown".to_string())
+                Err(_) => (
+                    "macOS".to_string(),
+                    "Unknown".to_string(),
+                    "Unknown".to_string(),
+                ),
             }
         } else if cfg!(target_os = "linux") {
             // Linux 特定的信息收集
@@ -1739,7 +1751,8 @@ impl SystemInfoMessageHandler {
                 "Linux".to_string()
             };
 
-            let version = self.run_command("lsb_release", &["-r", "-s"])
+            let version = self
+                .run_command("lsb_release", &["-r", "-s"])
                 .await
                 .unwrap_or_else(|_| "Unknown".to_string());
 
@@ -1748,12 +1761,19 @@ impl SystemInfoMessageHandler {
         } else if cfg!(target_os = "windows") {
             // Windows 特定的信息收集
             let name = "Windows".to_string();
-            let version = self.run_command("cmd", &["/c", "ver"]).await.unwrap_or_else(|_| "Unknown".to_string());
+            let version = self
+                .run_command("cmd", &["/c", "ver"])
+                .await
+                .unwrap_or_else(|_| "Unknown".to_string());
             let kernel_version = version.clone();
             (name, version, kernel_version)
         } else {
             // 其他操作系统
-            (os_type.clone(), "Unknown".to_string(), "Unknown".to_string())
+            (
+                os_type.clone(),
+                "Unknown".to_string(),
+                "Unknown".to_string(),
+            )
         };
 
         Ok(OSInfo {
@@ -1770,13 +1790,22 @@ impl SystemInfoMessageHandler {
 
         let default_shell = shell_detector.shell_path.clone();
         let shell_type = shell_detector.shell_type.clone();
-        let shell_version = self.get_shell_version(&default_shell).await.unwrap_or_else(|_| "Unknown".to_string());
+        let shell_version = self
+            .get_shell_version(&default_shell)
+            .await
+            .unwrap_or_else(|_| "Unknown".to_string());
 
         // 查找可用的 shells
         let mut available_shells = Vec::new();
 
         let potential_shells = if cfg!(target_os = "macos") || cfg!(target_os = "linux") {
-            vec!["/bin/bash", "/bin/zsh", "/bin/fish", "/bin/sh", "/usr/bin/fish"]
+            vec![
+                "/bin/bash",
+                "/bin/zsh",
+                "/bin/fish",
+                "/bin/sh",
+                "/usr/bin/fish",
+            ]
         } else if cfg!(target_os = "windows") {
             vec!["powershell", "cmd"]
         } else {
@@ -2050,8 +2079,10 @@ impl SystemInfoMessageHandler {
     /// 收集用户信息
     fn collect_user_info(&self) -> UserInfo {
         UserInfo {
-            username: std::env::var("USER").unwrap_or_else(|_| std::env::var("USERNAME").unwrap_or_default()),
-            home_directory: std::env::var("HOME").unwrap_or_else(|_| std::env::var("USERPROFILE").unwrap_or_default()),
+            username: std::env::var("USER")
+                .unwrap_or_else(|_| std::env::var("USERNAME").unwrap_or_default()),
+            home_directory: std::env::var("HOME")
+                .unwrap_or_else(|_| std::env::var("USERPROFILE").unwrap_or_default()),
             current_directory: std::env::current_dir()
                 .unwrap_or_default()
                 .to_string_lossy()
@@ -2063,9 +2094,9 @@ impl SystemInfoMessageHandler {
 
     /// 检查命令是否存在
     async fn check_command_exists(&self, command: &str) -> bool {
-        self.run_command("which", &[command]).await.is_ok() ||
-        self.run_command("whereis", &[command]).await.is_ok() ||
-        self.run_command("command", &["-v", command]).await.is_ok()
+        self.run_command("which", &[command]).await.is_ok()
+            || self.run_command("whereis", &[command]).await.is_ok()
+            || self.run_command("command", &["-v", command]).await.is_ok()
     }
 
     /// 获取工具版本
@@ -2076,7 +2107,10 @@ impl SystemInfoMessageHandler {
         for arg in version_args {
             if let Ok(output) = self.run_command(command, &[arg]).await {
                 let cleaned = output.trim().to_string();
-                if !cleaned.is_empty() && !cleaned.contains("not found") && !cleaned.contains("command not found") {
+                if !cleaned.is_empty()
+                    && !cleaned.contains("not found")
+                    && !cleaned.contains("command not found")
+                {
                     return Ok(cleaned);
                 }
             }
@@ -2109,20 +2143,20 @@ impl SystemInfoMessageHandler {
 
     /// 运行命令并获取输出
     async fn run_command(&self, command: &str, args: &[&str]) -> Result<String> {
-        let output = Command::new(command)
-            .args(args)
-            .output()
-            .await;
+        let output = Command::new(command).args(args).output().await;
 
         match output {
             Ok(output) => {
                 if output.status.success() {
                     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
                 } else {
-                    Err(anyhow::anyhow!("Command failed: {}", String::from_utf8_lossy(&output.stderr)))
+                    Err(anyhow::anyhow!(
+                        "Command failed: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ))
                 }
             }
-            Err(e) => Err(anyhow::anyhow!("Failed to run command {}: {}", command, e))
+            Err(e) => Err(anyhow::anyhow!("Failed to run command {}: {}", command, e)),
         }
     }
 }
@@ -2141,7 +2175,7 @@ impl MessageHandler for SystemInfoMessageHandler {
                                     riterm_shared::message_protocol::SystemInfoMessage {
                                         action: SystemInfoAction::SystemInfoResponse(system_info),
                                         request_id: system_info_msg.request_id.clone(),
-                                    }
+                                    },
                                 );
                                 return Ok(Some(message.create_response(response_payload)));
                             }
@@ -2152,8 +2186,11 @@ impl MessageHandler for SystemInfoMessageHandler {
                                         request_id: message.id.clone(),
                                         success: false,
                                         data: None,
-                                        message: Some(format!("Failed to collect system info: {}", e)),
-                                    })
+                                        message: Some(format!(
+                                            "Failed to collect system info: {}",
+                                            e
+                                        )),
+                                    }),
                                 )));
                             }
                         }

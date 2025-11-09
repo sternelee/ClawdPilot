@@ -23,11 +23,6 @@ import {
 import { getViewportManager } from "./utils/mobile/ViewportManager";
 import type { ViewportDimensions } from "./utils/mobile/ViewportManager";
 
-// 在开发环境中导入测试脚本
-if (import.meta.env.DEV) {
-  import("./utils/testSessionManager");
-}
-
 function App() {
   const [sessionTicket, setSessionTicket] = createSignal("");
   const [connecting, setConnecting] = createSignal(false);
@@ -63,7 +58,7 @@ function App() {
   let fitAddon: FitAddon | null = null;
   let unlistenRef: (() => void) | null = null;
 
-  
+
   // Enhanced mobile initialization and keyboard state management
   onMount(() => {
     // Time update timer
@@ -144,7 +139,7 @@ function App() {
       );
     }
 
-  
+
     if (sessionIdRef) {
       try {
         await invoke("disconnect_session", { sessionId: sessionIdRef });
@@ -196,7 +191,7 @@ function App() {
       return;
     }
 
-      setConnecting(true);
+    setConnecting(true);
     setStatus(t("connection.status.connecting"));
     setConnectionError(null);
 
@@ -221,7 +216,7 @@ function App() {
       setActiveTicket(ticket);
       setIsConnected(true);
       setCurrentView("remote");
-  
+
       const unlisten = await listen<any>(
         `terminal-event-${actualSessionId}`,
         (event) => {
@@ -276,7 +271,7 @@ function App() {
     setIsLoggedIn(true);
   };
 
-  
+
   return (
     <div
       class="w-full font-mono mobile-viewport"

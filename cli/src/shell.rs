@@ -124,30 +124,32 @@ impl ShellDetector {
     pub fn get_shell_path() -> String {
         #[cfg(unix)]
         {
-            std::env::var("SHELL")
-                .unwrap_or_else(|_| {
-                    // Fallback to common shell paths
-                    if std::path::Path::new("/bin/zsh").exists() {
-                        "/bin/zsh".to_string()
-                    } else if std::path::Path::new("/bin/bash").exists() {
-                        "/bin/bash".to_string()
-                    } else {
-                        "sh".to_string()
-                    }
-                })
+            std::env::var("SHELL").unwrap_or_else(|_| {
+                // Fallback to common shell paths
+                if std::path::Path::new("/bin/zsh").exists() {
+                    "/bin/zsh".to_string()
+                } else if std::path::Path::new("/bin/bash").exists() {
+                    "/bin/bash".to_string()
+                } else {
+                    "sh".to_string()
+                }
+            })
         }
 
         #[cfg(windows)]
         {
             // Try to find PowerShell
-            std::env::var("COMSPEC")
-                .unwrap_or_else(|_| {
-                    if std::path::Path::new("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe").exists() {
-                        "powershell.exe".to_string()
-                    } else {
-                        "cmd.exe".to_string()
-                    }
-                })
+            std::env::var("COMSPEC").unwrap_or_else(|_| {
+                if std::path::Path::new(
+                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                )
+                .exists()
+                {
+                    "powershell.exe".to_string()
+                } else {
+                    "cmd.exe".to_string()
+                }
+            })
         }
     }
 

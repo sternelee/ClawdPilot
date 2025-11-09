@@ -191,19 +191,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   };
 
-  // 获取系统信息
-  const fetchSystemInfo = async () => {
-    try {
-      const response = await invoke("get_system_info", { sessionId: props.sessionId });
-      console.log("System info received:", response);
-      setSystemInfo(response);
-      return response;
-    } catch (error) {
-      console.error("Failed to fetch system info:", error);
-      return null;
-    }
-  };
-
   // 获取下一个可用的本地端口（从6001开始递增）
   const getNextAvailableLocalPort = () => {
     const services = tcpServices();
@@ -424,7 +411,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       const fitAddon = new FitAddon();
       const canvasAddon = new CanvasAddon();
-      
+
       terminal.loadAddon(fitAddon);
       terminal.loadAddon(canvasAddon);
 
@@ -683,9 +670,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     // 初始加载数据
     await fetchTerminals();
 
-    // 获取系统信息
-    await fetchSystemInfo();
-
     setLoading(false);
 
     // 添加 resize 监听器 - 使用 debounce
@@ -936,10 +920,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                       <div class="flex items-center justify-between">
                         <div class="flex-1">
                           <div class="flex items-center gap-2 mb-1">
-                            <div class={`w-2 h-2 rounded-full ${
-                              service.status === 'active' ? 'bg-green-400' :
+                            <div class={`w-2 h-2 rounded-full ${service.status === 'active' ? 'bg-green-400' :
                               service.status === 'error' ? 'bg-red-400' : 'bg-gray-400'
-                            }`} />
+                              }`} />
                             <span class="font-medium">端口转发</span>
                           </div>
                           <div class="text-sm text-base-content/70">
@@ -1693,8 +1676,8 @@ ${Object.entries(environment_vars).slice(0, 5).map(([key, value]) => `- ${key}: 
         defaultShell: shell_info.shell_type,
         packageManager: available_tools.package_managers[0] || '系统包管理器',
         preferredSearchTool: available_tools.search_tools.includes('rg') ? 'rg' :
-                           available_tools.search_tools.includes('ag') ? 'ag' :
-                           available_tools.search_tools.includes('ack') ? 'ack' : 'grep',
+          available_tools.search_tools.includes('ag') ? 'ag' :
+            available_tools.search_tools.includes('ack') ? 'ack' : 'grep',
         preferredFindTool: available_tools.search_tools.includes('fd') ? 'fd' : 'find',
         preferredEditor: available_tools.editors[0] || 'vim'
       };
@@ -1738,9 +1721,9 @@ ${Object.entries(environment_vars).slice(0, 5).map(([key, value]) => `- ${key}: 
     } else if (message.includes('搜索') || message.includes('查找')) {
       if (message.includes('文本') || message.includes('内容')) {
         const searchCommand = systemInfo.preferredSearchTool === 'rg' ? "rg -i 'search_term' ." :
-                             systemInfo.preferredSearchTool === 'ag' ? "ag -i 'search_term'" :
-                             systemInfo.preferredSearchTool === 'ack' ? "ack -i 'search_term'" :
-                             "grep -r 'search_term' .";
+          systemInfo.preferredSearchTool === 'ag' ? "ag -i 'search_term'" :
+            systemInfo.preferredSearchTool === 'ack' ? "ack -i 'search_term'" :
+              "grep -r 'search_term' .";
         return {
           explanation: `在当前目录及其子目录中搜索文本内容。推荐使用 ${systemInfo.preferredSearchTool}，它在 ${systemInfo.osName} 上效率很高。`,
           commands: [{
@@ -1808,8 +1791,8 @@ ${Object.entries(environment_vars).slice(0, 5).map(([key, value]) => `- ${key}: 
       };
     } else if (message.includes('系统信息') || message.includes('system')) {
       const systemCommand = systemInfo.osName.toLowerCase().includes('macos') ? "system_profiler SPSoftwareDataType" :
-                           systemInfo.osName.toLowerCase().includes('linux') ? "uname -a && lsb_release -a" :
-                           "uname -a";
+        systemInfo.osName.toLowerCase().includes('linux') ? "uname -a && lsb_release -a" :
+          "uname -a";
       return {
         explanation: `显示 ${systemInfo.osName} 系统信息。`,
         commands: [{
