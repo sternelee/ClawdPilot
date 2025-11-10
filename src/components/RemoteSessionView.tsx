@@ -301,7 +301,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 获取终端列表
   const fetchTerminals = async () => {
     try {
-      await invoke("get_terminal_list", { sessionId: props.sessionId });
+      await invoke("get_terminal_list", {
+        request: { session_id: props.sessionId },
+      });
     } catch (error) {
       console.error("Failed to fetch terminal list:", error);
     }
@@ -461,8 +463,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const stopTerminal = async (terminalId: string) => {
     try {
       await invoke("stop_terminal", {
-        sessionId: props.sessionId,
-        terminalId,
+        request: {
+          session_id: props.sessionId,
+          terminal_id: terminalId,
+        },
       });
 
       // 清理本地终端会话
@@ -674,8 +678,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       // 告诉CLI端我们连接到了这个终端
       await invoke("connect_to_terminal", {
-        sessionId: props.sessionId,
-        terminalId,
+        request: {
+          session_id: props.sessionId,
+          terminal_id: terminalId,
+        },
       });
 
       // 更新连接状态
