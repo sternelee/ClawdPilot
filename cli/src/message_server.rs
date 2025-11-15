@@ -125,8 +125,21 @@ pub struct InternalTcpForwardingSession {
 
 /// TCP 连接信息
 pub struct TcpConnection {
+    pub stream: Option<TokioTcpStream>,
     pub bytes_sent: u64,
     pub bytes_received: u64,
+    pub created_at: std::time::SystemTime,
+}
+
+impl Default for TcpConnection {
+    fn default() -> Self {
+        Self {
+            stream: None,
+            bytes_sent: 0,
+            bytes_received: 0,
+            created_at: std::time::SystemTime::now(),
+        }
+    }
 }
 
 impl Default for TcpForwardingSession {
@@ -252,9 +265,19 @@ impl CliMessageServer {
             .await;
 
         // 注册 TCP 转发处理器
-        let tcp_handler = Arc::new(TcpForwardingMessageHandler::new(self.tcp_sessions.clone()));
+        let tcp_handler = Arc::new(TcpForwardingMessageHandler::new(
+            self.tcp_sessions.clone(),
+            self.communication_manager.clone(),
+            self.quic_server.clone(),
+        ));
         self.communication_manager
             .register_message_handler(tcp_handler)
+            .await;
+
+        // 注册 TCP 数据处理器
+        let tcp_data_handler = Arc::new(TcpDataMessageHandler::new(self.tcp_sessions.clone()));
+        self.communication_manager
+            .register_message_handler(tcp_data_handler)
             .await;
 
         // 注册系统控制处理器
@@ -1090,11 +1113,21 @@ impl MessageHandler for TerminalIOHandler {
 /// TCP 转发消息处理器
 pub struct TcpForwardingMessageHandler {
     tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>,
+    communication_manager: Arc<CommunicationManager>,
+    quic_server: QuicMessageServer,
 }
 
 impl TcpForwardingMessageHandler {
-    pub fn new(tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>) -> Self {
-        Self { tcp_sessions }
+    pub fn new(
+        tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>,
+        communication_manager: Arc<CommunicationManager>,
+        quic_server: QuicMessageServer,
+    ) -> Self {
+        Self {
+            tcp_sessions,
+            communication_manager,
+            quic_server,
+        }
     }
 
     /// 创建 TCP 转发会话
@@ -1257,14 +1290,16 @@ impl TcpForwardingMessageHandler {
             .await
             .map_err(|e| anyhow::anyhow!("Failed to connect to remote {}: {}", remote_addr, e))?;
 
-        // 记录连接信息
+        // 记录连接信息（不存储流，流将在数据转发中处理）
         {
             let mut conn_map = connections.write().await;
             conn_map.insert(
                 connection_id.clone(),
                 TcpConnection {
+                    stream: None, // 流不在这里存储，而是由数据转发逻辑管理
                     bytes_sent: 0,
                     bytes_received: 0,
+                    created_at: std::time::SystemTime::now(),
                 },
             );
         }
@@ -1428,23 +1463,49 @@ impl MessageHandler for TcpForwardingMessageHandler {
                             .await
                         {
                             Ok(session_id) => {
-                                let response_data = serde_json::json!({
-                                    "session_id": session_id,
-                                    "status": "created"
-                                });
-                                return Ok(Some(
-                                    message.create_response(MessagePayload::Response(
-                                        ResponseMessage {
-                                            request_id: message.id.clone(),
-                                            success: true,
-                                            data: Some(response_data.to_string()),
-                                            message: Some(
-                                                "TCP forwarding session created successfully"
-                                                    .to_string(),
-                                            ),
-                                        },
-                                    )),
-                                ));
+                                // 创建会话成功后，获取最新的会话列表并包含在响应中
+                                match self.list_tcp_forwarding_sessions().await {
+                                    Ok(sessions) => {
+                                        let response_data = serde_json::json!({
+                                            "session_id": session_id,
+                                            "status": "created",
+                                            "sessions": sessions
+                                        });
+                                        return Ok(Some(
+                                            message.create_response(MessagePayload::Response(
+                                                ResponseMessage {
+                                                    request_id: message.id.clone(),
+                                                    success: true,
+                                                    data: Some(response_data.to_string()),
+                                                    message: Some(
+                                                        "TCP forwarding session created successfully"
+                                                            .to_string(),
+                                                    ),
+                                                },
+                                            )),
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        // 如果获取列表失败，至少返回创建成功的消息
+                                        let response_data = serde_json::json!({
+                                            "session_id": session_id,
+                                            "status": "created"
+                                        });
+                                        return Ok(Some(
+                                            message.create_response(MessagePayload::Response(
+                                                ResponseMessage {
+                                                    request_id: message.id.clone(),
+                                                    success: true,
+                                                    data: Some(response_data.to_string()),
+                                                    message: Some(
+                                                        "TCP forwarding session created successfully"
+                                                            .to_string(),
+                                                    ),
+                                                },
+                                            )),
+                                        ));
+                                    }
+                                }
                             }
                             Err(e) => {
                                 return Ok(Some(message.create_response(
@@ -1464,19 +1525,49 @@ impl MessageHandler for TcpForwardingMessageHandler {
                     TcpForwardingAction::StopSession { session_id } => {
                         match self.stop_tcp_forwarding_session(session_id).await {
                             Ok(()) => {
-                                return Ok(Some(
-                                    message.create_response(MessagePayload::Response(
-                                        ResponseMessage {
-                                            request_id: message.id.clone(),
-                                            success: true,
-                                            data: None,
-                                            message: Some(
-                                                "TCP forwarding session stopped successfully"
-                                                    .to_string(),
-                                            ),
-                                        },
-                                    )),
-                                ));
+                                // 停止会话成功后，获取最新的会话列表并包含在响应中
+                                match self.list_tcp_forwarding_sessions().await {
+                                    Ok(sessions) => {
+                                        let response_data = serde_json::json!({
+                                            "session_id": session_id,
+                                            "status": "stopped",
+                                            "sessions": sessions
+                                        });
+                                        return Ok(Some(
+                                            message.create_response(MessagePayload::Response(
+                                                ResponseMessage {
+                                                    request_id: message.id.clone(),
+                                                    success: true,
+                                                    data: Some(response_data.to_string()),
+                                                    message: Some(
+                                                        "TCP forwarding session stopped successfully"
+                                                            .to_string(),
+                                                    ),
+                                                },
+                                            )),
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        // 如果获取列表失败，至少返回停止成功的消息
+                                        let response_data = serde_json::json!({
+                                            "session_id": session_id,
+                                            "status": "stopped"
+                                        });
+                                        return Ok(Some(
+                                            message.create_response(MessagePayload::Response(
+                                                ResponseMessage {
+                                                    request_id: message.id.clone(),
+                                                    success: true,
+                                                    data: Some(response_data.to_string()),
+                                                    message: Some(
+                                                        "TCP forwarding session stopped successfully"
+                                                            .to_string(),
+                                                    ),
+                                                },
+                                            )),
+                                        ));
+                                    }
+                                }
                             }
                             Err(e) => {
                                 return Ok(Some(message.create_response(
@@ -2209,5 +2300,135 @@ impl MessageHandler for SystemInfoMessageHandler {
 
     fn supported_message_types(&self) -> Vec<MessageType> {
         vec![MessageType::SystemInfo]
+    }
+}
+
+/// TCP 数据消息处理器
+pub struct TcpDataMessageHandler {
+    tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>,
+}
+
+impl TcpDataMessageHandler {
+    pub fn new(tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>) -> Self {
+        Self { tcp_sessions }
+    }
+
+    /// 处理 TCP 数据消息
+    async fn handle_tcp_data(
+        &self,
+        session_id: &str,
+        connection_id: &str,
+        data: &[u8],
+        data_type: &riterm_shared::message_protocol::TcpDataType,
+    ) -> Result<()> {
+        let sessions = self.tcp_sessions.read().await;
+        if let Some(internal_session) = sessions.get(session_id) {
+            match data_type {
+                riterm_shared::message_protocol::TcpDataType::Data => {
+                    // 转发数据到对应的 TCP 连接
+                    let mut connections = internal_session.connections.write().await;
+                    if let Some(conn_info) = connections.get_mut(connection_id) {
+                        if let Some(stream) = &mut conn_info.stream {
+                            match tokio::io::AsyncWriteExt::write_all(stream, data).await {
+                                Ok(_) => {
+                                    conn_info.bytes_sent += data.len() as u64;
+                                    debug!(
+                                        "TCP data forwarded to connection {}: {} bytes",
+                                        connection_id,
+                                        data.len()
+                                    );
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Failed to forward TCP data to connection {}: {}",
+                                        connection_id, e
+                                    );
+                                    // 连接可能已经断开，移除流对象但保留统计信息
+                                    conn_info.stream = None;
+                                }
+                            }
+                        } else {
+                            warn!("TCP stream not available for connection {}", connection_id);
+                        }
+                    } else {
+                        warn!("TCP connection not found: {}", connection_id);
+                    }
+                }
+                riterm_shared::message_protocol::TcpDataType::ConnectionOpen => {
+                    info!(
+                        "TCP connection open requested for session {} connection {}",
+                        session_id, connection_id
+                    );
+                    // 连接打开通常由服务端主动发起，这里主要是记录
+                }
+                riterm_shared::message_protocol::TcpDataType::ConnectionClose => {
+                    info!(
+                        "TCP connection close requested for session {} connection {}",
+                        session_id, connection_id
+                    );
+                    let mut connections = internal_session.connections.write().await;
+                    if let Some(conn_info) = connections.get_mut(connection_id) {
+                        // 关闭 TCP 流
+                        if let Some(mut stream) = conn_info.stream.take() {
+                            let _ = stream.shutdown().await;
+                        }
+                    }
+                }
+                riterm_shared::message_protocol::TcpDataType::Error => {
+                    error!(
+                        "TCP error for session {} connection {}: {:?}",
+                        session_id,
+                        connection_id,
+                        String::from_utf8_lossy(data)
+                    );
+                }
+            }
+        } else {
+            warn!("TCP session not found: {}", session_id);
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for TcpDataMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        match &message.payload {
+            MessagePayload::TcpData(tcp_data_msg) => {
+                debug!(
+                    "Received TCP data message: session_id={}, connection_id={}, data_type={:?}, data_len={}",
+                    tcp_data_msg.session_id,
+                    tcp_data_msg.connection_id,
+                    tcp_data_msg.data_type,
+                    tcp_data_msg.data.len()
+                );
+
+                // 处理 TCP 数据，不返回响应（高频操作）
+                if let Err(e) = self
+                    .handle_tcp_data(
+                        &tcp_data_msg.session_id,
+                        &tcp_data_msg.connection_id,
+                        &tcp_data_msg.data,
+                        &tcp_data_msg.data_type,
+                    )
+                    .await
+                {
+                    error!("Failed to process TCP data: {}", e);
+                    return Ok(Some(message.create_error_response(format!(
+                        "TCP data processing failed: {}",
+                        e
+                    ))));
+                }
+
+                // TCP 数据消息不需要响应
+                return Ok(None);
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::TcpData]
     }
 }

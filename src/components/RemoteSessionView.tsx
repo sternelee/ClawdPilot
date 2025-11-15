@@ -9,6 +9,7 @@ import { getDeviceCapabilities } from "../stores/deviceStore";
 import { useTerminalSessions } from "../stores/terminalSessionStore";
 import { useTerminalSession } from "../hooks/useTerminalSession";
 import { MobileKeyboard } from "../utils/mobile";
+import { TcpForwardingManager } from "./TcpForwardingManager";
 // Import types from the shared library
 interface TerminalInfo {
   id: string;
@@ -55,7 +56,7 @@ class SmartCtrlCHandler {
   private readonly rapidPressThreshold = 500; // 500ms内视为快速连按
   private readonly maxRetries = 3;
 
-  constructor(private onSendData: (data: string) => void) {}
+  constructor(private onSendData: (data: string) => void) { }
 
   handleCtrlC(): void {
     const now = Date.now();
@@ -1159,11 +1160,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                   const isActive = activeTerminalId() === terminal.id;
                   return (
                     <div
-                      class={`card card-compact p-0! cursor-pointer transition-all duration-200 group ${
-                        isActive
+                      class={`card card-compact p-0! cursor-pointer transition-all duration-200 group ${isActive
                           ? "bg-primary/5 border border-primary shadow-sm"
                           : "bg-base-200 hover:bg-base-300"
-                      }`}
+                        }`}
                       onClick={() => {
                         if (terminal.status === "Running") {
                           connectToTerminal(terminal.id);
@@ -1174,19 +1174,17 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                         <div class="flex flex-col gap-1">
                           <div class="flex items-center justify-between gap-2">
                             <div
-                              class={`font-semibold truncate text-base flex-1 ${
-                                isActive ? "text-primary" : "text-base-content"
-                              }`}
+                              class={`font-semibold truncate text-base flex-1 ${isActive ? "text-primary" : "text-base-content"
+                                }`}
                             >
                               {terminal.name ||
                                 `Terminal ${terminal.id.slice(0, 8)}`}
                             </div>
                             <button
-                              class={`btn btn-ghost btn-error btn-xs p-0 btn-square opacity-0 group-hover:opacity-100 transition-opacity ${
-                                isActive
+                              class={`btn btn-ghost btn-error btn-xs p-0 btn-square opacity-0 group-hover:opacity-100 transition-opacity ${isActive
                                   ? "opacity-100 hover:bg-error/20 hover:text-error"
                                   : ""
-                              }`}
+                                }`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 stopTerminal(terminal.id);
@@ -1244,115 +1242,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
         {/* TCP 服务标签页内容 */}
         <Show when={activeSidebarTab() === "services"}>
-          <div class="p-4">
-            {/* 服务操作按钮 */}
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-bold text-sm uppercase tracking-wide text-base-content/70">
-                TCP 服务管理
-              </h3>
-              <button
-                class="btn btn-primary btn-sm"
-                title="添加服务"
-                onClick={() => openTcpDialog()}
-              >
-                <svg
-                  class="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            {/* 服务列表 */}
-            <Show
-              when={tcpServices().length > 0}
-              fallback={
-                <div class="text-center py-8">
-                  <div class="mask mask-squircle w-14 h-14 mx-auto mb-3 bg-base-200 flex items-center justify-center">
-                    <svg
-                      class="w-7 h-7 text-base-content/20"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                      />
-                    </svg>
-                  </div>
-                  <div class="text-sm text-base-content/50 mb-3">
-                    暂无TCP服务
-                  </div>
-                  <div class="text-xs text-base-content/40 space-y-1">
-                    <p>可以在此管理TCP端口转发服务</p>
-                    <p>支持本地端口映射到远程服务</p>
-                  </div>
-                </div>
-              }
-            >
-              <div class="space-y-3">
-                <For each={tcpServices()}>
-                  {(service) => (
-                    <div class="card bg-base-200 shadow-sm p-4">
-                      <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                          <div class="flex items-center gap-2 mb-1">
-                            <div
-                              class={`w-2 h-2 rounded-full ${
-                                service.status === "active"
-                                  ? "bg-green-400"
-                                  : service.status === "error"
-                                    ? "bg-red-400"
-                                    : "bg-gray-400"
-                              }`}
-                            />
-                            <span class="font-medium">端口转发</span>
-                          </div>
-                          <div class="text-sm text-base-content/70">
-                            {service.localPort} → {service.remotePort}
-                          </div>
-                          <div class="text-xs text-base-content/50">
-                            本地端口 {service.localPort} 转发到远程端口{" "}
-                            {service.remotePort}
-                          </div>
-                        </div>
-                        <button
-                          class="btn btn-ghost btn-xs btn-circle text-error hover:bg-error/10"
-                          onClick={() => stopTcpForwarding(service.id)}
-                          title="停止转发"
-                        >
-                          <svg
-                            class="w-3 h-3"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              stroke-linecap="round"
-                              stroke-linejoin="round"
-                              stroke-width="2"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
-          </div>
+          <TcpForwardingManager sessionId={props.sessionId} />
         </Show>
       </div>
 
@@ -1420,9 +1310,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       <For each={terminals()}>
         {(terminal) => (
           <div
-            class={`card bg-base-200 shadow-sm p-3 ${
-              activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
-            }`}
+            class={`card bg-base-200 shadow-sm p-3 ${activeTerminalId() === terminal.id ? "ring-2 ring-primary" : ""
+              }`}
           >
             <div class="flex flex-col gap-1">
               <div class="flex justify-between items-center">
@@ -1492,9 +1381,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         <div class="border-t bg-base-200 p-2">
           <div class="flex items-center gap-2">
             <button
-              class={`btn btn-sm btn-square ${
-                showChatHistory() ? "btn-primary" : "btn-ghost"
-              }`}
+              class={`btn btn-sm btn-square ${showChatHistory() ? "btn-primary" : "btn-ghost"
+                }`}
               onClick={() => setShowChatHistory(!showChatHistory())}
             >
               <svg
@@ -1561,16 +1449,14 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 <For each={chatMessages()}>
                   {(message) => (
                     <div
-                      class={`text-xs ${
-                        message.role === "user" ? "text-right" : "text-left"
-                      }`}
+                      class={`text-xs ${message.role === "user" ? "text-right" : "text-left"
+                        }`}
                     >
                       <div
-                        class={`inline-block px-2 py-1 rounded ${
-                          message.role === "user"
+                        class={`inline-block px-2 py-1 rounded ${message.role === "user"
                             ? "bg-primary text-primary-content"
                             : "bg-base-300 text-base-content"
-                        }`}
+                          }`}
                       >
                         {message.content}
                       </div>
@@ -1629,9 +1515,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                   <For each={aiResponse()!.commands}>
                     {(command, index) => (
                       <div
-                        class={`p-2 border-b border-base-200 last:border-b-0 ${
-                          index() === 0 ? "bg-primary/5" : ""
-                        }`}
+                        class={`p-2 border-b border-base-200 last:border-b-0 ${index() === 0 ? "bg-primary/5" : ""
+                          }`}
                       >
                         <div class="flex items-start justify-between gap-2">
                           <div class="flex-1 min-w-0">
@@ -2074,9 +1959,9 @@ ${editorInfo}
 
 【重要环境变量】
 ${Object.entries(environment_vars)
-  .slice(0, 5)
-  .map(([key, value]) => `- ${key}: ${value}`)
-  .join("\n")}
+            .slice(0, 5)
+            .map(([key, value]) => `- ${key}: ${value}`)
+            .join("\n")}
 
 请以以下 JSON 格式返回响应：
 {
@@ -3096,11 +2981,10 @@ ${Object.entries(environment_vars)
                       const isActive = activeTerminalId() === terminal.id;
                       return (
                         <button
-                          class={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap mr-2 ${
-                            isActive
+                          class={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap mr-2 ${isActive
                               ? "bg-primary text-primary-content shadow-md"
                               : "bg-base-200 hover:bg-base-300 text-base-content"
-                          }`}
+                            }`}
                           onClick={() => {
                             setActiveTerminalId(terminal.id);
                             terminalSessionManager.setActiveTerminal(
@@ -3109,13 +2993,12 @@ ${Object.entries(environment_vars)
                           }}
                         >
                           <span
-                            class={`w-2 h-2 rounded-full ${
-                              terminal.status === "Running"
+                            class={`w-2 h-2 rounded-full ${terminal.status === "Running"
                                 ? "bg-green-400"
                                 : terminal.status === "Starting"
                                   ? "bg-yellow-400"
                                   : "bg-gray-400"
-                            }`}
+                              }`}
                           />
                           <span class="truncate max-w-[120px]">
                             {terminal.name || `Term ${terminal.id.slice(0, 6)}`}
@@ -3208,18 +3091,16 @@ ${Object.entries(environment_vars)
                     <For each={chatMessages()}>
                       {(message) => (
                         <div
-                          class={`flex gap-2 ${
-                            message.role === "user"
+                          class={`flex gap-2 ${message.role === "user"
                               ? "justify-end"
                               : "justify-start"
-                          }`}
+                            }`}
                         >
                           <div
-                            class={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg ${
-                              message.role === "user"
+                            class={`max-w-xs lg:max-w-md px-3 py-2 rounded-lg ${message.role === "user"
                                 ? "bg-primary text-primary-content"
                                 : "bg-base-300 text-base-content"
-                            }`}
+                              }`}
                           >
                             <div class="text-sm">{message.content}</div>
                             {message.command && (
@@ -3286,9 +3167,8 @@ ${Object.entries(environment_vars)
                       <For each={aiResponse()!.commands}>
                         {(command, index) => (
                           <div
-                            class={`p-3 border-b border-base-200 last:border-b-0 hover:bg-base-50 transition-colors ${
-                              index() === 0 ? "bg-primary/5" : ""
-                            }`}
+                            class={`p-3 border-b border-base-200 last:border-b-0 hover:bg-base-50 transition-colors ${index() === 0 ? "bg-primary/5" : ""
+                              }`}
                           >
                             <div class="flex items-start justify-between gap-3">
                               <div class="flex-1 min-w-0">
@@ -3393,9 +3273,8 @@ ${Object.entries(environment_vars)
                 <div class="flex items-center gap-2 max-w-4xl mx-auto">
                   {/* Chat Toggle Button */}
                   <button
-                    class={`btn btn-sm btn-square ${
-                      showChatHistory() ? "btn-primary" : "btn-ghost"
-                    }`}
+                    class={`btn btn-sm btn-square ${showChatHistory() ? "btn-primary" : "btn-ghost"
+                      }`}
                     onClick={() => setShowChatHistory(!showChatHistory())}
                     title="聊天历史"
                   >
@@ -3422,11 +3301,10 @@ ${Object.entries(environment_vars)
                   {/* AI Status Indicator */}
                   <div class="flex items-center gap-1">
                     <div
-                      class={`w-2 h-2 rounded-full ${
-                        isAiThinking()
+                      class={`w-2 h-2 rounded-full ${isAiThinking()
                           ? "bg-warning animate-pulse"
                           : "bg-success"
-                      }`}
+                        }`}
                     />
                     <span class="text-xs text-base-content/60">
                       {isAiThinking() ? "AI思考中..." : "AI助手"}

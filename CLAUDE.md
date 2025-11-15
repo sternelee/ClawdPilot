@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**RiTerm** is a P2P terminal session sharing tool built with Rust, SolidJS, and Tauri. It enables real-time terminal collaboration across multiple platforms using iroh's P2P networking with end-to-end encryption.
+**RiTerm** is a P2P terminal session sharing tool built with Rust, SolidJS, and Tauri. It enables real-time terminal collaboration across multiple platforms using iroh's P2P networking with end-to-end encryption. The project supports both Chinese and English users, with comprehensive documentation in both languages.
 
 ## Architecture
 
@@ -64,6 +64,9 @@ npm run build
 
 # Development server
 npm run dev
+
+# Type checking and build
+npm run tsc    # TypeScript check followed by Vite build
 ```
 
 ### Mobile Development
@@ -104,7 +107,7 @@ rustc test_connection.rs && ./test_connection
 
 ### Code Quality and Development Tools
 ```bash
-# TypeScript type checking
+# TypeScript type checking (followed by build)
 npm run tsc
 # or
 pnpm tsc
@@ -145,7 +148,7 @@ cargo build --release
 # Install dependencies
 npm install
 # or
-pnpm install
+pnpm install  # specified as packageManager in package.json
 
 # Start development with hot reload
 npm run tauri dev
@@ -168,7 +171,7 @@ npm run build && npm run tauri build
 pnpm build && pnpm tauri build
 ```
 
-**Note**: The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands while the project root uses `npm`. Both package managers work, but be consistent within your development environment.
+**Package Manager Note**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. While `npm` commands work, `pnpm` is recommended for consistency. The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands.
 
 ## Key Technical Details
 
@@ -218,6 +221,27 @@ The project has implemented a comprehensive message system replacing the previou
   - `desktop.json` - Desktop-specific capabilities
   - `mobile.json` - Mobile-specific capabilities
 - `vite.config.ts` - Vite build configuration for SolidJS
+
+## Dependencies and Ecosystem
+
+### Core Rust Dependencies
+- **iroh** (0.93) - P2P networking with NAT traversal
+- **tokio** (1.47) - Async runtime with full features
+- **portable-pty** (0.9) - Cross-platform pseudo-terminal
+- **tauri** (2) - Cross-platform desktop/mobile framework
+- **crossterm** (0.29) - Cross-platform terminal manipulation
+
+### Frontend Dependencies
+- **solid-js** (1.9.9) - Reactive UI framework
+- **@xterm/xterm** (5.5.0) - Terminal emulator with addons
+- **daisyui** (5.0.50) - TailwindCSS component library
+- **fast_qr** (0.13.0) - QR code generation for session sharing
+- **lucide-solid** (0.540.0) - Icon library
+
+### Key Features
+- **Package Manager**: pnpm@10.0.0 (specified in package.json)
+- **Build Profiles**: Release with LTO, strip, and single codegen-unit optimization
+- **Production Profile**: Inherits release with panic=abort for smaller binaries
 
 ## Development Notes
 
@@ -301,3 +325,9 @@ riterm/
 - Use the session recovery utilities for connection resilience
 - Monitor event count to stay within buffer limits
 - Implement proper error handling for network interruptions
+
+### Internationalization
+- The project supports both Chinese and English users
+- README.md contains comprehensive Chinese documentation
+- User interface should consider bilingual support where appropriate
+- Error messages and logs may include Chinese content for Chinese users

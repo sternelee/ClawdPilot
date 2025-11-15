@@ -13,7 +13,8 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 
 use riterm_shared::{
     CommunicationManager, Event, EventListener, EventType, IODataType, Message, MessageBuilder,
-    MessagePayload, QuicMessageClientHandle, SerializableEndpointAddr, TerminalAction,
+    MessagePayload, QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType,
+    TcpForwardingAction, TcpForwardingType, TerminalAction,
 };
 
 /// Maximum number of concurrent sessions to prevent memory exhaustion
@@ -602,6 +603,37 @@ async fn connect_to_peer(
                                         })
                                     );
                                 }
+                                MessagePayload::TcpForwarding(tcp_msg) => {
+                                    // Handle TCP forwarding messages
+                                    #[cfg(debug_assertions)]
+                                    tracing::debug!("Received TCP forwarding message: {:?}", tcp_msg.action);
+
+                                    // Emit TCP forwarding event to frontend
+                                    let _ = app_handle_clone.emit(
+                                        &format!("tcp-forwarding-{}", session_id_clone),
+                                        &serde_json::json!({
+                                            "action": format!("{:?}", tcp_msg.action),
+                                            "request_id": tcp_msg.request_id,
+                                        })
+                                    );
+                                }
+                                MessagePayload::TcpData(tcp_data_msg) => {
+                                    // Handle TCP data messages
+                                    #[cfg(debug_assertions)]
+                                    tracing::debug!("Received TCP data message: session_id={}, connection_id={}, data_type={:?}",
+                                        tcp_data_msg.session_id, tcp_data_msg.connection_id, tcp_data_msg.data_type);
+
+                                    // Emit TCP data event to frontend
+                                    let _ = app_handle_clone.emit(
+                                        &format!("tcp-data-{}", session_id_clone),
+                                        &serde_json::json!({
+                                            "session_id": tcp_data_msg.session_id,
+                                            "connection_id": tcp_data_msg.connection_id,
+                                            "data_type": format!("{:?}", tcp_data_msg.data_type),
+                                            "data_length": tcp_data_msg.data.len(),
+                                        })
+                                    );
+                                }
                                 _ => {
                                     #[cfg(debug_assertions)]
                                     tracing::debug!("Unhandled message type: {:?}", message.message_type);
@@ -1026,6 +1058,251 @@ async fn connect_to_terminal(
     Ok(())
 }
 
+// === TCP Forwarding Management Commands ===
+
+#[tauri::command]
+async fn create_tcp_forwarding_session(
+    sessionId: String,
+    local_addr: String,
+    remote_host: Option<String>,
+    remote_port: Option<u16>,
+    forwarding_type: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
+        }
+    };
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // 解析转发类型
+    let fwd_type = match forwarding_type.as_str() {
+        "ListenToRemote" | "listen-to-remote" => TcpForwardingType::ListenToRemote,
+        "ConnectToRemote" | "connect-to-remote" => TcpForwardingType::ConnectToRemote,
+        _ => {
+            return Err(
+                "Invalid forwarding type. Use 'ListenToRemote' or 'ConnectToRemote'".to_string(),
+            );
+        }
+    };
+
+    // 创建 TCP 转发管理消息
+    let action = TcpForwardingAction::CreateSession {
+        local_addr,
+        remote_host,
+        remote_port,
+        forwarding_type: fwd_type,
+    };
+
+    let message =
+        MessageBuilder::tcp_forwarding("riterm_app".to_string(), action, Some(sessionId.clone()))
+            .with_session(sessionId.clone());
+
+    // 发送消息 via QUIC 客户端
+    send_message_via_client(
+        &state,
+        &session.connection_id,
+        message,
+        "TCP forwarding session creation",
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn list_tcp_forwarding_sessions(
+    sessionId: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
+        }
+    };
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // 创建列出 TCP 转发会话的消息
+    let message = MessageBuilder::tcp_forwarding(
+        "riterm_app".to_string(),
+        TcpForwardingAction::ListSessions,
+        Some(sessionId.clone()),
+    )
+    .with_session(sessionId.clone());
+
+    // 发送消息 via QUIC 客户端
+    send_message_via_client(
+        &state,
+        &session.connection_id,
+        message,
+        "TCP forwarding sessions list",
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn stop_tcp_forwarding_session(
+    sessionId: String,
+    tcp_session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
+        }
+    };
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // 创建停止 TCP 转发会话的消息
+    let message = MessageBuilder::tcp_forwarding(
+        "riterm_app".to_string(),
+        TcpForwardingAction::StopSession {
+            session_id: tcp_session_id,
+        },
+        Some(sessionId.clone()),
+    )
+    .with_session(sessionId.clone());
+
+    // 发送消息 via QUIC 客户端
+    send_message_via_client(
+        &state,
+        &session.connection_id,
+        message,
+        "TCP forwarding session stop",
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_tcp_forwarding_session_info(
+    sessionId: String,
+    tcp_session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
+        }
+    };
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // 创建获取 TCP 转发会话信息的消息
+    let message = MessageBuilder::tcp_forwarding(
+        "riterm_app".to_string(),
+        TcpForwardingAction::GetSessionInfo {
+            session_id: tcp_session_id,
+        },
+        Some(sessionId.clone()),
+    )
+    .with_session(sessionId.clone());
+
+    // 发送消息 via QUIC 客户端
+    send_message_via_client(
+        &state,
+        &session.connection_id,
+        message,
+        "TCP forwarding session info",
+    )
+    .await?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_tcp_data(
+    sessionId: String,
+    tcp_session_id: String,
+    connection_id: String,
+    data: Vec<u8>,
+    data_type: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
+        }
+    };
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // 解析数据类型
+    let dt_type =
+        match data_type.as_str() {
+            "Data" | "data" => TcpDataType::Data,
+            "ConnectionOpen" | "connection-open" => TcpDataType::ConnectionOpen,
+            "ConnectionClose" | "connection-close" => TcpDataType::ConnectionClose,
+            "Error" | "error" => TcpDataType::Error,
+            _ => return Err(
+                "Invalid data type. Use 'Data', 'ConnectionOpen', 'ConnectionClose', or 'Error'"
+                    .to_string(),
+            ),
+        };
+
+    // 创建 TCP 数据消息
+    let message = MessageBuilder::tcp_data(
+        "riterm_app".to_string(),
+        tcp_session_id,
+        connection_id,
+        dt_type,
+        data,
+    )
+    .with_session(sessionId.clone());
+
+    // 发送消息 via QUIC 客户端
+    send_message_via_client(&state, &session.connection_id, message, "TCP data").await?;
+
+    Ok(())
+}
+
 /// Initialize tracing with conditional log levels based on build configuration
 fn init_tracing() {
     // Set different log levels based on build profile and features
@@ -1087,6 +1364,12 @@ pub fn run() {
             send_terminal_input_to_terminal,
             resize_terminal,
             connect_to_terminal, // Kept as no-op for compatibility
+            // TCP Forwarding Management
+            create_tcp_forwarding_session,
+            list_tcp_forwarding_sessions,
+            stop_tcp_forwarding_session,
+            get_tcp_forwarding_session_info,
+            send_tcp_data,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())
