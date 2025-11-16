@@ -14,8 +14,6 @@ interface SettingsModalProps {
 
 export function SettingsModal(props: SettingsModalProps) {
   const themeOptions = [
-    { value: "riterm-dark", label: t("theme.riterm-dark") },
-    { value: "riterm-light", label: t("theme.riterm-light") },
     { value: "dark", label: t("theme.dark") },
     { value: "light", label: t("theme.light") },
     { value: "corporate", label: t("theme.corporate") },

@@ -227,6 +227,19 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [tcpRemoteHost, setTcpRemoteHost] = createSignal("127.0.0.1");
   const [tcpForwardingType, setTcpForwardingType] = createSignal<"ListenToRemote" | "ConnectToRemote">("ConnectToRemote");
 
+  // TCP会话详情Modal状态
+  const [selectedTcpSession, setSelectedTcpSession] = createSignal<{
+    id: string;
+    local_addr: string;
+    remote_target: string;
+    forwarding_type: string;
+    active_connections: number;
+    bytes_sent: number;
+    bytes_received: number;
+    status: string;
+    created_at: number;
+  } | null>(null);
+
   // 系统信息相关状态
   const [systemInfo] = createSignal<{
     os_info: {
@@ -348,6 +361,17 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   };
 
+  // 智能刷新列表 - 根据当前活动标签刷新对应内容
+  const handleRefreshList = () => {
+    if (activeSidebarTab() === "services") {
+      // 当前在服务标签页，刷新TCP转发会话
+      loadTcpSessions();
+    } else {
+      // 默认刷新终端列表
+      fetchTerminals();
+    }
+  };
+
   // 停止 TCP 转发会话
   const stopTcpSession = async (tcpSessionId: string) => {
     try {
@@ -376,6 +400,22 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 格式化日期
   const formatDate = (timestamp: number): string => {
     return new Date(timestamp).toLocaleString();
+  };
+
+  // 提取端口号
+  const extractPort = (address: string): string => {
+    const parts = address.split(':');
+    return parts[parts.length - 1] || address;
+  };
+
+  // 获取转发类型的简短显示
+  const getForwardingTypeLabel = (type: string): string => {
+    return type.includes('ListenToRemote') ? '监听远程' : '连接本地';
+  };
+
+  // 处理TCP会话点击
+  const handleTcpSessionClick = (session: any) => {
+    setSelectedTcpSession(session);
   };
 
   // 计算终端大小（基于容器宽度）
@@ -657,7 +697,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               terminalSession.inputBuffer,
             );
             sendBufferedInput(props.sessionId, terminalId, terminalSession);
-          }, 1000);
+          }, 300);
         }
       });
 
@@ -1064,7 +1104,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             <div class="w-3 h-3 rounded-full bg-success animate-pulse" />
             <h2 class="text-lg font-bold">RiTerm</h2>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1">
             {/* 桌面端侧边栏切换按钮 */}
             <Show when={!isMobile}>
               <label
@@ -1096,7 +1136,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             class={`tab tab-sm ${activeSidebarTab() === "terminals" ? "tab-active" : ""}`}
             onClick={() => setActiveSidebarTab("terminals")}
           >
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
               <svg
                 class="w-4 h-4"
                 fill="none"
@@ -1120,7 +1160,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             class={`tab tab-sm ${activeSidebarTab() === "services" ? "tab-active" : ""}`}
             onClick={() => setActiveSidebarTab("services")}
           >
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1">
               <svg
                 class="w-4 h-4"
                 fill="none"
@@ -1141,7 +1181,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             </div>
           </a>
         </div>
-        <div class="tabs tabs-boxed bg-base-300 p-1"></div>
       </div>
 
       {/* Tab Content */}
@@ -1282,83 +1321,49 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             </button>
 
             {/* TCP 会话列表 */}
-            <div class="space-y-3">
+            <div class="space-y-2">
               <For each={tcpSessions()}>
                 {(session) => (
-                  <div class="card card-compact bg-base-200 hover:bg-base-300 transition-all duration-200">
-                    <div class="card-body">
-                      <div class="flex items-center justify-between mb-2">
-                        <div class="font-semibold truncate text-sm">
-                          {session.id.slice(0, 12)}...
-                        </div>
-                        <div class={`badge badge-xs ${session.status === 'running' ? 'badge-success' :
-                          session.status === 'stopped' ? 'badge-error' :
-                            'badge-warning'
-                          }`}>
-                          {session.status}
-                        </div>
-                      </div>
+                  <div
+                    class="card card-compact bg-base-200 hover:bg-base-300 transition-all duration-200 cursor-pointer"
+                    onClick={() => handleTcpSessionClick(session)}
+                  >
+                    <div class="card-body p-0">
+                      <div class="flex items-center justify-between">
+                        <div class="flex flex-col gap-3 flex-1 min-w-0">
+                          {/* 类型标签 */}
+                          <div class="badge badge-outline badge-sm">
+                            {getForwardingTypeLabel(session.forwarding_type)}
+                            <div class="flex items-center gap-2">
+                              {/* 状态指示器 */}
+                              <div class={`w-2 h-2 rounded-full ${session.status === 'running' ? 'bg-success' :
+                                session.status === 'stopped' ? 'bg-error' :
+                                  'bg-warning'
+                                }`} title={session.status}>
+                              </div>
 
-                      <div class="space-y-2 text-xs">
-                        <div class="flex items-center justify-between">
-                          <span class="text-base-content/70">本地:</span>
-                          <span class="font-mono bg-base-300 px-2 py-0.5 rounded">
-                            {session.local_addr}
-                          </span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                          <span class="text-base-content/70">远程:</span>
-                          <span class="font-mono bg-base-300 px-2 py-0.5 rounded">
-                            {session.remote_target}
-                          </span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                          <span class="text-base-content/70">类型:</span>
-                          <span class="badge badge-outline badge-xs">
-                            {session.forwarding_type}
-                          </span>
-                        </div>
-
-                        <div class="divider my-2"></div>
-
-                        <div class="grid grid-cols-2 gap-2">
-                          <div>
-                            <div class="text-base-content/50">连接数</div>
-                            <div class="font-semibold">{session.active_connections}</div>
-                          </div>
-                          <div>
-                            <div class="text-base-content/50">已发送</div>
-                            <div class="font-mono text-success text-xs">
-                              {formatBytes(session.bytes_sent)}
+                              {/* 连接数 */}
+                              <Show when={session.active_connections > 0}>
+                                <div class="badge badge-primary badge-xs">
+                                  {session.active_connections}
+                                </div>
+                              </Show>
                             </div>
                           </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                          <div>
-                            <div class="text-base-content/50">已接收</div>
-                            <div class="font-mono text-info text-xs">
-                              {formatBytes(session.bytes_received)}
-                            </div>
-                          </div>
-                          <div>
-                            <div class="text-base-content/50">创建时间</div>
-                            <div class="text-xs truncate">
-                              {new Date(session.created_at).toLocaleTimeString()}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
 
-                      <div class="card-actions justify-end mt-3">
-                        <button
-                          class="btn btn-error btn-xs"
-                          onClick={() => stopTcpSession(session.id)}
-                        >
-                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          停止
-                        </button>
+                          {/* 本地端口 */}
+                          <div class="flex items-center gap-1 text-xs">
+                            <span class="text-base-content/50">local:</span>
+                            <span class="font-semibold">{session.local_addr}</span>
+                          </div>
+
+                          {/* 远程端口 */}
+                          <div class="flex items-center gap-1 text-xs">
+                            <span class="text-base-content/50">remote:</span>
+                            <span class="font-semibold">{session.remote_target}</span>
+                          </div>
+                        </div>
+
                       </div>
                     </div>
                   </div>
@@ -1394,7 +1399,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       <div class="p-4 border-t border-base-300 space-y-2 bg-base-200">
         <button
           class="btn btn-ghost btn-sm w-full justify-start gap-2"
-          onClick={() => fetchTerminals()}
+          onClick={() => handleRefreshList()}
         >
           <svg
             class="w-4 h-4"
@@ -2738,7 +2743,7 @@ ${Object.entries(environment_vars)
 
             {/* Tabs 终端列表 */}
             <div class="flex-1 overflow-x-auto scrollbar-hide">
-              <div role="tablist" class="tabs tabs-boxed bg-transparent gap-1 p-1">
+              <div role="tablist" class="tabs tabs-lift gap-1 p-1">
                 <For each={terminals()}>
                   {(terminal) => {
                     const isActive = activeTerminalId() === terminal.id;
@@ -3287,6 +3292,128 @@ ${Object.entries(environment_vars)
           {renderSidebar()}
         </aside>
       </div>
+
+      {/* TCP会话详情Modal */}
+      <Show when={selectedTcpSession()}>
+        <div class="modal modal-open">
+          <div class="modal-box max-w-md">
+            <h3 class="font-bold text-lg mb-4">TCP 转发会话详情</h3>
+
+            <div class="space-y-4">
+              {/* 基本信息 */}
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <div class="text-sm text-base-content/50">会话ID</div>
+                  <div class="font-mono text-xs bg-base-200 p-2 rounded mt-1 truncate">
+                    {selectedTcpSession()?.id}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-sm text-base-content/50">状态</div>
+                  <div class={`badge badge-sm mt-1 ${selectedTcpSession()?.status === 'running' ? 'badge-success' :
+                    selectedTcpSession()?.status === 'stopped' ? 'badge-error' :
+                      'badge-warning'
+                    }`}>
+                    {selectedTcpSession()?.status}
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <div class="text-sm text-base-content/50">转发类型</div>
+                  <div class="badge badge-outline badge-sm mt-1">
+                    {getForwardingTypeLabel(selectedTcpSession()?.forwarding_type || '')}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-sm text-base-content/50">创建时间</div>
+                  <div class="text-xs mt-1">
+                    {formatDate(selectedTcpSession()?.created_at || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* 地址信息 */}
+              <div class="divider">地址配置</div>
+
+              <div>
+                <div class="text-sm text-base-content/50">本地地址</div>
+                <div class="font-mono text-sm bg-base-200 p-2 rounded mt-1">
+                  {selectedTcpSession()?.local_addr}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-sm text-base-content/50">远程目标</div>
+                <div class="font-mono text-sm bg-base-200 p-2 rounded mt-1">
+                  {selectedTcpSession()?.remote_target}
+                </div>
+              </div>
+
+              {/* 统计信息 */}
+              <div class="divider">传输统计</div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <div class="text-sm text-base-content/50">活跃连接</div>
+                  <div class="text-2xl font-bold text-primary mt-1">
+                    {selectedTcpSession()?.active_connections}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-sm text-base-content/50">总连接数</div>
+                  <div class="text-2xl font-bold text-secondary mt-1">
+                    {selectedTcpSession()?.active_connections}
+                  </div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <div class="text-sm text-base-content/50">已发送</div>
+                  <div class="text-lg font-semibold text-success mt-1">
+                    {formatBytes(selectedTcpSession()?.bytes_sent || 0)}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-sm text-base-content/50">已接收</div>
+                  <div class="text-lg font-semibold text-info mt-1">
+                    {formatBytes(selectedTcpSession()?.bytes_received || 0)}
+                  </div>
+                </div>
+              </div>
+
+              {/* 操作按钮 */}
+              <div class="divider">操作</div>
+
+              <div class="flex gap-2">
+                <button
+                  class="btn btn-error btn-sm flex-1"
+                  onClick={() => {
+                    const session = selectedTcpSession();
+                    if (session) {
+                      stopTcpSession(session.id);
+                      setSelectedTcpSession(null);
+                    }
+                  }}
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  停止会话
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  onClick={() => setSelectedTcpSession(null)}
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }

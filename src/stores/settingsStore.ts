@@ -1,8 +1,6 @@
 import { createSignal, createEffect } from "solid-js";
 
 export type ThemeType =
-  | "riterm-dark"
-  | "riterm-light"
   | "dark"
   | "light"
   | "corporate"
@@ -34,7 +32,7 @@ export interface UserSettings {
 }
 
 const defaultSettings: UserSettings = {
-  theme: "riterm-dark",
+  theme: "dark",
   language: "en",
   fontSize: "medium",
   enableAnimations: true,
@@ -216,8 +214,6 @@ export const translations = {
     "settings.retryAttempts": "Retry Attempts",
 
     // Themes
-    "theme.riterm-dark": "RiTerm Dark",
-    "theme.riterm-light": "RiTerm Light",
     "theme.dark": "Dark",
     "theme.light": "Light",
     "theme.corporate": "Corporate",
@@ -281,8 +277,6 @@ export const translations = {
     "settings.retryAttempts": "重试次数",
 
     // Themes
-    "theme.riterm-dark": "RiTerm 深色",
-    "theme.riterm-light": "RiTerm 浅色",
     "theme.dark": "深色",
     "theme.light": "浅色",
     "theme.corporate": "企业",
@@ -322,4 +316,3 @@ export const t = (key: string, lang?: LanguageType): string => {
 
 // Initialize theme on app start
 document.documentElement.setAttribute("data-theme", settings().theme);
-
