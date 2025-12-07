@@ -30,6 +30,7 @@ fn is_valid_session_ticket(ticket: &str) -> bool {
     ticket.len() > 20
 }
 
+
 // Parse ticket and extract EndpointId
 fn parse_ticket_node_addr(
     ticket: &str,
@@ -318,10 +319,15 @@ pub struct DirectedMessageRequest {
 
 // === Terminal Management Commands ===
 
-#[tauri::command]
-async fn initialize_network_with_relay(
+/// Internal version of initialize_network that works with State references
+async fn initialize_network_internal(state: &State<'_, AppState>) -> Result<String, String> {
+    initialize_network_with_relay_internal(None, state).await
+}
+
+/// Internal version of initialize_network_with_relay that works with State references
+async fn initialize_network_with_relay_internal(
     relay_url: Option<String>,
-    state: State<'_, AppState>,
+    state: &State<'_, AppState>,
 ) -> Result<String, String> {
     // Create communication manager
     let communication_manager = Arc::new(CommunicationManager::new("riterm_app".to_string()));
@@ -330,24 +336,35 @@ async fn initialize_network_with_relay(
         .await
         .map_err(|e| format!("Failed to initialize communication manager: {}", e))?;
 
-    // Get secret key path for persistent node ID - use app startup directory
-    let app_data_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let secret_key_path = app_data_dir.join("riterm_app_secret_key");
-    info!(
-        "🔑 Using app secret key in startup directory: {:?}",
-        secret_key_path
-    );
+    // Handle secret key storage differently for mobile platforms
+    let secret_key_path = if cfg!(mobile) {
+        // On mobile platforms, use None to generate temporary keys
+        // This avoids file system permission issues and is appropriate for mobile apps
+        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+        tracing::info!("🔑 Using temporary secret key for mobile platform (no persistent storage)");
+        None
+    } else {
+        // On desktop platforms, use persistent secret key storage
+        let app_data_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let path = app_data_dir.join("riterm_app_secret_key");
+        info!(
+            "🔑 Using persistent secret key in startup directory: {:?}",
+            path
+        );
+        Some(path)
+    };
 
-    // Create QUIC client with persistent secret key
+    // Create QUIC client with secret key (temporary on mobile, persistent on desktop)
     let quic_client = QuicMessageClientHandle::new_with_secret_key(
         relay_url,
         communication_manager.clone(),
-        Some(&secret_key_path),
+        secret_key_path.as_deref(),
     )
     .await
     .map_err(|e| format!("Failed to initialize QUIC client: {}", e))?;
 
-    let node_id = format!("{:?}", quic_client.get_node_id().await);
+    // Get node ID
+    let node_id = quic_client.get_node_id().await.to_string();
 
     // Store in state
     {
@@ -360,14 +377,22 @@ async fn initialize_network_with_relay(
     }
 
     // Start cleanup task if not already running
-    start_cleanup_task(&state).await;
+    start_cleanup_task(state).await;
 
     Ok(node_id)
 }
 
 #[tauri::command]
+async fn initialize_network_with_relay(
+    relay_url: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    initialize_network_with_relay_internal(relay_url, &state).await
+}
+
+#[tauri::command]
 async fn initialize_network(state: State<'_, AppState>) -> Result<String, String> {
-    initialize_network_with_relay(None, state).await
+    initialize_network_internal(&state).await
 }
 
 #[tauri::command]
@@ -386,17 +411,7 @@ async fn connect_to_peer(
         return Err("Invalid session ticket format".to_string());
     }
 
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => {
-                return Err(
-                    "QUIC client not initialized. Please restart the application.".to_string(),
-                );
-            }
-        }
-    };
+    let quic_client = ensure_quic_client_initialized(&state).await?;
 
     let communication_manager = {
         let comm_guard = state.communication_manager.read().await;
@@ -804,6 +819,30 @@ async fn parse_session_ticket(ticket: String) -> Result<String, String> {
         Ok(ticket)
     } else {
         Err("Invalid session ticket format".to_string())
+    }
+}
+
+/// Helper function to check and initialize QUIC client if needed
+async fn ensure_quic_client_initialized(state: &State<'_, AppState>) -> Result<QuicMessageClientHandle, String> {
+    let client_guard = state.quic_client.read().await;
+    match client_guard.as_ref() {
+        Some(c) => Ok(c.clone()),
+        None => {
+            // Try to auto-initialize
+            drop(client_guard); // Release the read lock
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::info!("QUIC client not initialized, attempting auto-initialization...");
+            
+            // Initialize network - use internal function that works with references
+            initialize_network_internal(state).await?;
+            
+            // Try again
+            let client_guard = state.quic_client.read().await;
+            match client_guard.as_ref() {
+                Some(c) => Ok(c.clone()),
+                None => return Err("QUIC client initialization failed. Please restart the application.".to_string()),
+            }
+        }
     }
 }
 
@@ -1369,7 +1408,10 @@ pub fn run() {
             get_tcp_forwarding_session_info,
             send_tcp_data,
         ])
-        .setup(|_app| Ok(()))
+        .setup(|_app| {
+            // No additional setup needed - ensure_quic_client_initialized handles auto-initialization
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

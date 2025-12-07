@@ -107,6 +107,9 @@ cargo test --bin test_connection
 rustc test_ticket.rs && ./test_ticket
 rustc test_connection.rs && ./test_connection
 
+# Test CLI ticket generation
+./test_ticket_output.sh
+
 # Browser integration tests
 cd browser && cargo test --features integration-tests
 ```
@@ -183,7 +186,7 @@ npm run build && npm run tauri build
 pnpm build && pnpm tauri build
 ```
 
-**Package Manager Note**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. While `npm` commands work, `pnpm` is recommended for consistency. The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands.
+**Package Manager Note**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. While `npm` commands work, `pnpm` is recommended for consistency. The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands with `beforeDevCommand: "pnpm dev"` and `beforeBuildCommand: "pnpm build"`.
 
 ## Key Technical Details
 
@@ -272,34 +275,43 @@ Key message flows:
 
 ## Configuration Files
 
-- `Cargo.toml` - Workspace configuration with shared dependencies
-- `package.json` - Frontend dependencies and build scripts (SolidJS, xterm.js, DaisyUI)
-- `app/tauri.conf.json` - Tauri application configuration
+- `Cargo.toml` - Workspace configuration with shared dependencies and build profiles
+- `package.json` - Frontend dependencies and build scripts, specifies pnpm@10.0.0 as package manager
+- `app/tauri.conf.json` - Tauri application configuration with pnpm dev/build commands
 - `app/capabilities/` - Platform-specific permission configurations:
   - `main.json` - Main application permissions
   - `desktop.json` - Desktop-specific capabilities
   - `mobile.json` - Mobile-specific capabilities
-- `vite.config.ts` - Vite build configuration for SolidJS
+- `vite.config.ts` - Vite build configuration for SolidJS (server on localhost:1420)
+- `tailwind.config.js` - TailwindCSS configuration with DaisyUI themes
+- `postcss.config.js` - PostCSS configuration for TailwindCSS processing
 
 ## Dependencies and Ecosystem
 
 ### Core Rust Dependencies
-- **iroh** (0.93) - P2P networking with NAT traversal
-- **tokio** (1.47) - Async runtime with full features
+- **iroh** (0.95) - P2P networking with NAT traversal and QUIC protocol
+- **tokio** (1.47) - Async runtime with full features (net, fs, rt-multi-thread)
 - **portable-pty** (0.9) - Cross-platform pseudo-terminal
 - **tauri** (2) - Cross-platform desktop/mobile framework
 - **crossterm** (0.29) - Cross-platform terminal manipulation
+- **bincode** (1.3) - Efficient binary serialization for message protocol
+- **chacha20poly1305** (0.10) - End-to-end encryption for P2P communication
 
 ### Frontend Dependencies
 - **solid-js** (1.9.9) - Reactive UI framework
-- **@xterm/xterm** (5.5.0) - Terminal emulator with addons
+- **@xterm/xterm** (5.5.0) - Terminal emulator with addons (canvas, fit, search, web-links, webgl)
 - **daisyui** (5.0.50) - TailwindCSS component library
 - **lucide-solid** (0.540.0) - Icon library
+- **@tanstack/ai-solid** (0.0.2) - AI integration for natural language terminal commands
+- **vconsole** (3.15.1) - Mobile debugging console for development
 
 ### Key Features
 - **Package Manager**: pnpm@10.0.0 (specified in package.json)
-- **Build Profiles**: Release with LTO, strip, and single codegen-unit optimization
-- **Production Profile**: Inherits release with panic=abort for smaller binaries
+- **Build Profiles**: 
+  - Release with LTO, strip, and single codegen-unit optimization
+  - Production profile inherits release with panic=abort for smaller binaries
+- **Workspace Dependencies**: Centralized dependency management in root Cargo.toml
+- **Development Tools**: TypeScript strict mode, comprehensive linting with clippy and fmt
 
 ## Development Notes
 
@@ -370,6 +382,9 @@ The project now includes TCP service forwarding capabilities allowing users to:
 - Session management testing utilities
 - Message protocol validation
 - Terminal I/O synchronization testing
+- CLI ticket generation testing with `test_ticket_output.sh`
+- Mobile debugging with `vconsole` for in-app console during development
+- Frontend development server runs on `http://localhost:1420` with hot reload
 
 ## Build Targets and Workspace Structure
 
@@ -396,9 +411,11 @@ riterm/
 - Frontend (SolidJS) builds to `dist/` which Tauri packages in the final app
 - The `app` directory contains the Tauri backend and mobile app code
 - The `browser` directory contains a pure web client using WebAssembly
-- Development server runs frontend on `http://localhost:1420` with hot reload
+- Development server runs frontend on `http://localhost:1420` with hot reload and network access enabled
+- Vite configuration ignores `**/src-tauri/**` for watching (legacy pattern)
 - Mobile builds require platform-specific toolchains (Android SDK, Xcode)
 - Browser client uses `wasm-pack` for WASM compilation and web bundling
+- Tauri automatically runs `pnpm dev` before development and `pnpm build` before building
 
 ## Common Development Patterns
 
