@@ -55,31 +55,53 @@ cd cli && cargo build --release
 ./cli/target/release/cli host --shell zsh --width 120 --height 30
 
 # Build Tauri app
+bun run tauri build
+# or
 npm run tauri build
 
 # Development mode
+bun run tauri dev
+# or
 npm run tauri dev
 
 # Build frontend only
+bun run build
+# or
 npm run build
 
 # Development server
+bun run dev
+# or
 npm run dev
 
 # Type checking and build
-npm run tsc    # TypeScript check followed by Vite build
+bun run tsc    # TypeScript check followed by Vite build
+# or
+npm run tsc
 ```
 
 ### Mobile Development
 ```bash
 # Android development
+bun run tauri android dev
+# or
 npm run tauri android dev
+# or
+pnpm tauri android dev
 
 # Build Android APK
+bun run tauri android build
+# or
 npm run tauri android build
+# or
+pnpm tauri android build
 
 # iOS development (macOS only)
+bun run tauri ios dev
+# or
 npm run tauri ios dev
+# or
+pnpm tauri ios dev
 
 # View iOS device logs (macOS)
 idevicesyslog | grep RiTerm
@@ -117,21 +139,29 @@ cd browser && cargo test --features integration-tests
 ### Code Quality and Development Tools
 ```bash
 # TypeScript type checking (followed by build)
+bun run tsc
+# or
 npm run tsc
 # or
 pnpm tsc
 
 # Frontend development server
+bun run dev
+# or
 npm run dev
 # or
 pnpm dev
 
 # Build frontend only
+bun run build
+# or
 npm run build
 # or
 pnpm build
 
 # Preview built frontend
+bun run preview
+# or
 npm run preview
 # or
 pnpm preview
@@ -161,32 +191,42 @@ cd browser && wasm-pack build --target web --release
 ### Development Workflow
 ```bash
 # Install dependencies
+bun install
+# or
 npm install
 # or
 pnpm install  # specified as packageManager in package.json
 
 # Start development with hot reload
+bun run tauri dev
+# or
 npm run tauri dev
 # or
 pnpm tauri dev
 
 # For frontend-only development
+bun run dev
+# or
 npm run dev
 # or
 pnpm dev
 
 # Type checking
+bun run tsc
+# or
 npm run tsc
 # or
 pnpm tsc
 
 # Build for production
+bun run build && bun run tauri build
+# or
 npm run build && npm run tauri build
 # or
 pnpm build && pnpm tauri build
 ```
 
-**Package Manager Note**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. While `npm` commands work, `pnpm` is recommended for consistency. The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands with `beforeDevCommand: "pnpm dev"` and `beforeBuildCommand: "pnpm build"`.
+**Package Manager Note**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`, but `bun` is recommended for better performance. The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands with `beforeDevCommand: "pnpm dev"` and `beforeBuildCommand: "pnpm build"`.
 
 ## Key Technical Details
 
