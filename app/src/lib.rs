@@ -1122,13 +1122,12 @@ async fn create_tcp_forwarding_session(
             .ok_or("Session not found")?
     };
 
-    // 解析转发类型
+    // 解析转发类型 - 只支持 ListenToRemote
     let fwd_type = match forwarding_type.as_str() {
         "ListenToRemote" | "listen-to-remote" => TcpForwardingType::ListenToRemote,
-        "ConnectToRemote" | "connect-to-remote" => TcpForwardingType::ConnectToRemote,
         _ => {
             return Err(
-                "Invalid forwarding type. Use 'ListenToRemote' or 'ConnectToRemote'".to_string(),
+                "Invalid forwarding type. Only 'ListenToRemote' is supported".to_string(),
             );
         }
     };

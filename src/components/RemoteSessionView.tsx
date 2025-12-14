@@ -198,7 +198,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [tcpRemotePort, setTcpRemotePort] = createSignal("");
   const [tcpLocalAddr, setTcpLocalAddr] = createSignal("127.0.0.1:8080");
   const [tcpRemoteHost, setTcpRemoteHost] = createSignal("127.0.0.1");
-  const [tcpForwardingType, setTcpForwardingType] = createSignal<"ListenToRemote" | "ConnectToRemote">("ListenToRemote");
+  const [tcpForwardingType] = createSignal<"ListenToRemote">("ListenToRemote");
 
   // TCP会话详情Modal状态
   const [selectedTcpSession, setSelectedTcpSession] = createSignal<{
@@ -299,7 +299,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     setTcpLocalAddr("127.0.0.1:8080");
     setTcpRemoteHost("127.0.0.1");
     setTcpRemotePort("3000");
-    setTcpForwardingType("ConnectToRemote");
     setShowTcpForwardingModal(true);
     setShowAddMenu(false);
   };
@@ -377,8 +376,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
 
   // 获取转发类型的简短显示
-  const getForwardingTypeLabel = (type: string): string => {
-    return type.includes('ListenToRemote') ? '监听远程' : '连接本地';
+  const getForwardingTypeLabel = (_type: string): string => {
+    return '监听模式';
   };
 
   // 处理TCP会话点击
@@ -1526,36 +1525,17 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       <input type="checkbox" id="tcp_forwarding_modal" class="modal-toggle" checked={showTcpForwardingModal()} />
       <div class="modal" onClick={() => setShowTcpForwardingModal(false)}>
         <div class="modal-box" onClick={(e) => e.stopPropagation()}>
-          <h3 class="font-bold text-lg">新增 TCP 转发</h3>
+          <h3 class="font-bold text-lg">新增 TCP 转发 (监听模式)</h3>
           <div class="space-y-4 mt-4">
-            {/* 转发类型选择 */}
-            <div class="form-control hidden">
-              <label class="label">
-                <span class="label-text">转发类型</span>
-              </label>
-              <select
-                class="select select-bordered"
-                value={tcpForwardingType()}
-                onChange={(e) => setTcpForwardingType(e.currentTarget.value as "ListenToRemote" | "ConnectToRemote")}
-              >
-                <option value="ConnectToRemote">连接到远程 (Connect to Remote)</option>
-                <option value="ListenToRemote">监听远程 (Listen to Remote)</option>
-              </select>
-              <label class="label">
-                <span class="label-text-alt text-base-content/50">
-                  选择转发方向
-                </span>
-              </label>
-            </div>
-
-            {/* 本地地址 */}
+            
+            {/* 监听地址 */}
             <div class="form-control">
               <label class="label">
-                <span class="label-text">本地地址</span>
+                <span class="label-text">监听地址</span>
               </label>
               <input
                 type="text"
-                placeholder="例如：127.0.0.1:8080"
+                placeholder="监听本地端口，例如：127.0.0.1:8080"
                 class="input input-bordered"
                 value={tcpLocalAddr()}
                 onInput={(e) => setTcpLocalAddr(e.currentTarget.value)}
@@ -1616,12 +1596,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           <div class="mt-4 p-3 bg-base-200 rounded-lg">
             <div class="text-sm text-base-content/70">
               <p class="font-medium mb-1">转发说明：</p>
-              <Show when={tcpForwardingType() === "ConnectToRemote"}>
-                <p>• 本地 {tcpLocalAddr()} 的连接将转发到远程 {tcpRemoteHost()}:{tcpRemotePort()}</p>
-              </Show>
-              <Show when={tcpForwardingType() === "ListenToRemote"}>
-                <p>• 远程将监听并转发到本地 {tcpLocalAddr()}</p>
-              </Show>
+              <p>• 监听本地端口 {tcpLocalAddr()} 并转发到远程 {tcpRemoteHost()}:{tcpRemotePort()}</p>
               <p>• 确保端口未被占用</p>
               <p>• 支持HTTP、数据库、SSH等各种TCP服务</p>
             </div>

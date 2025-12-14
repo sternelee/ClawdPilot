@@ -112,8 +112,6 @@ pub enum TcpForwardingAction {
 pub enum TcpForwardingType {
     /// 监听本地TCP并转发到远程
     ListenToRemote,
-    /// 从本地TCP连接并转发到远程
-    ConnectToRemote,
 }
 
 /// 系统控制动作
