@@ -47,41 +47,78 @@ const truncatePath = (path: string, maxLength: number = 24): string => {
   return "..." + path.slice(-(maxLength - 3));
 };
 
-// 检测系统是否支持 Nerd Font
-const detectNerdFontSupport = (): { supported: boolean; availableFonts: string[] } => {
-  const nerdFonts = [
-    'CaskaydiaMono Nerd Font',
-    'JetBrainsMono Nerd Font',
-    'FiraCode Nerd Font',
-    'SourceCodePro Nerd Font',
-    'Hack Nerd Font',
-    'MesloLGS NF',
-    'DejaVuSansM Nerd Font'
+// 加载本地 Nerd Font 字体文件
+const loadLocalFont = async (): Promise<{ loaded: boolean; fontName: string }> => {
+  try {
+    // 尝试不同的字体文件路径
+    const fontPaths = [
+      './src/FiraCodeNerdFont-Regular.ttf',
+      '/src/FiraCodeNerdFont-Regular.ttf',
+      './FiraCodeNerdFont-Regular.ttf',
+      '/FiraCodeNerdFont-Regular.ttf'
+    ];
+
+    let loadedFont = null;
+
+    for (const fontPath of fontPaths) {
+      try {
+        console.log(`🔍 Trying font path: ${fontPath}`);
+        const font = new FontFace(
+          'FiraCode Nerd Font',
+          `url(${fontPath}) format('truetype')`
+        );
+
+        // 尝试加载字体
+        await font.load();
+        document.fonts.add(font);
+        loadedFont = font;
+        console.log(`✅ FiraCode Nerd Font loaded successfully from: ${fontPath}`);
+        break;
+      } catch (pathError) {
+        console.log(`❌ Failed to load from ${fontPath}:`, pathError);
+        continue;
+      }
+    }
+
+    if (loadedFont) {
+      return { loaded: true, fontName: 'FiraCode Nerd Font' };
+    } else {
+      throw new Error("All font paths failed");
+    }
+  } catch (error) {
+    console.error("❌ Failed to load local FiraCode Nerd Font:", error);
+    return { loaded: false, fontName: '' };
+  }
+};
+
+// 检测系统字体支持
+const detectFontSupport = () => {
+  const testFonts = [
+    { name: 'FiraCode Nerd Font', type: 'local' },
+    { name: 'Menlo', type: 'system' },
+    { name: 'Monaco', type: 'system' },
+    { name: '"Courier New"', type: 'system' },
+    { name: 'monospace', type: 'fallback' }
   ];
 
-  const availableFonts: string[] = [];
-
-  // 检测每个 Nerd Font 是否可用
-  nerdFonts.forEach(font => {
+  // 测试字体是否可用
+  for (const font of testFonts) {
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     if (context) {
-      context.font = `16px ${font}`;
-      // 测试一些 Nerd Font 图标字符
+      context.font = `16px ${font.name}`;
       const testChar = '\uf0e7'; // Git 图标
       const width = context.measureText(testChar).width;
 
-      // 如果测量宽度大于 0，说明字体支持该字符
       if (width > 0) {
-        availableFonts.push(font);
+        console.log(`✅ Font available: ${font.name} (${font.type})`);
+        return font;
       }
     }
-  });
+  }
 
-  return {
-    supported: availableFonts.length > 0,
-    availableFonts
-  };
+  console.warn("⚠️ No suitable fonts found, using fallback");
+  return { name: 'monospace', type: 'fallback' };
 };
 
 export function RemoteSessionView(props: RemoteSessionViewProps) {
@@ -92,6 +129,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [activeTerminalId, setActiveTerminalId] = createSignal<string | null>(
     null,
   );
+  const [bestFont, setBestFont] = createSignal<string>('monospace');
 
   // 优化后的输入发送函数
   const sendInputImmediately = (
@@ -550,7 +588,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const terminal = new Terminal({
         cursorBlink: true,
         fontSize: 14,
-        fontFamily: '"CaskaydiaMono Nerd Font", "JetBrainsMono Nerd Font", "FiraCode Nerd Font", "Source Code Pro", "Menlo", "Monaco", "Courier New", monospace',
+        fontFamily: bestFont(),
         theme: {
           background: "#000000",
           foreground: "#ffffff",
@@ -901,17 +939,25 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   onMount(async () => {
     await setupTerminalEventListeners();
 
-    // 检测 Nerd Font 支持情况
-    const fontSupport = detectNerdFontSupport();
-    console.log("🔤 Nerd Font Support Detection:", fontSupport);
+    // 尝试加载本地字体文件
+    console.log("🔤 Loading local FiraCode Nerd Font...");
+    const localFontResult = await loadLocalFont();
 
-    if (fontSupport.supported) {
-      console.log("✅ Available Nerd Fonts:", fontSupport.availableFonts);
+    if (localFontResult.loaded) {
+      // 本地字体加载成功，使用它
+      setBestFont('FiraCode Nerd Font');
+      console.log("✅ Using local FiraCode Nerd Font");
     } else {
-      console.warn("⚠️ No Nerd Fonts detected. Some icons may not display correctly.");
-      console.log("💡 To fix this, install a Nerd Font:");
-      console.log("   - macOS: brew install font-cascaydia-mono-nerd-font");
-      console.log("   - Or download from: https://www.nerdfonts.com/font-downloads");
+      // 本地字体加载失败，检测系统字体
+      console.log("🔍 Local font failed, checking system fonts...");
+      const detectedFont = detectFontSupport();
+      setBestFont(detectedFont.name);
+
+      if (detectedFont.type !== 'fallback') {
+        console.log(`✅ Using system font: ${detectedFont.name}`);
+      } else {
+        console.warn("⚠️ Using fallback font. Icons may not display correctly.");
+      }
     }
 
     // 初始加载数据
