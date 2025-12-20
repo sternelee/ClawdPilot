@@ -38,9 +38,7 @@ interface TerminalSession {
   terminalSession?: ReturnType<typeof useTerminalSession>;
   inputBuffer?: string;
   sendTimeout?: ReturnType<typeof setTimeout> | null;
-  localInputLength?: number; // 记录本次本地输入的字符数
   hasPendingInput?: boolean; // 是否有待发送的输入
-  lastLocalInput?: string; // 记录最后一次本地输入的内容，用于更精确的去重
 }
 
 // 截断路径，显示末尾部分，前面用...省略
@@ -48,15 +46,6 @@ const truncatePath = (path: string, maxLength: number = 24): string => {
   if (path.length <= maxLength) return path;
   return "..." + path.slice(-(maxLength - 3));
 };
-
-// 远程输出直接展示，不做本地裁剪或过滤
-const handleRemoteOutput = (
-  _session: TerminalSession,
-  outputData: string
-): string => {
-  return typeof outputData === "string" ? outputData : String(outputData ?? "");
-};
-
 
 export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [terminals, setTerminals] = createSignal<TerminalInfo[]>([]);
@@ -83,10 +72,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const dataToSend = session.inputBuffer;
       console.log("🚀 Sending input immediately:", JSON.stringify(dataToSend));
 
-      // 重要：不要立即重置 lastLocalInput，需要等待远程输出处理
-      // 只清空输入缓冲区和重置部分状态
+      // 清空输入缓冲区
       session.inputBuffer = "";
-      // session.lastLocalInput 和 session.hasPendingInput 将在 handleRemoteOutput 中处理
 
       // 保存命令到会话（如果有实际内容）
       const trimmedCommand = dataToSend.trim();
@@ -104,10 +91,8 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         input: dataToSend,
       }).catch((error) => {
         console.error("❌ Failed to send terminal input:", error);
-        // 发送失败时完全重置状态
+        // 发送失败时重置状态
         session.hasPendingInput = false;
-        session.lastLocalInput = "";
-        session.localInputLength = 0;
       });
     }
   };
@@ -124,16 +109,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
     // 设置新的防抖定时器（减少到200ms提高响应性）
     session.sendTimeout = setTimeout(sendCallback, 200);
-  };
-
-  // 保留旧函数以兼容现有代码（已弃用）
-  const sendBufferedInput = (
-    sessionId: string,
-    terminalId: string,
-    session: TerminalSession,
-  ) => {
-    console.warn("⚠️ Using deprecated sendBufferedInput, consider migrating to sendInputImmediately");
-    sendInputImmediately(sessionId, terminalId, session);
   };
 
   // 全局会话管理
@@ -491,8 +466,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const sessions = terminalSessions();
       const session = sessions.get(terminalId);
       if (session) {
-        // 先发送剩余的缓冲数据
-        sendBufferedInput(props.sessionId, terminalId, session);
 
         // 清理定时器
         if (session.sendTimeout) {
@@ -569,9 +542,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         isActive: true,
         inputBuffer: "",
         sendTimeout: null,
-        localInputLength: 0,
         hasPendingInput: false,
-        lastLocalInput: "",
       };
 
       // 添加到会话映射
@@ -634,21 +605,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           return;
         }
 
-        // 累积输入到会话缓冲区（仅用于发送，避免本地写入）
+        // 累积输入到会话缓冲区（仅用于发送）
         terminalSession.inputBuffer = (terminalSession.inputBuffer || "") + data;
-
-        // 更新本地输入状态用于去重
-        terminalSession.lastLocalInput = (terminalSession.lastLocalInput || "") + data;
         terminalSession.hasPendingInput = true;
 
-        // 注意：不再使用 localInputLength，改用 lastLocalInput.length
-
-        // 依赖远端回显，取消本地即时写入
-
-        console.log("📝 Input buffer updated:", {
-          buffer: JSON.stringify(terminalSession.inputBuffer),
-          lastLocalInput: JSON.stringify(terminalSession.lastLocalInput),
-        });
+        // 依赖远程终端的输出来显示，不做本地输入处理
+        console.log("📝 Terminal input:", JSON.stringify(data));
 
         // 检查是否是回车键，如果是则立即发送
         if (data === "\r" || data === "\n") {
@@ -761,10 +723,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const terminalId = payload.terminal_id || payload.terminalId;
       const data = payload.data;
 
-      console.log("📤 Received terminal output:", {
-        terminalId,
-        dataLength: data?.length,
-      });
+      // console.log("📤 Received terminal output:", {
+      //   terminalId,
+      //   dataLength: data?.length,
+      // });
       console.log("   Preview:", data);
 
       const sessions = terminalSessions();
@@ -774,14 +736,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         // 确保数据是字符串类型
         let outputData = typeof data === "string" ? data : String(data || "");
 
-        // 使用新的输出处理方法 - 先删除本地输入，再显示远程输出
-        outputData = handleRemoteOutput(session, outputData);
-
         // 只有当还有数据时才写入
         if (outputData.length > 0) {
           session.terminal.write(outputData);
         }
-
 
         // 触发会话保存（通过解析输出更新工作目录等）
         if (session.terminalSession) {
@@ -867,9 +825,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 typeof outputData === "string"
                   ? outputData
                   : String(outputData || "");
-
-              // 使用新的输出处理方法 - 先删除本地输入，再显示远程输出
-              dataStr = handleRemoteOutput(session, dataStr);
 
               // 只有当还有数据时才写入
               if (dataStr.length > 0) {
