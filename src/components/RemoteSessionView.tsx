@@ -382,8 +382,30 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   };
 
   // 处理TCP会话点击
-  const handleTcpSessionClick = (session: any) => {
-    setSelectedTcpSession(session);
+  const handleTcpSessionClick = async (session: any) => {
+    // 先刷新TCP会话列表以获取最新统计信息
+    console.log("🔄 Refreshing TCP sessions before showing details");
+    try {
+      await loadTcpSessions();
+
+      // 等待一小段时间确保数据已更新
+      setTimeout(() => {
+        // 根据ID找到最新的会话数据
+        const currentSessions = tcpSessions();
+        const updatedSession = currentSessions.find(s => s.id === session.id);
+        if (updatedSession) {
+          console.log("📊 Updated session data:", updatedSession);
+          setSelectedTcpSession(updatedSession);
+        } else {
+          // 如果找不到，使用原始数据
+          setSelectedTcpSession(session);
+        }
+      }, 300);
+    } catch (error) {
+      console.error("Failed to refresh TCP sessions:", error);
+      // 如果刷新失败，使用原始数据
+      setSelectedTcpSession(session);
+    }
   };
 
   // 计算终端大小（基于容器宽度）
@@ -974,6 +996,15 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       !availableTerminalIds.includes(hasActiveTerminal)
     ) {
       setActiveTerminalId(null);
+    }
+  });
+
+  // 监听标签页切换，自动刷新TCP会话列表
+  createEffect(() => {
+    const currentTab = activeSidebarTab();
+    if (currentTab === "services") {
+      console.log("🔄 Switched to services tab, refreshing TCP sessions");
+      loadTcpSessions();
     }
   });
 
