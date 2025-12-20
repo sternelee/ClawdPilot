@@ -9,6 +9,7 @@ import { getDeviceCapabilities } from "../stores/deviceStore";
 import { useTerminalSessions } from "../stores/terminalSessionStore";
 import { useTerminalSession } from "../hooks/useTerminalSession";
 import { AIHelper } from "./AIHelper";
+import { showError, showSuccess } from "../utils/toast";
 
 // Import types from the shared library
 interface TerminalInfo {
@@ -86,7 +87,7 @@ const loadLocalFont = async (): Promise<{ loaded: boolean; fontName: string }> =
       throw new Error("All font paths failed");
     }
   } catch (error) {
-    console.error("❌ Failed to load local FiraCode Nerd Font:", error);
+    showError("加载本地 FiraCode Nerd Font 失败: " + error, "字体加载错误");
     return { loaded: false, fontName: '' };
   }
 };
@@ -165,7 +166,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         terminalId: terminalId,
         input: dataToSend,
       }).catch((error) => {
-        console.error("❌ Failed to send terminal input:", error);
+        showError("发送终端输入失败: " + error, "输入错误");
         // 发送失败时重置状态
         session.hasPendingInput = false;
       });
@@ -217,7 +218,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         input: command + "\n",
       });
     } catch (error) {
-      console.error("Failed to execute command:", error);
+      showError("执行命令失败: " + error, "命令执行错误");
     }
   };
 
@@ -330,7 +331,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         terminalId: activeId,
         input: data,
       }).catch((error) => {
-        console.error("Failed to send terminal input:", error);
+        showError("发送终端输入失败: " + error, "输入发送错误");
       });
     }
   };
@@ -340,7 +341,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     try {
       await invoke("get_terminal_list", { sessionId: props.sessionId });
     } catch (error) {
-      console.error("Failed to fetch terminal list:", error);
+      showError("获取终端列表失败: " + error, "列表加载错误");
     }
   };
 
@@ -370,8 +371,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       // 延迟刷新列表
       setTimeout(() => loadTcpSessions(), 500);
     } catch (error) {
-      console.error("Failed to create TCP forwarding session:", error);
-      alert("创建 TCP 转发会话失败: " + error);
+      showError("创建 TCP 转发会话失败: " + error, "TCP 转发错误");
     }
   };
 
@@ -380,7 +380,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     try {
       await invoke("list_tcp_forwarding_sessions", { sessionId: props.sessionId });
     } catch (error) {
-      console.error("Failed to load TCP forwarding sessions:", error);
+      showError("加载 TCP 转发会话列表失败: " + error, "TCP 列表错误");
     }
   };
 
@@ -415,8 +415,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         setSelectedTcpSession(null);
       }
     } catch (error) {
-      console.error("Failed to stop TCP forwarding session:", error);
-      alert("停止 TCP 转发会话失败: " + error);
+      showError("停止 TCP 转发会话失败: " + error, "TCP 停止错误");
     }
   };
 
@@ -461,7 +460,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         }
       }, 300);
     } catch (error) {
-      console.error("Failed to refresh TCP sessions:", error);
+      showError("刷新 TCP 会话失败: " + error, "刷新错误");
       // 如果刷新失败，使用原始数据
       setSelectedTcpSession(session);
     }
@@ -533,7 +532,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       return terminalId;
     } catch (error) {
-      console.error("Failed to create terminal:", error);
+      showError("创建终端失败: " + error, "终端创建错误");
       throw error;
     }
   };
@@ -573,7 +572,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         setActiveTerminalId(null);
       }
     } catch (error) {
-      console.error("Failed to stop terminal:", error);
+      showError("停止终端失败: " + error, "终端停止错误");
     }
   };
 
@@ -592,7 +591,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             try {
               existingSession.fitAddon.fit();
             } catch (error) {
-              console.error("Error refitting existing terminal:", error);
+              showError("终端适配失败: " + error, "终端适配错误");
             }
           }, 100);
         }
@@ -690,7 +689,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             terminalId: terminalId,
             input: data,
           }).catch((error) => {
-            console.error("Failed to send Ctrl+C:", error);
+            showError("发送 Ctrl+C 命令失败: " + error, "快捷键发送错误");
           });
           return;
         }
@@ -736,7 +735,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         }
       }, 100);
     } catch (error) {
-      console.error("Failed to connect to terminal:", error);
+      showError("连接终端失败: " + error, "终端连接错误");
       // 更新连接状态为失败
       terminalSessionManager.updateConnectionState(terminalId, "disconnected");
     }
