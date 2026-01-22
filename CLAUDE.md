@@ -13,7 +13,7 @@ The project is organized as a Cargo workspace with four main components:
 - **cli/** - Command-line interface tool for hosting terminal sessions
 - **app/** - Tauri-based multi-platform application (desktop + mobile)
 - **shared/** - Common networking and messaging protocols
-- **browser/** - Web browser client implementation
+- **browser/** - Web browser client implementation (WebAssembly)
 - **src/** - SolidJS frontend application
 
 ### Core Components
@@ -22,24 +22,24 @@ The project is organized as a Cargo workspace with four main components:
    - `message_protocol.rs` - Core message types and protocols with unified messaging system
    - `quic_server.rs` - QUIC-based server implementation
    - `event_manager.rs` - Event handling and coordination
-   - `communication_manager.rs` - Communication and connection management
+   - `browser.rs` - Browser-specific P2P implementation (WASM)
 
 2. **CLI Tool** (`cli/src/`)
-   - `message_server.rs` - Host server for Tauri/mobile connections
-   - `terminal_runner.rs` - Terminal session management
+   - `message_server.rs` - Host server for Tauri/mobile connections with MessageHandler implementations
+   - `main.rs` - CLI entry point with `host` subcommand
    - `shell.rs` - Shell detection and configuration
-   - `message_handler.rs` - Message processing and routing
 
 3. **Tauri App** (`app/src/`)
    - `lib.rs` - Main Tauri backend with session management
+   - `tcp_forwarding.rs` - TCP forwarding session management
+   - `main.rs` - Tauri application entry point
    - Terminal creation, input handling, and P2P coordination
-   - Mobile and desktop capability management
 
 4. **Frontend** (`src/`)
    - SolidJS with TypeScript
    - Mobile-first responsive design with adaptive layouts
    - Terminal UI components using xterm.js
-   - AI chat integration for natural language terminal commands
+   - Components: `HomeView.tsx`, `RemoteSessionView.tsx`, `SettingsModal.tsx`, `P2PBackground.tsx`
 
 ## Development Commands
 
@@ -51,57 +51,35 @@ cd cli && cargo build --release
 # Run CLI host server
 ./cli/target/release/cli host
 
-# Run CLI with custom shell
-./cli/target/release/cli host --shell zsh --width 120 --height 30
+# Run CLI with custom options
+./cli/target/release/cli host --relay https://relay.example.com --max-connections 100 --temp-key
 
 # Build Tauri app
-bun run tauri build
-# or
-npm run tauri build
+pnpm tauri build
 
 # Development mode
-bun run tauri dev
-# or
-npm run tauri dev
+pnpm tauri dev
 
 # Build frontend only
-bun run build
-# or
-npm run build
+pnpm build
 
-# Development server
-bun run dev
-# or
-npm run dev
+# Development server (Vite dev server on localhost:1420)
+pnpm dev
 
 # Type checking and build
-bun run tsc    # TypeScript check followed by Vite build
-# or
-npm run tsc
+pnpm tsc    # TypeScript check followed by Vite build
 ```
 
 ### Mobile Development
 ```bash
 # Android development
-bun run tauri android dev
-# or
-npm run tauri android dev
-# or
-pnpm tauri android dev
+pnpm tauri:android:dev
 
 # Build Android APK
-bun run tauri android build
-# or
-npm run tauri android build
-# or
-pnpm tauri android build
+pnpm tauri:android:build
 
 # iOS development (macOS only)
-bun run tauri ios dev
-# or
-npm run tauri ios dev
-# or
-pnpm tauri ios dev
+pnpm tauri:ios:dev
 
 # View iOS device logs (macOS)
 idevicesyslog | grep RiTerm
@@ -121,19 +99,8 @@ cd shared && cargo test
 cd app && cargo test
 cd browser && cargo test
 
-# Run specific test files
-cargo test --bin test_ticket
-cargo test --bin test_connection
-
-# Build and run test utilities
-rustc test_ticket.rs && ./test_ticket
-rustc test_connection.rs && ./test_connection
-
 # Test CLI ticket generation
 ./test_ticket_output.sh
-
-# Browser integration tests
-cd browser && cargo test --features integration-tests
 
 # GitHub Actions (CI/CD)
 # - .github/workflows/build-and-test.yml - Automated builds and tests
@@ -143,31 +110,15 @@ cd browser && cargo test --features integration-tests
 ### Code Quality and Development Tools
 ```bash
 # TypeScript type checking (followed by build)
-bun run tsc
-# or
-npm run tsc
-# or
 pnpm tsc
 
-# Frontend development server
-bun run dev
-# or
-npm run dev
-# or
+# Frontend development server (localhost:1420)
 pnpm dev
 
 # Build frontend only
-bun run build
-# or
-npm run build
-# or
 pnpm build
 
 # Preview built frontend
-bun run preview
-# or
-npm run preview
-# or
 pnpm preview
 
 # Rust compilation check
@@ -197,43 +148,23 @@ cd browser && wasm-pack build --target web --release
 
 ### Development Workflow
 ```bash
-# Install dependencies
-bun install
-# or
-npm install
-# or
-pnpm install  # specified as packageManager in package.json
+# Install dependencies (use pnpm as specified in package.json)
+pnpm install
 
 # Start development with hot reload
-bun run tauri dev
-# or
-npm run tauri dev
-# or
 pnpm tauri dev
 
-# For frontend-only development
-bun run dev
-# or
-npm run dev
-# or
+# For frontend-only development (localhost:1420)
 pnpm dev
 
 # Type checking
-bun run tsc
-# or
-npm run tsc
-# or
 pnpm tsc
 
 # Build for production
-bun run build && bun run tauri build
-# or
-npm run build && npm run tauri build
-# or
 pnpm build && pnpm tauri build
 ```
 
-**Package Manager Note**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. The Tauri configuration (`app/tauri.conf.json`) references `pnpm` commands with `beforeDevCommand: "pnpm dev"` and `beforeBuildCommand: "pnpm build"`. While bun can be used for better performance, the project officially supports pnpm.
+**Package Manager**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. Tauri configuration (`app/tauri.conf.json`) uses `pnpm dev` and `pnpm build` commands.
 
 ## Key Technical Details
 
@@ -281,9 +212,8 @@ Key message flows:
 
 #### CLI Tool (`cli/src/`)
 - `message_server.rs` - Host server with MessageHandler implementations for different message types
-- `terminal_runner.rs` - Terminal session management with real-time I/O synchronization
+- `main.rs` - CLI entry point with `host` subcommand using clap
 - `shell.rs` - Cross-platform shell detection (Zsh, Bash, Fish, Nushell, PowerShell)
-- `message_handler.rs` - Message processing, routing, and response generation
 
 #### Tauri App (`app/src/`)
 - `lib.rs` - Main Tauri backend with session management and P2P coordination
@@ -295,8 +225,7 @@ Key message flows:
 - SolidJS with TypeScript for reactive UI development
 - Mobile-first responsive design with viewport management
 - Terminal UI using xterm.js with mobile-optimized keyboard handling
-- AI chat integration for natural language terminal command generation
-- Tab-based multi-terminal support with gesture controls
+- Main components: `HomeView.tsx`, `RemoteSessionView.tsx`, `SettingsModal.tsx`, `P2PBackground.tsx`
 
 #### Browser Client (`browser/src/`)
 - WebAssembly implementation using wasm-bindgen for browser P2P networking
@@ -314,22 +243,18 @@ Key message flows:
 
 ### Frontend Architecture
 - **Mobile-First Design**: Responsive layouts with dynamic viewport management
-- **Touch Optimization**: Gesture controls and appropriate tap targets for mobile devices  
+- **Touch Optimization**: Gesture controls and appropriate tap targets for mobile devices
 - **Keyboard Management**: Advanced mobile keyboard handling with automatic viewport adjustment
-- **AI Integration**: Natural language terminal command generation through chat interface
-- **Multi-Terminal Support**: Tab-based terminal management with session persistence
 - **Real-time Updates**: Reactive UI using SolidJS with immediate terminal output synchronization
+- **Components**: HomeView (connection screen), RemoteSessionView (terminal interface), SettingsModal, P2PBackground
 
 ## Configuration Files
 
 - `Cargo.toml` - Workspace configuration with shared dependencies and build profiles
 - `package.json` - Frontend dependencies and build scripts, specifies pnpm@10.0.0 as package manager
-- `app/tauri.conf.json` - Tauri application configuration with pnpm dev/build commands
-- `app/capabilities/` - Platform-specific permission configurations:
-  - `main.json` - Main application permissions
-  - `desktop.json` - Desktop-specific capabilities
-  - `mobile.json` - Mobile-specific capabilities
-- `vite.config.ts` - Vite build configuration for SolidJS (server on localhost:1420)
+- `app/tauri.conf.json` - Tauri application configuration (uses pnpm dev/build commands, devUrl: localhost:1420)
+- `app/capabilities/` - Platform-specific permission configurations
+- `vite.config.ts` - Vite build configuration for SolidJS (dev server on localhost:1420)
 - `tailwind.config.js` - TailwindCSS configuration with DaisyUI themes
 - `postcss.config.js` - PostCSS configuration for TailwindCSS processing
 
@@ -349,7 +274,6 @@ Key message flows:
 - **@xterm/xterm** (5.5.0) - Terminal emulator with addons (canvas, fit, search, web-links, webgl)
 - **daisyui** (5.0.50) - TailwindCSS component library
 - **lucide-solid** (0.540.0) - Icon library
-- **@tanstack/ai-solid** (0.0.2) - AI integration for natural language terminal commands
 - **vconsole** (3.15.1) - Mobile debugging console for development
 
 ### Key Features
@@ -372,12 +296,10 @@ Key message flows:
 - Implemented unified message protocol replacing previous TerminalCommand/Response system
 - Fixed terminal I/O synchronization issues for real-time interaction
 - Enhanced mobile viewport management and keyboard handling
-- Added AI chat integration for natural language commands
-- Improved session recovery and connection management
-- **NEW**: Implemented TCP service forwarding with full app-CLI coordination
-- Added comprehensive TCP session management UI with real-time statistics
-- Integrated TCP data message handling for bidirectional data forwarding
-- **NEW**: Added browser client with WebAssembly support for direct web access
+- Improved connection management and reliability
+- Implemented TCP service forwarding with full app-CLI coordination
+- Added TCP forwarding session management in `app/src/tcp_forwarding.rs`
+- Added browser client with WebAssembly support for direct web access
 - Enhanced cross-platform compatibility with dedicated web interface
 - Improved message serialization with bincode for performance optimization
 
@@ -399,8 +321,8 @@ The project now includes TCP service forwarding capabilities allowing users to:
 **Key Components:**
 - `shared/src/message_protocol.rs` - Defines `TcpForwardingAction`, `TcpForwardingType`, and `TcpDataType` enums
 - `cli/src/message_server.rs` - Implements `TcpForwardingMessageHandler` and `TcpDataMessageHandler`
+- `app/src/tcp_forwarding.rs` - TCP forwarding session management module
 - `app/src/lib.rs` - Provides Tauri commands for TCP forwarding management
-- `src/components/TcpForwardingManager.tsx` - Frontend UI for managing TCP sessions
 - `browser/src/` - WebAssembly implementation for browser-based terminal access only
 
 **Message Types:**
@@ -431,8 +353,10 @@ The project now includes TCP service forwarding capabilities allowing users to:
 - Terminal I/O synchronization testing
 - CLI ticket generation testing with `test_ticket_output.sh`
 - Mobile debugging with `vconsole` for in-app console during development
-- Frontend development server runs on `http://localhost:1420` with hot reload
+- Frontend development server runs on `http://localhost:1420` with hot reload and network access enabled
 - GitHub Actions CI/CD pipeline for automated testing and releases
+  - `.github/workflows/build-and-test.yml` - Development builds and tests
+  - `.github/workflows/publish-to-auto-release.yml` - Automated releases
 - Browser client WebAssembly debugging with browser dev tools
 
 ## Build Targets and Workspace Structure
@@ -465,6 +389,7 @@ riterm/
 - Mobile builds require platform-specific toolchains (Android SDK, Xcode)
 - Browser client uses `wasm-pack` for WASM compilation and web bundling
 - Tauri automatically runs `pnpm dev` before development and `pnpm build` before building
+- Use scripts: `pnpm tauri:android:dev`, `pnpm tauri:android:build`, `pnpm tauri:ios:dev`, `pnpm tauri:ios:build`
 
 ## Common Development Patterns
 
@@ -472,14 +397,14 @@ riterm/
 1. Define message types in `shared/src/message_protocol.rs`
 2. Implement CLI handlers in `cli/src/message_server.rs` (MessageHandler implementations)
 3. Add Tauri commands in `app/src/lib.rs`
-4. Create frontend components in `src/components/`
+4. Create/update frontend components in `src/components/`
 5. Update mobile viewport management if needed
 
 ### Adding New TCP Forwarding Features
 1. Define new TCP message types in `shared/src/message_protocol.rs`
-2. Implement TCP handlers in the existing `TcpForwardingMessageHandler` or `TcpDataMessageHandler`
-3. Add corresponding Tauri commands in `app/src/lib.rs`
-4. Update the `TcpForwardingManager.tsx` frontend component
+2. Implement TCP handlers in `cli/src/message_server.rs` (TcpForwardingMessageHandler or TcpDataMessageHandler)
+3. Add Tauri commands in `app/src/lib.rs` or update `app/src/tcp_forwarding.rs`
+4. Update the frontend components (e.g., RemoteSessionView.tsx)
 5. Test with both forwarding modes: "ListenToRemote" and "ConnectToRemote"
 
 ### Browser Client Development
@@ -497,15 +422,14 @@ riterm/
 - Dependent on browser WebAssembly support and security constraints
 
 ### Mobile Development Tips
-- Use the `ViewportManager` for keyboard-aware layouts
 - Test with both Android and iOS when possible
 - Consider touch targets and gesture handling
 - Use conditional compilation for platform-specific features
 - Test with various screen sizes and orientations
+- iOS device logs: `idevicesyslog | grep RiTerm`
 
 ### Session Management
 - Always handle session cleanup in component unmount effects
-- Use the session recovery utilities for connection resilience
 - Monitor event count to stay within buffer limits
 - Implement proper error handling for network interruptions
 

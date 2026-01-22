@@ -7,9 +7,7 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { getDeviceCapabilities } from "../stores/deviceStore";
 import { useTerminalSessions } from "../stores/terminalSessionStore";
-import { useTerminalSession } from "../hooks/useTerminalSession";
-import { AIHelper } from "./AIHelper";
-import { showError, showSuccess } from "../utils/toast";
+import { showError } from "../utils/toast";
 
 // Import types from the shared library
 interface TerminalInfo {
@@ -36,7 +34,6 @@ interface TerminalSession {
   fitAddon: FitAddon;
   canvasAddon: CanvasAddon;
   isActive: boolean;
-  terminalSession?: ReturnType<typeof useTerminalSession>;
   inputBuffer?: string;
   sendTimeout?: ReturnType<typeof setTimeout> | null;
   hasPendingInput?: boolean; // 是否有待发送的输入
@@ -151,16 +148,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       // 清空输入缓冲区
       session.inputBuffer = "";
 
-      // 保存命令到会话（如果有实际内容）
-      const trimmedCommand = dataToSend.trim();
-      if (trimmedCommand) {
-        // 从会话管理器获取对应的 Hook 来保存命令
-        const terminalSessionHook = session.terminalSession;
-        if (terminalSessionHook) {
-          terminalSessionHook.saveCommand(trimmedCommand);
-        }
-      }
-
       invoke("send_terminal_input_to_terminal", {
         sessionId: sessionId,
         terminalId: terminalId,
@@ -206,32 +193,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 侧边栏状态
   const [sidebarOpen, setSidebarOpen] = createSignal(true); // 默认开启，由CSS控制响应式
 
-  // Helper functions for AI integration
-  const handleExecuteCommand = async (command: string) => {
-    const activeId = activeTerminalId();
-    if (!activeId) return;
-
-    try {
-      await invoke("send_terminal_input_to_terminal", {
-        sessionId: props.sessionId,
-        terminalId: activeId,
-        input: command + "\n",
-      });
-    } catch (error) {
-      showError("执行命令失败: " + error, "命令执行错误");
-    }
-  };
-
-  const handleCreateTerminal = async (config?: { name?: string; rows?: number; cols?: number }): Promise<string> => {
-    const size = calculateTerminalSize();
-    const terminalId = await invoke<string>("create_terminal", {
-      sessionId: props.sessionId,
-      name: config?.name,
-      size: config?.rows && config?.cols ? [config.rows, config.cols] : [size.rows, size.cols],
-    });
-    return terminalId;
-  };
-
   // TCP 转发相关状态
   const [tcpSessions, setTcpSessions] = createSignal<
     Array<{
@@ -262,34 +223,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     bytes_received: number;
     status: string;
     created_at: number;
-  } | null>(null);
-
-  // 系统信息相关状态
-  const [systemInfo] = createSignal<{
-    os_info: {
-      name: string;
-      version: string;
-      arch: string;
-    };
-    shell_info: {
-      shell_type: string;
-      shell_path: string;
-      version?: string;
-    };
-    available_tools: {
-      package_managers: string[];
-      editors: string[];
-      search_tools: string[];
-      version_control: string[];
-      development_tools: string[];
-    };
-    environment_vars: Record<string, string>;
-    architecture: string;
-    hostname: string;
-    user_info: {
-      username: string;
-      home_dir: string;
-    };
   } | null>(null);
 
   const deviceCapabilities = getDeviceCapabilities();
@@ -663,17 +596,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       // 设置活动终端
       terminalSessionManager.setActiveTerminal(terminalId);
 
-      // 初始化终端会话Hook
-      const terminalSessionHook = useTerminalSession(
-        terminal,
-        () => terminalId,
-        {
-          saveInterval: 3000,
-          maxContentLength: 5000,
-        },
-      );
-
-
       // 设置终端数据处理器 - 优化版本
       terminal.onData((data) => {
         console.log("📝 Terminal input:", JSON.stringify(data));
@@ -711,9 +633,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           });
         }
       });
-
-      // 更新会话引用
-      terminalSession.terminalSession = terminalSessionHook;
 
       // 告诉CLI端我们连接到了这个终端
       await invoke("connect_to_terminal", {
@@ -828,11 +747,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         if (outputData.length > 0) {
           session.terminal.write(outputData);
         }
-
-        // 触发会话保存（通过解析输出更新工作目录等）
-        if (session.terminalSession) {
-          session.terminalSession.updateWorkingDirectory(outputData);
-        }
       } else {
         console.warn(
           "⚠️ Terminal session not found or inactive for output:",
@@ -917,11 +831,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               // 只有当还有数据时才写入
               if (dataStr.length > 0) {
                 session.terminal.write(dataStr);
-              }
-
-              // 触发会话保存
-              if (session.terminalSession) {
-                session.terminalSession.updateWorkingDirectory(dataStr);
               }
             } else {
               console.warn(
@@ -1433,16 +1342,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
     return (
       <>
-        {/* Mobile AI Helper Bar */}
-        <AIHelper
-          sessionId={props.sessionId}
-          terminals={terminals}
-          activeTerminalId={activeTerminalId}
-          systemInfo={systemInfo}
-          onExecuteCommand={handleExecuteCommand}
-          onCreateTerminal={handleCreateTerminal}
-        />
-
         {/* Traditional Shortcut Bar */}
         <div
           class="border-t bg-base-100 px-2 py-2 shrink-0"
@@ -1902,20 +1801,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
         {/* 底部工具栏区域 - 固定在底部 */}
         <div class="shrink-0">
-          {/* AI Helper - 桌面端显示 */}
-          <Show when={activeTerminalId() && !isMobile}>
-            <div class="border-t border-base-300 bg-base-200">
-              <AIHelper
-                sessionId={props.sessionId}
-                terminals={terminals}
-                activeTerminalId={activeTerminalId}
-                systemInfo={systemInfo}
-                onExecuteCommand={handleExecuteCommand}
-                onCreateTerminal={handleCreateTerminal}
-              />
-            </div>
-          </Show>
-
           {/* 底部快捷键栏 - 移动端显示 */}
           <Show when={isMobile && activeTerminalId()}>
             {renderShortcutBar()}
