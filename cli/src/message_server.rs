@@ -1204,21 +1204,15 @@ impl MessageHandler for TerminalIOHandler {
 /// TCP 转发消息处理器
 pub struct TcpForwardingMessageHandler {
     tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>,
-    communication_manager: Arc<CommunicationManager>,
-    quic_server: QuicMessageServer,
 }
 
 impl TcpForwardingMessageHandler {
     pub fn new(
         tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>,
-        communication_manager: Arc<CommunicationManager>,
-        quic_server: QuicMessageServer,
+        _communication_manager: Arc<CommunicationManager>,
+        _quic_server: QuicMessageServer,
     ) -> Self {
-        Self {
-            tcp_sessions,
-            communication_manager,
-            quic_server,
-        }
+        Self { tcp_sessions }
     }
 
     /// 创建 TCP 转发会话
@@ -1294,6 +1288,7 @@ impl TcpForwardingMessageHandler {
         {
             let mut sessions = self.tcp_sessions.write().await;
             let mut session_with_tx = internal_session;
+            session_with_tx.shutdown_tx = Some(shutdown_tx);
             session_with_tx.session.status = "running".to_string();
             session_with_tx.session.created_at = std::time::SystemTime::now();
             sessions.insert(session_id.clone(), session_with_tx);
@@ -1311,8 +1306,8 @@ impl TcpForwardingMessageHandler {
         &self,
         session_id: String,
         local_addr: SocketAddr,
-        remote_addr: SocketAddr,
-        connections: Arc<RwLock<HashMap<String, TcpConnection>>>,
+        _remote_addr: SocketAddr,
+        _connections: Arc<RwLock<HashMap<String, TcpConnection>>>,
     ) -> Result<mpsc::UnboundedSender<()>> {
         use tokio::net::TcpListener;
 
@@ -1387,7 +1382,7 @@ impl TcpForwardingMessageHandler {
         );
 
         let mut sessions = self.tcp_sessions.write().await;
-        if let Some(mut session) = sessions.get(session_id) {
+        if let Some(session) = sessions.get(session_id) {
             // 验证客户端所有权
             if session.session.client_node_id != client_node_id {
                 return Err(anyhow::anyhow!(
@@ -1527,7 +1522,7 @@ impl MessageHandler for TcpForwardingMessageHandler {
                                             )),
                                         ));
                                     }
-                                    Err(e) => {
+                                    Err(_e) => {
                                         // 如果获取列表失败，至少返回创建成功的消息
                                         let response_data = serde_json::json!({
                                             "session_id": session_id,
@@ -1595,7 +1590,7 @@ impl MessageHandler for TcpForwardingMessageHandler {
                                             )),
                                         ));
                                     }
-                                    Err(e) => {
+                                    Err(_e) => {
                                         // 如果获取列表失败，至少返回停止成功的消息
                                         let response_data = serde_json::json!({
                                             "session_id": session_id,
@@ -2015,7 +2010,7 @@ impl SystemInfoMessageHandler {
             ("cargo", "cargo", "Cargo"),
         ];
 
-        for (cmd, name, display_name) in potential_managers {
+        for (cmd, _name, display_name) in potential_managers {
             if let Ok(version) = self.get_tool_version(cmd).await {
                 managers.push(PackageManager {
                     name: display_name.to_string(),
@@ -2453,9 +2448,6 @@ impl TcpDataMessageHandler {
                                 );
 
                                 // 启动任务从 TCP 服务读取数据并通过 P2P 网络发送
-                                let session_id_clone = session_id.to_string();
-                                let connection_id_clone = connection_id.to_string();
-                                let tcp_connections_clone = internal_session.connections.clone();
                                 let quic_server_clone = self.quic_server.clone();
 
                                 // 启动任务从 TCP 服务读取数据并通过 P2P 网络发送

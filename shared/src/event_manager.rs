@@ -356,7 +356,7 @@ pub struct CommunicationManager {
     message_router: Arc<MessageRouter>,
     event_manager: Arc<EventManager>,
     message_converter: Arc<MessageToEventConverter>,
-    incoming_message_tx: mpsc::UnboundedSender<Message>,
+    _incoming_message_tx: mpsc::UnboundedSender<Message>, // Kept for potential future use
     outgoing_message_tx: mpsc::UnboundedSender<Message>,
     node_id: String,
 }
@@ -376,7 +376,7 @@ impl CommunicationManager {
             message_router: Arc::new(MessageRouter::new()),
             event_manager,
             message_converter,
-            incoming_message_tx,
+            _incoming_message_tx: incoming_message_tx,
             outgoing_message_tx,
             node_id,
         }
@@ -483,7 +483,7 @@ impl CommunicationManager {
 
     /// 启动消息处理循环
     async fn start_message_processing_loop(&self) -> Result<()> {
-        let outgoing_tx = self.outgoing_message_tx.clone();
+        let _outgoing_tx = self.outgoing_message_tx.clone();
         let node_id = self.node_id.clone();
 
         tokio::spawn(async move {

@@ -11,6 +11,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
+
 /// 默认最大日志行数
 const DEFAULT_MAX_LOG_LINES: usize = 1000;
 
@@ -186,7 +188,7 @@ impl TerminalLogger {
             .context("Failed to open log file")?;
 
         // 格式: timestamp|level|data_type|data_base64
-        let data_base64 = base64::encode(&entry.data);
+        let data_base64 = STANDARD.encode(&entry.data);
         let log_line = format!(
             "{}|{}|{}|{}\n",
             entry.timestamp, entry.level, entry.data_type, data_base64
@@ -239,7 +241,7 @@ fn parse_log_line(line: &str) -> Option<TerminalLogEntry> {
     let data_type = parts[2].to_string();
 
     // 解码 base64 数据
-    let data = base64::decode(parts[3]).ok()?;
+    let data = STANDARD.decode(parts[3]).ok()?;
 
     Some(TerminalLogEntry {
         timestamp,
@@ -337,7 +339,7 @@ mod tests {
     #[test]
     fn test_log_entry_parsing() {
         let data = b"test data";
-        let data_base64 = base64::encode(data);
+        let data_base64 = STANDARD.encode(data);
         let line = format!("1234567890|INPUT|input|{}", data_base64);
 
         let entry = parse_log_line(&line).unwrap();

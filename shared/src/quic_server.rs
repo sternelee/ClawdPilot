@@ -7,7 +7,7 @@ use crate::event_manager::*;
 use crate::message_protocol::*;
 use anyhow::Result;
 use async_trait::async_trait;
-use iroh::{Endpoint, SecretKey, discovery::dns::DnsDiscovery, EndpointId};
+use iroh::{Endpoint, EndpointId, SecretKey, discovery::dns::DnsDiscovery};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -379,10 +379,15 @@ impl QuicMessageServer {
         let connection_id = {
             let mut conns = connections.write().await;
 
-            info!("Message connection established with: {:?}", remote_endpoint_id);
+            info!(
+                "Message connection established with: {:?}",
+                remote_endpoint_id
+            );
 
             // 查找是否有相同endpoint_id的连接
-            let existing_conn = conns.iter_mut().find(|(_, conn)| conn.node_id == remote_endpoint_id);
+            let existing_conn = conns
+                .iter_mut()
+                .find(|(_, conn)| conn.node_id == remote_endpoint_id);
 
             if let Some((existing_id, existing_conn)) = existing_conn {
                 // 找到相同endpoint_id的连接，更新连接信息但保持相同ID
@@ -555,11 +560,7 @@ impl QuicMessageServer {
     }
 
     /// 发送消息到特定节点
-    pub async fn send_message_to_node(
-        &self,
-        node_id: &EndpointId,
-        message: Message,
-    ) -> Result<()> {
+    pub async fn send_message_to_node(&self, node_id: &EndpointId, message: Message) -> Result<()> {
         #[cfg(debug_assertions)]
         debug!("Sending message to node: {:?}", node_id);
 
@@ -718,7 +719,8 @@ pub struct QuicMessageClient {
     #[allow(dead_code)] // 通信管理器用于未来扩展
     communication_manager: Arc<CommunicationManager>,
     server_connections: Arc<RwLock<HashMap<String, iroh::endpoint::Connection>>>,
-    message_rx: broadcast::Receiver<Message>,
+    #[allow(dead_code)] // 保持接收器存活以防止广播通道关闭
+    _message_rx: broadcast::Receiver<Message>,
     message_tx: broadcast::Sender<Message>,
 }
 
@@ -775,7 +777,7 @@ impl QuicMessageClient {
             endpoint: Arc::new(endpoint),
             communication_manager,
             server_connections: Arc::new(RwLock::new(HashMap::new())),
-            message_rx,
+            _message_rx: message_rx,
             message_tx,
         })
     }
@@ -798,9 +800,7 @@ impl QuicMessageClient {
             .endpoint
             .connect(*node_addr, QUIC_MESSAGE_ALPN)
             .await
-            .map_err(|e| {
-                anyhow::anyhow!("Failed to connect to node {:?}: {}", node_addr, e)
-            })?;
+            .map_err(|e| anyhow::anyhow!("Failed to connect to node {:?}: {}", node_addr, e))?;
 
         let server_node_id = connection.remote_id();
         let connection_id = format!("conn_{}", uuid::Uuid::new_v4());

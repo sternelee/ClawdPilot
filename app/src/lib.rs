@@ -425,7 +425,7 @@ async fn connect_to_peer(
         return Err("Invalid session ticket format".to_string());
     }
 
-    let quic_client = ensure_quic_client_initialized(&state).await?;
+    let _quic_client = ensure_quic_client_initialized(&state).await?;
 
     let communication_manager = {
         let comm_guard = state.communication_manager.read().await;
@@ -898,14 +898,6 @@ async fn create_terminal(
     size: Option<(u16, u16)>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -941,14 +933,6 @@ async fn stop_terminal(
     terminalId: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -977,14 +961,6 @@ async fn stop_terminal(
 
 #[tauri::command]
 async fn list_terminals(sessionId: String, state: State<'_, AppState>) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1014,14 +990,6 @@ async fn send_terminal_input_to_terminal(
     input: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1053,14 +1021,6 @@ async fn resize_terminal(
     cols: u16,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1120,14 +1080,6 @@ async fn get_terminal_logs(
     terminalId: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1170,7 +1122,6 @@ async fn create_tcp_forwarding_session(
     remote_port: Option<u16>,
     forwarding_type: String,
     state: State<'_, AppState>,
-    app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // 验证转发类型 - 只支持 ListenToRemote
     let _fwd_type = match forwarding_type.as_str() {
@@ -1195,7 +1146,7 @@ async fn create_tcp_forwarding_session(
 
     // 在本地创建 TCP 转发会话（暂时不设置消息发送器）
     let session_id_result = {
-        let mut manager = state.tcp_forwarding_manager.lock().await;
+        let manager = state.tcp_forwarding_manager.lock().await;
         manager
             .create_session(local_addr.clone(), remote_host.clone(), remote_port)
             .await
@@ -1203,7 +1154,6 @@ async fn create_tcp_forwarding_session(
     };
 
     // 启动一个任务来处理数据转发
-    let quic_client_clone = quic_client.clone();
     let session_id_for_task = sessionId.clone();
     tokio::spawn(async move {
         // 这里可以监听 TCP 连接并发送数据
@@ -1253,14 +1203,6 @@ async fn list_tcp_forwarding_sessions(
     sessionId: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1295,14 +1237,6 @@ async fn stop_tcp_forwarding_session(
     tcp_session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1339,14 +1273,6 @@ async fn get_tcp_forwarding_session_info(
     tcp_session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
@@ -1386,14 +1312,6 @@ async fn send_tcp_data(
     data_type: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
     let session = {
         let sessions = state.sessions.read().await;
         sessions
