@@ -85,6 +85,8 @@ pub enum TerminalAction {
     Info { terminal_id: String },
     /// 发送输入到终端
     Input { terminal_id: String, data: Vec<u8> },
+    /// 获取终端日志
+    GetLogs { terminal_id: String },
 }
 
 /// TCP转发管理动作
@@ -344,6 +346,34 @@ pub struct ErrorMessage {
     pub code: i32,
     pub message: String,
     pub details: Option<String>,
+}
+
+/// 终端日志条目
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalLogEntry {
+    /// 时间戳
+    pub timestamp: u64,
+    /// 日志级别
+    pub level: String,
+    /// 终端ID
+    pub terminal_id: String,
+    /// 数据类型
+    pub data_type: String,
+    /// 数据内容
+    pub data: Vec<u8>,
+}
+
+/// 终端日志响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TerminalLogResponse {
+    /// 终端ID
+    pub terminal_id: String,
+    /// 日志条目列表
+    pub entries: Vec<TerminalLogEntry>,
+    /// 总行数
+    pub total_lines: usize,
+    /// 日志文件路径
+    pub log_path: String,
 }
 
 /// 系统信息消息

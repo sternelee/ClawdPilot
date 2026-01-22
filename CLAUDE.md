@@ -28,6 +28,7 @@ The project is organized as a Cargo workspace with four main components:
    - `message_server.rs` - Host server for Tauri/mobile connections with MessageHandler implementations
    - `main.rs` - CLI entry point with `host` subcommand
    - `shell.rs` - Shell detection and configuration
+   - `terminal_logger.rs` - Terminal logging module with file-based I/O recording
 
 3. **Tauri App** (`app/src/`)
    - `lib.rs` - Main Tauri backend with session management
@@ -194,6 +195,14 @@ Key message flows:
 2. CLI processes terminal operations and sends responses back through the chain
 3. Browser client can connect directly using WebAssembly P2P implementation
 
+**Terminal Actions** include:
+- `Create` - Create new terminal session
+- `List` - List all terminals
+- `Stop` - Stop a terminal
+- `Resize` - Resize terminal dimensions
+- `Input` - Send input to terminal
+- `GetLogs` - Retrieve terminal logs (new)
+
 ### Session and Connection Management
 
 - **Session Tickets**: Base32-encoded NodeAddr for secure P2P connection sharing
@@ -240,6 +249,15 @@ Key message flows:
 - **Real-time Terminal I/O**: sshx-style asynchronous I/O loop using tokio::select!
 - **Cross-Platform Shell Support**: Automatic detection and configuration of Zsh, Bash, Fish, Nushell, PowerShell
 - **Mobile Optimization**: Adaptive terminal interface with viewport-aware layouts
+
+### Terminal Logging
+- **Automatic I/O Recording**: All terminal input and output is automatically logged to files
+- **Log Location**: Logs are stored in `.riterm/logs/` directory with format `{terminal_id}.log`
+- **Log Rotation**: Default maximum of 1000 lines per terminal (configurable)
+- **Log Retrieval**: Use `get_terminal_logs` Tauri command to retrieve logs via P2P
+- **Log Format**: Each log entry includes timestamp, level (INPUT/OUTPUT/ERROR), and data
+- **Memory Cache**: Recent logs are cached in memory for fast access
+- **File Persistence**: Logs are persisted to disk for session recovery and auditing
 
 ### Frontend Architecture
 - **Mobile-First Design**: Responsive layouts with dynamic viewport management

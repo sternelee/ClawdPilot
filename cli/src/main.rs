@@ -3,6 +3,7 @@ use clap::Parser;
 
 mod message_server;
 mod shell;
+mod terminal_logger;
 use message_server::CliMessageServer;
 use riterm_shared::QuicMessageServerConfig;
 use tracing::info;

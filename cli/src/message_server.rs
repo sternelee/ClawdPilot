@@ -6,10 +6,11 @@
 use anyhow::Result;
 use portable_pty::{CommandBuilder, MasterPty, PtySize};
 use riterm_shared::{
-    AvailableTools, CommunicationManager, IODataType, Message, MessageBuilder, MessageHandler, MessagePayload,
-    MessageType, OSInfo, PackageManager, QuicMessageServer, QuicMessageServerConfig,
-    ResponseMessage, ShellInfo, SystemAction, SystemInfo, SystemInfoAction, TcpDataType, TcpForwardingAction,
-    TcpForwardingType, TerminalAction, Tool, UserInfo,
+    AvailableTools, CommunicationManager, IODataType, Message, MessageBuilder, MessageHandler,
+    MessagePayload, MessageType, OSInfo, PackageManager, QuicMessageServer,
+    QuicMessageServerConfig, ResponseMessage, ShellInfo, SystemAction, SystemInfo,
+    SystemInfoAction, TcpDataType, TcpForwardingAction, TcpForwardingType, TerminalAction,
+    TerminalLogResponse, Tool, UserInfo,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -22,8 +23,8 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-
 use crate::shell::ShellDetector;
+use crate::terminal_logger::TerminalLogManager;
 
 /// Connection information for status display
 #[derive(Debug, Clone)]
@@ -201,6 +202,8 @@ pub struct CliMessageServer {
     system_status: Arc<RwLock<SystemStatus>>,
     /// 默认终端路径
     default_shell_path: String,
+    /// 日志管理器
+    log_manager: Arc<TerminalLogManager>,
 }
 
 impl CliMessageServer {
@@ -226,6 +229,14 @@ impl CliMessageServer {
         // 创建 QUIC 服务器
         let quic_server = QuicMessageServer::new(config, communication_manager.clone()).await?;
 
+        // 创建日志管理器
+        let log_dir = std::env::current_dir()
+            .unwrap_or_default()
+            .join(".riterm")
+            .join("logs");
+        let log_manager = Arc::new(TerminalLogManager::new(log_dir, Some(1000)));
+        info!("📝 Terminal log directory: {:?}", log_manager.log_dir());
+
         // 创建服务器实例
         let server = Self {
             quic_server,
@@ -240,6 +251,7 @@ impl CliMessageServer {
                 memory_usage: 0,
             })),
             default_shell_path,
+            log_manager,
         };
 
         // 注册消息处理器
@@ -256,13 +268,17 @@ impl CliMessageServer {
             self.communication_manager.clone(),
             self.quic_server.clone(),
             self.default_shell_path.clone(),
+            self.log_manager.clone(),
         ));
         self.communication_manager
             .register_message_handler(terminal_handler)
             .await;
 
         // 注册终端 I/O 处理器
-        let terminal_io_handler = Arc::new(TerminalIOHandler::new(self.terminal_sessions.clone()));
+        let terminal_io_handler = Arc::new(TerminalIOHandler::new(
+            self.terminal_sessions.clone(),
+            self.log_manager.clone(),
+        ));
         self.communication_manager
             .register_message_handler(terminal_io_handler)
             .await;
@@ -355,7 +371,8 @@ impl CliMessageServer {
         tracing::info!("🎫 Generating ticket for node: {:?}", node_id);
 
         // 使用 SerializableEndpointAddr::from_endpoint_id 创建地址
-        let serializable_addr = SerializableEndpointAddr::from_endpoint_id(node_id, riterm_shared::QUIC_MESSAGE_ALPN)?;
+        let serializable_addr =
+            SerializableEndpointAddr::from_endpoint_id(node_id, riterm_shared::QUIC_MESSAGE_ALPN)?;
         let encoded_addr = serializable_addr.to_base64()?;
 
         // 创建 ticket 结构
@@ -385,7 +402,6 @@ impl CliMessageServer {
         Ok(ticket)
     }
 
-  
     /// 获取活跃连接数
     pub async fn get_active_connections_count(&self) -> usize {
         self.quic_server.get_active_connections_count().await
@@ -421,6 +437,7 @@ pub struct TerminalMessageHandler {
     communication_manager: Arc<CommunicationManager>,
     quic_server: QuicMessageServer,
     default_shell_path: String,
+    log_manager: Arc<TerminalLogManager>,
 }
 
 impl TerminalMessageHandler {
@@ -429,12 +446,14 @@ impl TerminalMessageHandler {
         communication_manager: Arc<CommunicationManager>,
         quic_server: QuicMessageServer,
         default_shell_path: String,
+        log_manager: Arc<TerminalLogManager>,
     ) -> Self {
         Self {
             terminal_sessions,
             communication_manager,
             quic_server,
             default_shell_path,
+            log_manager,
         }
     }
 
@@ -550,6 +569,7 @@ impl TerminalMessageHandler {
         let terminal_id_clone = terminal_id.clone();
         let output_broadcast_for_io = output_broadcast_tx.clone();
         let quic_server_for_io = self.quic_server.clone();
+        let log_manager_for_io = self.log_manager.clone();
 
         tokio::spawn(async move {
             use riterm_shared::message_protocol::{IODataType, MessageBuilder};
@@ -611,6 +631,11 @@ impl TerminalMessageHandler {
                                 let data = buffer[..n].to_vec();
                                 #[cfg(debug_assertions)]
                                 debug!("Terminal {} output: {} bytes", terminal_id_clone, n);
+
+                                // 记录输出到日志
+                                if let Err(e) = log_manager_for_io.get_logger(&terminal_id_clone).log_output(&data) {
+                                    tracing::warn!("Failed to log terminal output: {}", e);
+                                }
 
                                 // 广播输出到所有订阅者
                                 let _ = output_broadcast_for_io.send(data.clone());
@@ -787,6 +812,25 @@ impl TerminalMessageHandler {
             .collect();
         Ok(terminals)
     }
+
+    /// 获取终端日志
+    async fn get_terminal_logs(&self, terminal_id: &str) -> Result<TerminalLogResponse> {
+        let logger = self.log_manager.get_logger(terminal_id);
+
+        // 重新从文件加载以确保获取最新的日志
+        logger.reload_from_file()?;
+
+        let entries = logger.get_logs();
+        let total_lines = entries.len();
+        let log_path = logger.log_path().to_string_lossy().to_string();
+
+        Ok(TerminalLogResponse {
+            terminal_id: terminal_id.to_string(),
+            entries,
+            total_lines,
+            log_path,
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -952,6 +996,36 @@ impl MessageHandler for TerminalMessageHandler {
                             },
                         ))));
                     }
+                    TerminalAction::GetLogs { terminal_id } => {
+                        match self.get_terminal_logs(terminal_id).await {
+                            Ok(log_response) => {
+                                let response_data = serde_json::json!(log_response);
+                                return Ok(Some(message.create_response(
+                                    MessagePayload::Response(ResponseMessage {
+                                        request_id: message.id.clone(),
+                                        success: true,
+                                        data: Some(response_data.to_string()),
+                                        message: Some(
+                                            "Terminal logs retrieved successfully".to_string(),
+                                        ),
+                                    }),
+                                )));
+                            }
+                            Err(e) => {
+                                return Ok(Some(message.create_response(
+                                    MessagePayload::Response(ResponseMessage {
+                                        request_id: message.id.clone(),
+                                        success: false,
+                                        data: None,
+                                        message: Some(format!(
+                                            "Failed to get terminal logs: {}",
+                                            e
+                                        )),
+                                    }),
+                                )));
+                            }
+                        }
+                    }
                 }
             }
             _ => {}
@@ -967,11 +1041,18 @@ impl MessageHandler for TerminalMessageHandler {
 /// 终端 I/O 消息处理器
 pub struct TerminalIOHandler {
     terminal_sessions: Arc<RwLock<HashMap<String, InternalTerminalSession>>>,
+    log_manager: Arc<TerminalLogManager>,
 }
 
 impl TerminalIOHandler {
-    pub fn new(terminal_sessions: Arc<RwLock<HashMap<String, InternalTerminalSession>>>) -> Self {
-        Self { terminal_sessions }
+    pub fn new(
+        terminal_sessions: Arc<RwLock<HashMap<String, InternalTerminalSession>>>,
+        log_manager: Arc<TerminalLogManager>,
+    ) -> Self {
+        Self {
+            terminal_sessions,
+            log_manager,
+        }
     }
 
     /// 处理终端输入
@@ -982,6 +1063,11 @@ impl TerminalIOHandler {
             terminal_id,
             data.len()
         );
+
+        // 记录输入到日志
+        if let Err(e) = self.log_manager.get_logger(&terminal_id).log_input(&data) {
+            warn!("Failed to log terminal input: {}", e);
+        }
 
         // 找到对应的终端 session 并获取输入通道
         let input_tx = {
@@ -1243,10 +1329,7 @@ impl TcpForwardingMessageHandler {
 
         // 启动接受连接的任务
         tokio::spawn(async move {
-            info!(
-                "TCP listener started for session: {}",
-                session_id_clone
-            );
+            info!("TCP listener started for session: {}", session_id_clone);
 
             loop {
                 tokio::select! {
@@ -1286,15 +1369,11 @@ impl TcpForwardingMessageHandler {
                 }
             }
 
-            info!(
-                "TCP listener stopped for session: {}",
-                session_id_clone
-            );
+            info!("TCP listener stopped for session: {}", session_id_clone);
         });
 
         Ok(shutdown_tx)
     }
-
 
     /// 停止 TCP 转发会话（带客户端所有权验证）
     async fn stop_tcp_forwarding_session(
@@ -2286,7 +2365,10 @@ impl TcpDataMessageHandler {
         tcp_sessions: Arc<RwLock<HashMap<String, InternalTcpForwardingSession>>>,
         quic_server: QuicMessageServer,
     ) -> Self {
-        Self { tcp_sessions, quic_server }
+        Self {
+            tcp_sessions,
+            quic_server,
+        }
     }
 
     /// 处理 TCP 数据消息
@@ -2342,14 +2424,21 @@ impl TcpDataMessageHandler {
                     // 获取会话信息以确定本地服务地址
                     let sessions = self.tcp_sessions.read().await;
                     if let Some(internal_session) = sessions.get(session_id) {
-                        let local_addr: SocketAddr = internal_session.session.local_addr
-                            .parse()
-                            .map_err(|_| anyhow::anyhow!("Invalid local address: {}", internal_session.session.local_addr))?;
+                        let local_addr: SocketAddr =
+                            internal_session.session.local_addr.parse().map_err(|_| {
+                                anyhow::anyhow!(
+                                    "Invalid local address: {}",
+                                    internal_session.session.local_addr
+                                )
+                            })?;
 
                         info!("Connecting to local TCP service: {}", local_addr);
                         match TokioTcpStream::connect(local_addr).await {
                             Ok(tcp_stream) => {
-                                info!("Successfully connected to local TCP service for connection: {}", connection_id);
+                                info!(
+                                    "Successfully connected to local TCP service for connection: {}",
+                                    connection_id
+                                );
 
                                 // 保存连接
                                 let mut connections = internal_session.connections.write().await;
@@ -2392,7 +2481,10 @@ impl TcpDataMessageHandler {
                                         loop {
                                             match tcp_read.read(&mut buffer).await {
                                                 Ok(0) => {
-                                                    info!("TCP connection closed: {}", connection_id_clone);
+                                                    info!(
+                                                        "TCP connection closed: {}",
+                                                        connection_id_clone
+                                                    );
 
                                                     // 发送连接关闭消息
                                                     let close_message = MessageBuilder::tcp_data(
@@ -2403,8 +2495,14 @@ impl TcpDataMessageHandler {
                                                         vec![],
                                                     );
 
-                                                    if let Err(e) = quic_server_clone.broadcast_message(close_message).await {
-                                                        error!("Failed to send connection close message: {}", e);
+                                                    if let Err(e) = quic_server_clone
+                                                        .broadcast_message(close_message)
+                                                        .await
+                                                    {
+                                                        error!(
+                                                            "Failed to send connection close message: {}",
+                                                            e
+                                                        );
                                                     }
 
                                                     break;
@@ -2414,8 +2512,11 @@ impl TcpDataMessageHandler {
 
                                                     // 更新接收字节数
                                                     {
-                                                        let mut conn_map = tcp_connections_clone.write().await;
-                                                        if let Some(conn) = conn_map.get_mut(&connection_id_clone) {
+                                                        let mut conn_map =
+                                                            tcp_connections_clone.write().await;
+                                                        if let Some(conn) =
+                                                            conn_map.get_mut(&connection_id_clone)
+                                                        {
                                                             conn.bytes_received += n as u64;
                                                         }
                                                     }
@@ -2431,8 +2532,14 @@ impl TcpDataMessageHandler {
                                                     );
 
                                                     // 广播消息给所有连接的客户端
-                                                    if let Err(e) = quic_server_clone.broadcast_message(message).await {
-                                                        error!("Failed to broadcast TCP data: {}", e);
+                                                    if let Err(e) = quic_server_clone
+                                                        .broadcast_message(message)
+                                                        .await
+                                                    {
+                                                        error!(
+                                                            "Failed to broadcast TCP data: {}",
+                                                            e
+                                                        );
                                                     }
                                                 }
                                                 Err(e) => {
@@ -2445,7 +2552,10 @@ impl TcpDataMessageHandler {
                                 });
                             }
                             Err(e) => {
-                                error!("Failed to connect to local TCP service {}: {}", local_addr, e);
+                                error!(
+                                    "Failed to connect to local TCP service {}: {}",
+                                    local_addr, e
+                                );
                             }
                         }
                     }
@@ -2541,23 +2651,42 @@ mod tests {
 
         // Create a CLI message server
         let server = CliMessageServer::new(config).await;
-        assert!(server.is_ok(), "Failed to create CLI message server: {:?}", server.err());
+        assert!(
+            server.is_ok(),
+            "Failed to create CLI message server: {:?}",
+            server.err()
+        );
 
         let server = server.unwrap();
 
         // Generate ticket
         let ticket = server.generate_connection_ticket();
-        assert!(ticket.is_ok(), "Failed to generate ticket: {:?}", ticket.err());
+        assert!(
+            ticket.is_ok(),
+            "Failed to generate ticket: {:?}",
+            ticket.err()
+        );
 
         let ticket = ticket.unwrap();
 
         // Verify ticket doesn't have 'ticket:' prefix
-        assert!(!ticket.starts_with("ticket:"), "Ticket should not start with 'ticket:' prefix, but got: {}", ticket);
+        assert!(
+            !ticket.starts_with("ticket:"),
+            "Ticket should not start with 'ticket:' prefix, but got: {}",
+            ticket
+        );
 
         // Verify ticket is properly formatted (not empty and has reasonable length)
         assert!(!ticket.is_empty(), "Ticket should not be empty");
-        assert!(ticket.len() > 20, "Ticket should be reasonably long, got {} characters", ticket.len());
+        assert!(
+            ticket.len() > 20,
+            "Ticket should be reasonably long, got {} characters",
+            ticket.len()
+        );
 
-        println!("✅ Test passed! Generated ticket without prefix: {}...", &ticket[..50.min(ticket.len())]);
+        println!(
+            "✅ Test passed! Generated ticket without prefix: {}...",
+            &ticket[..50.min(ticket.len())]
+        );
     }
 }

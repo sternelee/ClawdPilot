@@ -34,11 +34,8 @@ fn is_valid_session_ticket(ticket: &str) -> bool {
     ticket.len() > 20
 }
 
-
 // Parse ticket and extract EndpointId
-fn parse_ticket_node_addr(
-    ticket: &str,
-) -> Result<iroh::EndpointId, Box<dyn std::error::Error>> {
+fn parse_ticket_node_addr(ticket: &str) -> Result<iroh::EndpointId, Box<dyn std::error::Error>> {
     use data_encoding::BASE32;
     use serde_json;
 
@@ -361,7 +358,8 @@ async fn initialize_network_with_relay_internal(
         None
     } else {
         // On desktop platforms, use persistent secret key storage
-        let app_data_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let app_data_dir =
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         let path = app_data_dir.join("riterm_app_secret_key");
         info!(
             "🔑 Using persistent secret key in startup directory: {:?}",
@@ -472,10 +470,7 @@ async fn connect_to_peer(
             let receiver = quic_client.get_message_receiver().await;
 
             // Establish actual QUIC connection using EndpointId
-            let connection_id = match quic_client
-                .connect_to_server(&node_addr)
-                .await
-            {
+            let connection_id = match quic_client.connect_to_server(&node_addr).await {
                 Ok(actual_connection_id) => {
                     #[cfg(debug_assertions)]
                     tracing::info!(
@@ -839,7 +834,9 @@ async fn parse_session_ticket(ticket: String) -> Result<String, String> {
 }
 
 /// Helper function to check and initialize QUIC client if needed
-async fn ensure_quic_client_initialized(state: &State<'_, AppState>) -> Result<QuicMessageClientHandle, String> {
+async fn ensure_quic_client_initialized(
+    state: &State<'_, AppState>,
+) -> Result<QuicMessageClientHandle, String> {
     let client_guard = state.quic_client.read().await;
     match client_guard.as_ref() {
         Some(c) => Ok(c.clone()),
@@ -848,15 +845,20 @@ async fn ensure_quic_client_initialized(state: &State<'_, AppState>) -> Result<Q
             drop(client_guard); // Release the read lock
             #[cfg(any(debug_assertions, not(feature = "release-logging")))]
             tracing::info!("QUIC client not initialized, attempting auto-initialization...");
-            
+
             // Initialize network - use internal function that works with references
             initialize_network_internal(state).await?;
-            
+
             // Try again
             let client_guard = state.quic_client.read().await;
             match client_guard.as_ref() {
                 Some(c) => Ok(c.clone()),
-                None => return Err("QUIC client initialization failed. Please restart the application.".to_string()),
+                None => {
+                    return Err(
+                        "QUIC client initialization failed. Please restart the application."
+                            .to_string(),
+                    );
+                }
             }
         }
     }
@@ -1111,6 +1113,53 @@ async fn connect_to_terminal(
     Ok(())
 }
 
+/// 获取终端日志
+#[tauri::command]
+async fn get_terminal_logs(
+    sessionId: String,
+    terminalId: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let quic_client = {
+        let client_guard = state.quic_client.read().await;
+        match client_guard.as_ref() {
+            Some(c) => c.clone(),
+            None => return Err("QUIC client not initialized".to_string()),
+        }
+    };
+
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    // Create terminal management message for getting logs
+    let action = TerminalAction::GetLogs {
+        terminal_id: terminalId.clone(),
+    };
+
+    let message = MessageBuilder::terminal_management(
+        "riterm_app".to_string(),
+        action,
+        Some(sessionId.clone()),
+    )
+    .with_session(sessionId.clone());
+
+    // Send message via QUIC client
+    send_message_via_client(
+        &state,
+        &session.connection_id,
+        message,
+        "terminal logs request",
+    )
+    .await?;
+
+    Ok(())
+}
+
 // === TCP Forwarding Management Commands ===
 
 #[tauri::command]
@@ -1127,9 +1176,7 @@ async fn create_tcp_forwarding_session(
     let _fwd_type = match forwarding_type.as_str() {
         "ListenToRemote" | "listen-to-remote" => TcpForwardingType::ListenToRemote,
         _ => {
-            return Err(
-                "Invalid forwarding type. Only 'ListenToRemote' is supported".to_string(),
-            );
+            return Err("Invalid forwarding type. Only 'ListenToRemote' is supported".to_string());
         }
     };
 
@@ -1149,11 +1196,10 @@ async fn create_tcp_forwarding_session(
     // 在本地创建 TCP 转发会话（暂时不设置消息发送器）
     let session_id_result = {
         let mut manager = state.tcp_forwarding_manager.lock().await;
-        manager.create_session(
-            local_addr.clone(),
-            remote_host.clone(),
-            remote_port,
-        ).await.map_err(|e| format!("Failed to create TCP forwarding session: {}", e))?
+        manager
+            .create_session(local_addr.clone(), remote_host.clone(), remote_port)
+            .await
+            .map_err(|e| format!("Failed to create TCP forwarding session: {}", e))?
     };
 
     // 启动一个任务来处理数据转发
@@ -1162,7 +1208,10 @@ async fn create_tcp_forwarding_session(
     tokio::spawn(async move {
         // 这里可以监听 TCP 连接并发送数据
         // 暂时只记录日志
-        info!("TCP forwarding task started for session {}", session_id_for_task);
+        info!(
+            "TCP forwarding task started for session {}",
+            session_id_for_task
+        );
     });
 
     // 发送会话创建通知给 CLI 端
@@ -1181,17 +1230,18 @@ async fn create_tcp_forwarding_session(
         forwarding_type: TcpForwardingType::ListenToRemote,
     };
 
-    let message = MessageBuilder::tcp_forwarding(
-        "riterm_app".to_string(),
-        action,
-        Some(sessionId.clone())
-    ).with_session(sessionId.clone());
+    let message =
+        MessageBuilder::tcp_forwarding("riterm_app".to_string(), action, Some(sessionId.clone()))
+            .with_session(sessionId.clone());
 
     // 获取正确的 connection_id
     let connection_id = session.connection_id;
 
     // 使用直接发送
-    if let Err(e) = quic_client.send_message_to_server(&connection_id, message).await {
+    if let Err(e) = quic_client
+        .send_message_to_server(&connection_id, message)
+        .await
+    {
         return Err(format!("Failed to notify CLI about TCP session: {}", e));
     }
 
@@ -1442,6 +1492,7 @@ pub fn run() {
             send_terminal_input_to_terminal,
             resize_terminal,
             connect_to_terminal, // Kept as no-op for compatibility
+            get_terminal_logs,   // Get terminal logs from CLI
             // TCP Forwarding Management
             create_tcp_forwarding_session,
             list_tcp_forwarding_sessions,
