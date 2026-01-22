@@ -361,7 +361,7 @@ impl CliMessageServer {
         &self.default_shell_path
     }
 
-    /// 生成连接票据 - 使用 NodeAddr (推荐，包含relay信息)
+    /// 生成连接票据 - 简化版本，直接编码端点信息
     pub fn generate_connection_ticket(&self) -> Result<String> {
         use data_encoding::BASE32;
         use riterm_shared::SerializableEndpointAddr;
@@ -373,22 +373,9 @@ impl CliMessageServer {
         // 使用 SerializableEndpointAddr::from_endpoint_id 创建地址
         let serializable_addr =
             SerializableEndpointAddr::from_endpoint_id(node_id, riterm_shared::QUIC_MESSAGE_ALPN)?;
-        let encoded_addr = serializable_addr.to_base64()?;
 
-        // 创建 ticket 结构
-        let ticket_data = serde_json::json!({
-            "node_id": node_id.to_string(),
-            "endpoint_addr": encoded_addr,
-            "relay_url": None::<String>, // 简化版本，不包含relay信息
-            "alpn": "riterm_quic",
-            "created_at": std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-        });
-
-        // 生成 base32 编码的 ticket
-        let ticket_json = serde_json::to_string(&ticket_data)?;
+        // 直接序列化为 JSON 并 base32 编码，去掉外层包装
+        let ticket_json = serde_json::to_string(&serializable_addr)?;
         let ticket = BASE32.encode(ticket_json.as_bytes());
 
         tracing::info!("✅ Connection ticket generated successfully");
@@ -397,6 +384,7 @@ impl CliMessageServer {
             "🎫 ALPN: {}",
             std::str::from_utf8(riterm_shared::QUIC_MESSAGE_ALPN)?
         );
+        tracing::info!("🎫 Ticket length: {} bytes", ticket.len());
         tracing::info!("🎫 Ticket preview: {}...", &ticket[..50.min(ticket.len())]);
 
         Ok(ticket)
