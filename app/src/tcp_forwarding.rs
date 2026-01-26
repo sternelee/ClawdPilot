@@ -7,9 +7,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc, RwLock};
-use uuid::Uuid;
+use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
+use uuid::Uuid;
 
 use riterm_shared::TcpDataType;
 
@@ -104,7 +104,10 @@ impl TcpForwardingManager {
                     stream.write_all(data).await?;
                     stream.flush().await?;
 
-                    debug!("Successfully wrote {} bytes to local TCP stream", data.len());
+                    debug!(
+                        "Successfully wrote {} bytes to local TCP stream",
+                        data.len()
+                    );
                     Ok(())
                 } else {
                     warn!(
@@ -130,7 +133,10 @@ impl TcpForwardingManager {
             }
             TcpDataType::ConnectionOpen => {
                 // CLI 端不应该发送 ConnectionOpen 到 App
-                warn!("Received unexpected ConnectionOpen from CLI for connection {}", connection_id);
+                warn!(
+                    "Received unexpected ConnectionOpen from CLI for connection {}",
+                    connection_id
+                );
                 Ok(())
             }
             TcpDataType::Error => {
@@ -174,7 +180,12 @@ impl TcpForwardingManager {
         let local_addr_parsed: SocketAddr = local_addr.parse()?;
         let remote_host_for_listener = remote_host.clone();
         let _shutdown_tx = self
-            .start_listener(session_id.clone(), local_addr_parsed, remote_host_for_listener, remote_port)
+            .start_listener(
+                session_id.clone(),
+                local_addr_parsed,
+                remote_host_for_listener,
+                remote_port,
+            )
             .await?;
 
         // 更新会话状态
@@ -342,7 +353,12 @@ impl TcpForwardingManager {
         let local_addr_parsed: SocketAddr = local_addr.parse()?;
         let remote_host_for_listener = remote_host.clone();
         let _shutdown_tx = self
-            .start_listener(session_id.clone(), local_addr_parsed, remote_host_for_listener, remote_port)
+            .start_listener(
+                session_id.clone(),
+                local_addr_parsed,
+                remote_host_for_listener,
+                remote_port,
+            )
             .await?;
 
         // 更新会话状态
@@ -403,7 +419,10 @@ async fn handle_connection(
         error!("Failed to send ConnectionOpen message: {}", e);
         return Err("Failed to send ConnectionOpen message".into());
     }
-    info!("Sent ConnectionOpen to CLI for connection {}", connection_id);
+    info!(
+        "Sent ConnectionOpen to CLI for connection {}",
+        connection_id
+    );
 
     // 获取流引用用于读取
     let stream_arc = {
@@ -457,13 +476,19 @@ async fn handle_connection(
     }) {
         error!("Failed to send ConnectionClose message: {}", e);
     }
-    info!("Sent ConnectionClose to CLI for connection {}", connection_id);
+    info!(
+        "Sent ConnectionClose to CLI for connection {}",
+        connection_id
+    );
 
     {
         let mut connections = tcp_connections.write().await;
         connections.remove(&connection_id);
     }
 
-    info!("TCP connection handler ended for connection {}", connection_id);
+    info!(
+        "TCP connection handler ended for connection {}",
+        connection_id
+    );
     Ok(())
 }

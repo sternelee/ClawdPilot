@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use tauri::Manager;
 use tauri::{Emitter, State};
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
@@ -853,7 +853,10 @@ async fn connect_to_peer(
         }
 
         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-        tracing::info!("TCP message sender task ended for session: {}", session_id_for_sender);
+        tracing::info!(
+            "TCP message sender task ended for session: {}",
+            session_id_for_sender
+        );
     });
 
     // Spawn the message listener task
@@ -867,7 +870,10 @@ async fn connect_to_peer(
 
         // Subscribe to the TCP message channel
         let mut tcp_message_receiver = {
-            tcp_manager_for_tcp.lock().await.subscribe_message_receiver()
+            tcp_manager_for_tcp
+                .lock()
+                .await
+                .subscribe_message_receiver()
         };
 
         loop {
@@ -940,7 +946,10 @@ async fn connect_to_peer(
         }
 
         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-        tracing::info!("Syncing existing terminals for session: {}", session_id_for_terminal_sync);
+        tracing::info!(
+            "Syncing existing terminals for session: {}",
+            session_id_for_terminal_sync
+        );
 
         // Send list_terminals request to CLI
         if let Some(quic_client) = quic_client_for_terminal_sync {
@@ -951,10 +960,10 @@ async fn connect_to_peer(
             )
             .with_session(session_id_for_terminal_sync.clone());
 
-            if let Err(e) = quic_client.send_message_to_server(
-                &connection_id_for_terminal_sync,
-                list_message,
-            ).await {
+            if let Err(e) = quic_client
+                .send_message_to_server(&connection_id_for_terminal_sync, list_message)
+                .await
+            {
                 #[cfg(any(debug_assertions, not(feature = "release-logging")))]
                 tracing::error!("Failed to send list_terminals request: {}", e);
             }
@@ -978,7 +987,10 @@ async fn connect_to_peer(
         }
 
         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-        tracing::info!("Syncing existing TCP sessions for session: {}", session_id_for_sync);
+        tracing::info!(
+            "Syncing existing TCP sessions for session: {}",
+            session_id_for_sync
+        );
 
         // Send list request to CLI
         let list_message = MessageBuilder::tcp_forwarding(
