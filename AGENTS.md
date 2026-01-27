@@ -1,10 +1,8 @@
 # AGENTS.md - AI Coding Agent Guide for riterm
 
-> **riterm** is a P2P Terminal Session Sharing application built with Rust (CLI/backend), 
-> SolidJS (frontend), and Tauri 2 (desktop/mobile). It uses iroh for decentralized P2P 
-> networking with NAT traversal and end-to-end encryption via ChaCha20-Poly1305.
-
----
+> **riterm** is a P2P Terminal Session Sharing app built with Rust (CLI/backend),
+> SolidJS (frontend), and Tauri 2 (desktop/mobile). Uses iroh for decentralized
+> P2P networking with NAT traversal and ChaCha20-Poly1305 encryption.
 
 ## Project Structure
 
@@ -22,101 +20,55 @@ riterm/
 └── logs/          # Runtime log files
 ```
 
----
-
 ## Build Commands
 
-### Package Manager
-- **Use pnpm** (`packageManager=pnpm@10.0.0`); avoid npm/yarn lockfiles
-- Install: `pnpm install`
-
-### Frontend (Vite + SolidJS)
-```bash
-pnpm dev              # Start dev server (port 1420)
-pnpm build            # Production build
-pnpm tsc              # TypeScript check + Vite build
-pnpm preview          # Preview production build
-```
-
-### Desktop/Mobile (Tauri 2)
-```bash
-pnpm tauri dev                # Desktop dev mode
-pnpm tauri build              # Build desktop app
-pnpm tauri android dev        # Android dev mode
-pnpm tauri android build      # Build Android app
-pnpm tauri ios dev            # iOS dev mode
-pnpm tauri ios build          # Build iOS app
-```
-
-### Rust Workspace
-```bash
-cargo build --workspace                              # Build all crates
-cargo build -p cli                                   # Build CLI only
-cargo build -p riterm-shared                         # Build shared lib
-cargo build -p app                                   # Build Tauri backend
-```
-
-### WebAssembly (browser crate)
-```bash
-cd browser && wasm-pack build --target web           # Dev build
-cd browser && wasm-pack build --target web --release # Production build
-```
-
----
+| Task | Command |
+|------|---------|
+| Install deps | `pnpm install` |
+| Frontend dev | `pnpm dev` |
+| Frontend build | `pnpm build` |
+| TypeScript check | `pnpm tsc` |
+| Desktop dev | `pnpm tauri dev` |
+| Desktop build | `pnpm tauri build` |
+| Android dev | `pnpm tauri android dev` |
+| iOS dev | `pnpm tauri ios dev` |
+| Build all Rust | `cargo build --workspace` |
+| Build CLI only | `cargo build -p cli` |
+| Build shared lib | `cargo build -p riterm-shared` |
+| Build app backend | `cargo build -p app` |
+| WASM build | `cd browser && wasm-pack build --target web` |
 
 ## Test Commands
 
-### Run All Tests
 ```bash
-cargo test --workspace
+cargo test --workspace                         # All tests
+cargo test -p cli test_name                    # Single test in CLI crate
+cargo test -p riterm-shared mod::test_name     # Single test in shared
+cargo test -p app test_name                    # Single test in app
+cargo test -p cli test_name -- --nocapture     # With stdout output
+cargo test -p cli test_name -- --exact         # Exact match only
 ```
-
-### Run Single Test
-```bash
-cargo test -p cli some_test_name              # Test in CLI crate
-cargo test -p riterm-shared path::mod::test   # Test in shared crate
-cargo test -p app test_name                   # Test in app crate
-cargo test -p cli some_test -- --nocapture    # With output
-```
-
----
 
 ## Lint & Format
 
-### Rust
 ```bash
-cargo fmt                                            # Format code
-cargo clippy --workspace --all-targets --all-features  # Lint all
-cargo clippy -p cli                                  # Lint specific crate
+cargo fmt                                      # Format Rust code
+cargo clippy --workspace --all-targets         # Lint all crates
+cargo clippy -p cli                            # Lint specific crate
+pnpm tsc                                       # TypeScript type check
 ```
 
-### TypeScript
-```bash
-pnpm tsc                 # Type check via tsconfig.json (strict mode)
-```
-
----
+**Before committing:** Run `cargo fmt && cargo clippy` for Rust, `pnpm tsc` for TypeScript.
 
 ## Rust Code Style
 
 ### Error Handling
-- Use `anyhow` for error propagation with `?` operator
-- Add meaningful context: `.with_context(|| "description")`
+- Use `anyhow::Result` with `?` operator for error propagation
+- Add context: `.with_context(|| format!("Failed to do X: {}", path))?`
 - Avoid `.unwrap()`/`.expect()` except in tests
-- Handle `Option`/`Result` explicitly
+- Handle `Option`/`Result` explicitly with `match` or combinators
 
-```rust
-// Good
-let file = fs::read_to_string(path)
-    .with_context(|| format!("Failed to read {}", path))?;
-
-// Bad
-let file = fs::read_to_string(path).unwrap();
-```
-
-### Imports
-Group imports in order: std → third-party → workspace crates → local mods
-
+### Imports (order: std → third-party → workspace → local)
 ```rust
 use std::collections::HashMap;
 
@@ -129,91 +81,60 @@ use riterm_shared::QuicMessageServerConfig;
 use crate::message_server::CliMessageServer;
 ```
 
-### Types & Data
-- Favor explicit struct/enum fields over tuples
-- Use `#[derive(Debug, Clone, Serialize, Deserialize)]` where appropriate
-- Prefer descriptive field names
-
 ### Logging
-- Use `tracing` macros with structured fields
-- Avoid `println!` for production paths
-- Use appropriate log levels: `error!`, `warn!`, `info!`, `debug!`, `trace!`
-
-```rust
-tracing::info!(session_id = %id, "Connection established");
-tracing::debug!(?config, "Server configuration loaded");
-```
-
-### Concurrency
-- Prefer `tokio::spawn` with joined error handling
-- Ensure Send/Sync types across async tasks
-- Use `tokio::select!` for concurrent operations
+- Use `tracing` macros: `error!`, `warn!`, `info!`, `debug!`, `trace!`
+- Avoid `println!` in production code
+- Use structured fields: `info!(session_id = %id, "Connected")`
 
 ### Naming Conventions
-- `snake_case` for functions, variables, modules
-- `PascalCase` for types, structs, enums
-- `SCREAMING_SNAKE_CASE` for constants
+- `snake_case`: functions, variables, modules
+- `PascalCase`: types, structs, enums
+- `SCREAMING_SNAKE_CASE`: constants
 
----
+### Async/Concurrency
+- Use `tokio::spawn` with proper error handling
+- Use `tokio::select!` for concurrent operations
+- Ensure types are `Send + Sync` for async boundaries
+- Persist `mpsc::Sender` handles to prevent channel closure
+
+### Types
+- Prefer explicit struct fields over tuples
+- Use `#[derive(Debug, Clone, Serialize, Deserialize)]` appropriately
+- Use descriptive field names
 
 ## TypeScript/SolidJS Code Style
 
 ### General
-- Favor `const`/`let`, never `var`
-- Avoid `any` type; use explicit types
-- Use TypeScript strict mode (enforced by tsconfig.json)
+- Use `const`/`let`, never `var`
+- Avoid `any`; use explicit types
+- Strict mode enforced via tsconfig.json
 
-### SolidJS Components
-- Keep hooks (`createSignal`, `createEffect`, etc.) at component top level
-- Derive state from signals/stores; avoid redundant state
-- Avoid side effects in render path
-- Use `onMount`/`onCleanup` for lifecycle management
-
+### SolidJS Patterns
 ```tsx
 function MyComponent() {
   const [value, setValue] = createSignal("");
-
-  onMount(() => {
-    // Setup
-  });
-
-  onCleanup(() => {
-    // Cleanup
-  });
-
+  
+  onMount(() => { /* setup */ });
+  onCleanup(() => { /* cleanup */ });
+  
   return <div>{value()}</div>;
 }
 ```
 
-### State Management
-- Use stores in `src/stores/` for shared state
-- Export typed interfaces for store state
-- Use `createSignal` for local component state
+- Keep hooks at component top level
+- Derive state from signals; avoid redundant state
+- Use `onMount`/`onCleanup` for lifecycle
 
 ### Naming
-- `camelCase` for variables, functions, props
-- `PascalCase` for components and types
-- Prefix hooks with `use`: `useConnection`, `useToolbarPreferences`
-
----
+- `camelCase`: variables, functions, props
+- `PascalCase`: components, types
+- Prefix hooks: `useConnection`, `useToolbarPreferences`
 
 ## Styling
 
-- Use **Tailwind CSS v4** with **DaisyUI** components
-- Co-locate styles with components using Tailwind classes
-- Custom CSS goes in `src/styles/`
-- Available themes: dark, light, corporate, business, night, forest, dracula, luxury, synthwave
-
----
-
-## Mobile Development
-
-- Use `ViewportManager` and `KeyboardAwareContainer` for keyboard-safe layouts
-- Respect safe-area insets on iOS/Android
-- Test on both portrait and landscape orientations
-- Mobile utilities in `src/utils/mobile/`
-
----
+- **Tailwind CSS v4** + **DaisyUI** components
+- Custom CSS in `src/styles/`
+- Themes: dark, light, corporate, business, night, forest, dracula, luxury, synthwave
 
 ## Workspace Crates
 
@@ -224,8 +145,6 @@ function MyComponent() {
 | `app` | 2024 | Tauri 2 backend for desktop/mobile |
 | `riterm-browser` | 2021 | WebAssembly client for browser |
 
----
-
 ## Key Dependencies
 
 - **tokio 1.47**: Async runtime
@@ -234,15 +153,28 @@ function MyComponent() {
 - **portable-pty**: Cross-platform PTY
 - **tauri 2**: Desktop/mobile framework
 - **solid-js**: Reactive UI framework
-- **xterm.js**: Terminal emulator
+- **xterm.js / ghostty-web**: Terminal emulator
 
----
+## Common Patterns
+
+### TCP Forwarding Session Lifecycle
+1. App creates pending session → sends `CreateSession` to CLI
+2. CLI creates session, responds with `{session_id, status: "created"}`
+3. App receives response → calls `start_session_listener()`
+4. App saves `shutdown_tx` to `shutdown_senders` HashMap (prevents immediate closure)
+5. Local client connects → App opens QUIC bidi stream with session handshake
+6. CLI receives stream, connects to target, bidirectional forwarding begins
+
+### Message Protocol
+- Messages use `MessagePayload` enum variants
+- Response matching: check `session_id + status` before generic `sessions` field
+- Use `tracing::debug!` for verbose logs, `tracing::info!` for key events
 
 ## Best Practices
 
 1. Keep changes minimal and aligned with existing patterns
-2. Prefer incremental, documented adjustments
-3. Run `cargo fmt && cargo clippy` before committing Rust changes
-4. Run `pnpm tsc` to verify TypeScript before committing
-5. Create nested AGENTS.md for subdirectories with stricter rules if needed
-6. No Cursor or Copilot rules present; this file is the canonical guide
+2. Run lint/format before committing
+3. Persist channel senders to prevent premature closure
+4. Use `#[cfg(debug_assertions)]` for debug-only logs
+5. Match enum variants exactly (e.g., `"ListenToRemote"` vs `"local-to-remote"`)
+6. Use `BASE32_NOPAD` with `.to_ascii_lowercase()` for ticket encoding
