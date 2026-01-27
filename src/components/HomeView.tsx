@@ -113,7 +113,7 @@ export function HomeView(props: HomeViewProps) {
   const renderLoginModal = () => (
     <Show when={showLoginModal()}>
       <div
-        class="fixed inset-0 bg-black/50 z-50 flex justify-center transition-all duration-300"
+        class="fixed inset-0 bg-black/80 z-50 flex justify-center transition-all duration-300"
         classList={{
           "items-end md:items-center": !loginInputFocused() || !isMobile,
           "items-start pt-12": loginInputFocused() && isMobile
@@ -121,7 +121,7 @@ export function HomeView(props: HomeViewProps) {
         onClick={() => setShowLoginModal(false)}
       >
         <div
-          class="bg-base-100 w-full max-w-md rounded-t-3xl md:rounded-2xl p-6 transform transition-all duration-300"
+          class="ascii-box w-full max-w-md transform transition-all duration-300"
           onClick={(e) => e.stopPropagation()}
         >
           <div
@@ -131,30 +131,24 @@ export function HomeView(props: HomeViewProps) {
               "mb-4": loginInputFocused() && isMobile
             }}
           >
-            <div class="w-12 h-1 bg-base-300 rounded-full mx-auto mb-4 md:hidden"></div>
-            <h2
-              class="font-bold transition-all duration-300"
-              classList={{
-                "text-2xl mb-2": !loginInputFocused() || !isMobile,
-                "text-xl mb-1": loginInputFocused() && isMobile
-              }}
-            >
-              登录
-            </h2>
+            <div class="w-12 h-1 bg-primary rounded-full mx-auto mb-4 md:hidden opacity-60"></div>
+            <div class="terminal-cmd mb-4">
+              <span class="text-primary">&gt;&gt;&gt; 用户登录</span>
+            </div>
             <Show when={!loginInputFocused() || !isMobile}>
-              <p class="text-sm opacity-70">登录后解锁完整功能</p>
+              <p class="text-sm text-base-content/70">登录后解锁完整功能</p>
             </Show>
           </div>
 
           <div class="space-y-4">
-            <div class="form-control">
+            <div>
               <label class="label">
-                <span class="label-text font-medium">用户名</span>
+                <span class="label-text font-medium text-primary">用户名 / Username</span>
               </label>
               <input
                 type="text"
-                placeholder="输入用户名"
-                class="input input-bordered w-full text-base"
+                placeholder="输入用户名..."
+                class="input w-full text-base bg-transparent border-primary/50 text-primary"
                 value={username()}
                 onInput={(e) => setUsername(e.currentTarget.value)}
                 onFocus={() => setLoginInputFocused(true)}
@@ -162,14 +156,14 @@ export function HomeView(props: HomeViewProps) {
               />
             </div>
 
-            <div class="form-control">
+            <div>
               <label class="label">
-                <span class="label-text font-medium">密码</span>
+                <span class="label-text font-medium text-primary">密码 / Password</span>
               </label>
               <input
                 type="password"
-                placeholder="输入密码"
-                class="input input-bordered w-full text-base"
+                placeholder="输入密码..."
+                class="input w-full text-base bg-transparent border-primary/50 text-primary"
                 value={password()}
                 onInput={(e) => setPassword(e.currentTarget.value)}
                 onFocus={() => setLoginInputFocused(true)}
@@ -188,17 +182,18 @@ export function HomeView(props: HomeViewProps) {
 
             <div class="flex space-x-3 mt-6">
               <button
-                class="btn btn-primary flex-1"
+                type="button"
+                class="btn flex-1"
                 onClick={handleLogin}
                 disabled={!username().trim() || !password().trim()}
               >
-                🔑 登录
+                <span class="text-primary font-bold">[ 登录 ]</span>
               </button>
             </div>
 
             <Show when={!loginInputFocused() || !isMobile}>
-              <div class="text-center text-xs opacity-50 mt-4">
-                <p>登陆后解锁完整功能</p>
+              <div class="text-center text-xs text-base-content/50 mt-4">
+                <p class="font-mono">// 登录后解锁完整功能</p>
               </div>
             </Show>
           </div>
@@ -208,9 +203,9 @@ export function HomeView(props: HomeViewProps) {
   );
 
 
-  // 主页渲染 - 简洁设计
+  // 主页渲染 - 终端风格设计
   const renderMainView = () => (
-    <div class="min-h-screen bg-base-100 flex flex-col">
+    <div class="min-h-screen bg-base-100 flex flex-col font-mono">
       {/* 主内容区域 - Logo 和 Slogan */}
       <div
         class="flex-1 flex flex-col items-center p-6 transition-all duration-300"
@@ -219,7 +214,21 @@ export function HomeView(props: HomeViewProps) {
           "justify-start pt-20": inputFocused() && isMobile
         }}
       >
-        {/* Logo */}
+        {/* ASCII 艺术装饰 - 仅桌面端显示 */}
+        <Show when={!isMobile && (!inputFocused() || !isMobile)}>
+          <div class="text-primary text-xs mb-4 opacity-60">
+            <pre>
+{`
+╔═════════════════════════════════════════════════════════╗
+║  ╔═╗╔═╗╔═╗╦ ╦╔═╗╦  ╦  ╔═╗╔═╗  ╦ ╦╔═╗╦  ╦╔═╗       ║
+║  ║╣ ╠═╣║ ║║ ║╠═╝╚╗╔╝  ║ ║║ ║  ╠═╣╠═╣╚╗╔╝╠═╝       ║
+║  ╚═╝╩ ╩╚═╝╚═╝╩  ╚╝ ╚╝  ╚═╝╚═╝  ╩ ╩╩ ╩ ╚╝ ╩         ║
+╚═════════════════════════════════════════════════════════╝`}
+            </pre>
+          </div>
+        </Show>
+
+        {/* Logo 和标题 */}
         <div
           class="text-center transition-all duration-300"
           classList={{
@@ -228,7 +237,7 @@ export function HomeView(props: HomeViewProps) {
           }}
         >
           <div
-            class="text-6xl text-primary transition-all duration-300"
+            class="text-6xl text-primary transition-all duration-300 mb-6 glow-text"
             classList={{
               "mb-6": !inputFocused() || !isMobile,
               "mb-3": inputFocused() && isMobile
@@ -236,75 +245,95 @@ export function HomeView(props: HomeViewProps) {
           >
             ⚡
           </div>
-          <h1
-            class="font-bold transition-all duration-300"
-            classList={{
-              "text-4xl mb-3": !inputFocused() || !isMobile,
-              "text-3xl mb-2": inputFocused() && isMobile
-            }}
-          >
-            RiTerm
-          </h1>
+          <div class="relative">
+            <h1
+              class="font-bold transition-all duration-300"
+              classList={{
+                "text-4xl mb-3": !inputFocused() || !isMobile,
+                "text-3xl mb-2": inputFocused() && isMobile
+              }}
+            >
+              <span class="text-primary">&gt;&gt;&gt;</span> RiTerm <span class="typing-cursor"></span>
+            </h1>
+          </div>
           <Show when={!inputFocused() || !isMobile}>
-            <p class="text-lg text-base-content/70 max-w-sm">
-              P2P 终端远程连接工具
-            </p>
+            <div class="terminal-cmd inline-block mt-2">
+              <span>P2P 终端远程连接工具 v1.0</span>
+            </div>
           </Show>
         </div>
 
         {/* 连接输入框 */}
-        <div class="w-full max-w-md mb-4">
-          <div class="flex items-center space-x-2">
-            <div class="flex-1">
-              <input
-                type="text"
-                value={props.sessionTicket}
-                onInput={(e) => props.onTicketInput(e.currentTarget.value)}
-                onFocus={() => setInputFocused(true)}
-                onBlur={() => setInputFocused(false)}
-                placeholder="输入会话票据..."
-                class="input input-bordered w-full text-base"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && props.sessionTicket.trim()) {
-                    handleConnect();
-                  }
-                }}
-                autofocus
-              />
-              {props.connectionError && (
-                <div class="text-error text-sm mt-1">{props.connectionError}</div>
-              )}
+        <div class="w-full max-w-2xl mb-6">
+          <div class="ascii-box">
+            <div class="text-primary text-sm mb-3 font-bold">
+              &gt;&gt;&gt; 连接到远程终端
             </div>
-            {/* 扫码按钮 - 仅移动端显示 */}
-            <Show when={isMobile}>
-              <button
-                class="btn btn-outline"
-                onClick={handleShowQRScanner}
-              >
-                📷
-              </button>
-            </Show>
+            <div class="flex items-center space-x-2">
+              <div class="flex-1">
+                <input
+                  type="text"
+                  value={props.sessionTicket}
+                  onInput={(e) => props.onTicketInput(e.currentTarget.value)}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
+                  placeholder="输入会话票据 (Session Ticket)..."
+                  class="input w-full text-base bg-transparent border-primary/50 text-primary focus:border-primary focus:ring-1 focus:ring-primary"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && props.sessionTicket.trim()) {
+                      handleConnect();
+                    }
+                  }}
+                  autofocus
+                />
+                {props.connectionError && (
+                  <div class="text-error text-sm mt-2 flex items-center gap-2">
+                    <span class="text-lg">✕</span>
+                    <span>{props.connectionError}</span>
+                  </div>
+                )}
+              </div>
+              {/* 扫码按钮 - 仅移动端显示 */}
+              <Show when={isMobile}>
+                <button
+                  type="button"
+                  class="btn btn-outline btn-square"
+                  onClick={handleShowQRScanner}
+                >
+                  <span class="text-2xl">📷</span>
+                </button>
+              </Show>
+            </div>
           </div>
         </div>
 
         {/* 票据历史 */}
         <Show when={ticketHistory().length > 0}>
-          <div class="w-full max-w-md mb-4">
-            <div class="text-sm opacity-70 mb-2">最近连接:</div>
-            <div class="space-y-1">
+          <div class="w-full max-w-2xl mb-6">
+            <div class="terminal-cmd">
+              <span class="text-primary">&gt;&gt;&gt; 最近连接:</span>
+            </div>
+            <div class="space-y-2 mt-3">
               <For each={ticketHistory()}>
                 {(ticket) => (
                   <div
-                    class="p-2 bg-base-200 rounded-lg cursor-pointer hover:bg-base-300 transition-colors flex items-center justify-between"
+                    class="terminal-list-item flex items-center justify-between"
                     onClick={() => {
                       props.onTicketInput(ticket);
                       handleConnect();
                     }}
                   >
-                    <div class="font-mono text-sm font-medium">
-                      {getTicketDisplayId(ticket)}
+                    <div class="flex-1">
+                      <div class="font-mono text-sm font-medium text-primary">
+                        {getTicketDisplayId(ticket)}
+                      </div>
+                      <div class="text-xs text-base-content/50 mt-1">
+                        点击连接 / 按回车
+                      </div>
                     </div>
-                    <div class="text-xs opacity-50">点击连接</div>
+                    <div class="text-primary">
+                      <span class="text-lg">→</span>
+                    </div>
                   </div>
                 )}
               </For>
@@ -338,11 +367,19 @@ export function HomeView(props: HomeViewProps) {
 
       {/* 正在连接的加载遮罩 */}
       <Show when={props.connecting}>
-        <div class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
-          <div class="bg-base-100 p-8 rounded-2xl text-center">
-            <div class="loading loading-spinner loading-lg mb-4"></div>
-            <div class="font-medium">正在连接...</div>
-            <div class="text-sm opacity-70 mt-2">请稍候</div>
+        <div class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center">
+          <div class="ascii-box text-center">
+            <div class="loading loading-spinner loading-lg mb-4 text-primary"></div>
+            <div class="font-mono text-primary text-lg mb-2">
+              <span class="typing-cursor inline-block mr-2"></span>
+              正在连接...
+            </div>
+            <div class="text-sm text-base-content/70 font-mono mt-2">
+              Establishing secure P2P connection...
+            </div>
+            <div class="text-xs text-base-content/50 font-mono mt-4">
+              [████████████░░░░░░░░] 50%
+            </div>
           </div>
         </div>
       </Show>

@@ -37,9 +37,11 @@ The project is organized as a Cargo workspace with four main components:
    - Terminal creation, input handling, and P2P coordination
 
 4. **Frontend** (`src/`)
-   - SolidJS (not React) with TypeScript
+   - **SolidJS Start** (`@solidjs/start`) with Vinxi build tool (modern SSR-ready framework)
+   - File-based routing with `src/routes/` directory
+   - Entry points: `src/app.tsx` (root), `src/entry-client.tsx`, `src/entry-server.tsx`
    - Mobile-first responsive design with adaptive layouts
-   - Terminal UI components using xterm.js
+   - Terminal UI using **ghostty-web** (modern WASM-based terminal emulator)
    - Components: `HomeView.tsx`, `RemoteSessionView.tsx`, `SettingsModal.tsx`, `P2PBackground.tsx`
    - UI Components: `CyberComponents`, `CyberEffects`, `EnhancedComponents`, `GestureSettings`, `KeyboardAwareContainer`, `MobileNavigation`, `QuickAccessToolbar`, `ThemeSwitcher`
 
@@ -57,19 +59,19 @@ cd cli && cargo build --release
 ./cli/target/release/cli host --relay https://relay.example.com --max-connections 100 --temp-key
 
 # Build Tauri app
-pnpm tauri build
+pnpm tauri:build
 
-# Development mode
-pnpm tauri dev
+# Development mode (full app with hot reload)
+pnpm tauri:dev
 
-# Build frontend only
+# Build frontend only (Vinxi build to .output/public)
 pnpm build
 
-# Development server (Vite dev server on localhost:1420)
+# Development server (Vinxi dev server on localhost:1420)
 pnpm dev
 
-# Type checking and build
-pnpm tsc    # TypeScript check followed by Vite build
+# Type checking
+pnpm tsc
 ```
 
 ### Mobile Development
@@ -111,17 +113,17 @@ cd browser && cargo test
 
 ### Code Quality and Development Tools
 ```bash
-# TypeScript type checking (followed by build)
+# TypeScript type checking
 pnpm tsc
 
-# Frontend development server (localhost:1420)
+# Frontend development server (Vinxi on localhost:1420)
 pnpm dev
 
-# Build frontend only
+# Build frontend (Vinxi to .output/public)
 pnpm build
 
 # Preview built frontend
-pnpm preview
+pnpm serve  # Vinxi production server
 
 # Rust compilation check
 cargo check
@@ -153,20 +155,23 @@ cd browser && wasm-pack build --target web --release
 # Install dependencies (use pnpm as specified in package.json)
 pnpm install
 
-# Start development with hot reload
-pnpm tauri dev
+# Start development with hot reload (full Tauri app)
+pnpm tauri:dev
 
-# For frontend-only development (localhost:1420)
+# For frontend-only development (localhost:1420 via Vinxi)
 pnpm dev
 
 # Type checking
 pnpm tsc
 
-# Build for production
-pnpm build && pnpm tauri build
+# Build frontend (Vinxi build to .output/public)
+pnpm build
+
+# Build full app for production
+pnpm build && pnpm tauri:build
 ```
 
-**Package Manager**: The project specifies `pnpm@10.0.0` as the package manager in `package.json`. Tauri configuration (`app/tauri.conf.json`) uses `pnpm dev` and `pnpm build` commands.
+**Package Manager**: The project specifies `pnpm@10.28.2` as the package manager in `package.json`. The project uses `@solidjs/start` with Vinxi build tool.
 
 ## Key Technical Details
 
@@ -208,11 +213,12 @@ Key message flows:
 
 ### Session and Connection Management
 
-- **Session Tickets**: Base32-encoded NodeAddr for secure P2P connection sharing
+- **Session Tickets**: Uses iroh-tickets standard format (base64-encoded NodeAddr) for secure P2P connection sharing
 - **Concurrent Connections**: Supports up to 50 simultaneous participants per session
 - **Event Buffering**: 5000 event limit per session with automatic cleanup
 - **Memory Management**: 5-minute interval cleanup tasks for inactive sessions
-- **Recovery**: Session recovery utilities for connection resilience
+- **Session Recovery**: Automatic reconnection and session state restoration after network interruptions
+- **QR Code Support**: Fast QR code generation for easy mobile ticket sharing
 
 ### Core Components
 
@@ -234,9 +240,11 @@ Key message flows:
 - TCP forwarding session management and statistics tracking
 
 #### Frontend (`src/`)
-- SolidJS with TypeScript for reactive UI development
-- Mobile-first responsive design with viewport management
-- Terminal UI using xterm.js with mobile-optimized keyboard handling
+- **SolidJS Start** (`@solidjs/start`) with file-based routing in `src/routes/`
+- Vinxi build tool wraps Vite for enhanced SSR capabilities
+- Root component: `src/app.tsx` with `FileRoutes` from `@solidjs/start/router`
+- Mobile-first responsive design with ViewportManager and AdaptiveLayoutManager utilities
+- Terminal UI using **ghostty-web** (modern WASM-based terminal emulator, migrated from xterm.js)
 - Main components: `HomeView.tsx`, `RemoteSessionView.tsx`, `SettingsModal.tsx`, `P2PBackground.tsx`
 - UI components: `CyberComponents`, `CyberEffects`, `EnhancedComponents`, `GestureSettings`, `KeyboardAwareContainer`, `MobileNavigation`, `QuickAccessToolbar`, `ThemeSwitcher`
 
@@ -249,10 +257,12 @@ Key message flows:
 - **iroh Networking**: P2P communication with NAT traversal and no central server dependency
 - **End-to-End Encryption**: ChaCha20Poly1305 encryption for all terminal data
 - **QUIC Protocol**: Reliable message delivery with connection multiplexing
-- **Session Tickets**: Base32-encoded connection tokens for secure session sharing
+- **Session Tickets**: Uses iroh-tickets standard format (base64-encoded NodeAddr) for secure P2P connection sharing
+- **QR Code Generation**: Fast QR code generation via `fast_qr` crate for easy ticket sharing on mobile
 - **Real-time Terminal I/O**: sshx-style asynchronous I/O loop using tokio::select!
 - **Cross-Platform Shell Support**: Automatic detection and configuration of Zsh, Bash, Fish, Nushell, PowerShell
 - **Mobile Optimization**: Adaptive terminal interface with viewport-aware layouts
+- **Session Recovery**: Automatic reconnection and session state restoration
 
 ### Terminal Logging
 - **Automatic I/O Recording**: All terminal input and output is automatically logged to files
@@ -264,19 +274,23 @@ Key message flows:
 - **File Persistence**: Logs are persisted to disk for session recovery and auditing
 
 ### Frontend Architecture
+- **@solidjs/start Framework**: Modern SSR-ready architecture with file-based routing
 - **Mobile-First Design**: Responsive layouts with dynamic viewport management
+- **ViewportManager Utility**: Advanced viewport height management with keyboard awareness
+- **AdaptiveLayoutManager**: Responsive layout class application based on device capabilities
 - **Touch Optimization**: Gesture controls and appropriate tap targets for mobile devices
 - **Keyboard Management**: Advanced mobile keyboard handling with automatic viewport adjustment
-- **Real-time Updates**: Reactive UI using SolidJS with immediate terminal output synchronization
+- **Real-time Updates**: Reactive UI using SolidJS fine-grained reactivity
+- **Terminal Emulator**: ghostty-web (WASM-based, migrated from xterm.js)
 - **Components**: HomeView (connection screen), RemoteSessionView (terminal interface), SettingsModal, P2PBackground
 
 ## Configuration Files
 
 - `Cargo.toml` - Workspace configuration with shared dependencies and build profiles
-- `package.json` - Frontend dependencies and build scripts, specifies pnpm@10.0.0 as package manager
+- `package.json` - Frontend dependencies and build scripts, specifies pnpm@10.28.2 as package manager
 - `app/tauri.conf.json` - Tauri application configuration (uses pnpm dev/build commands, devUrl: localhost:1420)
 - `app/capabilities/` - Platform-specific permission configurations
-- `vite.config.ts` - Vite build configuration for SolidJS (dev server on localhost:1420)
+- `app.config.ts` - **@solidjs/start** configuration with Vinxi build tool (replaces vite.config.ts)
 - `tailwind.config.js` - TailwindCSS configuration with DaisyUI themes
 
 ## Dependencies and Ecosystem
@@ -292,15 +306,18 @@ Key message flows:
 - **Rust 2024 Edition**: The `app` crate uses Rust 2024 edition
 
 ### Frontend Dependencies
-- **solid-js** (1.9.9) - Reactive UI framework (SolidJS, not React)
-- **@xterm/xterm** (5.5.0) - Terminal emulator with addons (canvas, fit, search, web-links, webgl)
-- **daisyui** (5.0.50) - TailwindCSS component library
+- **solid-js** (1.9.11) - Reactive UI framework (SolidJS, not React)
+- **@solidjs/start** (1.2.1) - Modern SolidJS framework with SSR support
+- **@solidjs/router** (0.15.4) - File-based routing
+- **vinxi** (0.5.11) - Build tool wrapping Vite for enhanced features
+- **ghostty-web** (0.3.0) - Modern WASM-based terminal emulator (migrated from xterm.js)
+- **daisyui** (5.5.14) - TailwindCSS component library
 - **lucide-solid** (0.540.0) - Icon library
 - **vconsole** (3.15.1) - Mobile debugging console for development
 - **solid-toast** (0.5.0) - Toast notifications for SolidJS
 
 ### Key Features
-- **Package Manager**: pnpm@10.0.0 (specified in package.json)
+- **Package Manager**: pnpm@10.28.2 (specified in package.json)
 - **Build Profiles**:
   - Release with LTO, strip, and single codegen-unit optimization
   - Production profile inherits release with panic=abort for smaller binaries
@@ -324,10 +341,12 @@ Key message flows:
 - Mobile apps include gesture controls and adaptive layouts
 
 ### Recent Major Changes
+- **Migrated to @solidjs/start** - Modern SSR-ready SolidJS framework with Vinxi build tool
+- **Switched to ghostty-web** - Modern WASM-based terminal emulator (replaced xterm.js)
 - Implemented unified message protocol replacing previous TerminalCommand/Response system
 - Fixed terminal I/O synchronization issues for real-time interaction
-- Enhanced mobile viewport management and keyboard handling
-- Improved connection management and reliability
+- Enhanced mobile viewport management with ViewportManager and AdaptiveLayoutManager
+- Improved connection management and reliability with session reconnection
 - Implemented TCP service forwarding with full app-CLI coordination
 - Added TCP forwarding session management in `app/src/tcp_forwarding.rs`
 - Added browser client with WebAssembly support for direct web access
@@ -370,11 +389,15 @@ The project now includes TCP service forwarding capabilities allowing users to:
 - Focuses purely on terminal data interaction capabilities
 
 ### Mobile Considerations
-- Viewport height management with keyboard awareness
-- Touch-optimized UI with appropriate tap targets
-- Adaptive layouts for different screen sizes
-- Safe area insets for mobile devices
-- Performance optimizations for mobile hardware
+- **ViewportManager Utility** (`src/utils/mobile/ViewportManager.ts`): Centralized viewport height management with keyboard awareness
+- **AdaptiveLayoutManager** (`src/utils/mobile/AdaptiveLayoutManager.ts`): Responsive layout class application
+- **MobileKeyboard Utility** (`src/utils/mobile/index.ts`): Touch device keyboard state tracking
+- **Device Store** (`src/stores/deviceStore.ts`): Device capability detection and caching
+- Touch-optimized UI with appropriate tap targets (minimum 44x44px)
+- Adaptive layouts for different screen sizes (breakpoint-based classes)
+- Safe area insets for mobile devices (notch/sensor accommodation)
+- Performance optimizations for mobile hardware (virtual scrolling, lazy loading)
+- HMR (Hot Module Replacement) for mobile development with configurable WebSocket host
 
 ### Testing and Debugging
 - Comprehensive logging system with configurable levels
@@ -383,8 +406,8 @@ The project now includes TCP service forwarding capabilities allowing users to:
 - Message protocol validation
 - Terminal I/O synchronization testing
 - CLI ticket generation testing with `test_ticket_output.sh`
-- Mobile debugging with `vconsole` for in-app console during development
-- Frontend development server runs on `http://localhost:1420` with hot reload and network access enabled
+- Mobile debugging with `vconsole` for in-app console during development (auto-initialized in src/app.tsx)
+- Frontend development server runs on `http://localhost:1420` via Vinxi with HMR
 - GitHub Actions CI/CD pipeline for automated testing and releases
   - `.github/workflows/build-and-test.yml` - Development builds and tests
   - `.github/workflows/publish-to-auto-release.yml` - Automated releases
@@ -399,8 +422,13 @@ riterm/
 ├── app/                 # Tauri app (Rust + SolidJS) → builds to `app/target/`
 ├── shared/              # Shared networking protocols (Rust library)
 ├── browser/             # Browser client (Rust + WebAssembly)
-├── src/                 # SolidJS frontend application
-└── dist/                # Built frontend assets
+├── src/                 # SolidJS Start frontend application
+│   ├── app.tsx          # Root component with Router
+│   ├── entry-client.tsx # Client-side entry
+│   ├── entry-server.tsx # Server-side entry (SSR)
+│   ├── routes/          # File-based routing (index.tsx is main page)
+│   └── components/      # UI components
+└── .output/public/      # Vinxi build output (served by Tauri in production)
 ```
 
 ### Build Targets
@@ -408,15 +436,16 @@ riterm/
 - **Desktop App**: `app/target/release/bundle/` (macOS .app, Windows .exe, Linux AppImage)
 - **Mobile Apps**: Generated in `app/gen/android/` (APK) and `app/gen/apple/` (iOS .ipa)
 - **Browser Client**: `browser/dist/` (WASM + HTML/JS/CSS for web deployment)
-- **Frontend**: `dist/` directory (served by Tauri in production)
+- **Frontend**: `.output/public/` directory (Vinxi build output, served by Tauri in production)
 
 ### Build Process Notes
 - The project uses a Cargo workspace with four crates: `cli`, `app`, `shared`, and `browser`
-- Frontend (SolidJS) builds to `dist/` which Tauri packages in the final app
+- Frontend uses **@solidjs/start** with **Vinxi** build tool (modern SSR-ready architecture)
+- Frontend builds to `.output/public/` which Tauri packages in the final app
 - The `app` directory contains the Tauri backend and mobile app code
 - The `browser` directory contains a pure web client using WebAssembly
-- Development server runs frontend on `http://localhost:1420` with hot reload and network access enabled
-- Vite configuration ignores `**/src-tauri/**` for watching (legacy pattern)
+- Development server runs frontend on `http://localhost:1420` via `PORT=1420 vinxi dev`
+- File-based routing via `@solidjs/start/router` with `FileRoutes`
 - Mobile builds require platform-specific toolchains (Android SDK, Xcode)
 - Browser client uses `wasm-pack` for WASM compilation and web bundling
 - Tauri automatically runs `pnpm dev` before development and `pnpm build` before building
@@ -429,7 +458,8 @@ riterm/
 2. Implement CLI handlers in `cli/src/message_server.rs` (MessageHandler implementations)
 3. Add Tauri commands in `app/src/lib.rs`
 4. Create/update frontend components in `src/components/`
-5. Update mobile viewport management if needed
+5. Update routes in `src/routes/` if adding new pages
+6. Update mobile viewport management if needed (ViewportManager/AdaptiveLayoutManager)
 
 ### Adding New TCP Forwarding Features
 1. Define new TCP message types in `shared/src/message_protocol.rs`

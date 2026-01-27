@@ -171,11 +171,6 @@
 }
 
 /* Header responsive styles */
-.terminal-header {
-  height: var(--header-height);
-  min-height: var(--header-height);
-}
-
 .layout-xs .terminal-header {
   padding: 8px 12px;
 }
