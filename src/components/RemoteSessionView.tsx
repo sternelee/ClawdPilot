@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { init, Terminal, FitAddon } from "ghostty-web";
 import { getDeviceCapabilities } from "../stores/deviceStore";
 import { useTerminalSessions } from "../stores/terminalSessionStore";
-import { showError } from "../utils/toast";
+import { toast } from "solid-sonner";
 
 // Import types from the shared library
 interface TerminalInfo {
@@ -78,7 +78,7 @@ const loadLocalFont = async (): Promise<{ loaded: boolean; fontName: string }> =
       throw new Error("All font paths failed");
     }
   } catch (error) {
-    showError("加载本地 FiraCode Nerd Font 失败: " + error, "字体加载错误");
+    toast.error("加载本地 FiraCode Nerd Font 失败: " + error);
     return { loaded: false, fontName: '' };
   }
 };
@@ -147,7 +147,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         terminalId: terminalId,
         input: dataToSend,
       }).catch((error) => {
-        showError("发送终端输入失败: " + error, "输入错误");
+        toast.error("发送终端输入失败: " + error);
         // 发送失败时重置状态
         session.hasPendingInput = false;
       });
@@ -258,7 +258,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         terminalId: activeId,
         input: data,
       }).catch((error) => {
-        showError("发送终端输入失败: " + error, "输入发送错误");
+        toast.error("发送终端输入失败: " + error);
       });
     }
   };
@@ -268,7 +268,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     try {
       await invoke("get_terminal_list", { sessionId: props.sessionId });
     } catch (error) {
-      showError("获取终端列表失败: " + error, "列表加载错误");
+      toast.error("获取终端列表失败: " + error);
     }
   };
 
@@ -297,7 +297,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       // 延迟刷新列表
       setTimeout(() => loadTcpSessions(), 500);
     } catch (error) {
-      showError("创建 TCP 转发会话失败: " + error, "TCP 转发错误");
+      toast.error("创建 TCP 转发会话失败: " + error);
     }
   };
 
@@ -306,7 +306,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     try {
       await invoke("list_tcp_forwarding_sessions", { sessionId: props.sessionId });
     } catch (error) {
-      showError("加载 TCP 转发会话列表失败: " + error, "TCP 列表错误");
+      toast.error("加载 TCP 转发会话列表失败: " + error);
     }
   };
 
@@ -341,7 +341,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         setSelectedTcpSession(null);
       }
     } catch (error) {
-      showError("停止 TCP 转发会话失败: " + error, "TCP 停止错误");
+      toast.error("停止 TCP 转发会话失败: " + error);
     }
   };
 
@@ -386,7 +386,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         }
       }, 300);
     } catch (error) {
-      showError("刷新 TCP 会话失败: " + error, "刷新错误");
+      toast.error("刷新 TCP 会话失败: " + error);
       // 如果刷新失败，使用原始数据
       setSelectedTcpSession(session);
     }
@@ -458,7 +458,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       return terminalId;
     } catch (error) {
-      showError("创建终端失败: " + error, "终端创建错误");
+      toast.error("创建终端失败: " + error);
       throw error;
     }
   };
@@ -498,7 +498,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         setActiveTerminalId(null);
       }
     } catch (error) {
-      showError("停止终端失败: " + error, "终端停止错误");
+      toast.error("停止终端失败: " + error);
     }
   };
 
@@ -517,7 +517,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             try {
               existingSession.fitAddon.fit();
             } catch (error) {
-              showError("终端适配失败: " + error, "终端适配错误");
+              toast.error("终端适配失败: " + error);
             }
           }, 100);
         }
@@ -600,7 +600,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             terminalId: terminalId,
             input: data,
           }).catch((error) => {
-            showError("发送 Ctrl+C 命令失败: " + error, "快捷键发送错误");
+            toast.error("发送 Ctrl+C 命令失败: " + error);
           });
           return;
         }
@@ -643,7 +643,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         }
       }, 100);
     } catch (error) {
-      showError("连接终端失败: " + error, "终端连接错误");
+      toast.error("连接终端失败: " + error);
       // 更新连接状态为失败
       terminalSessionManager.updateConnectionState(terminalId, "disconnected");
     }
@@ -976,333 +976,333 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   });
 
-   // 渲染左侧边栏内容
-   const renderSidebar = () => (
-     <>
-       {/* 侧边栏头部 */}
-       <div class="terminal-sidebar">
-         <div class="terminal-header">
-           <div class="flex items-center justify-between">
-             <div class="flex items-center gap-3">
-               <div class="status-indicator status-online">
-                 <div class="status-dot"></div>
-                 <span class="text-primary font-bold">RiTerm</span>
-               </div>
-             </div>
-             <div class="flex items-center gap-1">
-               {/* 桌面端侧边栏切换按钮 */}
-               <Show when={!isMobile}>
-                 <label
-                   for="left-sidebar-drawer"
-                   class="btn btn-ghost btn-sm btn-square cursor-pointer"
-                 >
-                   <svg
-                     class="w-4 h-4"
-                     fill="none"
-                     stroke="currentColor"
-                     viewBox="0 0 24 24"
-                   >
-                     <path
-                       stroke-linecap="round"
-                       stroke-linejoin="round"
-                       stroke-width="2"
-                       d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                     />
-                   </svg>
-                 </label>
-               </Show>
-             </div>
-           </div>
+  // 渲染左侧边栏内容
+  const renderSidebar = () => (
+    <>
+      {/* 侧边栏头部 */}
+      <div class="terminal-sidebar">
+        <div class="terminal-header">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="status-indicator status-online">
+                <div class="status-dot"></div>
+                <span class="text-primary font-bold">RiTerm</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              {/* 桌面端侧边栏切换按钮 */}
+              <Show when={!isMobile}>
+                <label
+                  for="left-sidebar-drawer"
+                  class="btn btn-ghost btn-sm btn-square cursor-pointer"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                    />
+                  </svg>
+                </label>
+              </Show>
+            </div>
+          </div>
 
-           {/* Tab Navigation */}
-           <div role="tablist" class="tabs">
-             <a
-               role="tab"
-               class={`tab tab-sm ${activeSidebarTab() === "terminals" ? "tab-active" : ""}`}
-               onClick={() => setActiveSidebarTab("terminals")}
-             >
-               <div class="flex items-center gap-1">
-                 <svg
-                   class="w-4 h-4"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24"
-                 >
-                   <path
-                     stroke-linecap="round"
-                     stroke-linejoin="round"
-                     stroke-width="2"
-                     d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                   />
-                 </svg>
-                 终端
-                 <div class="badge badge-neutral badge-xs">
-                   {terminals().length}
-                 </div>
-               </div>
-             </a>
-             <a
-               class={`tab tab-sm ${activeSidebarTab() === "services" ? "tab-active" : ""}`}
-               onClick={() => setActiveSidebarTab("services")}
-             >
-               <div class="flex items-center gap-1">
-                 <svg
-                   class="w-4 h-4"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24"
-                 >
-                   <path
-                     stroke-linecap="round"
-                     stroke-linejoin="round"
-                     stroke-width="2"
-                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
-                   />
-                 </svg>
-                 TCP 服务
-                 <div class="badge badge-neutral badge-xs">
-                   {tcpSessions().length}
-                 </div>
-               </div>
-             </a>
-           </div>
-         </div>
-       </div>
-
-       {/* Tab Content */}
-       <div class="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent bg-base-100">
-         {/* 终端标签页内容 */}
-         <Show when={activeSidebarTab() === "terminals"}>
-           <div class="p-4">
-             {/* 新建终端按钮 */}
-             <button
-               type="button"
-               class="btn w-full gap-2 mb-4"
-               onClick={() => openCreateDialog()}
-             >
-               <svg
-                 class="w-4 h-4"
-                 fill="none"
-                 stroke="currentColor"
-                 viewBox="0 0 24 24"
-               >
-                 <path
-                   stroke-linecap="round"
-                   stroke-linejoin="round"
-                   stroke-width="2"
-                   d="M12 4v16m8-8H4"
-                 />
-               </svg>
-               <span class="font-bold text-primary">[ 新建终端 ]</span>
-             </button>
-
-             {/* 终端列表 */}
-             <div class="space-y-2">
-               <For each={terminals()}>
-                 {(terminal) => {
-                   const isActive = activeTerminalId() === terminal.id;
-                   return (
-                     <div
-                       class={`terminal-list-item ${isActive ? "active" : ""}`}
-                       onClick={() => {
-                         if (terminal.status === "Running") {
-                           connectToTerminal(terminal.id);
-                         }
-                       }}
-                     >
-                       <div class="flex items-center justify-between gap-2">
-                         <div class="flex-1">
-                           <div class="flex items-center gap-2 mb-1">
-                             <span class={`text-sm font-semibold ${isActive ? "text-primary" : "text-base-content"
-                               }`}>
-                               {terminal.name ||
-                                 `term-${terminal.id.slice(0, 6)}`}
-                             </span>
-                             <span class={`text-xs ${terminal.status === "Running" ? "text-success" : "text-warning"}`}>
-                               [{terminal.status}]
-                             </span>
-                           </div>
-                           <div class="text-xs text-base-content/50 font-mono">
-                             {truncatePath(terminal.current_dir)}
-                           </div>
-                         </div>
-                         <button
-                           type="button"
-                           class="btn btn-ghost btn-error btn-xs btn-square opacity-60 hover:opacity-100"
-                           onClick={(e) => {
-                             e.stopPropagation();
-                             stopTerminal(terminal.id);
-                           }}
-                           title="停止终端"
-                         >
-                           <svg
-                             class="w-3 h-3"
-                             fill="none"
-                             stroke="currentColor"
-                             viewBox="0 0 24 24"
-                           >
-                             <path
-                               stroke-linecap="round"
-                               stroke-linejoin="round"
-                               stroke-width="2"
-                               d="M6 18L18 6M6 6l12 12"
-                             />
-                           </svg>
-                         </button>
-                       </div>
-                     </div>
-                   );
-                 }}
-               </For>
-
-               {terminals().length === 0 && (
-                 <div class="text-center py-12 px-4">
-                   <div class="text-6xl mb-4 opacity-30">▓</div>
-                   <div class="terminal-cmd inline-block mb-2">
-                     <span class="text-primary">&gt;&gt;&gt; 暂无终端</span>
-                   </div>
-                   <div class="text-xs text-base-content/50 font-mono mt-2">
-                     // 点击上方按钮创建新终端
-                   </div>
-                 </div>
-               )}
-             </div>
-           </div>
-         </Show>
-
-         {/* TCP 服务标签页内容 */}
-         <Show when={activeSidebarTab() === "services"}>
-           <div class="p-4">
-             {/* 新建 TCP 转发按钮 */}
-             <button
-               type="button"
-               class="btn w-full gap-2 mb-4"
-               onClick={() => openTcpDialog()}
-             >
-               <svg
-                 class="w-4 h-4"
-                 fill="none"
-                 stroke="currentColor"
-                 viewBox="0 0 24 24"
-               >
-                 <path
-                   stroke-linecap="round"
-                   stroke-linejoin="round"
-                   stroke-width="2"
-                   d="M12 4v16m8-8H4"
-                 />
-               </svg>
-               <span class="font-bold text-primary">[ 新建 TCP 转发 ]</span>
-             </button>
-
-             {/* TCP 会话列表 */}
-             <div class="space-y-2">
-               <For each={tcpSessions()}>
-                 {(session) => (
-                   <div
-                     class="terminal-list-item"
-                     onClick={() => handleTcpSessionClick(session)}
-                   >
-                     <div class="flex flex-col gap-2 flex-1">
-                       <div class="flex items-center justify-between">
-                         <div class="text-sm font-semibold text-primary">
-                           {getForwardingTypeLabel(session.forwarding_type)}
-                         </div>
-                         <div class="flex items-center gap-2">
-                           {/* 状态指示器 */}
-                           <div class={`status-dot ${session.status === 'running' ? 'status-online' :
-                             session.status === 'stopped' ? 'status-offline' :
-                               'status-connecting'
-                             }`} title={session.status}>
-                           </div>
-
-                           {/* 连接数 */}
-                           <Show when={session.active_connections > 0}>
-                             <div class="badge badge-primary badge-xs">
-                               {session.active_connections}
-                             </div>
-                           </Show>
-                         </div>
-                       </div>
-
-                       {/* 端口信息 */}
-                       <div class="flex items-center gap-4 text-xs font-mono">
-                         <div class="flex items-center gap-1">
-                           <span class="text-base-content/50">LOCAL:</span>
-                           <span class="text-base-content">{session.local_addr}</span>
-                         </div>
-                         <div class="flex items-center gap-1">
-                           <span class="text-base-content/50">REMOTE:</span>
-                           <span class="text-base-content">{session.remote_target}</span>
-                         </div>
-                       </div>
-                     </div>
-
-                   </div>
-                 )}
-               </For>
-
-               {tcpSessions().length === 0 && (
-                 <div class="text-center py-12 px-4">
-                   <div class="text-6xl mb-4 opacity-30">⚡</div>
-                   <div class="terminal-cmd inline-block mb-2">
-                     <span class="text-primary">&gt;&gt;&gt; 暂无 TCP 转发</span>
-                   </div>
-                   <div class="text-xs text-base-content/50 font-mono mt-2">
-                     // 点击上方按钮创建新的 TCP 转发
-                   </div>
-                 </div>
-               )}
-             </div>
-           </div>
-         </Show>
+          {/* Tab Navigation */}
+          <div role="tablist" class="tabs">
+            <a
+              role="tab"
+              class={`tab tab-sm ${activeSidebarTab() === "terminals" ? "tab-active" : ""}`}
+              onClick={() => setActiveSidebarTab("terminals")}
+            >
+              <div class="flex items-center gap-1">
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                终端
+                <div class="badge badge-neutral badge-xs">
+                  {terminals().length}
+                </div>
+              </div>
+            </a>
+            <a
+              class={`tab tab-sm ${activeSidebarTab() === "services" ? "tab-active" : ""}`}
+              onClick={() => setActiveSidebarTab("services")}
+            >
+              <div class="flex items-center gap-1">
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                  />
+                </svg>
+                TCP 服务
+                <div class="badge badge-neutral badge-xs">
+                  {tcpSessions().length}
+                </div>
+              </div>
+            </a>
+          </div>
+        </div>
       </div>
 
-       {/* 侧边栏底部操作 */}
-       <div class="p-4 border-t border-primary/20 space-y-2 bg-base-200">
-         <button
-           type="button"
-           class="btn btn-ghost btn-sm w-full justify-start gap-2 font-mono text-xs"
-           onClick={() => handleRefreshList()}
-         >
-           <svg
-             class="w-4 h-4"
-             fill="none"
-             stroke="currentColor"
-             viewBox="0 0 24 24"
-           >
-             <path
-               stroke-linecap="round"
-               stroke-linejoin="round"
-               stroke-width="2"
-               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-             />
-           </svg>
-           <span>[ 刷新列表 ]</span>
-         </button>
-         <button
-           type="button"
-           class="btn btn-ghost btn-sm w-full justify-start gap-2 hover:bg-error/10 hover:text-error font-mono text-xs"
-           onClick={props.onDisconnect}
-         >
-           <svg
-             class="w-4 h-4"
-             fill="none"
-             stroke="currentColor"
-             viewBox="0 0 24 24"
-           >
-             <path
-               stroke-linecap="round"
-               stroke-linejoin="round"
-               stroke-width="2"
-               d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-             />
-           </svg>
-           <span class="text-error">[ 断开连接 ]</span>
-         </button>
-       </div>
-     </>
-   );
+      {/* Tab Content */}
+      <div class="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-base-300 scrollbar-track-transparent bg-base-100">
+        {/* 终端标签页内容 */}
+        <Show when={activeSidebarTab() === "terminals"}>
+          <div class="p-4">
+            {/* 新建终端按钮 */}
+            <button
+              type="button"
+              class="btn w-full gap-2 mb-4"
+              onClick={() => openCreateDialog()}
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span class="font-bold text-primary">[ 新建终端 ]</span>
+            </button>
+
+            {/* 终端列表 */}
+            <div class="space-y-2">
+              <For each={terminals()}>
+                {(terminal) => {
+                  const isActive = activeTerminalId() === terminal.id;
+                  return (
+                    <div
+                      class={`terminal-list-item ${isActive ? "active" : ""}`}
+                      onClick={() => {
+                        if (terminal.status === "Running") {
+                          connectToTerminal(terminal.id);
+                        }
+                      }}
+                    >
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="flex-1">
+                          <div class="flex items-center gap-2 mb-1">
+                            <span class={`text-sm font-semibold ${isActive ? "text-primary" : "text-base-content"
+                              }`}>
+                              {terminal.name ||
+                                `term-${terminal.id.slice(0, 6)}`}
+                            </span>
+                            <span class={`text-xs ${terminal.status === "Running" ? "text-success" : "text-warning"}`}>
+                              [{terminal.status}]
+                            </span>
+                          </div>
+                          <div class="text-xs text-base-content/50 font-mono">
+                            {truncatePath(terminal.current_dir)}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-error btn-xs btn-square opacity-60 hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            stopTerminal(terminal.id);
+                          }}
+                          title="停止终端"
+                        >
+                          <svg
+                            class="w-3 h-3"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }}
+              </For>
+
+              {terminals().length === 0 && (
+                <div class="text-center py-12 px-4">
+                  <div class="text-6xl mb-4 opacity-30">▓</div>
+                  <div class="terminal-cmd inline-block mb-2">
+                    <span class="text-primary">&gt;&gt;&gt; 暂无终端</span>
+                  </div>
+                  <div class="text-xs text-base-content/50 font-mono mt-2">
+                     // 点击上方按钮创建新终端
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </Show>
+
+        {/* TCP 服务标签页内容 */}
+        <Show when={activeSidebarTab() === "services"}>
+          <div class="p-4">
+            {/* 新建 TCP 转发按钮 */}
+            <button
+              type="button"
+              class="btn w-full gap-2 mb-4"
+              onClick={() => openTcpDialog()}
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span class="font-bold text-primary">[ 新建 TCP 转发 ]</span>
+            </button>
+
+            {/* TCP 会话列表 */}
+            <div class="space-y-2">
+              <For each={tcpSessions()}>
+                {(session) => (
+                  <div
+                    class="terminal-list-item"
+                    onClick={() => handleTcpSessionClick(session)}
+                  >
+                    <div class="flex flex-col gap-2 flex-1">
+                      <div class="flex items-center justify-between">
+                        <div class="text-sm font-semibold text-primary">
+                          {getForwardingTypeLabel(session.forwarding_type)}
+                        </div>
+                        <div class="flex items-center gap-2">
+                          {/* 状态指示器 */}
+                          <div class={`status-dot ${session.status === 'running' ? 'status-online' :
+                            session.status === 'stopped' ? 'status-offline' :
+                              'status-connecting'
+                            }`} title={session.status}>
+                          </div>
+
+                          {/* 连接数 */}
+                          <Show when={session.active_connections > 0}>
+                            <div class="badge badge-primary badge-xs">
+                              {session.active_connections}
+                            </div>
+                          </Show>
+                        </div>
+                      </div>
+
+                      {/* 端口信息 */}
+                      <div class="flex items-center gap-4 text-xs font-mono">
+                        <div class="flex items-center gap-1">
+                          <span class="text-base-content/50">LOCAL:</span>
+                          <span class="text-base-content">{session.local_addr}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                          <span class="text-base-content/50">REMOTE:</span>
+                          <span class="text-base-content">{session.remote_target}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+              </For>
+
+              {tcpSessions().length === 0 && (
+                <div class="text-center py-12 px-4">
+                  <div class="text-6xl mb-4 opacity-30">⚡</div>
+                  <div class="terminal-cmd inline-block mb-2">
+                    <span class="text-primary">&gt;&gt;&gt; 暂无 TCP 转发</span>
+                  </div>
+                  <div class="text-xs text-base-content/50 font-mono mt-2">
+                     // 点击上方按钮创建新的 TCP 转发
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </Show>
+      </div>
+
+      {/* 侧边栏底部操作 */}
+      <div class="p-4 border-t border-primary/20 space-y-2 bg-base-200">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm w-full justify-start gap-2 font-mono text-xs"
+          onClick={() => handleRefreshList()}
+        >
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <span>[ 刷新列表 ]</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm w-full justify-start gap-2 hover:bg-error/10 hover:text-error font-mono text-xs"
+          onClick={props.onDisconnect}
+        >
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+            />
+          </svg>
+          <span class="text-error">[ 断开连接 ]</span>
+        </button>
+      </div>
+    </>
+  );
 
 
   // 渲染快捷键按钮栏
@@ -1318,31 +1318,31 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       { key: "ctrl-c", label: "^C", color: "bg-error/80 text-error-content" },
     ];
 
-     return (
-       <>
-         {/* Traditional Shortcut Bar - Terminal Style */}
-         <div
-           class="border-t border-primary/20 bg-base-100 px-2 py-3 shrink-0"
-           style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}
-         >
-           <div class="flex items-center justify-between gap-2 max-w-full overflow-x-auto scrollbar-hide">
-             <For each={shortcuts}>
-               {(shortcut) => (
-                 <button
-                   type="button"
-                   class={`shortcut-key ${shortcut.key === 'ctrl-c' ? 'ctrl' : ''} ${shortcut.key === 'enter' ? 'enter' : ''} flex-1`}
-                   onClick={() => sendShortcut(shortcut.key)}
-                 >
-                   <span class="text-xs sm:text-sm truncate font-mono font-bold">
-                     {shortcut.label}
-                   </span>
-                 </button>
-               )}
-             </For>
-           </div>
-         </div>
-       </>
-     );
+    return (
+      <>
+        {/* Traditional Shortcut Bar - Terminal Style */}
+        <div
+          class="border-t border-primary/20 bg-base-100 px-2 py-3 shrink-0"
+          style={{ "padding-bottom": "env(safe-area-inset-bottom, 0.5rem)" }}
+        >
+          <div class="flex items-center justify-between gap-2 max-w-full overflow-x-auto scrollbar-hide">
+            <For each={shortcuts}>
+              {(shortcut) => (
+                <button
+                  type="button"
+                  class={`shortcut-key ${shortcut.key === 'ctrl-c' ? 'ctrl' : ''} ${shortcut.key === 'enter' ? 'enter' : ''} flex-1`}
+                  onClick={() => sendShortcut(shortcut.key)}
+                >
+                  <span class="text-xs sm:text-sm truncate font-mono font-bold">
+                    {shortcut.label}
+                  </span>
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+      </>
+    );
   };
 
   // 渲染活动终端

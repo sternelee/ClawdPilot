@@ -8,7 +8,7 @@ import {
 import type { Terminal, FitAddon } from "ghostty-web";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Toaster } from "solid-toast";
+import { Toaster } from "solid-sonner";
 import { SettingsModal } from "./components/SettingsModal";
 import { HomeView } from "./components/HomeView";
 import { RemoteSessionView } from "./components/RemoteSessionView";
@@ -273,34 +273,7 @@ export default function Page() {
 
   return (
     <>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#1f2937',
-            color: '#f3f4f6',
-            border: '1px solid #374151',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            fontSize: '14px',
-            fontWeight: '500',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#ffffff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#ffffff',
-            },
-          },
-        }}
-      />
+      <Toaster />
       <div
         class="w-full font-mono mobile-viewport"
         data-theme="dark"

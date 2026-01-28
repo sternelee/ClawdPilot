@@ -314,7 +314,7 @@ Key message flows:
 - **daisyui** (5.5.14) - TailwindCSS component library
 - **lucide-solid** (0.540.0) - Icon library
 - **vconsole** (3.15.1) - Mobile debugging console for development
-- **solid-toast** (0.5.0) - Toast notifications for SolidJS
+- **solid-sonner** - Toast notifications for SolidJS
 
 ### Key Features
 - **Package Manager**: pnpm@10.28.2 (specified in package.json)

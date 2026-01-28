@@ -1,4 +1,5 @@
 import { createSignal, Show, For, onMount } from "solid-js";
+import { toast } from "solid-sonner";
 import { getDeviceCapabilities } from "../utils/mobile";
 import { getLastTicket, saveTicket, getTicketHistory } from "../utils/localStorage";
 import { getTicketDisplayId } from "../utils/ticketParser";
@@ -89,7 +90,15 @@ export function HomeView(props: HomeViewProps) {
   const handleShowQRScanner = async () => {
     try {
       // 使用Tauri的条码扫描插件
-      const { scan } = await import("@tauri-apps/plugin-barcode-scanner");
+      const { scan, checkPermissions, requestPermissions } = await import("@tauri-apps/plugin-barcode-scanner");
+      let permissionStatus = await checkPermissions();
+      if (permissionStatus !== "granted") {
+        permissionStatus = await requestPermissions();
+      }
+      if (permissionStatus !== "granted") {
+        toast.error("Camera permission is required to scan QR codes");
+        return;
+      }
       const result = await scan();
       console.log(result);
       if (result && result.content) {
@@ -218,7 +227,7 @@ export function HomeView(props: HomeViewProps) {
         <Show when={!isMobile && (!inputFocused() || !isMobile)}>
           <div class="text-primary text-xs mb-4 opacity-60">
             <pre>
-{`
+              {`
 ╔═════════════════════════════════════════════════════════╗
 ║  ╔═╗╔═╗╔═╗╦ ╦╔═╗╦  ╦  ╔═╗╔═╗  ╦ ╦╔═╗╦  ╦╔═╗       ║
 ║  ║╣ ╠═╣║ ║║ ║╠═╝╚╗╔╝  ║ ║║ ║  ╠═╣╠═╣╚╗╔╝╠═╝       ║
