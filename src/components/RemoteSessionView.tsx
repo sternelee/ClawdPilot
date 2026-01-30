@@ -5,6 +5,10 @@ import { init, Terminal, FitAddon } from "ghostty-web";
 import { getDeviceCapabilities } from "../stores/deviceStore";
 import { useTerminalSessions } from "../stores/terminalSessionStore";
 import { toast } from "solid-sonner";
+import {
+  createPredictionEngine,
+  PredictionEngine,
+} from "../utils/PredictionEngine";
 
 // Import types from the shared library
 interface TerminalInfo {
@@ -33,6 +37,7 @@ interface TerminalSession {
   inputBuffer?: string;
   sendTimeout?: ReturnType<typeof setTimeout> | null;
   hasPendingInput?: boolean; // 是否有待发送的输入
+  predictionEngine?: PredictionEngine; // Mosh-style predictive local echo
 }
 
 // 截断路径，显示末尾部分，前面用...省略
@@ -42,12 +47,15 @@ const truncatePath = (path: string, maxLength: number = 24): string => {
 };
 
 // 加载本地 Nerd Font 字体文件
-const loadLocalFont = async (): Promise<{ loaded: boolean; fontName: string }> => {
+const loadLocalFont = async (): Promise<{
+  loaded: boolean;
+  fontName: string;
+}> => {
   try {
     // Vite public 目录中的字体文件在构建后会被复制到 dist 根目录
     const fontPaths = [
-      '/FiraCodeNerdFont-Regular.ttf',
-      './FiraCodeNerdFont-Regular.ttf'
+      "/FiraCodeNerdFont-Regular.ttf",
+      "./FiraCodeNerdFont-Regular.ttf",
     ];
 
     let loadedFont = null;
@@ -56,15 +64,17 @@ const loadLocalFont = async (): Promise<{ loaded: boolean; fontName: string }> =
       try {
         console.log(`🔍 Trying font path: ${fontPath}`);
         const font = new FontFace(
-          'FiraCode Nerd Font',
-          `url(${fontPath}) format('truetype')`
+          "FiraCode Nerd Font",
+          `url(${fontPath}) format('truetype')`,
         );
 
         // 尝试加载字体
         await font.load();
         document.fonts.add(font);
         loadedFont = font;
-        console.log(`✅ FiraCode Nerd Font loaded successfully from: ${fontPath}`);
+        console.log(
+          `✅ FiraCode Nerd Font loaded successfully from: ${fontPath}`,
+        );
         break;
       } catch (pathError) {
         console.log(`❌ Failed to load from ${fontPath}:`, pathError);
@@ -73,33 +83,33 @@ const loadLocalFont = async (): Promise<{ loaded: boolean; fontName: string }> =
     }
 
     if (loadedFont) {
-      return { loaded: true, fontName: 'FiraCode Nerd Font' };
+      return { loaded: true, fontName: "FiraCode Nerd Font" };
     } else {
       throw new Error("All font paths failed");
     }
   } catch (error) {
     toast.error("加载本地 FiraCode Nerd Font 失败: " + error);
-    return { loaded: false, fontName: '' };
+    return { loaded: false, fontName: "" };
   }
 };
 
 // 检测系统字体支持
 const detectFontSupport = () => {
   const testFonts = [
-    { name: 'FiraCode Nerd Font', type: 'local' },
-    { name: 'Menlo', type: 'system' },
-    { name: 'Monaco', type: 'system' },
-    { name: '"Courier New"', type: 'system' },
-    { name: 'monospace', type: 'fallback' }
+    { name: "FiraCode Nerd Font", type: "local" },
+    { name: "Menlo", type: "system" },
+    { name: "Monaco", type: "system" },
+    { name: '"Courier New"', type: "system" },
+    { name: "monospace", type: "fallback" },
   ];
 
   // 测试字体是否可用
   for (const font of testFonts) {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
     if (context) {
       context.font = `16px ${font.name}`;
-      const testChar = '\uf0e7'; // Git 图标
+      const testChar = "\uf0e7"; // Git 图标
       const width = context.measureText(testChar).width;
 
       if (width > 0) {
@@ -110,7 +120,7 @@ const detectFontSupport = () => {
   }
 
   console.warn("⚠️ No suitable fonts found, using fallback");
-  return { name: 'monospace', type: 'fallback' };
+  return { name: "monospace", type: "fallback" };
 };
 
 export function RemoteSessionView(props: RemoteSessionViewProps) {
@@ -121,52 +131,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [activeTerminalId, setActiveTerminalId] = createSignal<string | null>(
     null,
   );
-  const [bestFont, setBestFont] = createSignal<string>('monospace');
-
-  // 优化后的输入发送函数
-  const sendInputImmediately = (
-    sessionId: string,
-    terminalId: string,
-    session: TerminalSession,
-  ) => {
-    // 清除防抖定时器
-    if (session.sendTimeout) {
-      clearTimeout(session.sendTimeout);
-      session.sendTimeout = null;
-    }
-
-    if (session.inputBuffer && session.inputBuffer.length > 0) {
-      const dataToSend = session.inputBuffer;
-      console.log("🚀 Sending input immediately:", JSON.stringify(dataToSend));
-
-      // 清空输入缓冲区
-      session.inputBuffer = "";
-
-      invoke("send_terminal_input_to_terminal", {
-        sessionId: sessionId,
-        terminalId: terminalId,
-        input: dataToSend,
-      }).catch((error) => {
-        toast.error("发送终端输入失败: " + error);
-        // 发送失败时重置状态
-        session.hasPendingInput = false;
-      });
-    }
-  };
-
-  // 防抖输入发送调度
-  const scheduleInputSend = (
-    session: TerminalSession,
-    sendCallback: () => void,
-  ) => {
-    // 清除现有定时器
-    if (session.sendTimeout) {
-      clearTimeout(session.sendTimeout);
-    }
-
-    // 设置新的防抖定时器（减少到200ms提高响应性）
-    session.sendTimeout = setTimeout(sendCallback, 200);
-  };
+  const [bestFont, setBestFont] = createSignal<string>("monospace");
 
   // 全局会话管理
   const terminalSessionManager = useTerminalSessions();
@@ -175,9 +140,10 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   const [terminalName, setTerminalName] = createSignal("");
 
   const [showAddMenu, setShowAddMenu] = createSignal(false);
-  const [showCreateTerminalModal, setShowCreateTerminalModal] = createSignal(false);
-  const [showTcpForwardingModal, setShowTcpForwardingModal] = createSignal(false);
-
+  const [showCreateTerminalModal, setShowCreateTerminalModal] =
+    createSignal(false);
+  const [showTcpForwardingModal, setShowTcpForwardingModal] =
+    createSignal(false);
 
   // 侧边栏标签页状态
   const [activeSidebarTab, setActiveSidebarTab] = createSignal<
@@ -289,7 +255,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         localAddr: tcpLocalAddr(),
         remoteHost: tcpRemoteHost() || undefined,
         remotePort: tcpRemotePort() ? parseInt(tcpRemotePort()) : undefined,
-        forwardingType: tcpForwardingType()
+        forwardingType: tcpForwardingType(),
       });
 
       setShowTcpForwardingModal(false);
@@ -304,7 +270,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
   // 加载 TCP 转发会话列表
   const loadTcpSessions = async () => {
     try {
-      await invoke("list_tcp_forwarding_sessions", { sessionId: props.sessionId });
+      await invoke("list_tcp_forwarding_sessions", {
+        sessionId: props.sessionId,
+      });
     } catch (error) {
       toast.error("加载 TCP 转发会话列表失败: " + error);
     }
@@ -326,12 +294,14 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     try {
       await invoke("stop_tcp_forwarding_session", {
         sessionId: props.sessionId,
-        tcpSessionId
+        tcpSessionId,
       });
 
       // 立即从前端TCP会话列表中移除
       const currentSessions = tcpSessions();
-      const updatedSessions = currentSessions.filter(s => s.id !== tcpSessionId);
+      const updatedSessions = currentSessions.filter(
+        (s) => s.id !== tcpSessionId,
+      );
       setTcpSessions(updatedSessions);
       console.log("🗑️ Removed TCP session from list:", tcpSessionId);
 
@@ -347,11 +317,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
   // 格式化字节数
   const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
   };
 
   // 格式化日期
@@ -359,10 +329,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     return new Date(timestamp).toLocaleString();
   };
 
-
   // 获取转发类型的简短显示
   const getForwardingTypeLabel = (_type: string): string => {
-    return '监听模式';
+    return "监听模式";
   };
 
   // 处理TCP会话点击
@@ -376,7 +345,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       setTimeout(() => {
         // 根据ID找到最新的会话数据
         const currentSessions = tcpSessions();
-        const updatedSession = currentSessions.find(s => s.id === session.id);
+        const updatedSession = currentSessions.find((s) => s.id === session.id);
         if (updatedSession) {
           console.log("📊 Updated session data:", updatedSession);
           setSelectedTcpSession(updatedSession);
@@ -473,7 +442,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
       // 立即从前端终端列表中移除
       const currentTerminals = terminals();
-      const updatedTerminals = currentTerminals.filter(t => t.id !== terminalId);
+      const updatedTerminals = currentTerminals.filter(
+        (t) => t.id !== terminalId,
+      );
       setTerminals(updatedTerminals);
       console.log("🗑️ Removed terminal from list:", terminalId);
 
@@ -481,7 +452,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const sessions = terminalSessions();
       const session = sessions.get(terminalId);
       if (session) {
-
         // 清理定时器
         if (session.sendTimeout) {
           clearTimeout(session.sendTimeout);
@@ -545,6 +515,30 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const fitAddon = new FitAddon();
       terminal.loadAddon(fitAddon);
 
+      // 创建预测引擎 (Mosh-style predictive local echo)
+      const predictionEngine = createPredictionEngine({
+        enabled: false, // 临时禁用以测试问题根源
+        displayMode: "never", // 根据 RTT 自动决定是否显示预测
+        rttThresholdHigh: 50, // RTT > 50ms 时激活预测
+        rttThresholdLow: 20, // RTT < 20ms 时关闭预测
+        predictionTimeout: 500, // 500ms 未确认视为超时
+      });
+
+      // 设置预测引擎回调
+      predictionEngine.setWriteCallback((data) => {
+        terminal.write(data);
+      });
+
+      predictionEngine.setSendCallback((data) => {
+        invoke("send_terminal_input_to_terminal", {
+          sessionId: props.sessionId,
+          terminalId: terminalId,
+          input: data,
+        }).catch((error) => {
+          toast.error("发送终端输入失败: " + error);
+        });
+      });
+
       // 创建终端会话
       const terminalSession: TerminalSession = {
         terminalId,
@@ -554,6 +548,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         inputBuffer: "",
         sendTimeout: null,
         hasPendingInput: false,
+        predictionEngine,
       };
 
       // 添加到会话映射
@@ -586,42 +581,16 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       // 设置活动终端
       terminalSessionManager.setActiveTerminal(terminalId);
 
-      // 设置终端数据处理器 - 优化版本
+      // 设置终端数据处理器 - 使用 Mosh-style 预测性本地回显
       terminal.onData((data) => {
         console.log("📝 Terminal input:", JSON.stringify(data));
 
-        // 特殊处理 Ctrl+C
-        if (data === "\x03") {
-          console.log("🎯 检测到 Ctrl+C 输入");
-          // Ctrl+C handled directly by sending to remote
-          // 依赖远端回显，不在本地写入
-          invoke("send_terminal_input_to_terminal", {
-            sessionId: props.sessionId,
-            terminalId: terminalId,
-            input: data,
-          }).catch((error) => {
-            toast.error("发送 Ctrl+C 命令失败: " + error);
-          });
-          return;
-        }
-
-        // 累积输入到会话缓冲区（仅用于发送）
-        terminalSession.inputBuffer = (terminalSession.inputBuffer || "") + data;
-        terminalSession.hasPendingInput = true;
-
-        // 依赖远程终端的输出来显示，不做本地输入处理
-        console.log("📝 Terminal input:", JSON.stringify(data));
-
-        // 检查是否是回车键，如果是则立即发送
-        if (data === "\r" || data === "\n") {
-          console.log("🚀 Enter key detected, sending immediately");
-          sendInputImmediately(props.sessionId, terminalId, terminalSession);
-        } else {
-          // 对于其他输入，使用防抖机制
-          scheduleInputSend(terminalSession, () => {
-            sendInputImmediately(props.sessionId, terminalId, terminalSession);
-          });
-        }
+        // 使用预测引擎处理用户输入
+        // 预测引擎会：
+        // 1. 对可打印字符进行本地预测显示
+        // 2. 自动发送到远程终端
+        // 3. 跳过控制字符（Ctrl+C, ESC 等）的预测
+        predictionEngine.handleUserInput(data);
       });
 
       // 告诉CLI端我们连接到了这个终端
@@ -733,6 +702,26 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
         // 确保数据是字符串类型
         let outputData = typeof data === "string" ? data : String(data || "");
 
+        // 使用预测引擎处理远程输出
+        // 引擎会：
+        // 1. 验证预测是否正确
+        // 2. 去重已经本地显示的预测字符
+        // 3. 返回需要实际写入终端的数据
+        if (session.predictionEngine) {
+          const originalLength = outputData.length;
+          outputData = session.predictionEngine.handleRemoteOutput(outputData);
+          if (outputData.length !== originalLength) {
+            console.log(
+              `[PredictionEngine] Processed output: ${originalLength} -> ${outputData.length} chars`,
+            );
+          }
+        } else {
+          console.warn(
+            "[PredictionEngine] No prediction engine for session:",
+            terminalId,
+          );
+        }
+
         // 只有当还有数据时才写入
         if (outputData.length > 0) {
           session.terminal.write(outputData);
@@ -818,6 +807,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                   ? outputData
                   : String(outputData || "");
 
+              // 使用预测引擎处理远程输出
+              // 引擎会验证预测并去重已显示的字符
+              if (session.predictionEngine) {
+                dataStr = session.predictionEngine.handleRemoteOutput(dataStr);
+              }
+
               // 只有当还有数据时才写入
               if (dataStr.length > 0) {
                 session.terminal.write(dataStr);
@@ -862,7 +857,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
 
     if (localFontResult.loaded) {
       // 本地字体加载成功，使用它
-      setBestFont('FiraCode Nerd Font');
+      setBestFont("FiraCode Nerd Font");
       console.log("✅ Using local FiraCode Nerd Font");
     } else {
       // 本地字体加载失败，检测系统字体
@@ -870,10 +865,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       const detectedFont = detectFontSupport();
       setBestFont(detectedFont.name);
 
-      if (detectedFont.type !== 'fallback') {
+      if (detectedFont.type !== "fallback") {
         console.log(`✅ Using system font: ${detectedFont.name}`);
       } else {
-        console.warn("⚠️ Using fallback font. Icons may not display correctly.");
+        console.warn(
+          "⚠️ Using fallback font. Icons may not display correctly.",
+        );
       }
     }
 
@@ -1113,12 +1110,17 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                       <div class="flex items-center justify-between gap-2">
                         <div class="flex-1">
                           <div class="flex items-center gap-2 mb-1">
-                            <span class={`text-sm font-semibold ${isActive ? "text-primary" : "text-base-content"
-                              }`}>
+                            <span
+                              class={`text-sm font-semibold ${
+                                isActive ? "text-primary" : "text-base-content"
+                              }`}
+                            >
                               {terminal.name ||
                                 `term-${terminal.id.slice(0, 6)}`}
                             </span>
-                            <span class={`text-xs ${terminal.status === "Running" ? "text-success" : "text-warning"}`}>
+                            <span
+                              class={`text-xs ${terminal.status === "Running" ? "text-success" : "text-warning"}`}
+                            >
                               [{terminal.status}]
                             </span>
                           </div>
@@ -1162,7 +1164,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                     <span class="text-primary">&gt;&gt;&gt; 暂无终端</span>
                   </div>
                   <div class="text-xs text-base-content/50 font-mono mt-2">
-                     // 点击上方按钮创建新终端
+                    // 点击上方按钮创建新终端
                   </div>
                 </div>
               )}
@@ -1210,11 +1212,16 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                         </div>
                         <div class="flex items-center gap-2">
                           {/* 状态指示器 */}
-                          <div class={`status-dot ${session.status === 'running' ? 'status-online' :
-                            session.status === 'stopped' ? 'status-offline' :
-                              'status-connecting'
-                            }`} title={session.status}>
-                          </div>
+                          <div
+                            class={`status-dot ${
+                              session.status === "running"
+                                ? "status-online"
+                                : session.status === "stopped"
+                                  ? "status-offline"
+                                  : "status-connecting"
+                            }`}
+                            title={session.status}
+                          ></div>
 
                           {/* 连接数 */}
                           <Show when={session.active_connections > 0}>
@@ -1229,15 +1236,18 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                       <div class="flex items-center gap-4 text-xs font-mono">
                         <div class="flex items-center gap-1">
                           <span class="text-base-content/50">LOCAL:</span>
-                          <span class="text-base-content">{session.local_addr}</span>
+                          <span class="text-base-content">
+                            {session.local_addr}
+                          </span>
                         </div>
                         <div class="flex items-center gap-1">
                           <span class="text-base-content/50">REMOTE:</span>
-                          <span class="text-base-content">{session.remote_target}</span>
+                          <span class="text-base-content">
+                            {session.remote_target}
+                          </span>
                         </div>
                       </div>
                     </div>
-
                   </div>
                 )}
               </For>
@@ -1249,7 +1259,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                     <span class="text-primary">&gt;&gt;&gt; 暂无 TCP 转发</span>
                   </div>
                   <div class="text-xs text-base-content/50 font-mono mt-2">
-                     // 点击上方按钮创建新的 TCP 转发
+                    // 点击上方按钮创建新的 TCP 转发
                   </div>
                 </div>
               )}
@@ -1304,7 +1314,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     </>
   );
 
-
   // 渲染快捷键按钮栏
   const renderShortcutBar = () => {
     if (!activeTerminalId()) return null;
@@ -1330,7 +1339,7 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
               {(shortcut) => (
                 <button
                   type="button"
-                  class={`shortcut-key ${shortcut.key === 'ctrl-c' ? 'ctrl' : ''} ${shortcut.key === 'enter' ? 'enter' : ''} flex-1`}
+                  class={`shortcut-key ${shortcut.key === "ctrl-c" ? "ctrl" : ""} ${shortcut.key === "enter" ? "enter" : ""} flex-1`}
                   onClick={() => sendShortcut(shortcut.key)}
                 >
                   <span class="text-xs sm:text-sm truncate font-mono font-bold">
@@ -1439,7 +1448,6 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
     }
   };
 
-
   return (
     <div
       class="drawer lg:drawer-open"
@@ -1447,7 +1455,12 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       tabIndex={0}
     >
       {/* 创建终端 Modal */}
-      <input type="checkbox" id="create_terminal_modal" class="modal-toggle" checked={showCreateTerminalModal()} />
+      <input
+        type="checkbox"
+        id="create_terminal_modal"
+        class="modal-toggle"
+        checked={showCreateTerminalModal()}
+      />
       <div class="modal" onClick={() => setShowCreateTerminalModal(false)}>
         <div class="modal-box ascii-box" onClick={(e) => e.stopPropagation()}>
           <div class="terminal-cmd mb-4">
@@ -1455,7 +1468,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           </div>
           <div class="form-control mt-4">
             <label class="label">
-              <span class="label-text text-primary font-mono text-sm">终端名称（可选）</span>
+              <span class="label-text text-primary font-mono text-sm">
+                终端名称（可选）
+              </span>
             </label>
             <input
               type="text"
@@ -1473,7 +1488,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           <div class="mt-4 text-sm text-base-content/70 font-mono">
             <p class="mb-2">// 终端配置信息</p>
             <p class="text-primary font-mono">
-              <span class="text-base-content/50">&gt; </span>COLS: {calculateTerminalSize().cols} | ROWS: {calculateTerminalSize().rows}
+              <span class="text-base-content/50">&gt; </span>COLS:{" "}
+              {calculateTerminalSize().cols} | ROWS:{" "}
+              {calculateTerminalSize().rows}
             </p>
           </div>
           <div class="modal-action flex gap-2">
@@ -1484,7 +1501,11 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             >
               [ 取消 ]
             </button>
-            <button type="button" class="btn flex-1 font-mono" onClick={confirmCreateTerminal}>
+            <button
+              type="button"
+              class="btn flex-1 font-mono"
+              onClick={confirmCreateTerminal}
+            >
               <span class="text-primary font-bold">[ 创建 ]</span>
             </button>
           </div>
@@ -1492,18 +1513,24 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
       </div>
 
       {/* TCP 转发 Modal */}
-      <input type="checkbox" id="tcp_forwarding_modal" class="modal-toggle" checked={showTcpForwardingModal()} />
+      <input
+        type="checkbox"
+        id="tcp_forwarding_modal"
+        class="modal-toggle"
+        checked={showTcpForwardingModal()}
+      />
       <div class="modal" onClick={() => setShowTcpForwardingModal(false)}>
         <div class="modal-box ascii-box" onClick={(e) => e.stopPropagation()}>
           <div class="terminal-cmd mb-4">
             <span class="text-primary">&gt;&gt;&gt; 新增 TCP 转发</span>
           </div>
           <div class="space-y-4 mt-4">
-
             {/* 监听地址 */}
             <div class="form-control">
               <label class="label">
-                <span class="label-text text-primary font-mono text-sm">监听地址 / Local Address</span>
+                <span class="label-text text-primary font-mono text-sm">
+                  监听地址 / Local Address
+                </span>
               </label>
               <input
                 type="text"
@@ -1522,7 +1549,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             {/* 远程主机 */}
             <div class="form-control">
               <label class="label">
-                <span class="label-text text-primary font-mono text-sm">远程主机 / Remote Host</span>
+                <span class="label-text text-primary font-mono text-sm">
+                  远程主机 / Remote Host
+                </span>
               </label>
               <input
                 type="text"
@@ -1541,7 +1570,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
             {/* 远程端口 */}
             <div class="form-control">
               <label class="label">
-                <span class="label-text text-primary font-mono text-sm">远程端口 / Remote Port</span>
+                <span class="label-text text-primary font-mono text-sm">
+                  远程端口 / Remote Port
+                </span>
               </label>
               <input
                 type="number"
@@ -1568,10 +1599,20 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
           <div class="mt-4 p-3 border border-primary/20 font-mono text-sm">
             <div class="text-base-content/70">
               <p class="font-medium mb-2 text-primary">// 转发配置摘要</p>
-              <p class="mb-1 font-mono"><span class="text-base-content/50">&gt;</span> LOCAL:   {tcpLocalAddr()}</p>
-              <p class="mb-1 font-mono"><span class="text-base-content/50">&gt;</span> REMOTE:  {tcpRemoteHost()}:{tcpRemotePort()}</p>
-              <p class="mb-1 font-mono"><span class="text-base-content/50">&gt;</span> STATUS:   监听模式</p>
-              <p class="text-base-content/50 text-xs mt-2">// 支持HTTP、数据库、SSH等各种TCP服务</p>
+              <p class="mb-1 font-mono">
+                <span class="text-base-content/50">&gt;</span> LOCAL:{" "}
+                {tcpLocalAddr()}
+              </p>
+              <p class="mb-1 font-mono">
+                <span class="text-base-content/50">&gt;</span> REMOTE:{" "}
+                {tcpRemoteHost()}:{tcpRemotePort()}
+              </p>
+              <p class="mb-1 font-mono">
+                <span class="text-base-content/50">&gt;</span> STATUS: 监听模式
+              </p>
+              <p class="text-base-content/50 text-xs mt-2">
+                // 支持HTTP、数据库、SSH等各种TCP服务
+              </p>
             </div>
           </div>
 
@@ -1649,18 +1690,20 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                         }}
                       >
                         <span
-                          class={`w-2 h-2 rounded-full ${terminal.status === "Running"
-                            ? "bg-success"
-                            : terminal.status === "Starting"
-                              ? "bg-warning"
-                              : "bg-base-300"
-                            }`}
+                          class={`w-2 h-2 rounded-full ${
+                            terminal.status === "Running"
+                              ? "bg-success"
+                              : terminal.status === "Starting"
+                                ? "bg-warning"
+                                : "bg-base-300"
+                          }`}
                         />
                         <span class="hidden md:inline">
                           {terminal.name || `Term ${terminal.id.slice(0, 6)}`}
                         </span>
                         <span class="md:hidden">
-                          {terminal.name?.slice(0, 8) || terminal.id.slice(0, 4)}
+                          {terminal.name?.slice(0, 8) ||
+                            terminal.id.slice(0, 4)}
                         </span>
                       </a>
                     );
@@ -1813,10 +1856,15 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 </div>
                 <div>
                   <div class="text-sm text-base-content/50">状态</div>
-                  <div class={`badge badge-sm mt-1 ${selectedTcpSession()?.status === 'running' ? 'badge-success' :
-                    selectedTcpSession()?.status === 'stopped' ? 'badge-error' :
-                      'badge-warning'
-                    }`}>
+                  <div
+                    class={`badge badge-sm mt-1 ${
+                      selectedTcpSession()?.status === "running"
+                        ? "badge-success"
+                        : selectedTcpSession()?.status === "stopped"
+                          ? "badge-error"
+                          : "badge-warning"
+                    }`}
+                  >
                     {selectedTcpSession()?.status}
                   </div>
                 </div>
@@ -1826,7 +1874,9 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                 <div>
                   <div class="text-sm text-base-content/50">转发类型</div>
                   <div class="badge badge-outline badge-sm mt-1">
-                    {getForwardingTypeLabel(selectedTcpSession()?.forwarding_type || '')}
+                    {getForwardingTypeLabel(
+                      selectedTcpSession()?.forwarding_type || "",
+                    )}
                   </div>
                 </div>
                 <div>
@@ -1901,8 +1951,18 @@ export function RemoteSessionView(props: RemoteSessionViewProps) {
                     }
                   }}
                 >
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
                   </svg>
                   停止会话
                 </button>

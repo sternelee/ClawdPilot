@@ -1,25 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <!-- Network capabilities for P2P functionality -->
-    <key>com.apple.developer.networking.HotspotConfiguration</key>
-    <true/>
-    
-    <!-- Allow outgoing network connections -->
-    <key>com.apple.security.network.client</key>
-    <true/>
-    
-    <!-- Allow incoming network connections for P2P -->
-    <key>com.apple.security.network.server</key>
-    <true/>
-    
-    <!-- Access local network for P2P discovery -->
-    <key>com.apple.developer.networking.localnetwork-access</key>
-    <true/>
-    
-    <!-- Background app refresh for maintaining P2P connections -->
-    <key>com.apple.developer.background-processing</key>
-    <true/>
-</dict>
+<dict/>
 </plist>
