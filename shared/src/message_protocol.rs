@@ -40,6 +40,24 @@ pub enum MessageType {
     Response = 0x07,
     /// 错误消息
     Error = 0x08,
+    /// AI Agent 会话管理
+    AgentSession = 0x10,
+    /// AI Agent 消息 (用户 <-> AI)
+    AgentMessage = 0x11,
+    /// AI Agent 权限请求/响应
+    AgentPermission = 0x12,
+    /// AI Agent 控制消息
+    AgentControl = 0x13,
+    /// AI Agent 元数据和状态更新
+    AgentMetadata = 0x14,
+    /// 文件浏览器消息
+    FileBrowser = 0x15,
+    /// Git 状态消息
+    GitStatus = 0x16,
+    /// 远程会话生成消息
+    RemoteSpawn = 0x17,
+    /// 推送通知消息
+    Notification = 0x18,
 }
 
 impl TryFrom<u8> for MessageType {
@@ -56,6 +74,15 @@ impl TryFrom<u8> for MessageType {
             0x09 => Ok(MessageType::SystemInfo),
             0x07 => Ok(MessageType::Response),
             0x08 => Ok(MessageType::Error),
+            0x10 => Ok(MessageType::AgentSession),
+            0x11 => Ok(MessageType::AgentMessage),
+            0x12 => Ok(MessageType::AgentPermission),
+            0x13 => Ok(MessageType::AgentControl),
+            0x14 => Ok(MessageType::AgentMetadata),
+            0x15 => Ok(MessageType::FileBrowser),
+            0x16 => Ok(MessageType::GitStatus),
+            0x17 => Ok(MessageType::RemoteSpawn),
+            0x18 => Ok(MessageType::Notification),
             _ => Err(anyhow::anyhow!("Invalid message type: {}", value)),
         }
     }
@@ -267,6 +294,24 @@ pub enum MessagePayload {
     Response(ResponseMessage),
     /// 错误载荷
     Error(ErrorMessage),
+    /// AI Agent 会话载荷
+    AgentSession(AgentSessionMessage),
+    /// AI Agent 消息载荷
+    AgentMessage(AgentMessageMessage),
+    /// AI Agent 权限载荷
+    AgentPermission(AgentPermissionMessage),
+    /// AI Agent 控制载荷
+    AgentControl(AgentControlMessage),
+    /// AI Agent 元数据载荷
+    AgentMetadata(AgentMetadataMessage),
+    /// 文件浏览器载荷
+    FileBrowser(FileBrowserMessage),
+    /// Git 状态载荷
+    GitStatus(GitStatusMessage),
+    /// 远程会话生成载荷
+    RemoteSpawn(RemoteSpawnMessage),
+    /// 推送通知载荷
+    Notification(NotificationMessage),
 }
 
 /// 心跳消息
@@ -500,6 +545,436 @@ pub struct UserInfo {
     pub group_id: String,
 }
 
+// ============================================================================
+// AI Agent 相关类型定义
+// ============================================================================
+
+/// AI Agent 类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AgentType {
+    /// Claude Code (Anthropic)
+    ClaudeCode,
+    /// OpenCode (OpenAI)
+    OpenCode,
+    /// Gemini CLI (Google)
+    Gemini,
+    /// 其他自定义 Agent
+    Custom,
+}
+
+/// AI Agent 会话元数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSessionMetadata {
+    /// 会话 ID
+    pub session_id: String,
+    /// Agent 类型
+    pub agent_type: AgentType,
+    /// 项目路径
+    pub project_path: String,
+    /// 会话开始时间
+    pub started_at: u64,
+    /// 是否活跃
+    pub active: bool,
+    /// 是否被远程控制
+    pub controlled_by_remote: bool,
+    /// 主机名
+    pub hostname: String,
+    /// 操作系统
+    pub os: String,
+    /// Agent 版本
+    pub agent_version: Option<String>,
+    /// 当前工作目录
+    pub current_dir: String,
+    /// Git 分支（如果在 git 仓库中）
+    pub git_branch: Option<String>,
+    /// 机器 ID
+    pub machine_id: String,
+}
+
+/// AI Agent 会话动作
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AgentSessionAction {
+    /// 注册新会话
+    Register {
+        metadata: AgentSessionMetadata,
+    },
+    /// 更新会话状态
+    UpdateStatus {
+        active: bool,
+        thinking: bool,
+    },
+    /// 列出活跃会话
+    ListSessions,
+    /// 停止会话
+    StopSession {
+        session_id: String,
+    },
+    /// 心跳更新
+    Heartbeat {
+        sequence: u64,
+    },
+}
+
+/// AI Agent 消息内容类型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AgentMessageContent {
+    /// 用户输入消息
+    UserMessage {
+        content: String,
+        /// 附件 ID 列表（文件、图片等）
+        attachments: Vec<String>,
+    },
+    /// AI 响应消息
+    AgentResponse {
+        content: String,
+        /// 是否正在思考（流式响应中）
+        thinking: bool,
+        /// 消息 ID（用于流式更新）
+        message_id: Option<String>,
+    },
+    /// 工具调用更新
+    ToolCallUpdate {
+        tool_name: String,
+        status: ToolCallStatus,
+        output: Option<String>,
+    },
+    /// 系统通知
+    SystemNotification {
+        level: NotificationLevel,
+        message: String,
+    },
+}
+
+/// 工具调用状态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ToolCallStatus {
+    /// 工具调用开始
+    Started,
+    /// 工具调用进行中
+    InProgress,
+    /// 工具调用成功完成
+    Completed,
+    /// 工具调用失败
+    Failed,
+    /// 工具调用被取消
+    Cancelled,
+}
+
+/// 通知级别
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NotificationLevel {
+    Info,
+    Warning,
+    Error,
+    Success,
+}
+
+/// AI Agent 权限请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPermissionRequest {
+    /// 请求 ID
+    pub request_id: String,
+    /// 会话 ID
+    pub session_id: String,
+    /// 工具名称
+    pub tool_name: String,
+    /// 工具参数
+    pub tool_params: serde_json::Value,
+    /// 请求时间戳
+    pub requested_at: u64,
+    /// 权限模式
+    pub permission_mode: PermissionMode,
+    /// 用户友好的描述
+    pub description: Option<String>,
+}
+
+/// 权限模式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionMode {
+    /// 每次都需要批准
+    AlwaysAsk,
+    /// 本次会话批准
+    ApproveForSession,
+    /// 自动批准
+    AutoApprove,
+    /// 拒绝
+    Deny,
+}
+
+/// AI Agent 权限响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPermissionResponse {
+    /// 请求 ID
+    pub request_id: String,
+    /// 是否批准
+    pub approved: bool,
+    /// 权限模式
+    pub permission_mode: PermissionMode,
+    /// 决策时间戳
+    pub decided_at: u64,
+    /// 拒绝原因（如果拒绝）
+    pub reason: Option<String>,
+}
+
+/// AI Agent 控制动作
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AgentControlAction {
+    /// 暂停 Agent
+    Pause,
+    /// 恢复 Agent
+    Resume,
+    /// 终止 Agent
+    Terminate,
+    /// 发送用户输入
+    SendInput {
+        content: String,
+    },
+    /// 发送中断信号
+    SendInterrupt,
+    /// 获取 Agent 状态
+    GetStatus,
+}
+
+/// AI Agent 元数据更新
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMetadataUpdate {
+    /// 会话 ID
+    pub session_id: String,
+    /// 更新时间戳
+    pub updated_at: u64,
+    /// 元数据内容
+    pub metadata: AgentMetadataContent,
+}
+
+/// AI Agent 元数据内容
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AgentMetadataContent {
+    /// 更新待办事项列表
+    UpdateTodos {
+        todos: Vec<TodoItem>,
+    },
+    /// 更新会话摘要
+    UpdateSummary {
+        summary: String,
+    },
+    /// 更新可用工具列表
+    UpdateAvailableTools {
+        tools: Vec<String>,
+    },
+    /// 更新斜杠命令列表
+    UpdateSlashCommands {
+        commands: Vec<String>,
+    },
+    /// 会话生命周期状态
+    LifecycleState {
+        state: String,
+        since: u64,
+    },
+}
+
+/// 待办事项
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TodoItem {
+    /// 待办 ID
+    pub id: String,
+    /// 内容
+    pub content: String,
+    /// 状态
+    pub status: TodoStatus,
+    /// 优先级
+    pub priority: TodoPriority,
+}
+
+/// 待办状态
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TodoStatus {
+    Pending,
+    InProgress,
+    Completed,
+}
+
+/// 待办优先级
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TodoPriority {
+    High,
+    Medium,
+    Low,
+}
+
+/// AI Agent 会话消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSessionMessage {
+    pub action: AgentSessionAction,
+    pub request_id: Option<String>,
+}
+
+/// AI Agent 消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMessageMessage {
+    pub session_id: String,
+    pub content: AgentMessageContent,
+    pub sequence: Option<u64>,
+}
+
+/// AI Agent 权限消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPermissionMessage {
+    pub inner: AgentPermissionMessageInner,
+}
+
+/// AI Agent 权限消息内容（枚举包装）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AgentPermissionMessageInner {
+    /// 权限请求
+    Request(AgentPermissionRequest),
+    /// 权限响应
+    Response(AgentPermissionResponse),
+}
+
+/// AI Agent 控制消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentControlMessage {
+    pub session_id: String,
+    pub action: AgentControlAction,
+    pub request_id: Option<String>,
+}
+
+/// AI Agent 元数据消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMetadataMessage {
+    pub update: AgentMetadataUpdate,
+}
+
+/// 文件浏览器消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileBrowserMessage {
+    pub action: FileBrowserAction,
+    pub request_id: Option<String>,
+}
+
+/// 文件浏览器动作
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FileBrowserAction {
+    /// 列出目录内容
+    ListDirectory {
+        path: String,
+    },
+    /// 读取文件内容
+    ReadFile {
+        path: String,
+    },
+    /// 写入文件
+    WriteFile {
+        path: String,
+        content: String,
+    },
+    /// 获取文件信息
+    GetFileInfo {
+        path: String,
+    },
+}
+
+/// Git 状态消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitStatusMessage {
+    pub action: GitAction,
+    pub request_id: Option<String>,
+}
+
+/// Git 操作动作
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum GitAction {
+    /// 获取 git 状态
+    GetStatus {
+        path: String,
+    },
+    /// 获取文件 diff
+    GetDiff {
+        path: String,
+        file: String,
+    },
+    /// 获取提交历史
+    GetLog {
+        path: String,
+        limit: Option<usize>,
+    },
+    /// 获取当前分支
+    GetBranch {
+        path: String,
+    },
+}
+
+/// 远程会话生成消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoteSpawnMessage {
+    pub action: RemoteSpawnAction,
+    pub request_id: Option<String>,
+}
+
+/// 远程会话生成动作
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RemoteSpawnAction {
+    /// 生成新的 AI Agent 会话
+    SpawnSession {
+        agent_type: AgentType,
+        project_path: String,
+        args: Vec<String>,
+    },
+    /// 列出可用的 agent 类型
+    ListAvailableAgents,
+}
+
+/// 推送通知消息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationMessage {
+    pub notification: NotificationData,
+}
+
+/// 通知数据
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationData {
+    /// 通知 ID
+    pub id: String,
+    /// 会话 ID (可选)
+    pub session_id: Option<String>,
+    /// 通知类型
+    pub notification_type: NotificationType,
+    /// 通知标题
+    pub title: String,
+    /// 通知内容
+    pub body: String,
+    /// 时间戳
+    pub timestamp: u64,
+    /// 优先级
+    pub priority: NotificationPriority,
+    /// 是否已读
+    pub read: bool,
+}
+
+/// 通知类型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NotificationType {
+    /// 权限请求
+    PermissionRequest,
+    /// 工具调用完成
+    ToolCompleted,
+    /// 会话状态变化
+    SessionStatus,
+    /// 错误通知
+    Error,
+    /// 信息通知
+    Info,
+}
+
+/// 通知优先级
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum NotificationPriority {
+    Low,
+    Normal,
+    High,
+    Critical,
+}
+
 /// 消息处理器trait
 #[async_trait::async_trait]
 pub trait MessageHandler: Send + Sync {
@@ -720,6 +1195,250 @@ impl MessageBuilder {
         });
         Message::new(MessageType::Error, sender_id, payload)
             .with_priority(MessagePriority::Critical)
+    }
+
+    // ========================================================================
+    // AI Agent 消息构建方法
+    // ========================================================================
+
+    /// 创建 AI Agent 会话注册消息
+    pub fn agent_session_register(
+        sender_id: String,
+        metadata: AgentSessionMetadata,
+        request_id: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::AgentSession(AgentSessionMessage {
+            action: AgentSessionAction::Register { metadata },
+            request_id,
+        });
+        Message::new(MessageType::AgentSession, sender_id, payload)
+            .with_priority(MessagePriority::High)
+            .requires_response()
+    }
+
+    /// 创建 AI Agent 会话心跳消息
+    pub fn agent_session_heartbeat(sender_id: String, session_id: String, sequence: u64) -> Message {
+        let payload = MessagePayload::AgentSession(AgentSessionMessage {
+            action: AgentSessionAction::Heartbeat { sequence },
+            request_id: None,
+        });
+        Message::new(MessageType::AgentSession, sender_id, payload)
+            .with_session(session_id)
+            .with_priority(MessagePriority::Low)
+    }
+
+    /// 创建 AI Agent 用户消息
+    pub fn agent_user_message(
+        sender_id: String,
+        session_id: String,
+        content: String,
+        attachments: Vec<String>,
+    ) -> Message {
+        let payload = MessagePayload::AgentMessage(AgentMessageMessage {
+            session_id: session_id.clone(),
+            content: AgentMessageContent::UserMessage { content, attachments },
+            sequence: None,
+        });
+        Message::new(MessageType::AgentMessage, sender_id, payload)
+            .with_session(session_id)
+            .with_priority(MessagePriority::Normal)
+    }
+
+    /// 创建 AI Agent 响应消息
+    pub fn agent_response(
+        sender_id: String,
+        session_id: String,
+        content: String,
+        thinking: bool,
+        message_id: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::AgentMessage(AgentMessageMessage {
+            session_id: session_id.clone(),
+            content: AgentMessageContent::AgentResponse {
+                content,
+                thinking,
+                message_id,
+            },
+            sequence: None,
+        });
+        Message::new(MessageType::AgentMessage, sender_id, payload)
+            .with_session(session_id)
+            .with_priority(MessagePriority::Normal)
+    }
+
+    /// 创建 AI Agent 工具调用更新消息
+    pub fn agent_tool_update(
+        sender_id: String,
+        session_id: String,
+        tool_name: String,
+        status: ToolCallStatus,
+        output: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::AgentMessage(AgentMessageMessage {
+            session_id: session_id.clone(),
+            content: AgentMessageContent::ToolCallUpdate {
+                tool_name,
+                status,
+                output,
+            },
+            sequence: None,
+        });
+        Message::new(MessageType::AgentMessage, sender_id, payload)
+            .with_session(session_id)
+            .with_priority(MessagePriority::High)
+    }
+
+    /// 创建 AI Agent 系统通知消息
+    pub fn agent_notification(
+        sender_id: String,
+        session_id: String,
+        level: NotificationLevel,
+        message: String,
+    ) -> Message {
+        let payload = MessagePayload::AgentMessage(AgentMessageMessage {
+            session_id: session_id.clone(),
+            content: AgentMessageContent::SystemNotification { level, message },
+            sequence: None,
+        });
+        Message::new(MessageType::AgentMessage, sender_id, payload)
+            .with_session(session_id)
+            .with_priority(MessagePriority::Normal)
+    }
+
+    /// 创建 AI Agent 权限请求消息
+    pub fn agent_permission_request(
+        sender_id: String,
+        request: AgentPermissionRequest,
+    ) -> Message {
+        let payload = MessagePayload::AgentPermission(AgentPermissionMessage {
+            inner: AgentPermissionMessageInner::Request(request),
+        });
+        Message::new(MessageType::AgentPermission, sender_id, payload)
+            .with_priority(MessagePriority::High)
+            .requires_response()
+    }
+
+    /// 创建 AI Agent 权限响应消息
+    pub fn agent_permission_response(
+        sender_id: String,
+        response: AgentPermissionResponse,
+    ) -> Message {
+        let payload = MessagePayload::AgentPermission(AgentPermissionMessage {
+            inner: AgentPermissionMessageInner::Response(response),
+        });
+        Message::new(MessageType::AgentPermission, sender_id, payload)
+            .with_priority(MessagePriority::High)
+    }
+
+    /// 创建 AI Agent 控制消息
+    pub fn agent_control(
+        sender_id: String,
+        session_id: String,
+        action: AgentControlAction,
+        request_id: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::AgentControl(AgentControlMessage {
+            session_id: session_id.clone(),
+            action,
+            request_id,
+        });
+        Message::new(MessageType::AgentControl, sender_id, payload)
+            .with_session(session_id)
+            .with_priority(MessagePriority::High)
+            .requires_response()
+    }
+
+    /// 创建 AI Agent 元数据更新消息
+    pub fn agent_metadata_update(
+        sender_id: String,
+        session_id: String,
+        metadata: AgentMetadataContent,
+    ) -> Message {
+        let payload = MessagePayload::AgentMetadata(AgentMetadataMessage {
+            update: AgentMetadataUpdate {
+                session_id,
+                updated_at: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                metadata,
+            },
+        });
+        Message::new(MessageType::AgentMetadata, sender_id, payload)
+            .with_priority(MessagePriority::Normal)
+    }
+
+    // ========================================================================
+    // Phase 5: File Browser, Git, Remote Spawn, Notifications
+    // ========================================================================
+
+    /// 创建文件浏览器消息
+    pub fn file_browser(
+        sender_id: String,
+        action: FileBrowserAction,
+        request_id: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::FileBrowser(FileBrowserMessage { action, request_id });
+        Message::new(MessageType::FileBrowser, sender_id, payload)
+            .with_priority(MessagePriority::Normal)
+            .requires_response()
+    }
+
+    /// 创建 Git 状态消息
+    pub fn git_status(
+        sender_id: String,
+        action: GitAction,
+        request_id: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::GitStatus(GitStatusMessage { action, request_id });
+        Message::new(MessageType::GitStatus, sender_id, payload)
+            .with_priority(MessagePriority::Normal)
+            .requires_response()
+    }
+
+    /// 创建远程会话生成消息
+    pub fn remote_spawn(
+        sender_id: String,
+        action: RemoteSpawnAction,
+        request_id: Option<String>,
+    ) -> Message {
+        let payload = MessagePayload::RemoteSpawn(RemoteSpawnMessage { action, request_id });
+        Message::new(MessageType::RemoteSpawn, sender_id, payload)
+            .with_priority(MessagePriority::High)
+            .requires_response()
+    }
+
+    /// 创建通知消息
+    pub fn notification(
+        sender_id: String,
+        notification: NotificationData,
+    ) -> Message {
+        let payload = MessagePayload::Notification(NotificationMessage { notification });
+        Message::new(MessageType::Notification, sender_id, payload)
+            .with_priority(MessagePriority::High)
+    }
+
+    /// 创建权限请求通知
+    pub fn permission_notification(
+        sender_id: String,
+        session_id: String,
+        tool_name: String,
+        description: String,
+    ) -> Message {
+        let notification = NotificationData {
+            id: Uuid::new_v4().to_string(),
+            session_id: Some(session_id),
+            notification_type: NotificationType::PermissionRequest,
+            title: "Permission Request".to_string(),
+            body: description,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            priority: NotificationPriority::High,
+            read: false,
+        };
+        Self::notification(sender_id, notification)
     }
 }
 

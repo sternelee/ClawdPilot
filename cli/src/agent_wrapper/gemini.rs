@@ -1,0 +1,251 @@
+//! Gemini CLI 集成模块
+//!
+//! 此模块专门处理与 Gemini CLI (Google AI 编码助手) 的集成，
+//! 包括输出解析、权限请求处理等。
+
+use anyhow::Result;
+use regex::Regex;
+use riterm_shared::message_protocol::{
+    AgentMessageContent, NotificationLevel, ToolCallStatus,
+};
+
+/// Gemini CLI 输出解析器
+pub struct GeminiOutputParser {
+    /// 权限请求正则表达式
+    permission_regex: Regex,
+    /// 工具调用正则表达式
+    tool_regex: Regex,
+    /// 函数调用正则表达式 (Gemini 使用 ACP)
+    function_regex: Regex,
+}
+
+impl GeminiOutputParser {
+    /// 创建新的解析器
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            // 匹配权限请求
+            permission_regex: Regex::new(r"^(Allow|Confirm) (.+?)(?: \[y/n\])?\?*$")?,
+            // 匹配工具调用
+            tool_regex: Regex::new(r"^(Tool|Function|Calling): (.+)$")?,
+            // 匹配函数调用 (ACP 格式)
+            function_regex: Regex::new(r"^(Function Call|Calling function): (.+)\(")?,
+        })
+    }
+
+    /// 解析一行输出
+    pub fn parse_line(&self, line: &str) -> ParseResult {
+        let line = line.trim();
+
+        // 空行跳过
+        if line.is_empty() {
+            return ParseResult::Empty;
+        }
+
+        // 检查是否是函数调用 (Gemini ACP 特有)
+        if let Some(caps) = self.function_regex.captures(line) {
+            let function = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+            return ParseResult::FunctionCall {
+                function: function.to_string(),
+            };
+        }
+
+        // 检查是否是权限请求
+        if let Some(caps) = self.permission_regex.captures(line) {
+            let tool = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+            return ParseResult::PermissionRequest {
+                tool: tool.to_string(),
+                description: line.to_string(),
+            };
+        }
+
+        // 检查是否是工具调用
+        if let Some(caps) = self.tool_regex.captures(line) {
+            let tool = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+            return ParseResult::ToolCall {
+                tool: tool.to_string(),
+                status: ToolCallStatus::Started,
+            };
+        }
+
+        // 检查是否是错误消息
+        if line.starts_with("Error:") || line.starts_with("ERROR:") {
+            return ParseResult::Error {
+                message: line.to_string(),
+            };
+        }
+
+        // 检查是否是完成标记
+        if line.contains("Done") || line.contains("Completed") {
+            return ParseResult::ToolCallComplete;
+        }
+
+        // 检查是否是思考状态
+        if line.contains("Thinking") || line.contains("Processing") {
+            return ParseResult::Thinking;
+        }
+
+        // 默认作为普通输出
+        ParseResult::Output {
+            content: line.to_string(),
+        }
+    }
+
+    /// 解析函数调用参数 (ACP 格式)
+    pub fn parse_function_args(&self, line: &str) -> Option<Vec<String>> {
+        // 从 "function_call(arg1, arg2)" 格式中提取参数
+        let paren_start = line.find('(')?;
+        let paren_end = line.rfind(')')?;
+
+        if paren_end <= paren_start + 1 {
+            return Some(vec![]);
+        }
+
+        let args_str = &line[paren_start + 1..paren_end];
+        let args: Vec<String> = args_str
+            .split(',')
+            .map(|s| s.trim().trim_matches('"').to_string())
+            .collect();
+
+        Some(args)
+    }
+}
+
+impl Default for GeminiOutputParser {
+    fn default() -> Self {
+        Self::new().expect("Failed to create GeminiOutputParser")
+    }
+}
+
+/// 解析结果
+#[derive(Debug, Clone)]
+pub enum ParseResult {
+    /// 空行
+    Empty,
+    /// 函数调用 (ACP 特有)
+    FunctionCall {
+        function: String,
+    },
+    /// 权限请求
+    PermissionRequest {
+        tool: String,
+        description: String,
+    },
+    /// 工具调用
+    ToolCall {
+        tool: String,
+        status: ToolCallStatus,
+    },
+    /// 工具调用完成
+    ToolCallComplete,
+    /// 错误消息
+    Error {
+        message: String,
+    },
+    /// 思考状态
+    Thinking,
+    /// 普通输出
+    Output {
+        content: String,
+    },
+}
+
+impl ParseResult {
+    /// 转换为 AgentMessageContent
+    pub fn to_message_content(self) -> AgentMessageContent {
+        match self {
+            ParseResult::Empty => AgentMessageContent::SystemNotification {
+                level: NotificationLevel::Info,
+                message: String::new(),
+            },
+            ParseResult::FunctionCall { function } => AgentMessageContent::ToolCallUpdate {
+                tool_name: function,
+                status: ToolCallStatus::Started,
+                output: None,
+            },
+            ParseResult::PermissionRequest { tool, description } => {
+                AgentMessageContent::SystemNotification {
+                    level: NotificationLevel::Warning,
+                    message: format!("Permission request: {}", description),
+                }
+            }
+            ParseResult::ToolCall { tool, status } => AgentMessageContent::ToolCallUpdate {
+                tool_name: tool,
+                status,
+                output: None,
+            },
+            ParseResult::ToolCallComplete => AgentMessageContent::SystemNotification {
+                level: NotificationLevel::Success,
+                message: "Tool execution completed".to_string(),
+            },
+            ParseResult::Error { message } => AgentMessageContent::SystemNotification {
+                level: NotificationLevel::Error,
+                message,
+            },
+            ParseResult::Thinking => AgentMessageContent::AgentResponse {
+                content: String::new(),
+                thinking: true,
+                message_id: None,
+            },
+            ParseResult::Output { content } => AgentMessageContent::AgentResponse {
+                content,
+                thinking: false,
+                message_id: None,
+            },
+        }
+    }
+}
+
+/// 检测 Gemini CLI 是否可用
+pub fn check_gemini_available() -> Result<bool> {
+    let output = std::process::Command::new("gemini")
+        .arg("--version")
+        .output()?;
+
+    Ok(output.status.success())
+}
+
+/// 获取 Gemini CLI 版本
+pub fn get_gemini_version() -> Result<String> {
+    let output = std::process::Command::new("gemini")
+        .arg("version")
+        .output()?;
+
+    if !output.status.success() {
+        return Err(anyhow::anyhow!("Failed to get Gemini version"));
+    }
+
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(version)
+}
+
+/// 获取默认的 Gemini CLI 启动参数
+pub fn get_default_gemini_args() -> Vec<String> {
+    vec![
+        "chat".to_string(),
+        "--non-interactive".to_string(),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_permission_request() {
+        let parser = GeminiOutputParser::new().unwrap();
+        let result = parser.parse_line("Allow editing src/main.rs? [y/n]");
+        assert!(matches!(result, ParseResult::PermissionRequest { .. }));
+    }
+
+    #[test]
+    fn test_parse_function_call() {
+        let parser = GeminiOutputParser::new().unwrap();
+        let result = parser.parse_line("Function Call: read_file(\"src/main.rs\")");
+        match result {
+            ParseResult::FunctionCall { function } => {
+                assert_eq!(function, "read_file(\"src/main.rs\")");
+            }
+            _ => panic!("Expected FunctionCall result"),
+        }
+    }
+}

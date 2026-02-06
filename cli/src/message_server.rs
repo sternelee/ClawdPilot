@@ -11,6 +11,9 @@ use riterm_shared::{
     QuicMessageServerConfig, ResponseMessage, ShellInfo, SystemAction, SystemInfo,
     SystemInfoAction, TcpDataType, TcpForwardingAction, TcpForwardingType, TerminalAction,
     TerminalLogResponse, TcpStreamHandler, Tool, UserInfo,
+    AgentControlAction, FileBrowserAction, FileBrowserMessage, GitAction, GitStatusMessage,
+    NotificationData, NotificationMessage, NotificationType, NotificationPriority,
+    RemoteSpawnAction, RemoteSpawnMessage,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -26,6 +29,7 @@ use uuid::Uuid;
 
 use crate::shell::ShellDetector;
 use crate::terminal_logger::TerminalLogManager;
+use crate::agent_wrapper::AgentManager;
 
 /// Connection information for status display
 #[derive(Debug, Clone)]
@@ -205,6 +209,8 @@ pub struct CliMessageServer {
     default_shell_path: String,
     /// 日志管理器
     log_manager: Arc<TerminalLogManager>,
+    /// AI Agent 管理器
+    agent_manager: Arc<AgentManager>,
 }
 
 impl CliMessageServer {
@@ -253,6 +259,7 @@ impl CliMessageServer {
             })),
             default_shell_path,
             log_manager,
+            agent_manager: Arc::new(AgentManager::new()),
         };
 
         // 注册消息处理器
@@ -418,6 +425,39 @@ impl CliMessageServer {
         let system_info_handler = Arc::new(SystemInfoMessageHandler::new());
         self.communication_manager
             .register_message_handler(system_info_handler)
+            .await;
+
+        // Phase 5: P2P File Browser, Git, Remote Spawn, Notifications (No Telegram)
+        // 注册文件浏览器处理器
+        let file_browser_handler = Arc::new(FileBrowserMessageHandler::new(
+            self.communication_manager.clone(),
+        ));
+        self.communication_manager
+            .register_message_handler(file_browser_handler)
+            .await;
+
+        // 注册 Git 状态处理器
+        let git_status_handler = Arc::new(GitStatusMessageHandler::new(
+            self.communication_manager.clone(),
+        ));
+        self.communication_manager
+            .register_message_handler(git_status_handler)
+            .await;
+
+        // 注册远程生成处理器
+        let remote_spawn_handler = Arc::new(RemoteSpawnMessageHandler::new(
+            self.agent_manager.clone(),
+        ));
+        self.communication_manager
+            .register_message_handler(remote_spawn_handler)
+            .await;
+
+        // 注册通知处理器
+        let notification_handler = Arc::new(NotificationMessageHandler::new(
+            self.communication_manager.clone(),
+        ));
+        self.communication_manager
+            .register_message_handler(notification_handler)
             .await;
 
         info!("All message handlers registered successfully");
@@ -2631,6 +2671,255 @@ impl MessageHandler for TcpDataMessageHandler {
 
     fn supported_message_types(&self) -> Vec<MessageType> {
         vec![MessageType::TcpData]
+    }
+}
+
+// ============================================================================
+// Phase 5: P2P File Browser, Git, Remote Spawn, Notifications (No Telegram)
+// ============================================================================
+
+/// File browser message handler for P2P file operations
+pub struct FileBrowserMessageHandler {
+    communication_manager: Arc<CommunicationManager>,
+}
+
+impl FileBrowserMessageHandler {
+    pub fn new(communication_manager: Arc<CommunicationManager>) -> Self {
+        Self { communication_manager }
+    }
+
+    async fn handle_list_directory(&self, path: String) -> Result<Option<Message>> {
+        use std::fs;
+        let mut entries = vec![];
+        let read_result = fs::read_dir(&path);
+        let dir_iter = match read_result {
+            Ok(d) => d,
+            Err(_) => fs::read_dir(".")?
+        };
+
+        for entry in dir_iter.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                entries.push(serde_json::json!({
+                    "name": entry.file_name(),
+                    "is_dir": meta.is_dir(),
+                    "size": meta.len(),
+                }));
+            }
+        }
+        Ok(Some(MessageBuilder::response(
+            "cli".to_string(),
+            Uuid::new_v4().to_string(),
+            true,
+            Some(serde_json::json!({"entries": entries})),
+            None,
+        )))
+    }
+
+    async fn handle_read_file(&self, path: String) -> Result<Option<Message>> {
+        use std::fs;
+        match fs::read_to_string(&path) {
+            Ok(content) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                true,
+                Some(serde_json::json!({"path": path, "content": content})),
+                None,
+            ))),
+            Err(e) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                false,
+                None,
+                Some(format!("Failed to read file: {}", e)),
+            ))),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for FileBrowserMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        if let MessagePayload::FileBrowser(fb) = &message.payload {
+            match &fb.action {
+                FileBrowserAction::ListDirectory { path } => self.handle_list_directory(path.clone()).await,
+                FileBrowserAction::ReadFile { path } => self.handle_read_file(path.clone()).await,
+                _ => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::FileBrowser]
+    }
+}
+
+/// Git operations handler for P2P git access
+pub struct GitStatusMessageHandler {
+    communication_manager: Arc<CommunicationManager>,
+}
+
+impl GitStatusMessageHandler {
+    pub fn new(communication_manager: Arc<CommunicationManager>) -> Self {
+        Self { communication_manager }
+    }
+
+    async fn handle_get_status(&self, path: String) -> Result<Option<Message>> {
+        let output = tokio::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .current_dir(&path)
+            .output()
+            .await;
+
+        let is_ok = output.is_ok();
+        let status = output.as_ref().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+        Ok(Some(MessageBuilder::response(
+            "cli".to_string(),
+            Uuid::new_v4().to_string(),
+            is_ok,
+            Some(serde_json::json!({"status": status})),
+            if !is_ok { Some("Failed to get git status".to_string()) } else { None },
+        )))
+    }
+
+    async fn handle_get_diff(&self, path: String, file: String) -> Result<Option<Message>> {
+        let output = tokio::process::Command::new("git")
+            .args(["diff", &file])
+            .current_dir(&path)
+            .output()
+            .await;
+
+        let is_ok = output.is_ok();
+        let diff = output.as_ref().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+        Ok(Some(MessageBuilder::response(
+            "cli".to_string(),
+            Uuid::new_v4().to_string(),
+            is_ok,
+            Some(serde_json::json!({"file": file, "diff": diff})),
+            if !is_ok { Some("Failed to get diff".to_string()) } else { None },
+        )))
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for GitStatusMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        if let MessagePayload::GitStatus(gs) = &message.payload {
+            match &gs.action {
+                GitAction::GetStatus { path } => self.handle_get_status(path.clone()).await,
+                GitAction::GetDiff { path, file } => self.handle_get_diff(path.clone(), file.clone()).await,
+                _ => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::GitStatus]
+    }
+}
+
+/// Remote spawn handler for P2P session spawning
+pub struct RemoteSpawnMessageHandler {
+    agent_manager: Arc<AgentManager>,
+}
+
+impl RemoteSpawnMessageHandler {
+    pub fn new(agent_manager: Arc<AgentManager>) -> Self {
+        Self { agent_manager }
+    }
+
+    async fn handle_spawn_session(
+        &self,
+        agent_type: riterm_shared::message_protocol::AgentType,
+        project_path: String,
+        args: Vec<String>,
+    ) -> Result<Option<Message>> {
+        match self.agent_manager.start_session(agent_type, project_path, args).await {
+            Ok((session_id, metadata)) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                true,
+                Some(serde_json::json!({
+                    "session_id": session_id,
+                    "metadata": metadata
+                })),
+                None,
+            ))),
+            Err(e) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                false,
+                None,
+                Some(format!("Failed to spawn: {}", e)),
+            ))),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for RemoteSpawnMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        if let MessagePayload::RemoteSpawn(rs) = &message.payload {
+            if let RemoteSpawnAction::SpawnSession { agent_type, project_path, args } = &rs.action {
+                return self.handle_spawn_session(*agent_type, project_path.clone(), args.clone()).await;
+            }
+        }
+        Ok(None)
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::RemoteSpawn]
+    }
+}
+
+/// Notification handler for P2P push notifications (no Telegram)
+pub struct NotificationMessageHandler {
+    communication_manager: Arc<CommunicationManager>,
+    pending_notifications: Arc<RwLock<Vec<NotificationData>>>,
+}
+
+impl NotificationMessageHandler {
+    pub fn new(communication_manager: Arc<CommunicationManager>) -> Self {
+        Self {
+            communication_manager,
+            pending_notifications: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    async fn handle_add_notification(&self, notification: NotificationData) -> Result<Option<Message>> {
+        let mut notifications = self.pending_notifications.write().await;
+        notifications.push(notification);
+        // TODO: Broadcast via iroh P2P to connected clients
+        Ok(None)
+    }
+
+    async fn handle_get_pending(&self, _session_id: Option<String>) -> Result<Option<Message>> {
+        let notifications = self.pending_notifications.read().await;
+        Ok(Some(MessageBuilder::response(
+            "cli".to_string(),
+            Uuid::new_v4().to_string(),
+            true,
+            Some(serde_json::json!({"notifications": *notifications})),
+            None,
+        )))
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for NotificationMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        if let MessagePayload::Notification(n) = &message.payload {
+            self.handle_add_notification(n.notification.clone()).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::Notification]
     }
 }
 
