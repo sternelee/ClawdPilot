@@ -6,6 +6,10 @@ use anyhow::Result;
 use riterm_shared::message_protocol::{
     Message, MessageType, AgentSessionAction, AgentControlAction,
     MessagePayload, AgentSessionMessage, AgentControlMessage,
+    AgentMessageContent, ResponseMessage, RemoteSpawnMessage,
+    RemoteSpawnAction, AgentType, AgentPermissionMessage,
+    AgentPermissionMessageInner, AgentPermissionResponse,
+    PermissionMode,
 };
 use riterm_shared::quic_server::{
     QuicMessageClient, SerializableEndpointAddr,
@@ -14,8 +18,9 @@ use riterm_shared::CommunicationManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{Mutex, RwLock, broadcast};
+use tokio::sync::{Mutex, RwLock, oneshot};
 use tracing::{debug, info};
+use std::collections::HashMap;
 
 /// P2P 客户端连接配置
 #[derive(Clone)]
@@ -51,9 +56,9 @@ pub struct RiTermClient {
     connection_id: Option<String>,
     remote_node_id: Option<String>,
     connected: bool,
-    sessions: Vec<AgentSessionInfo>,
-    message_rx: broadcast::Receiver<Message>,
-    message_tx: broadcast::Sender<Message>,
+    sessions: Arc<RwLock<Vec<AgentSessionInfo>>>,
+    /// 等待响应的通道映射 (correlation_id -> sender)
+    response_channels: Arc<Mutex<HashMap<String, oneshot::Sender<Message>>>>,
 }
 
 /// AI Agent 会话信息
@@ -69,17 +74,14 @@ pub struct AgentSessionInfo {
 impl RiTermClient {
     /// 创建新的客户端
     pub fn new(config: ClientConfig) -> Self {
-        let (message_tx, message_rx) = broadcast::channel(1000);
-
         Self {
             config,
             quic_client: None,
             connection_id: None,
             remote_node_id: None,
             connected: false,
-            sessions: Vec::new(),
-            message_rx,
-            message_tx,
+            sessions: Arc::new(RwLock::new(Vec::new())),
+            response_channels: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -111,52 +113,140 @@ impl RiTermClient {
         info!("✅ Connected to remote host: {:?}", remote_node_id);
         println!("✅ Connected to remote host");
 
+        // 获取消息接收器并启动处理任务
+        let mut message_rx = quic_client.get_message_receiver();
+        let sessions_ref = self.sessions.clone();
+        let response_channels = self.response_channels.clone();
+
+        tokio::spawn(async move {
+            while let Ok(message) = message_rx.recv().await {
+                Self::handle_message(message, sessions_ref.clone(), response_channels.clone()).await;
+            }
+        });
+
         // 更新状态
         self.quic_client = Some(Arc::new(Mutex::new(quic_client)));
         self.connection_id = Some(connection_id);
         self.remote_node_id = Some(remote_node_id.to_string());
         self.connected = true;
 
-        // 启动消息接收处理任务
-        self.start_message_receiver().await;
-
         Ok(())
-    }
-
-    /// 启动消息接收处理器
-    async fn start_message_receiver(&self) {
-        let mut rx = self.message_tx.subscribe();
-        let sessions_ref = Arc::new(RwLock::new(self.sessions.clone()));
-
-        tokio::spawn(async move {
-            while let Ok(message) = rx.recv().await {
-                Self::handle_message(message, sessions_ref.clone()).await;
-            }
-        });
     }
 
     /// 处理接收到的消息
     async fn handle_message(
         message: Message,
         sessions_ref: Arc<RwLock<Vec<AgentSessionInfo>>>,
+        response_channels: Arc<Mutex<HashMap<String, oneshot::Sender<Message>>>>,
     ) {
+        // 检查是否是响应消息，如果是则路由到等待的通道
+        if let Some(correlation_id) = &message.correlation_id {
+            let mut channels = response_channels.lock().await;
+            if let Some(tx) = channels.remove(correlation_id) {
+                // 发送响应到等待的通道
+                let _ = tx.send(message);
+                return;
+            }
+        }
+
+        // 处理其他消息类型
         match message.message_type {
             MessageType::AgentSession => {
-                debug!("Received AgentSession message");
-                // TODO: 解析会话列表更新
+                if let MessagePayload::AgentSession(session_msg) = message.payload {
+                    Self::handle_agent_session(session_msg, sessions_ref).await;
+                }
+            }
+            MessageType::AgentMessage => {
+                Self::handle_agent_message(message).await;
+            }
+            MessageType::Response => {
+                // 没有等待的响应通道，打印响应内容
+                Self::handle_response(message).await;
             }
             MessageType::AgentControl => {
                 debug!("Received AgentControl message");
                 // TODO: 处理控制响应
             }
-            MessageType::Response => {
-                debug!("Received Response message");
-                if let Ok(response_text) = extract_response_content(&message) {
-                    println!("🤖 {}", response_text);
-                }
-            }
             _ => {
                 debug!("Received message type: {:?}", message.message_type);
+            }
+        }
+    }
+
+    /// 处理 Agent 会话消息
+    async fn handle_agent_session(
+        session_msg: AgentSessionMessage,
+        sessions_ref: Arc<RwLock<Vec<AgentSessionInfo>>>,
+    ) {
+        match session_msg.action {
+            AgentSessionAction::Register { metadata } => {
+                info!("📝 Session registered: {}", metadata.session_id);
+                let session = AgentSessionInfo {
+                    session_id: metadata.session_id.clone(),
+                    agent_type: format!("{:?}", metadata.agent_type),
+                    project_path: metadata.project_path,
+                    started_at: metadata.started_at,
+                    active: metadata.active,
+                };
+
+                let mut sessions = sessions_ref.write().await;
+                // 检查是否已存在，避免重复
+                if !sessions.iter().any(|s| s.session_id == session.session_id) {
+                    sessions.push(session);
+                }
+            }
+            AgentSessionAction::UpdateStatus { active, thinking } => {
+                debug!("Session status update: active={}, thinking={}", active, thinking);
+                // TODO: 更新会话状态
+            }
+            AgentSessionAction::ListSessions => {
+                debug!("ListSessions action received");
+            }
+            _ => {
+                debug!("Other AgentSession action: {:?}", session_msg.action);
+            }
+        }
+    }
+
+    /// 处理 Agent 消息
+    async fn handle_agent_message(message: Message) {
+        if let MessagePayload::AgentMessage(agent_msg) = message.payload {
+            match agent_msg.content {
+                AgentMessageContent::AgentResponse { content, .. } => {
+                    println!("{}", content);
+                }
+                AgentMessageContent::SystemNotification { level, message } => {
+                    match level {
+                        riterm_shared::message_protocol::NotificationLevel::Info => {
+                            println!("ℹ️  {}", message);
+                        }
+                        riterm_shared::message_protocol::NotificationLevel::Warning => {
+                            println!("⚠️  {}", message);
+                        }
+                        riterm_shared::message_protocol::NotificationLevel::Error => {
+                            println!("❌ {}", message);
+                        }
+                        riterm_shared::message_protocol::NotificationLevel::Success => {
+                            println!("✅ {}", message);
+                        }
+                    }
+                }
+                _ => {
+                    debug!("Other AgentMessage content: {:?}", agent_msg.content);
+                }
+            }
+        }
+    }
+
+    /// 处理响应消息
+    async fn handle_response(message: Message) {
+        if let MessagePayload::Response(response) = message.payload {
+            if let Some(ref data) = response.data {
+                println!("{}", data);
+            } else if let Some(ref msg) = response.message {
+                println!("{}", msg);
+            } else {
+                debug!("Empty response received");
             }
         }
     }
@@ -169,17 +259,11 @@ impl RiTermClient {
 
         info!("🔌 Disconnecting...");
 
-        if let (Some(quic_client), Some(connection_id)) = (&self.quic_client, &self.connection_id) {
-            let client = quic_client.lock().await;
-            // Note: disconnect requires &mut, so we need to handle this differently
-            // For now, we'll just mark as disconnected
-            drop(client);
-        }
-
         self.connected = false;
         self.remote_node_id = None;
         self.connection_id = None;
-        self.sessions.clear();
+        self.sessions.write().await.clear();
+        self.response_channels.lock().await.clear();
         self.quic_client = None;
 
         println!("🔌 Disconnected");
@@ -205,6 +289,33 @@ impl RiTermClient {
         Ok(())
     }
 
+    /// 发送消息并等待响应
+    async fn send_and_wait(&self, message: Message) -> Result<Message> {
+        let message_id = message.id.clone();
+
+        // 创建响应通道
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut channels = self.response_channels.lock().await;
+            channels.insert(message_id.clone(), tx);
+        }
+
+        // 发送消息
+        self.send_quic_message(message).await?;
+
+        // 等待响应（带超时）
+        match tokio::time::timeout(self.config.timeout, rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => Err(anyhow::anyhow!("Response channel closed")),
+            Err(_) => {
+                // 超时，清理通道
+                let mut channels = self.response_channels.lock().await;
+                channels.remove(&message_id);
+                Err(anyhow::anyhow!("Response timeout"))
+            }
+        }
+    }
+
     /// 获取可用的 AI Agent 会话列表
     pub async fn list_sessions(&mut self) -> Result<Vec<AgentSessionInfo>> {
         if !self.connected {
@@ -224,11 +335,25 @@ impl RiTermClient {
         ).requires_response();
 
         // 通过 P2P 发送并等待响应
-        self.send_quic_message(message).await?;
+        let response_msg = self.send_and_wait(message).await?;
 
-        // TODO: 实际从响应中解析会话列表
-        // 暂时返回空列表
-        Ok(Vec::new())
+        // 解析响应消息
+        if let MessagePayload::Response(response) = response_msg.payload {
+            if !response.success {
+                return Err(anyhow::anyhow!("ListSessions failed: {}",
+                    response.message.unwrap_or_else(|| "Unknown error".to_string())));
+            }
+
+            // 如果响应中有数据，解析会话列表
+            if let Some(data) = response.data {
+                // 响应数据应该是 JSON 数组格式的会话列表
+                // 但会话主要是通过 Register 消息异步更新的
+                debug!("ListSessions response: {}", data);
+            }
+        }
+
+        // 返回本地缓存的会话列表（通过 Register 消息更新）
+        Ok(self.sessions.read().await.clone())
     }
 
     /// 发送消息到指定的 AI Agent 会话
@@ -264,7 +389,7 @@ impl RiTermClient {
         &mut self,
         agent_type: &str,
         project_path: &str,
-        _args: &[String],
+        args: &[String],
     ) -> Result<AgentSessionInfo> {
         if !self.connected {
             return Err(anyhow::anyhow!("Not connected"));
@@ -272,22 +397,75 @@ impl RiTermClient {
 
         info!("🚀 Spawning new {} session", agent_type);
 
-        // TODO: 构建远程生成消息 - 需要使用 RemoteSpawn MessageType
-        // 目前先返回模拟的会话信息
-        let session_info = AgentSessionInfo {
-            session_id: uuid::Uuid::new_v4().to_string(),
-            agent_type: agent_type.to_string(),
-            project_path: project_path.to_string(),
-            started_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs(),
-            active: true,
+        // 解析 agent 类型
+        let agent_type_enum = match agent_type.to_lowercase().as_str() {
+            "claude" | "claudecode" => AgentType::ClaudeCode,
+            "opencode" => AgentType::OpenCode,
+            "gemini" => AgentType::Gemini,
+            _ => AgentType::Custom,
         };
 
-        self.sessions.push(session_info.clone());
+        // 构建远程生成消息
+        let message = Message::new(
+            MessageType::RemoteSpawn,
+            "client".to_string(),
+            MessagePayload::RemoteSpawn(RemoteSpawnMessage {
+                action: RemoteSpawnAction::SpawnSession {
+                    agent_type: agent_type_enum,
+                    project_path: project_path.to_string(),
+                    args: args.to_vec(),
+                },
+                request_id: Some(uuid::Uuid::new_v4().to_string()),
+            }),
+        ).requires_response();
 
-        info!("✅ Session spawned: {}", session_info.session_id);
-        Ok(session_info)
+        // 通过 P2P 发送并等待响应
+        let response_msg = self.send_and_wait(message).await?;
+
+        // 解析响应消息
+        if let MessagePayload::Response(response) = response_msg.payload {
+            if !response.success {
+                return Err(anyhow::anyhow!("SpawnSession failed: {}",
+                    response.message.unwrap_or_else(|| "Unknown error".to_string())));
+            }
+
+            // 响应数据应包含新会话的信息
+            if let Some(data) = response.data {
+                debug!("SpawnSession response: {}", data);
+
+                // 解析 JSON 响应获取 session_id
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&data) {
+                    if let Some(session_id) = json.get("session_id").and_then(|v| v.as_str()) {
+                        let session_info = AgentSessionInfo {
+                            session_id: session_id.to_string(),
+                            agent_type: agent_type.to_string(),
+                            project_path: project_path.to_string(),
+                            started_at: std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)?
+                                .as_secs(),
+                            active: true,
+                        };
+                        info!("✅ Session spawned: {}", session_info.session_id);
+                        return Ok(session_info);
+                    }
+                }
+            }
+        }
+
+        // 如果没有收到 session_id，等待会话注册消息
+        // 给一些时间让 Register 消息到达
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // 尝试从缓存中找到新创建的会话
+        let sessions = self.sessions.read().await;
+        for session in sessions.iter() {
+            if session.project_path == project_path && session.agent_type.to_lowercase() == agent_type.to_lowercase() {
+                info!("✅ Session spawned (from cache): {}", session.session_id);
+                return Ok(session.clone());
+            }
+        }
+
+        Err(anyhow::anyhow!("Failed to spawn session or receive session registration"))
     }
 
     /// 获取会话元数据
@@ -299,7 +477,8 @@ impl RiTermClient {
         debug!("📊 Fetching metadata for session: {}", session_id);
 
         // 检查本地缓存
-        for session in &self.sessions {
+        let sessions = self.sessions.read().await;
+        for session in sessions.iter() {
             if session.session_id == session_id {
                 return Ok(session.clone());
             }
@@ -312,16 +491,49 @@ impl RiTermClient {
     pub async fn respond_to_permission(
         &self,
         _session_id: &str,
-        _permission_id: &str,
-        _response: bool,
+        permission_id: &str,
+        approved: bool,
     ) -> Result<()> {
         if !self.connected {
             return Err(anyhow::anyhow!("Not connected"));
         }
 
-        info!("📝 Responding to permission");
+        info!("📝 Responding to permission: {} -> {}", permission_id, approved);
 
-        // TODO: 通过 P2P 发送权限响应
+        // 确定权限模式
+        let permission_mode = if approved {
+            PermissionMode::ApproveForSession
+        } else {
+            PermissionMode::Deny
+        };
+
+        // 构建权限响应消息
+        let response = AgentPermissionResponse {
+            request_id: permission_id.to_string(),
+            approved,
+            permission_mode,
+            decided_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs(),
+            reason: if !approved {
+                Some("User denied the request".to_string())
+            } else {
+                None
+            },
+        };
+
+        let message = Message::new(
+            MessageType::AgentPermission,
+            "client".to_string(),
+            MessagePayload::AgentPermission(AgentPermissionMessage {
+                inner: AgentPermissionMessageInner::Response(response),
+            }),
+        ).requires_response();
+
+        // 通过 P2P 发送权限响应
+        self.send_quic_message(message).await?;
+
+        info!("✅ Permission response sent");
         Ok(())
     }
 
@@ -358,22 +570,6 @@ impl RiTermClient {
 
         debug!("Control action sent");
         Ok(())
-    }
-}
-
-/// 从响应消息中提取内容
-fn extract_response_content(message: &Message) -> Result<String> {
-    match &message.payload {
-        MessagePayload::Response(response) => {
-            if let Some(ref data) = response.data {
-                Ok(data.clone())
-            } else if let Some(ref msg) = response.message {
-                Ok(msg.clone())
-            } else {
-                Ok("Success".to_string())
-            }
-        }
-        _ => Err(anyhow::anyhow!("Not a response message")),
     }
 }
 
@@ -475,8 +671,7 @@ impl InteractiveClient {
             // 发送消息到当前会话
             if let Some(session_id) = &self.current_session_id {
                 match self.client.send_message(session_id, input).await {
-                    Ok(request_id) => {
-                        debug!("💬 Message sent (request_id: {})", request_id);
+                    Ok(_request_id) => {
                         // 响应会通过消息接收器异步处理
                     }
                     Err(e) => {
