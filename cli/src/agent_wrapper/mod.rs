@@ -548,24 +548,10 @@ impl AgentOutputHandler {
     }
 
     fn parse_claude_output(&self, line: &str) -> Option<AgentMessageContent> {
-        // Claude Code 输出解析
-        // 需要识别不同的输出类型（用户消息、AI 响应、工具调用等）
-
-        if line.starts_with("Tool:") {
-            // 工具调用
-            return Some(AgentMessageContent::ToolCallUpdate {
-                tool_name: line[5..].trim().to_string(),
-                status: riterm_shared::message_protocol::ToolCallStatus::Started,
-                output: None,
-            });
-        }
-
-        // 普通输出作为 AI 响应
-        Some(AgentMessageContent::AgentResponse {
-            content: line.to_string(),
-            thinking: false,
-            message_id: None,
-        })
+        // 使用 ClaudeOutputParser 解析输出
+        let parser = claude::ClaudeOutputParser::new().ok()?;
+        let parse_result = parser.parse_line(line);
+        Some(parse_result.to_message_content())
     }
 
     fn parse_opencode_output(&self, line: &str) -> Option<AgentMessageContent> {
