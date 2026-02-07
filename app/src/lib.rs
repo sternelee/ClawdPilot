@@ -18,6 +18,8 @@ use riterm_shared::{
     CommunicationManager, Event, EventListener, EventType, IODataType, Message, MessageBuilder,
     MessagePayload, QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType,
     TcpForwardingAction, TcpForwardingType, TerminalAction,
+    AgentControlAction, AgentSessionAction, AgentType, SlashCommand, SlashCommandMessage,
+    RemoteSpawnAction, AgentPermissionMessage, AgentPermissionMessageInner,
 };
 
 use crate::tcp_forwarding::TcpForwardingManager;
@@ -1757,6 +1759,166 @@ async fn send_tcp_data(
     Ok(())
 }
 
+// ============================================================================
+// AI Agent Commands - Slash Command Support
+// ============================================================================
+
+/// Send a slash command to an AI agent session
+#[tauri::command]
+async fn send_slash_command(
+    sessionId: String,
+    command: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .ok_or_else(|| format!("Session not found: {}", sessionId))?
+            .clone()
+    };
+
+    // Parse the command to determine if it's a builtin or passthrough
+    let (command_type, raw_command) = if command.starts_with('/') {
+        let parts: Vec<&str> = command.trim().split_whitespace().collect();
+        let cmd = parts.first().copied().unwrap_or("");
+
+        // Check if it's a RiTerm builtin command
+        match cmd {
+            "/list" => {
+                // This is handled by a different flow - send as passthrough for now
+                ("passthrough", command.as_str())
+            }
+            "/spawn" => {
+                // Extract parameters and send a RemoteSpawn message
+                if parts.len() >= 3 {
+                    let agent_type_str = parts.get(1).copied().unwrap_or("claude");
+                    let project_path = parts.get(2).copied().unwrap_or(".");
+                    let agent_type = match agent_type_str {
+                        "claude" | "claudecode" => AgentType::ClaudeCode,
+                        "opencode" | "open" => AgentType::OpenCode,
+                        "gemini" => AgentType::Gemini,
+                        _ => AgentType::Custom,
+                    };
+
+                    let args = if parts.len() > 3 {
+                        parts[3..].iter().map(|s| s.to_string()).collect()
+                    } else {
+                        vec![]
+                    };
+
+                    // Create RemoteSpawn message
+                    let spawn_message = Message::new(
+                        riterm_shared::MessageType::RemoteSpawn,
+                        "app".to_string(),
+                        riterm_shared::MessagePayload::RemoteSpawn(
+                            riterm_shared::RemoteSpawnMessage {
+                                action: riterm_shared::RemoteSpawnAction::SpawnSession {
+                                    agent_type,
+                                    project_path: project_path.to_string(),
+                                    args,
+                                },
+                                request_id: None,
+                            },
+                        ),
+                    ).requires_response();
+
+                    send_message_via_client(&state, &session.connection_id, spawn_message, "remote spawn").await?;
+                    return Ok("spawn_request_sent".to_string());
+                }
+                ("passthrough", command.as_str())
+            }
+            "/stop" => {
+                // Stop session command
+                if parts.len() >= 2 {
+                    let target_session_id = parts.get(1).copied().unwrap_or(&sessionId.as_str());
+                    disconnect_session(target_session_id.to_string(), state).await?;
+                    return Ok("session_stopped".to_string());
+                }
+                ("passthrough", command.as_str())
+            }
+            _ => ("passthrough", command.as_str()),
+        }
+    } else {
+        ("passthrough", command.as_str())
+    };
+
+    match command_type {
+        "passthrough" => {
+            // Send as AgentControl::SendInput
+            let control_message = Message::new(
+                riterm_shared::MessageType::AgentControl,
+                "app".to_string(),
+                riterm_shared::MessagePayload::AgentControl(
+                    riterm_shared::AgentControlMessage {
+                        session_id: sessionId.clone(),
+                        action: AgentControlAction::SendInput {
+                            content: raw_command.to_string(),
+                        },
+                        request_id: None,
+                    },
+                ),
+            ).requires_response();
+
+            send_message_via_client(&state, &session.connection_id, control_message, "agent command").await?;
+            Ok("command_sent".to_string())
+        }
+        _ => Ok("unknown_command".to_string()),
+    }
+}
+
+/// Respond to an agent permission request
+#[tauri::command]
+async fn respond_to_agent_permission(
+    sessionId: String,
+    permissionId: String,
+    approved: bool,
+    approveForSession: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .ok_or_else(|| format!("Session not found: {}", sessionId))?
+            .clone()
+    };
+
+    use riterm_shared::{AgentPermissionMessage, AgentPermissionMessageInner, AgentPermissionResponse, PermissionMode};
+
+    let response_mode = if !approved {
+        PermissionMode::Deny
+    } else if approveForSession {
+        PermissionMode::ApproveForSession
+    } else {
+        PermissionMode::AlwaysAsk
+    };
+
+    let permission_response = AgentPermissionResponse {
+        request_id: permissionId,
+        approved,
+        permission_mode: response_mode,
+        decided_at: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        reason: None,
+    };
+
+    let permission_message = Message::new(
+        riterm_shared::MessageType::AgentPermission,
+        "app".to_string(),
+        riterm_shared::MessagePayload::AgentPermission(
+            riterm_shared::AgentPermissionMessage {
+                inner: riterm_shared::AgentPermissionMessageInner::Response(permission_response),
+            },
+        ),
+    ).with_session(sessionId);
+
+    send_message_via_client(&state, &session.connection_id, permission_message, "permission response").await?;
+    Ok(())
+}
+
 /// Initialize tracing with conditional log levels based on build configuration
 fn init_tracing() {
     // Set different log levels based on build profile and features
@@ -1825,6 +1987,9 @@ pub fn run() {
             stop_tcp_forwarding_session,
             get_tcp_forwarding_session_info,
             send_tcp_data,
+            // AI Agent Commands
+            send_slash_command,
+            respond_to_agent_permission,
         ])
         .setup(|_app| {
             // No additional setup needed - ensure_quic_client_initialized handles auto-initialization

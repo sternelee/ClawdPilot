@@ -2,10 +2,12 @@
  * ChatView Component
  *
  * Main chat interface for AI agent interactions with DaisyUI styling.
- * Displays messages, handles user input, and shows permission requests.
+ * Displays messages, handles user input, shows permission requests, and supports slash commands.
  */
 
-import { For, Show, createEffect, createSignal } from 'solid-js'
+import { For, Show, createEffect, createSignal, onMount } from 'solid-js'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { chatStore } from '../stores/chatStore'
 import type { AgentType } from '../stores/sessionStore'
 import { notificationStore } from '../stores/notificationStore'
@@ -207,21 +209,79 @@ export function ChatView(props: ChatViewProps) {
     }
   })
 
+  // Listen for incoming agent messages from backend
+  onMount(() => {
+    const unlisten = listen<string>('agent-message', (event) => {
+      try {
+        const data = JSON.parse(event.payload)
+        if (data.sessionId === props.sessionId) {
+          // Handle different message types
+          if (data.type === 'response') {
+            chatStore.addMessage(props.sessionId, {
+              role: 'assistant',
+              content: data.content || '',
+              thinking: data.thinking || false,
+              messageId: data.messageId,
+            })
+          } else if (data.type === 'permission_request') {
+            chatStore.addPermissionRequest(props.sessionId, {
+              sessionId: props.sessionId,
+              toolName: data.toolName,
+              toolParams: data.toolParams,
+              description: data.description || `Permission request for ${data.toolName}`,
+            })
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse agent message:', e)
+      }
+    })
+
+    return () => {
+      unlisten.then(fn => fn())
+    }
+  })
+
   const scrollToBottom = () => {
     messagesEnd()?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const content = inputValue().trim()
     if (!content) return
 
     setInputValue('')
-    chatStore.addMessage(props.sessionId, {
-      role: 'user',
-      content,
-    })
 
-    props.onSendMessage?.(content)
+    // Check if it's a slash command
+    if (content.startsWith('/')) {
+      try {
+        // Send slash command via Tauri
+        await invoke('send_slash_command', {
+          sessionId: props.sessionId,
+          command: content,
+        })
+        // Add system message showing the command was sent
+        chatStore.addMessage(props.sessionId, {
+          role: 'system',
+          content: `Command sent: ${content}`,
+        })
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Failed to send command'
+        notificationStore.error(errorMsg, 'Command Error')
+        chatStore.addMessage(props.sessionId, {
+          role: 'system',
+          content: `Error: ${errorMsg}`,
+        })
+      }
+    } else {
+      // Regular message
+      chatStore.addMessage(props.sessionId, {
+        role: 'user',
+        content,
+      })
+
+      props.onSendMessage?.(content)
+    }
   }
 
   const handleKeyDown = (e: KeyboardEvent) => {
