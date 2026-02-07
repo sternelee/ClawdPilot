@@ -14,6 +14,7 @@ use riterm_shared::{
     AgentControlAction, FileBrowserAction, FileBrowserMessage, GitAction, GitStatusMessage,
     NotificationData, NotificationMessage, NotificationType, NotificationPriority,
     RemoteSpawnAction, RemoteSpawnMessage,
+    AgentSessionAction, AgentSessionMessage, AgentSessionMetadata, AgentType,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -29,7 +30,7 @@ use uuid::Uuid;
 
 use crate::shell::ShellDetector;
 use crate::terminal_logger::TerminalLogManager;
-use crate::agent_wrapper::AgentManager;
+use crate::agent_wrapper::{AgentFactory, AgentManager};
 
 /// Connection information for status display
 #[derive(Debug, Clone)]
@@ -446,10 +447,20 @@ impl CliMessageServer {
 
         // 注册远程生成处理器
         let remote_spawn_handler = Arc::new(RemoteSpawnMessageHandler::new(
+            self.communication_manager.clone(),
             self.agent_manager.clone(),
         ));
         self.communication_manager
             .register_message_handler(remote_spawn_handler)
+            .await;
+
+        // 注册 Agent 会话处理器
+        let agent_session_handler = Arc::new(AgentSessionMessageHandler::new(
+            self.communication_manager.clone(),
+            self.agent_manager.clone(),
+        ));
+        self.communication_manager
+            .register_message_handler(agent_session_handler)
             .await;
 
         // 注册通知处理器
@@ -2822,53 +2833,188 @@ impl MessageHandler for GitStatusMessageHandler {
     }
 }
 
-/// Remote spawn handler for P2P session spawning
+/// Agent 会话消息处理器
+pub struct AgentSessionMessageHandler {
+    communication_manager: Arc<CommunicationManager>,
+    agent_manager: Arc<AgentManager>,
+}
+
+impl AgentSessionMessageHandler {
+    pub fn new(
+        communication_manager: Arc<CommunicationManager>,
+        agent_manager: Arc<AgentManager>,
+    ) -> Self {
+        Self {
+            communication_manager,
+            agent_manager,
+        }
+    }
+
+    /// 处理会话列表请求
+    async fn handle_list_sessions(&self, request_id: Option<String>) -> Result<Option<Message>> {
+        let sessions = self.agent_manager.list_sessions().await;
+
+        let sessions_json = serde_json::to_value(&sessions)?;
+        let response = MessageBuilder::response(
+            "cli".to_string(),
+            request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+            true,
+            Some(sessions_json),
+            None,
+        );
+
+        Ok(Some(response))
+    }
+
+    /// 发送会话注册通知到所有连接的客户端
+    async fn broadcast_session_register(&self, metadata: AgentSessionMetadata) -> Result<()> {
+        // 通过 CommunicationManager 广播会话注册消息
+        let message = MessageBuilder::agent_session_register(
+            "cli".to_string(),
+            metadata.clone(),
+            None,
+        );
+
+        // TODO: 广播到所有连接的客户端
+        tracing::info!("Broadcasting session registration: {}", metadata.session_id);
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for AgentSessionMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        if let MessagePayload::AgentSession(session_msg) = &message.payload {
+            match &session_msg.action {
+                AgentSessionAction::ListSessions => {
+                    self.handle_list_sessions(session_msg.request_id.clone()).await
+                }
+                AgentSessionAction::Register { .. } => {
+                    // 客户端不应该发送 Register 消息到 host
+                    tracing::warn!("Received Register message from client, ignoring");
+                    Ok(None)
+                }
+                AgentSessionAction::UpdateStatus { .. } => {
+                    // TODO: 更新会话状态
+                    Ok(None)
+                }
+                AgentSessionAction::Heartbeat { .. } => {
+                    // 心跳消息，可以记录但不响应
+                    Ok(None)
+                }
+                _ => Ok(None),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::AgentSession]
+    }
+}
+
+// ============================================================================
+// Remote Spawn Message Handler
+// ============================================================================
+
+/// 远程会话生成消息处理器
 pub struct RemoteSpawnMessageHandler {
+    communication_manager: Arc<CommunicationManager>,
     agent_manager: Arc<AgentManager>,
 }
 
 impl RemoteSpawnMessageHandler {
-    pub fn new(agent_manager: Arc<AgentManager>) -> Self {
-        Self { agent_manager }
+    pub fn new(
+        communication_manager: Arc<CommunicationManager>,
+        agent_manager: Arc<AgentManager>,
+    ) -> Self {
+        Self {
+            communication_manager,
+            agent_manager,
+        }
     }
 
+    /// 处理远程生成会话请求
     async fn handle_spawn_session(
         &self,
-        agent_type: riterm_shared::message_protocol::AgentType,
+        agent_type: AgentType,
         project_path: String,
         args: Vec<String>,
+        request_id: Option<String>,
     ) -> Result<Option<Message>> {
-        match self.agent_manager.start_session(agent_type, project_path, args).await {
-            Ok((session_id, metadata)) => Ok(Some(MessageBuilder::response(
-                "cli".to_string(),
-                Uuid::new_v4().to_string(),
-                true,
-                Some(serde_json::json!({
-                    "session_id": session_id,
-                    "metadata": metadata
-                })),
-                None,
-            ))),
-            Err(e) => Ok(Some(MessageBuilder::response(
-                "cli".to_string(),
-                Uuid::new_v4().to_string(),
-                false,
-                None,
-                Some(format!("Failed to spawn: {}", e)),
-            ))),
-        }
+        tracing::info!(
+            "Remote spawn request: agent_type={:?}, project_path={}, args={:?}",
+            agent_type,
+            project_path,
+            args
+        );
+
+        // 使用 AgentManager 启动新的 agent 会话
+        let (session_id, _metadata) = self.agent_manager.start_session(
+            agent_type,
+            project_path.clone(),
+            args,
+        ).await.map_err(|e| {
+            tracing::error!("Failed to start agent session: {}", e);
+            anyhow::anyhow!("Failed to start agent session: {}", e)
+        })?;
+
+        // 构建响应
+        let response_data = serde_json::json!({
+            "session_id": session_id,
+            "agent_type": format!("{:?}", agent_type),
+            "project_path": project_path,
+        });
+
+        let response = MessageBuilder::response(
+            "cli".to_string(),
+            request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+            true,
+            Some(response_data),
+            None,
+        );
+
+        Ok(Some(response))
+    }
+
+    /// 处理列出可用 agent 类型请求
+    async fn handle_list_available_agents(&self, request_id: Option<String>) -> Result<Option<Message>> {
+        let available_agents = AgentFactory::check_all_available().unwrap_or_default();
+
+        let agents_json = serde_json::to_value(&available_agents)?;
+        let response = MessageBuilder::response(
+            "cli".to_string(),
+            request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+            true,
+            Some(agents_json),
+            None,
+        );
+
+        Ok(Some(response))
     }
 }
 
 #[async_trait::async_trait]
 impl MessageHandler for RemoteSpawnMessageHandler {
     async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
-        if let MessagePayload::RemoteSpawn(rs) = &message.payload {
-            if let RemoteSpawnAction::SpawnSession { agent_type, project_path, args } = &rs.action {
-                return self.handle_spawn_session(*agent_type, project_path.clone(), args.clone()).await;
+        if let MessagePayload::RemoteSpawn(spawn_msg) = &message.payload {
+            match &spawn_msg.action {
+                RemoteSpawnAction::SpawnSession { agent_type, project_path, args } => {
+                    self.handle_spawn_session(
+                        agent_type.clone(),
+                        project_path.clone(),
+                        args.clone(),
+                        spawn_msg.request_id.clone(),
+                    ).await
+                }
+                RemoteSpawnAction::ListAvailableAgents => {
+                    self.handle_list_available_agents(spawn_msg.request_id.clone()).await
+                }
             }
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 
     fn supported_message_types(&self) -> Vec<MessageType> {
@@ -2876,44 +3022,54 @@ impl MessageHandler for RemoteSpawnMessageHandler {
     }
 }
 
-/// Notification handler for P2P push notifications (no Telegram)
+// ============================================================================
+// Notification Message Handler
+// ============================================================================
+
+/// 通知消息处理器
 pub struct NotificationMessageHandler {
     communication_manager: Arc<CommunicationManager>,
-    pending_notifications: Arc<RwLock<Vec<NotificationData>>>,
 }
 
 impl NotificationMessageHandler {
     pub fn new(communication_manager: Arc<CommunicationManager>) -> Self {
-        Self {
-            communication_manager,
-            pending_notifications: Arc::new(RwLock::new(Vec::new())),
+        Self { communication_manager }
+    }
+
+    /// 处理通知消息
+    async fn handle_notification(&self, notification: NotificationData) -> Result<Option<Message>> {
+        tracing::info!("Received notification: {:?}", notification);
+
+        // 在 host 端，通知通常来自远程客户端
+        // 可以在这里实现通知的逻辑处理，比如记录日志或触发某些操作
+        match notification.notification_type {
+            NotificationType::Info => {
+                tracing::info!("Info notification: {} - {}", notification.title, notification.body);
+            }
+            NotificationType::Error => {
+                tracing::error!("Error notification: {} - {}", notification.title, notification.body);
+            }
+            NotificationType::PermissionRequest => {
+                tracing::info!("Permission request: {} - {}", notification.title, notification.body);
+            }
+            NotificationType::ToolCompleted => {
+                tracing::info!("Tool completed: {} - {}", notification.title, notification.body);
+            }
+            NotificationType::SessionStatus => {
+                tracing::info!("Session status: {} - {}", notification.title, notification.body);
+            }
         }
-    }
 
-    async fn handle_add_notification(&self, notification: NotificationData) -> Result<Option<Message>> {
-        let mut notifications = self.pending_notifications.write().await;
-        notifications.push(notification);
-        // TODO: Broadcast via iroh P2P to connected clients
+        // 通知消息通常不需要响应
         Ok(None)
-    }
-
-    async fn handle_get_pending(&self, _session_id: Option<String>) -> Result<Option<Message>> {
-        let notifications = self.pending_notifications.read().await;
-        Ok(Some(MessageBuilder::response(
-            "cli".to_string(),
-            Uuid::new_v4().to_string(),
-            true,
-            Some(serde_json::json!({"notifications": *notifications})),
-            None,
-        )))
     }
 }
 
 #[async_trait::async_trait]
 impl MessageHandler for NotificationMessageHandler {
     async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
-        if let MessagePayload::Notification(n) = &message.payload {
-            self.handle_add_notification(n.notification.clone()).await
+        if let MessagePayload::Notification(notification_msg) = &message.payload {
+            self.handle_notification(notification_msg.notification.clone()).await
         } else {
             Ok(None)
         }

@@ -4,13 +4,14 @@
 
 use anyhow::Result;
 use riterm_shared::message_protocol::AgentType;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use tracing::{debug, info};
 
 /// Agent 可用性检查结果
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AgentAvailability {
     /// Agent 是否可用
     pub available: bool,
