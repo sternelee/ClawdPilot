@@ -76,6 +76,23 @@ const GEMINI_SPECIFIC_COMMANDS: &[&str] = &[
     "/chat",          // 聊天历史
 ];
 
+/// OpenAI Codex 专用命令
+const CODEX_SPECIFIC_COMMANDS: &[&str] = &[
+    "/generate",      // 生成代码
+    "/complete",      // 代码补全
+    "/refactor",      // 重构代码
+    "/explain",       // 解释代码
+    "/fix",           // 修复代码
+    "/optimize",      // 优化代码
+    "/test",          // 生成测试
+    "/docs",          // 生成文档
+    "/model",         // 切换模型
+    "/temperature",   // 设置温度参数
+    "/max-tokens",    // 设置最大 token 数
+    "/format",        // 代码格式化
+    "/lint",          // 代码检查
+];
+
 /// 通用命令（所有 Agent 都支持）
 const UNIVERSAL_COMMANDS: &[&str] = &[
     "/help",          // 帮助
@@ -190,6 +207,7 @@ impl CommandRouter {
         match s.to_lowercase().as_str() {
             "claude" | "claudecode" | "claude-code" => Ok(AgentType::ClaudeCode),
             "opencode" | "open" | "openai" => Ok(AgentType::OpenCode),
+            "codex" | "openai-codex" | "openai-codex-cli" => Ok(AgentType::Codex),
             "gemini" | "gemini-cli" => Ok(AgentType::Gemini),
             "custom" => Ok(AgentType::Custom),
             _ => Err(anyhow::anyhow!("Unknown agent type: {}", s)),
@@ -214,6 +232,7 @@ impl CommandRouter {
         let agent_commands = match agent_type {
             AgentType::ClaudeCode => CLAUDE_SPECIFIC_COMMANDS,
             AgentType::OpenCode => OPENCODE_SPECIFIC_COMMANDS,
+            AgentType::Codex => CODEX_SPECIFIC_COMMANDS,
             AgentType::Gemini => GEMINI_SPECIFIC_COMMANDS,
             AgentType::Custom => &[],
         };
@@ -250,6 +269,19 @@ impl CommandRouter {
             "/compact" | "/summarize" => "压缩会话上下文".to_string(),
             "/memory" => "管理 GEMINI.md 文件".to_string(),
             "/stats" => "显示会话统计信息".to_string(),
+            "/generate" => "生成代码".to_string(),
+            "/complete" => "代码补全".to_string(),
+            "/refactor" => "重构代码".to_string(),
+            "/explain" => "解释代码".to_string(),
+            "/fix" => "修复代码".to_string(),
+            "/optimize" => "优化代码".to_string(),
+            "/test" => "生成测试".to_string(),
+            "/docs" => "生成文档".to_string(),
+            "/model" => "切换模型".to_string(),
+            "/temperature" => "设置温度参数".to_string(),
+            "/max-tokens" => "设置最大 token 数".to_string(),
+            "/format" => "代码格式化".to_string(),
+            "/lint" => "代码检查".to_string(),
             _ => format!("{} 命令", command),
         }
     }
@@ -273,6 +305,58 @@ impl CommandRouter {
                 _ => vec![],
             },
             "/stats" => vec!["/stats".to_string()],
+            "/generate" => match agent_type {
+                AgentType::Codex => vec!["/generate a function to parse JSON".to_string(), "/generate async fetch wrapper".to_string()],
+                _ => vec![],
+            },
+            "/complete" => match agent_type {
+                AgentType::Codex => vec!["/complete".to_string()],
+                _ => vec![],
+            },
+            "/refactor" => match agent_type {
+                AgentType::Codex => vec!["/refactor this function to be more readable".to_string()],
+                _ => vec![],
+            },
+            "/explain" => match agent_type {
+                AgentType::Codex => vec!["/explain selected code".to_string()],
+                _ => vec![],
+            },
+            "/fix" => match agent_type {
+                AgentType::Codex => vec!["/fix bugs in this code".to_string()],
+                _ => vec![],
+            },
+            "/optimize" => match agent_type {
+                AgentType::Codex => vec!["/optimize for performance".to_string()],
+                _ => vec![],
+            },
+            "/test" => match agent_type {
+                AgentType::Codex => vec!["/test generate unit tests for this function".to_string()],
+                _ => vec![],
+            },
+            "/docs" => match agent_type {
+                AgentType::Codex => vec!["/docs generate JSDoc comments".to_string()],
+                _ => vec![],
+            },
+            "/model" => match agent_type {
+                AgentType::Codex => vec!["/model gpt-4".to_string(), "/model gpt-3.5-turbo".to_string()],
+                _ => vec![],
+            },
+            "/temperature" => match agent_type {
+                AgentType::Codex => vec!["/temperature 0.7".to_string()],
+                _ => vec![],
+            },
+            "/max-tokens" => match agent_type {
+                AgentType::Codex => vec!["/max-tokens 1000".to_string()],
+                _ => vec![],
+            },
+            "/format" => match agent_type {
+                AgentType::Codex => vec!["/format".to_string()],
+                _ => vec![],
+            },
+            "/lint" => match agent_type {
+                AgentType::Codex => vec!["/lint".to_string()],
+                _ => vec![],
+            },
             _ => vec![command.to_string()],
         }
     }
@@ -296,6 +380,7 @@ impl CommandRouter {
         UNIVERSAL_COMMANDS.contains(&command_name) || match self.agent_type {
             AgentType::ClaudeCode => CLAUDE_SPECIFIC_COMMANDS.contains(&command_name),
             AgentType::OpenCode => OPENCODE_SPECIFIC_COMMANDS.contains(&command_name),
+            AgentType::Codex => CODEX_SPECIFIC_COMMANDS.contains(&command_name),
             AgentType::Gemini => GEMINI_SPECIFIC_COMMANDS.contains(&command_name),
             AgentType::Custom => false,
         }

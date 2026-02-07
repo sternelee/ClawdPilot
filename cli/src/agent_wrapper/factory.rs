@@ -199,6 +199,57 @@ impl Agent for GeminiAgent {
     }
 }
 
+/// OpenAI Codex Agent
+pub struct CodexAgent;
+
+impl Agent for CodexAgent {
+    fn agent_type(&self) -> AgentType {
+        AgentType::Codex
+    }
+
+    fn command(&self) -> &str {
+        "codex"
+    }
+
+    fn check_available(&self) -> Result<AgentAvailability> {
+        let output = Command::new(self.command())
+            .arg("--version")
+            .output()?;
+
+        let available = output.status.success();
+        let version = if available {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            None
+        };
+
+        Ok(AgentAvailability {
+            available,
+            version,
+            executable: self.command().to_string(),
+        })
+    }
+
+    fn get_version(&self) -> Result<String> {
+        let output = Command::new(self.command())
+            .arg("--version")
+            .output()?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!("Failed to get Codex version"));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        vec![
+            "--interactive".to_string(),
+            "--no-color".to_string(),
+        ]
+    }
+}
+
 /// Agent 工厂
 pub struct AgentFactory;
 
@@ -208,6 +259,7 @@ impl AgentFactory {
         match agent_type {
             AgentType::ClaudeCode => Box::new(ClaudeCodeAgent),
             AgentType::OpenCode => Box::new(OpenCodeAgent),
+            AgentType::Codex => Box::new(CodexAgent),
             AgentType::Gemini => Box::new(GeminiAgent),
             AgentType::Custom => {
                 // 自定义 agent 需要用户提供命令
@@ -223,6 +275,7 @@ impl AgentFactory {
         let agents: Vec<Box<dyn Agent>> = vec![
             Box::new(ClaudeCodeAgent),
             Box::new(OpenCodeAgent),
+            Box::new(CodexAgent),
             Box::new(GeminiAgent),
         ];
 
@@ -250,9 +303,12 @@ impl AgentFactory {
     pub fn get_default() -> Option<AgentType> {
         let available = Self::check_all_available().ok()?;
 
-        // 优先级: Claude > OpenCode > Gemini
+        // 优先级: Claude > Codex > OpenCode > Gemini
         if available.contains_key(&AgentType::ClaudeCode) {
             return Some(AgentType::ClaudeCode);
+        }
+        if available.contains_key(&AgentType::Codex) {
+            return Some(AgentType::Codex);
         }
         if available.contains_key(&AgentType::OpenCode) {
             return Some(AgentType::OpenCode);

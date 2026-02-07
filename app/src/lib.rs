@@ -1797,6 +1797,7 @@ async fn send_slash_command(
                     let agent_type = match agent_type_str {
                         "claude" | "claudecode" => AgentType::ClaudeCode,
                         "opencode" | "open" => AgentType::OpenCode,
+                        "codex" => AgentType::Codex,
                         "gemini" => AgentType::Gemini,
                         _ => AgentType::Custom,
                     };

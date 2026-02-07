@@ -4,12 +4,14 @@
 //! 并处理与它们的 stdin/stdout 通信。
 
 pub mod claude;
+pub mod codex;
 pub mod factory;
 pub mod gemini;
 pub mod opencode;
 
 pub use claude::ClaudeOutputParser;
-pub use factory::{Agent, AgentAvailability, AgentFactory, ClaudeCodeAgent, GeminiAgent, OpenCodeAgent};
+pub use codex::CodexOutputParser;
+pub use factory::{Agent, AgentAvailability, AgentFactory, ClaudeCodeAgent, CodexAgent, GeminiAgent, OpenCodeAgent};
 pub use gemini::GeminiOutputParser;
 pub use opencode::OpenCodeOutputParser;
 
@@ -167,6 +169,13 @@ impl AgentManager {
                    .current_dir(project_path);
                 cmd
             }
+            AgentType::Codex => {
+                let mut cmd = Command::new("codex");
+                cmd.arg("--interactive")
+                   .arg("--no-color")
+                   .current_dir(project_path);
+                cmd
+            }
             AgentType::Gemini => {
                 let mut cmd = Command::new("gemini");
                 cmd.arg("chat")
@@ -271,6 +280,7 @@ impl AgentManager {
         let cmd = match agent_type {
             AgentType::ClaudeCode => "claude",
             AgentType::OpenCode => "opencode",
+            AgentType::Codex => "codex",
             AgentType::Gemini => "gemini",
             AgentType::Custom => return None,
         };
@@ -537,11 +547,12 @@ impl AgentOutputHandler {
     /// 解析 Agent 输出
     pub fn parse_output(&self, line: &str) -> Option<AgentMessageContent> {
         // 这里需要根据不同的 agent 类型解析输出
-        // Claude Code, OpenCode, Gemini 的输出格式不同
+        // Claude Code, OpenCode, Codex, Gemini 的输出格式不同
 
         match self.agent_type {
             AgentType::ClaudeCode => self.parse_claude_output(line),
             AgentType::OpenCode => self.parse_opencode_output(line),
+            AgentType::Codex => self.parse_codex_output(line),
             AgentType::Gemini => self.parse_gemini_output(line),
             AgentType::Custom => self.parse_custom_output(line),
         }
@@ -557,6 +568,13 @@ impl AgentOutputHandler {
     fn parse_opencode_output(&self, line: &str) -> Option<AgentMessageContent> {
         // 使用 OpenCodeOutputParser 解析输出
         let parser = opencode::OpenCodeOutputParser::new().ok()?;
+        let parse_result = parser.parse_line(line);
+        Some(parse_result.to_message_content())
+    }
+
+    fn parse_codex_output(&self, line: &str) -> Option<AgentMessageContent> {
+        // 使用 CodexOutputParser 解析输出
+        let parser = codex::CodexOutputParser::new().ok()?;
         let parse_result = parser.parse_line(line);
         Some(parse_result.to_message_content())
     }

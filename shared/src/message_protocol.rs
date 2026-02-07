@@ -561,6 +561,8 @@ pub enum AgentType {
     ClaudeCode,
     /// OpenCode (OpenAI)
     OpenCode,
+    /// OpenAI Codex (OpenAI)
+    Codex,
     /// Gemini CLI (Google)
     Gemini,
     /// 其他自定义 Agent
