@@ -69,7 +69,7 @@ export default function Page() {
     setConnectionError(null);
 
     try {
-      const sessionId = await invoke<string>("connect_to_host", { ticket });
+      const sessionId = await invoke<string>("connect_to_host", { sessionTicket: ticket });
       sessionIdRef = sessionId;
       setIsConnected(true);
       setActiveTicket(ticket);
