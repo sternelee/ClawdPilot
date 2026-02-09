@@ -450,6 +450,17 @@ async fn initialize_network(
     initialize_network_internal(&state, Some(&app_handle)).await
 }
 
+/// Connect to host (alias for connect_to_peer)
+/// This provides the command name that the frontend expects
+#[tauri::command]
+async fn connect_to_host(
+    session_ticket: String,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    connect_to_peer(session_ticket, state, app_handle).await
+}
+
 #[tauri::command]
 async fn connect_to_peer(
     session_ticket: String,
@@ -1967,6 +1978,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             initialize_network_with_relay,
             initialize_network,
+            connect_to_host,
             connect_to_peer,
             execute_remote_command, // Kept for compatibility but redirects to terminal input
             disconnect_session,
