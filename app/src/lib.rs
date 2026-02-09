@@ -34,7 +34,8 @@ const CLEANUP_INTERVAL_SECS: u64 = 300; // 5 minutes
 // Helper function to validate session ticket format
 fn is_valid_session_ticket(ticket: &str) -> bool {
     // iroh-tickets format is typically 44-52 characters (base64)
-    ticket.len() > 20 && ticket.len() < 100
+    // JSON format can be much longer (up to 500 chars for base64-encoded JSON)
+    ticket.len() > 20 && ticket.len() < 500
 }
 
 // Parse ticket and extract EndpointId
@@ -1904,6 +1905,52 @@ async fn send_slash_command(
     }
 }
 
+/// Spawn a remote AI agent session
+#[tauri::command]
+async fn remote_spawn_session(
+    sessionId: String,
+    agentType: String,
+    projectPath: String,
+    args: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&sessionId)
+            .ok_or_else(|| format!("Session not found: {}", sessionId))?
+            .clone()
+    };
+
+    // Parse agent type
+    let agent_type = match agentType.to_lowercase().as_str() {
+        "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
+        "opencode" | "open" | "openai" => AgentType::OpenCode,
+        "codex" => AgentType::Codex,
+        "gemini" | "gemini-cli" => AgentType::Gemini,
+        _ => AgentType::Custom,
+    };
+
+    // Create RemoteSpawn message
+    let spawn_message = Message::new(
+        riterm_shared::MessageType::RemoteSpawn,
+        "app".to_string(),
+        riterm_shared::MessagePayload::RemoteSpawn(
+            riterm_shared::RemoteSpawnMessage {
+                action: riterm_shared::RemoteSpawnAction::SpawnSession {
+                    agent_type,
+                    project_path: projectPath,
+                    args,
+                },
+                request_id: None,
+            },
+        ),
+    ).requires_response();
+
+    send_message_via_client(&state, &session.connection_id, spawn_message, "remote spawn").await?;
+    Ok("spawn_request_sent".to_string())
+}
+
 /// Respond to an agent permission request
 #[tauri::command]
 async fn respond_to_agent_permission(
@@ -2027,6 +2074,7 @@ pub fn run() {
             send_tcp_data,
             // AI Agent Commands
             send_slash_command,
+            remote_spawn_session,
             respond_to_agent_permission,
         ])
         .setup(|_app| {
