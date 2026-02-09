@@ -100,10 +100,31 @@ impl AgentManager {
 
         debug!("Spawning agent: {:?}", command);
 
+        // Get the program name before moving command
+        let program_name = command.get_program().to_string_lossy().to_string();
+
+        // Check if the command exists before spawning
+        if let Err(e) = std::process::Command::new(&program_name)
+            .arg("--version")
+            .output()
+        {
+            error!("Agent command '{}' not found or not executable: {}", program_name, e);
+            return Err(anyhow::anyhow!(
+                "Agent command '{}' not found. Please install the AI agent CLI tool first.\n\
+                 - Claude Code: https://claude.ai/code\n\
+                 - Codex: https://github.com/openai/openai-codex\n\
+                 - OpenCode: npm install -g @openai/openai-codex\n\
+                 - Gemini: npm install -g @google-cloud/generative-ai-cli\n\
+                 - Error: {}",
+                program_name,
+                e
+            ));
+        }
+
         let mut command_mut = command;
         let mut child = command_mut
             .spawn()
-            .context("Failed to spawn agent process")?;
+            .with_context(|| format!("Failed to spawn agent process '{}'. Please ensure the command is installed and in PATH.", program_name))?;
 
         let stdin = child
             .stdin
