@@ -92,9 +92,9 @@ impl Agent for ClaudeCodeAgent {
     }
 
     fn default_args(&self) -> Vec<String> {
-        vec![
-            "-p".to_string(),  // --print for non-interactive output
-        ]
+        // Claude Code runs in interactive mode by default (MCP over stdio)
+        // No special flags needed
+        vec![]
     }
 }
 

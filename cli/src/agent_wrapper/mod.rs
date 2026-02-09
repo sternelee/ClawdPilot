@@ -95,31 +95,24 @@ impl AgentManager {
     ) -> Result<(String, AgentSessionMetadata)> {
         info!("Starting AI Agent session: {:?} in {}", agent_type, project_path);
 
+        // Expand ~ to home directory
+        let expanded_path = if project_path.starts_with("~/") {
+            if let Some(home) = std::env::var("HOME").ok().or_else(|| std::env::var("USERPROFILE").ok()) {
+                project_path.replacen("~", &home, 1)
+            } else {
+                project_path
+            }
+        } else {
+            project_path.clone()
+        };
+
         let session_id = Uuid::new_v4().to_string();
-        let (agent_id, command) = self.build_agent_command(&agent_type, &project_path, args)?;
+        let (agent_id, command) = self.build_agent_command(&agent_type, &expanded_path, args)?;
 
         debug!("Spawning agent: {:?}", command);
 
-        // Get the program name before moving command
+        // Get the program name for error messages
         let program_name = command.get_program().to_string_lossy().to_string();
-
-        // Check if the command exists before spawning
-        if let Err(e) = std::process::Command::new(&program_name)
-            .arg("--version")
-            .output()
-        {
-            error!("Agent command '{}' not found or not executable: {}", program_name, e);
-            return Err(anyhow::anyhow!(
-                "Agent command '{}' not found. Please install the AI agent CLI tool first.\n\
-                 - Claude Code: https://claude.ai/code\n\
-                 - Codex: https://github.com/openai/openai-codex\n\
-                 - OpenCode: npm install -g @openai/openai-codex\n\
-                 - Gemini: npm install -g @google-cloud/generative-ai-cli\n\
-                 - Error: {}",
-                program_name,
-                e
-            ));
-        }
 
         let mut command_mut = command;
         let mut child = command_mut
@@ -140,7 +133,7 @@ impl AgentManager {
         let metadata = self.build_session_metadata(
             session_id.clone(),
             agent_type,
-            project_path,
+            expanded_path.clone(),
         ).await;
 
         // 创建会话
@@ -179,29 +172,27 @@ impl AgentManager {
 
         let mut command = match agent_type {
             AgentType::ClaudeCode => {
-                // Use -p for non-interactive mode (reads from stdin, writes to stdout)
+                // Run claude in interactive mode (no special flags needed)
+                // Claude Code uses MCP protocol over stdio by default
                 let mut cmd = Command::new("claude");
-                cmd.arg("-p")  // --print for non-interactive output
-                   .current_dir(project_path);
+                cmd.current_dir(project_path);
                 cmd
             }
             AgentType::OpenCode => {
                 let mut cmd = Command::new("opencode");
-                cmd.arg("--non-interactive")
-                   .current_dir(project_path);
+                cmd.current_dir(project_path);
                 cmd
             }
             AgentType::Codex => {
                 // Use 'exec' subcommand for non-interactive mode
                 let mut cmd = Command::new("codex");
-                cmd.arg("exec")  // Run non-interactively
+                cmd.arg("exec")
                    .current_dir(project_path);
                 cmd
             }
             AgentType::Gemini => {
                 let mut cmd = Command::new("gemini");
                 cmd.arg("chat")
-                   .arg("--non-interactive")
                    .current_dir(project_path);
                 cmd
             }
@@ -224,7 +215,7 @@ impl AgentManager {
             command.args(extra_args);
         }
 
-        // 配置 stdio
+        // 配置 stdio - 使用 inherit 来保持交互模式
         command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
