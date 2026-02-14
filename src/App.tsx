@@ -2,319 +2,107 @@
  * RiTerm App
  *
  * Main application entry point - AI Agent P2P Remote Management
+ * Multi-session management with SolidJS + DaisyUI
  */
 
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Toaster } from "solid-sonner";
+
+// Components
+import { AppLayout } from "./components/AppLayout";
 import { SettingsModal } from "./components/SettingsModal";
-import { HomeView } from "./components/HomeView";
-import { ChatView } from "./components/ChatView";
-import { SessionListView } from "./components/SessionListView";
-import { FileBrowserView } from "./components/FileBrowserView";
-import { GitDiffView } from "./components/GitDiffView";
 import { NotificationDisplay } from "./components/NotificationDisplay";
+
+// Stores
+import { sessionStore } from "./stores/sessionStore";
+import { notificationStore } from "./stores/notificationStore";
+
+// Types
 import type { AgentType } from "./stores/sessionStore";
 
-type ViewType = "home" | "chat" | "sessions" | "files" | "git";
-
-export default function Page() {
-  // Connection state
-  const [sessionTicket, setSessionTicket] = createSignal("");
-  const [connecting, setConnecting] = createSignal(false);
-  const [connectionError, setConnectionError] = createSignal<string | null>(
-    null,
-  );
-  const [isConnected, setIsConnected] = createSignal(false);
-  const [activeTicket, setActiveTicket] = createSignal<string | null>(null);
-  const [isLoggedIn, setIsLoggedIn] = createSignal(false);
-
-  // Navigation state
-  const [currentView, setCurrentView] = createSignal<ViewType>("home");
+export default function App() {
+  // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
 
-  // Session state
-  let sessionIdRef: string | null = null;
-  let activeAgentType: AgentType = "claude";
-
-  // Initialize network on mount
+  // Initialize app on mount
   onMount(() => {
-    initializeNetwork();
-
-    // Listen for agent session creation responses from CLI
-    onMount(async () => {
-      const unlisten = await listen("agent-session-created", (event) => {
-        const payload = event.payload as {
-          session_id: string;
-          agent_type: string;
-          project_path: string;
-        };
-
-        console.log("Agent session created event:", payload);
-        sessionIdRef = payload.session_id;
-
-        // Parse agent_type from string to enum (matching CLI's format)
-        if (payload.agent_type.toLowerCase().includes("claudecode")) {
-          activeAgentType = "claude";
-        } else if (payload.agent_type.toLowerCase().includes("opencode")) {
-          activeAgentType = "opencode";
-        } else if (payload.agent_type.toLowerCase().includes("custom")) {
-          activeAgentType = "custom";
-        } else if (payload.agent_type.toLowerCase().includes("gemini")) {
-          activeAgentType = "gemini";
-        }
-
-        // Switch to chat view when agent session is created
-        setCurrentView("chat");
-      });
-
-      // Cleanup listener on unmount
-      onCleanup(() => {
-        unlisten();
-      });
-    });
-
-    // Clean up old connection history
-    try {
-      localStorage.removeItem("riterm-connection-history");
-    } catch (error) {
-      console.log("Failed to clean up history data:", error);
-    }
+    initializeApp();
   });
 
-  const initializeNetwork = async () => {
+  const initializeApp = async () => {
     try {
+      // Initialize P2P network
       const nodeId = await invoke<string>("initialize_network");
       console.log("Network initialized:", nodeId);
+      notificationStore.success("Network connected", "System");
+
+      // Listen for agent session creation events
+      setupEventListeners();
     } catch (error) {
-      console.error("Failed to initialize network:", error);
+      console.error("Failed to initialize app:", error);
+      notificationStore.error("Failed to initialize app", "Error");
     }
   };
 
-  // Connection handlers
-  const handleConnect = async () => {
-    const ticket = sessionTicket().trim();
-    if (!ticket) {
-      setConnectionError("Please enter a valid ticket");
-      return;
-    }
+  const setupEventListeners = async () => {
+    // Listen for agent session creation responses from CLI
+    const unlisten = await listen("agent-session-created", (event) => {
+      const payload = event.payload as {
+        session_id: string;
+        agent_type: string;
+        project_path: string;
+      };
 
-    setConnecting(true);
-    setConnectionError(null);
+      console.log("Agent session created event:", payload);
 
-    try {
-      const sessionId = await invoke<string>("connect_to_host", {
-        sessionTicket: ticket,
+      // Parse agent type
+      const agentType = parseAgentType(payload.agent_type);
+
+      // Add session to store
+      sessionStore.addSession({
+        sessionId: payload.session_id,
+        agentType,
+        projectPath: payload.project_path,
+        startedAt: Date.now(),
+        active: true,
+        controlledByRemote: false,
+        hostname: "localhost",
+        os: navigator.userAgent,
+        currentDir: payload.project_path,
+        machineId: "local",
       });
-      sessionIdRef = sessionId;
-      setIsConnected(true);
-      setActiveTicket(ticket);
-      setCurrentView("chat");
-    } catch (error) {
-      const errorMsg =
-        error instanceof Error ? error.message : "Failed to connect";
-      setConnectionError(errorMsg);
-    } finally {
-      setConnecting(false);
-    }
-  };
 
-  const handleDisconnect = async () => {
-    if (sessionIdRef) {
-      try {
-        await invoke("disconnect_session", { sessionId: sessionIdRef });
-      } catch (error) {
-        console.error("Failed to disconnect:", error);
-      }
-    }
+      // Set as active session
+      sessionStore.setActiveSession(payload.session_id);
 
-    sessionIdRef = null;
-    setIsConnected(false);
-    setActiveTicket(null);
-    setCurrentView("home");
-  };
-
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-  };
-
-  const handleSkipLogin = () => {
-    setIsLoggedIn(true);
-  };
-
-  const handleReturnToSession = () => {
-    if (isConnected()) {
-      setCurrentView("chat");
-    }
-  };
-
-  // Remote session spawn handler
-  const handleSpawnRemoteSession = async (
-    agentType: AgentType,
-    projectPath: string,
-    args: string[],
-  ) => {
-    if (!sessionIdRef) {
-      throw new Error("Not connected to session");
-    }
-
-    await invoke("remote_spawn_session", {
-      sessionId: sessionIdRef,
-      agentType,
-      projectPath,
-      args,
+      notificationStore.success(
+        `${agentType} session created`,
+        "Session"
+      );
     });
 
-    // Switch to the new session view
-    activeAgentType = agentType;
-    setCurrentView("chat");
+    // Cleanup on unmount
+    onCleanup(() => {
+      unlisten();
+    });
   };
 
-  // Send message to AI agent
-  const handleSendMessage = async (message: string) => {
-    if (!sessionIdRef) {
-      throw new Error("Not connected to session");
-    }
-
-    await invoke("send_agent_message", {
-      sessionId: sessionIdRef,
-      content: message,
-    });
+  const parseAgentType = (agentTypeStr: string): AgentType => {
+    const lower = agentTypeStr.toLowerCase();
+    if (lower.includes("claude")) return "claude";
+    if (lower.includes("open")) return "opencode";
+    if (lower.includes("gemini")) return "gemini";
+    if (lower.includes("copilot")) return "copilot";
+    if (lower.includes("qwen")) return "qwen";
+    return "custom";
   };
 
   return (
     <>
-      {/* Main App */}
-      <div class="min-h-screen bg-base-200">
-        {/* Home View - Connection Screen */}
-        {currentView() === "home" && (
-          <HomeView
-            sessionTicket={sessionTicket()}
-            onTicketInput={setSessionTicket}
-            onConnect={handleConnect}
-            onShowSettings={() => setIsSettingsOpen(true)}
-            connecting={connecting()}
-            connectionError={connectionError()}
-            isLoggedIn={isLoggedIn()}
-            onLogin={handleLogin}
-            onSkipLogin={handleSkipLogin}
-            isConnected={isConnected()}
-            activeTicket={activeTicket()}
-            onReturnToSession={handleReturnToSession}
-            onDisconnect={handleDisconnect}
-          />
-        )}
-
-        {/* Chat View - AI Agent Chat Interface */}
-        {currentView() === "chat" && sessionIdRef && (
-          <div class="h-screen flex flex-col">
-            <ChatView
-              sessionId={sessionIdRef}
-              agentType={activeAgentType}
-              onSpawnRemoteSession={handleSpawnRemoteSession}
-              onSendMessage={handleSendMessage}
-            />
-            {/* Back button for mobile */}
-            <div class="fixed top-4 left-4 z-50 md:hidden">
-              <button
-                type="button"
-                class="btn btn-circle btn-ghost"
-                onClick={() => setCurrentView("sessions")}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <title>Back to Sessions</title>
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Sessions View - Session List */}
-        {currentView() === "sessions" && (
-          <SessionListView
-            onSelectSession={(sessionId: string) => {
-              sessionIdRef = sessionId;
-              setCurrentView("chat");
-            }}
-            onBack={() => setCurrentView("home")}
-          />
-        )}
-
-        {/* File Browser View */}
-        {currentView() === "files" && (
-          <div class="h-screen flex flex-col">
-            <FileBrowserView />
-            {/* Back button */}
-            <div class="fixed top-4 left-4 z-50">
-              <button
-                type="button"
-                class="btn btn-circle btn-ghost"
-                onClick={() => setCurrentView("chat")}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <title>Back to Chat</title>
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Git Diff View */}
-        {currentView() === "git" && (
-          <div class="h-screen flex flex-col">
-            <GitDiffView projectPath="." />
-            {/* Back button */}
-            <div class="fixed top-4 left-4 z-50">
-              <button
-                type="button"
-                class="btn btn-circle btn-ghost"
-                onClick={() => setCurrentView("chat")}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <title>Back to Chat</title>
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Main Layout */}
+      <AppLayout />
 
       {/* Settings Modal */}
       <SettingsModal
@@ -325,7 +113,7 @@ export default function Page() {
       {/* Notification Display */}
       <NotificationDisplay position="top-right" />
 
-      {/* Toaster */}
+      {/* Toaster for solid-sonner */}
       <Toaster richColors position="top-right" />
     </>
   );
