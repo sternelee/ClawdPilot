@@ -6,11 +6,14 @@
 pub mod claude;
 pub mod claude_streaming;
 pub mod codex;
+pub mod copilot;
 pub mod events;
 pub mod factory;
 pub mod gemini;
+pub mod generic_streaming;
 pub mod message_adapter;
 pub mod opencode;
+pub mod qwen;
 pub mod session;
 
 pub use events::AgentTurnEvent;
@@ -29,6 +32,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::agent_wrapper::claude_streaming::ClaudeStreamingSession;
+use crate::agent_wrapper::generic_streaming::GenericStreamingSession;
 
 /// AI Agent 管理器
 ///
@@ -155,6 +159,45 @@ impl AgentManager {
                 );
                 Arc::new(session)
             }
+            AgentType::Copilot => {
+                let session = GenericStreamingSession::new(
+                    session_id.clone(),
+                    AgentType::Copilot,
+                    "gh".to_string(),
+                    vec!["copilot".to_string(), "explain".to_string()], // Default to explain for now
+                    PathBuf::from(&expanded_path),
+                );
+                Arc::new(session)
+            }
+            AgentType::Qwen => {
+                let session = GenericStreamingSession::new(
+                    session_id.clone(),
+                    AgentType::Qwen,
+                    "qwen-agent".to_string(),
+                    vec![], // Assuming no extra args needed by default
+                    PathBuf::from(&expanded_path),
+                );
+                Arc::new(session)
+            }
+            AgentType::Custom => {
+                 // For custom agent, we need to know the command.
+                 // Currently AgentManager doesn't get custom command from start_session_with_id.
+                 // We might need to default to a shell or fail if not configured.
+                 // For now, let's assume 'opencode' or similar as a fallback, 
+                 // OR if the user provided a custom path in the 'project_path' (unlikely).
+                 // Better: use a default shell or echo for testing.
+                 // Real fix: Pass agent command in start_session args.
+                 
+                 // Using 'echo' for safe fallback if Custom is selected without config
+                let session = GenericStreamingSession::new(
+                    session_id.clone(),
+                    AgentType::Custom,
+                    "echo".to_string(), 
+                    vec![],
+                    PathBuf::from(&expanded_path),
+                );
+                Arc::new(session)
+            }
             _ => {
                 // For other agent types, fall back to legacy implementation
                 // TODO: Implement streaming sessions for OpenCode, Codex, Gemini
@@ -245,16 +288,21 @@ impl AgentManager {
 
     /// 获取 agent 版本
     async fn get_agent_version(&self, agent_type: &AgentType) -> Option<String> {
-        let cmd = match agent_type {
-            AgentType::ClaudeCode => "claude",
-            AgentType::OpenCode => "opencode",
-            AgentType::Codex => "codex",
-            AgentType::Gemini => "gemini",
-            AgentType::Custom => return None,
-        };
+        match agent_type {
+            AgentType::ClaudeCode => self.run_version_cmd("claude", &["--version"]).await,
+            AgentType::OpenCode => self.run_version_cmd("opencode", &["--version"]).await,
+            AgentType::Codex => self.run_version_cmd("codex", &["--version"]).await,
+            AgentType::Gemini => self.run_version_cmd("gemini", &["--version"]).await,
+            AgentType::Copilot => self.run_version_cmd("gh", &["copilot", "--version"]).await,
+            AgentType::Qwen => self.run_version_cmd("qwen-agent", &["--version"]).await,
+            AgentType::Custom => None,
+        }
+    }
 
+    /// Helper to run version command
+    async fn run_version_cmd(&self, cmd: &str, args: &[&str]) -> Option<String> {
         let output = tokio::process::Command::new(cmd)
-            .arg("--version")
+            .args(args)
             .output()
             .await;
 
@@ -493,6 +541,8 @@ impl AgentOutputHandler {
             AgentType::OpenCode => self.parse_opencode_output(line),
             AgentType::Codex => self.parse_codex_output(line),
             AgentType::Gemini => self.parse_gemini_output(line),
+            AgentType::Copilot => self.parse_copilot_output(line),
+            AgentType::Qwen => self.parse_qwen_output(line),
             AgentType::Custom => self.parse_custom_output(line),
         }
     }
@@ -521,6 +571,20 @@ impl AgentOutputHandler {
     fn parse_gemini_output(&self, line: &str) -> Option<AgentMessageContent> {
         // 使用 GeminiOutputParser 解析输出
         let parser = gemini::GeminiOutputParser::new().ok()?;
+        let parse_result = parser.parse_line(line);
+        Some(parse_result.to_message_content())
+    }
+
+    fn parse_copilot_output(&self, line: &str) -> Option<AgentMessageContent> {
+        // Use CopilotOutputParser
+        let parser = copilot::CopilotOutputParser::new().ok()?;
+        let parse_result = parser.parse_line(line);
+        Some(parse_result.to_message_content())
+    }
+
+    fn parse_qwen_output(&self, line: &str) -> Option<AgentMessageContent> {
+        // Use QwenOutputParser
+        let parser = qwen::QwenOutputParser::new().ok()?;
         let parse_result = parser.parse_line(line);
         Some(parse_result.to_message_content())
     }

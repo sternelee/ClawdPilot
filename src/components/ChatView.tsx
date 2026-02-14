@@ -352,25 +352,49 @@ export function ChatView(props: ChatViewProps) {
         try {
           const data = event.payload;
           if (data.sessionId === props.sessionId) {
-            if (data.type === "response") {
+            if (data.type === "text_delta") {
               const content = (data.content as string) || "";
               const thinking = (data.thinking as boolean) || false;
-              const messageId = data.messageId as string | undefined;
 
-              setIsStreaming(thinking);
+              // Ensure we show streaming state during response
+              setIsStreaming(true);
 
               const currentMessages = messages();
               const lastMessage = currentMessages[currentMessages.length - 1];
 
-              // Update existing message if matching ID or streaming chunk
-              if (
-                (messageId && lastMessage?.messageId === messageId) ||
-                (!messageId &&
-                  lastMessage?.role === "assistant" &&
-                  lastMessage.thinking)
-              ) {
+              // Update existing message if it's an assistant message
+              if (lastMessage?.role === "assistant") {
                 chatStore.updateMessage(props.sessionId, lastMessage.id, {
                   content: lastMessage.content + content,
+                  thinking,
+                  timestamp: Date.now(),
+                });
+              } else {
+                // New message
+                chatStore.addMessage(props.sessionId, {
+                  role: "assistant",
+                  content,
+                  thinking,
+                });
+              }
+            } else if (data.type === "response") {
+              // Full response - replace existing message or create new one
+              const content = (data.content as string) || "";
+              const thinking = (data.thinking as boolean) || false;
+              const messageId = data.messageId as string | undefined;
+
+              setIsStreaming(true);
+
+              const currentMessages = messages();
+              const lastMessage = currentMessages[currentMessages.length - 1];
+
+              // Update existing message if matching ID or streaming chunk (assistant role)
+              if (
+                (messageId && lastMessage?.messageId === messageId) ||
+                (!messageId && lastMessage?.role === "assistant")
+              ) {
+                chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                  content: content,  // Replace content instead of appending
                   thinking,
                   timestamp: Date.now(),
                 });
@@ -405,6 +429,24 @@ export function ChatView(props: ChatViewProps) {
               chatStore.addMessage(props.sessionId, {
                 role: "system",
                 content: `[${level}] ${message}`,
+              });
+            } else if (data.type === "turn_started") {
+              setIsStreaming(true);
+            } else if (data.type === "turn_completed") {
+              setIsStreaming(false);
+              // Ensure the last message is not thinking
+              const currentMessages = messages();
+              const lastMessage = currentMessages[currentMessages.length - 1];
+              if (lastMessage?.role === "assistant" && lastMessage.thinking) {
+                chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                  thinking: false,
+                });
+              }
+            } else if (data.type === "turn_error") {
+              setIsStreaming(false);
+              chatStore.addMessage(props.sessionId, {
+                role: "system",
+                content: `Error: ${data.error}`,
               });
             }
           }
@@ -560,6 +602,38 @@ export function ChatView(props: ChatViewProps) {
             <path d="M8 12h8"></path>
           </svg>
         );
+      case "copilot":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-6 w-6"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <title>GitHub Copilot</title>
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+          </svg>
+        );
+      case "qwen":
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-6 w-6"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <title>Qwen Code</title>
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+          </svg>
+        );
       default:
         return (
           <svg
@@ -591,6 +665,8 @@ export function ChatView(props: ChatViewProps) {
                 {props.agentType === "claude" && "Claude Code"}
                 {props.agentType === "opencode" && "OpenCode"}
                 {props.agentType === "gemini" && "Gemini CLI"}
+                {props.agentType === "copilot" && "GitHub Copilot"}
+                {props.agentType === "qwen" && "Qwen Code"}
                 {props.agentType === "custom" && "Custom Agent"}
               </h2>
               <div class="text-xs text-base-content/50">
@@ -757,6 +833,8 @@ export function ChatView(props: ChatViewProps) {
                 <option value="claude">Claude Code</option>
                 <option value="opencode">OpenCode</option>
                 <option value="gemini">Gemini CLI</option>
+                <option value="copilot">GitHub Copilot</option>
+                <option value="qwen">Qwen Code</option>
                 <option value="custom">Custom</option>
               </select>
             </div>

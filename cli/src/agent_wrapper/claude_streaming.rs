@@ -485,6 +485,75 @@ impl ClaudeStreamingSession {
                 result: Some(event.clone()),
             }),
 
+            // User messages - typically synthetic hook feedback, filter them out
+            "user" => {
+                // Check if this is a synthetic message (hook feedback, etc.)
+                // Synthetic messages should not be forwarded to the frontend
+                let is_synthetic = event
+                    .get("isSynthetic")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                if is_synthetic {
+                    debug!(
+                        "[claude] Filtering out synthetic user message: {:?}",
+                        event.get("message").and_then(|m| m.get("content"))
+                    );
+                    return None;
+                }
+
+                // For non-synthetic user messages, still don't forward
+                // (user messages are from the user, not the agent)
+                debug!("[claude] Ignoring user message event");
+                None
+            }
+
+            // Message events - these can contain assistant responses in some formats
+            "message" => {
+                if let Some(message) = event.get("message") {
+                    let role = message.get("role").and_then(|r| r.as_str()).unwrap_or("");
+
+                    match role {
+                        "assistant" => {
+                            // Handle assistant message content
+                            if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                                for block in content {
+                                    let block_type = block.get("type").and_then(|t| t.as_str());
+                                    match block_type {
+                                        Some("text") => {
+                                            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                                                let delta = self.process_state.compute_text_delta(text);
+                                                if delta.is_empty() {
+                                                    return None;
+                                                }
+                                                return Some(AgentEvent::TextDelta {
+                                                    session_id: self.session_id.clone(),
+                                                    text: delta,
+                                                });
+                                            }
+                                        }
+                                        Some("tool_use") => {
+                                            return self.convert_tool_use(block);
+                                        }
+                                        Some("tool_result") => {
+                                            return self.convert_tool_result(block);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                        "user" => {
+                            // Don't forward user messages back
+                            debug!("[claude] Ignoring user role message event");
+                            return None;
+                        }
+                        _ => {}
+                    }
+                }
+                None
+            }
+
             "error" => {
                 let message = event
                     .get("error")

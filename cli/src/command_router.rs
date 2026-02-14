@@ -93,6 +93,20 @@ const CODEX_SPECIFIC_COMMANDS: &[&str] = &[
     "/lint",        // 代码检查
 ];
 
+/// GitHub Copilot 专用命令
+const COPILOT_SPECIFIC_COMMANDS: &[&str] = &[
+    "/explain",  // 解释代码
+    "/fix",      // 修复代码
+    "/optimize", // 优化
+    "/tests",    // 生成测试
+];
+
+/// Qwen 专用命令
+const QWEN_SPECIFIC_COMMANDS: &[&str] = &[
+    "/chat", // 聊天
+    "/code", // 生成代码
+];
+
 /// 通用命令（所有 Agent 都支持）
 const UNIVERSAL_COMMANDS: &[&str] = &[
     "/help",  // 帮助
@@ -206,6 +220,8 @@ impl CommandRouter {
             "opencode" | "open" | "openai" => Ok(AgentType::OpenCode),
             "codex" | "openai-codex" | "openai-codex-cli" => Ok(AgentType::Codex),
             "gemini" | "gemini-cli" => Ok(AgentType::Gemini),
+            "copilot" | "gh-copilot" | "github-copilot" => Ok(AgentType::Copilot),
+            "qwen" | "qwen-code" | "ali-qwen" => Ok(AgentType::Qwen),
             "custom" => Ok(AgentType::Custom),
             _ => Err(anyhow::anyhow!("Unknown agent type: {}", s)),
         }
@@ -231,6 +247,8 @@ impl CommandRouter {
             AgentType::OpenCode => OPENCODE_SPECIFIC_COMMANDS,
             AgentType::Codex => CODEX_SPECIFIC_COMMANDS,
             AgentType::Gemini => GEMINI_SPECIFIC_COMMANDS,
+            AgentType::Copilot => COPILOT_SPECIFIC_COMMANDS,
+            AgentType::Qwen => QWEN_SPECIFIC_COMMANDS,
             AgentType::Custom => &[],
         };
 
@@ -380,6 +398,8 @@ impl CommandRouter {
                 AgentType::OpenCode => OPENCODE_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::Codex => CODEX_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::Gemini => GEMINI_SPECIFIC_COMMANDS.contains(&command_name),
+                AgentType::Copilot => COPILOT_SPECIFIC_COMMANDS.contains(&command_name),
+                AgentType::Qwen => QWEN_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::Custom => false,
             }
     }

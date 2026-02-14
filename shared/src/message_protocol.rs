@@ -565,6 +565,10 @@ pub enum AgentType {
     Codex,
     /// Gemini CLI (Google)
     Gemini,
+    /// GitHub Copilot CLI
+    Copilot,
+    /// Qwen Code (Alibaba Cloud)
+    Qwen,
     /// 其他自定义 Agent
     Custom,
 }

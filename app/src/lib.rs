@@ -971,7 +971,7 @@ async fn connect_to_peer(
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
                                             "type": "text_delta",
-                                            "text": text,
+                                            "content": text,
                                             "thinking": thinking,
                                         }),
                                         riterm_shared::message_protocol::AgentMessageContent::TurnCompleted {

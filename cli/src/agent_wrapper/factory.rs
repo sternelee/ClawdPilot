@@ -229,6 +229,99 @@ impl Agent for CodexAgent {
     }
 }
 
+/// GitHub Copilot Agent
+pub struct CopilotAgent;
+
+impl Agent for CopilotAgent {
+    fn agent_type(&self) -> AgentType {
+        AgentType::Copilot
+    }
+
+    fn command(&self) -> &str {
+        "gh"
+    }
+
+    fn check_available(&self) -> Result<AgentAvailability> {
+        let output = Command::new(self.command())
+            .args(["copilot", "--version"])
+            .output()?;
+
+        let available = output.status.success();
+        let version = if available {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            None
+        };
+
+        Ok(AgentAvailability {
+            available,
+            version,
+            executable: self.command().to_string(),
+        })
+    }
+
+    fn get_version(&self) -> Result<String> {
+        let output = Command::new(self.command())
+            .args(["copilot", "--version"])
+            .output()?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!("Failed to get Copilot version"));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        vec!["copilot".to_string(), "repl".to_string()]
+    }
+}
+
+/// Qwen Agent
+pub struct QwenAgent;
+
+impl Agent for QwenAgent {
+    fn agent_type(&self) -> AgentType {
+        AgentType::Qwen
+    }
+
+    fn command(&self) -> &str {
+        "qwen-agent"
+    }
+
+    fn check_available(&self) -> Result<AgentAvailability> {
+        // Assuming qwen-agent is the command
+        let output = Command::new(self.command()).arg("--version").output()?;
+
+        let available = output.status.success();
+        let version = if available {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            None
+        };
+
+        Ok(AgentAvailability {
+            available,
+            version,
+            executable: self.command().to_string(),
+        })
+    }
+
+    fn get_version(&self) -> Result<String> {
+        let output = Command::new(self.command()).arg("--version").output()?;
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!("Failed to get Qwen version"));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        vec![]
+    }
+}
+
 /// Agent 工厂
 pub struct AgentFactory;
 
@@ -240,6 +333,8 @@ impl AgentFactory {
             AgentType::OpenCode => Box::new(OpenCodeAgent),
             AgentType::Codex => Box::new(CodexAgent),
             AgentType::Gemini => Box::new(GeminiAgent),
+            AgentType::Copilot => Box::new(CopilotAgent),
+            AgentType::Qwen => Box::new(QwenAgent),
             AgentType::Custom => {
                 // 自定义 agent 需要用户提供命令
                 Box::new(ClaudeCodeAgent) // 默认回退到 Claude
@@ -256,6 +351,8 @@ impl AgentFactory {
             Box::new(OpenCodeAgent),
             Box::new(CodexAgent),
             Box::new(GeminiAgent),
+            Box::new(CopilotAgent),
+            Box::new(QwenAgent),
         ];
 
         for agent in agents {
@@ -289,7 +386,7 @@ impl AgentFactory {
     pub fn get_default() -> Option<AgentType> {
         let available = Self::check_all_available().ok()?;
 
-        // 优先级: Claude > Codex > OpenCode > Gemini
+        // 优先级: Claude > Codex > OpenCode > Copilot > Qwen > Gemini
         if available.contains_key(&AgentType::ClaudeCode) {
             return Some(AgentType::ClaudeCode);
         }
@@ -298,6 +395,12 @@ impl AgentFactory {
         }
         if available.contains_key(&AgentType::OpenCode) {
             return Some(AgentType::OpenCode);
+        }
+        if available.contains_key(&AgentType::Copilot) {
+            return Some(AgentType::Copilot);
+        }
+        if available.contains_key(&AgentType::Qwen) {
+            return Some(AgentType::Qwen);
         }
         if available.contains_key(&AgentType::Gemini) {
             return Some(AgentType::Gemini);
