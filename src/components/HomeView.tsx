@@ -1,3 +1,11 @@
+/**
+ * HomeView Component
+ *
+ * Redesigned home screen with dual mode support:
+ * - Remote Mode: Connect via P2P ticket to remote CLI
+ * - Local Mode: Directly enter session management for local agents
+ */
+
 import { createSignal, Show, For, onMount } from "solid-js";
 import { toast } from "solid-sonner";
 import { getDeviceCapabilities } from "../utils/mobile";
@@ -45,6 +53,8 @@ interface HomeViewProps {
   activeTicket: string | null;
   onReturnToSession: () => void;
   onDisconnect: () => void;
+  // New: Direct entry to local mode
+  onEnterLocalMode?: () => void;
 }
 
 export function HomeView(props: HomeViewProps) {
@@ -52,6 +62,7 @@ export function HomeView(props: HomeViewProps) {
   const [username, setUsername] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [ticketHistory, setTicketHistory] = createSignal<string[]>([]);
+  const [activeTab, setActiveTab] = createSignal<"remote" | "local">("remote");
 
   // Device capabilities
   const deviceCapabilities = getDeviceCapabilities();
@@ -107,6 +118,12 @@ export function HomeView(props: HomeViewProps) {
       }
     } catch (error) {
       console.error("QR Scanner error:", error);
+    }
+  };
+
+  const handleEnterLocalMode = () => {
+    if (props.onEnterLocalMode) {
+      props.onEnterLocalMode();
     }
   };
 
@@ -192,108 +209,171 @@ export function HomeView(props: HomeViewProps) {
           <p class="text-base-content/60">Secure P2P Agent Collaboration</p>
         </div>
 
-        {/* Main Card */}
-        <div class="card bg-base-100 shadow-xl w-full max-w-lg overflow-hidden">
-          <div class="card-body p-8">
-            <h2 class="card-title text-xl mb-6">Connect to Session</h2>
+        {/* Tab Navigation */}
+        <div class="tabs tabs-boxed bg-base-100/50 p-1 mb-8">
+          <button
+            class={`tab tab-lg ${activeTab() === "remote" ? "tab-active" : ""}`}
+            onClick={() => setActiveTab("remote")}
+          >
+            🌐 Remote Session
+          </button>
+          <button
+            class={`tab tab-lg ${activeTab() === "local" ? "tab-active" : ""}`}
+            onClick={() => setActiveTab("local")}
+          >
+            💻 Local Agent
+          </button>
+        </div>
 
-            <div class="form-control w-full">
-              <div class="join w-full">
-                <input
-                  type="text"
-                  value={props.sessionTicket}
-                  onInput={(e) => props.onTicketInput(e.currentTarget.value)}
-                  placeholder="Paste session ticket here..."
-                  class="input input-bordered input-lg w-full join-item focus:outline-none"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && props.sessionTicket.trim()) {
-                      handleConnect();
-                    }
-                  }}
-                  autofocus
-                  aria-label="Session Ticket"
-                />
-                <Show when={isMobile}>
-                  <button
-                    type="button"
-                    class="btn btn-lg btn-square join-item"
-                    onClick={handleShowQRScanner}
-                    title="Scan QR Code"
-                  >
-                    📷
-                  </button>
-                </Show>
-              </div>
-              <Show when={props.connectionError}>
-                <div class="label">
-                  <span class="label-text-alt text-error flex items-center gap-1">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-4 w-4"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <title>Error</title>
-                      <path
-                        fill-rule="evenodd"
-                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                    {props.connectionError}
-                  </span>
-                </div>
-              </Show>
-            </div>
+        {/* Remote Mode Content */}
+        <Show when={activeTab() === "remote"}>
+          <div class="card bg-base-100 shadow-xl w-full max-w-lg overflow-hidden">
+            <div class="card-body p-8">
+              <h2 class="card-title text-xl mb-6">Connect to Remote Session</h2>
 
-            <div class="card-actions mt-6">
-              <button
-                type="button"
-                class="btn btn-primary btn-lg w-full shadow-lg hover:shadow-xl transition-shadow"
-                onClick={handleConnect}
-                disabled={!props.sessionTicket.trim() || props.connecting}
-              >
-                <Show
-                  when={props.connecting}
-                  fallback={<span>Connect Now</span>}
-                >
-                  <span class="loading loading-spinner"></span>
-                  Connecting...
-                </Show>
-              </button>
-            </div>
-          </div>
-
-          {/* History Section */}
-          <Show when={ticketHistory().length > 0}>
-            <div class="bg-base-200/50 p-6 border-t border-base-200">
-              <h3 class="text-xs font-bold text-base-content/50 uppercase tracking-wider mb-3">
-                Recent Sessions
-              </h3>
-              <div class="space-y-2">
-                <For each={ticketHistory().slice(0, 3)}>
-                  {(ticket) => (
+              <div class="form-control w-full">
+                <div class="join w-full">
+                  <input
+                    type="text"
+                    value={props.sessionTicket}
+                    onInput={(e) => props.onTicketInput(e.currentTarget.value)}
+                    placeholder="Paste session ticket here..."
+                    class="input input-bordered input-lg w-full join-item focus:outline-none"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && props.sessionTicket.trim()) {
+                        handleConnect();
+                      }
+                    }}
+                    autofocus
+                    aria-label="Session Ticket"
+                  />
+                  <Show when={isMobile}>
                     <button
                       type="button"
-                      class="w-full text-left p-3 rounded-lg bg-base-100 hover:bg-base-200 border border-base-200 transition-colors flex items-center justify-between group"
-                      onClick={() => handleQuickConnect(ticket)}
+                      class="btn btn-lg btn-square join-item"
+                      onClick={handleShowQRScanner}
+                      title="Scan QR Code"
                     >
-                      <div class="flex items-center gap-3 overflow-hidden">
-                        <div class="w-2 h-2 rounded-full bg-success"></div>
-                        <span class="font-mono text-sm truncate opacity-70 group-hover:opacity-100 transition-opacity">
-                          {getTicketDisplayId(ticket)}
-                        </span>
-                      </div>
-                      <span class="text-base-content/30 group-hover:text-primary transition-colors">
-                        →
-                      </span>
+                      📷
                     </button>
-                  )}
-                </For>
+                  </Show>
+                </div>
+                <Show when={props.connectionError}>
+                  <div class="label">
+                    <span class="label-text-alt text-error flex items-center gap-1">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-4 w-4"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <title>Error</title>
+                        <path
+                          fill-rule="evenodd"
+                          d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                          clip-rule="evenodd"
+                        />
+                      </svg>
+                      {props.connectionError}
+                    </span>
+                  </div>
+                </Show>
+              </div>
+
+              <div class="card-actions mt-6">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-lg w-full shadow-lg hover:shadow-xl transition-shadow"
+                  onClick={handleConnect}
+                  disabled={!props.sessionTicket.trim() || props.connecting}
+                >
+                  <Show
+                    when={props.connecting}
+                    fallback={<span>Connect Now</span>}
+                  >
+                    <span class="loading loading-spinner"></span>
+                    Connecting...
+                  </Show>
+                </button>
               </div>
             </div>
-          </Show>
-        </div>
+
+            {/* History Section */}
+            <Show when={ticketHistory().length > 0}>
+              <div class="bg-base-200/50 p-6 border-t border-base-200">
+                <h3 class="text-xs font-bold text-base-content/50 uppercase tracking-wider mb-3">
+                  Recent Sessions
+                </h3>
+                <div class="space-y-2">
+                  <For each={ticketHistory().slice(0, 3)}>
+                    {(ticket) => (
+                      <button
+                        type="button"
+                        class="w-full text-left p-3 rounded-lg bg-base-100 hover:bg-base-200 border border-base-200 transition-colors flex items-center justify-between group"
+                        onClick={() => handleQuickConnect(ticket)}
+                      >
+                        <div class="flex items-center gap-3 overflow-hidden">
+                          <div class="w-2 h-2 rounded-full bg-success"></div>
+                          <span class="font-mono text-sm truncate opacity-70 group-hover:opacity-100 transition-opacity">
+                            {getTicketDisplayId(ticket)}
+                          </span>
+                        </div>
+                        <span class="text-base-content/30 group-hover:text-primary transition-colors">
+                          →
+                        </span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </Show>
+
+        {/* Local Mode Content */}
+        <Show when={activeTab() === "local"}>
+          <div class="card bg-base-100 shadow-xl w-full max-w-lg overflow-hidden">
+            <div class="card-body p-8 text-center">
+              <div class="w-16 h-16 rounded-2xl bg-primary/10 text-primary text-3xl flex items-center justify-center mx-auto mb-4">
+                💻
+              </div>
+              <h2 class="card-title text-xl mb-2 justify-center">Local Agent Mode</h2>
+              <p class="text-base-content/60 mb-6">
+                Manage AI agents directly on your machine without connecting to a remote CLI.
+              </p>
+
+              <div class="space-y-3">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-lg w-full"
+                  onClick={handleEnterLocalMode}
+                >
+                  Enter Session Manager
+                </button>
+
+                <div class="divider text-base-content/40">or</div>
+
+                <button
+                  type="button"
+                  class="btn btn-outline btn-lg w-full"
+                  onClick={() => setActiveTab("remote")}
+                >
+                  Connect to Remote CLI
+                </button>
+              </div>
+
+              <div class="mt-6 p-4 bg-base-200 rounded-lg text-left">
+                <h4 class="font-semibold text-sm mb-2">Supported Agents:</h4>
+                <div class="flex flex-wrap gap-2">
+                  <span class="badge badge-primary">Claude Code</span>
+                  <span class="badge badge-secondary">Gemini CLI</span>
+                  <span class="badge badge-accent">OpenCode</span>
+                  <span class="badge badge-neutral">GitHub Copilot</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Show>
 
         {/* Footer */}
         <div class="mt-12 text-center text-sm text-base-content/40">
