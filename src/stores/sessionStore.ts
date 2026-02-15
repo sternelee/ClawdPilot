@@ -21,6 +21,8 @@ export type AgentType =
   | "qwen"
   | "custom";
 
+export type SessionMode = "remote" | "local";
+
 export interface AgentSessionMetadata {
   sessionId: string;
   agentType: AgentType;
@@ -36,6 +38,7 @@ export interface AgentSessionMetadata {
   machineId: string;
   summary?: string;
   thinking?: boolean;
+  mode?: SessionMode;
 }
 
 export type ConnectionState =
