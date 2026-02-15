@@ -37,6 +37,7 @@ interface ChatViewProps {
     args: string[],
   ) => void;
   agentType?: AgentType;
+  sessionMode?: "remote" | "local"; // Added session mode
 }
 
 // ============================================================================
@@ -345,6 +346,91 @@ export function ChatView(props: ChatViewProps) {
 
   // Listen for incoming agent messages from backend
   onMount(() => {
+    // Listen for local agent events
+    const unlistenLocalPromise = listen<Record<string, unknown>>(
+      "local-agent-event",
+      (event) => {
+        console.log("[ChatView] Received local-agent-event:", event.payload);
+        try {
+          const data = event.payload as {
+            sessionId: string;
+            turnId: string;
+            event: Record<string, unknown>;
+          };
+          if (data.sessionId === props.sessionId) {
+            const eventType = data.event?.type as string;
+            const content = data.event?.content as string | undefined;
+
+            // Handle different event types from local agent
+            switch (eventType) {
+              case "text_delta":
+                const thinking = data.event?.thinking as boolean || false;
+                const deltaContent = content || "";
+                // Update or create message
+                const currentMessages = messages();
+                const lastMessage = currentMessages[currentMessages.length - 1];
+
+                if (lastMessage?.role === "assistant") {
+                  chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                    content: lastMessage.content + deltaContent,
+                    thinking,
+                    timestamp: Date.now(),
+                  });
+                } else {
+                  chatStore.addMessage(props.sessionId, {
+                    role: "assistant",
+                    content: deltaContent,
+                    thinking,
+                  });
+                }
+                setIsStreaming(true);
+                break;
+
+              case "turn_started":
+                setIsStreaming(true);
+                break;
+
+              case "turn_completed":
+                setIsStreaming(false);
+                const currentMessages2 = messages();
+                const lastMessage2 = currentMessages2[currentMessages2.length - 1];
+                if (lastMessage2?.role === "assistant" && lastMessage2.thinking) {
+                  chatStore.updateMessage(props.sessionId, lastMessage2.id, {
+                    thinking: false,
+                  });
+                }
+                break;
+
+              case "turn_error":
+                setIsStreaming(false);
+                const error = content || "Unknown error";
+                chatStore.addMessage(props.sessionId, {
+                  role: "system",
+                  content: `Error: ${error}`,
+                });
+                break;
+
+              case "tool_call":
+                const toolName = data.event?.toolName as string || "unknown";
+                const status = data.event?.status as string || "started";
+                const toolOutput = data.event?.output as string | undefined;
+                chatStore.addMessage(props.sessionId, {
+                  role: "system",
+                  content: `[Tool: ${toolName}] Status: ${status}${toolOutput ? `\n${toolOutput}` : ""}`,
+                });
+                break;
+
+              default:
+                console.log("Unknown local agent event:", eventType);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to handle local agent event:", e);
+        }
+      },
+    );
+
+    // Listen for remote agent events from CLI
     const unlistenPromise = listen<Record<string, unknown>>(
       "agent-message",
       (event) => {
@@ -457,6 +543,9 @@ export function ChatView(props: ChatViewProps) {
     );
 
     onCleanup(() => {
+      // Cleanup local agent event listener
+      unlistenLocalPromise.then((fn) => fn());
+      // Cleanup remote agent event listener
       unlistenPromise.then((fn) => fn());
     });
   });
@@ -493,10 +582,31 @@ export function ChatView(props: ChatViewProps) {
         setIsStreaming(false);
       }
     } else {
-      chatStore.addMessage(props.sessionId, {
-        role: "user",
-        content,
-      });
+      // Check session mode and call appropriate backend command
+      if (props.sessionMode === "local") {
+        // Local agent - use local_send_agent_message
+        try {
+          await invoke("local_send_agent_message", {
+            sessionId: props.sessionId,
+            content,
+          });
+        } catch (error) {
+          const errorMsg =
+            error instanceof Error ? error.message : "Failed to send message to local agent";
+          notificationStore.error(errorMsg, "Local Agent Error");
+          chatStore.addMessage(props.sessionId, {
+            role: "system",
+            content: `Error: ${errorMsg}`,
+          });
+          setIsStreaming(false);
+        }
+      } else {
+        // Remote agent - add user message to store
+        chatStore.addMessage(props.sessionId, {
+          role: "user",
+          content,
+        });
+      }
       props.onSendMessage?.(content);
     }
   };

@@ -8,7 +8,7 @@
 import { createSignal, Show, type Component } from "solid-js";
 import { SessionSidebar } from "./SessionSidebar";
 import { ChatView } from "./ChatView";
-import { sessionStore, type AgentType } from "../stores/sessionStore";
+import { sessionStore, type AgentType, type SessionMode } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 
 // ============================================================================
@@ -29,6 +29,10 @@ export const AppLayout: Component = () => {
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
 
   const activeSession = () => sessionStore.getActiveSession();
+  const sessionMode = () => {
+    const session = activeSession();
+    return session?.mode as SessionMode | undefined;
+  };
 
   const handleSendMessage = (message: string) => {
     const session = activeSession();
@@ -37,8 +41,14 @@ export const AppLayout: Component = () => {
       return;
     }
 
-    // TODO: Implement message sending via Tauri command
-    console.log("Sending message to session", session.sessionId, message);
+    // For local sessions, send to local agent backend
+    if (sessionMode() === "local") {
+      console.log("Sending message to local session:", session.sessionId, message);
+      // Local agent message is handled directly in ChatView
+    } else {
+      // For remote sessions, notify via callback
+      console.log("Sending message to remote session:", session.sessionId, message);
+    }
   };
 
   const handlePermissionResponse = (
@@ -93,6 +103,7 @@ export const AppLayout: Component = () => {
               <ChatView
                 sessionId={s.sessionId}
                 agentType={s.agentType}
+                sessionMode={sessionMode()}
                 onSendMessage={handleSendMessage}
                 onPermissionResponse={handlePermissionResponse}
               />
