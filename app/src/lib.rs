@@ -20,6 +20,7 @@ use riterm_shared::{
     QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType, TcpForwardingAction,
     TcpForwardingType, TerminalAction,
 };
+use lib::{AgentManager, AgentTurnEvent};
 
 use crate::tcp_forwarding::TcpForwardingManager;
 
@@ -190,6 +191,8 @@ pub struct AppState {
     quic_client: RwLock<Option<QuicMessageClientHandle>>,
     cleanup_token: RwLock<Option<CancellationToken>>,
     tcp_forwarding_manager: Arc<tokio::sync::Mutex<TcpForwardingManager>>,
+    // Local agent manager for in-app agent sessions
+    agent_manager: Arc<RwLock<Option<Arc<AgentManager>>>>,
 }
 
 impl Default for AppState {
@@ -200,6 +203,7 @@ impl Default for AppState {
             quic_client: RwLock::new(None),
             cleanup_token: RwLock::new(None),
             tcp_forwarding_manager: Arc::new(tokio::sync::Mutex::new(TcpForwardingManager::new())),
+            agent_manager: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -2201,6 +2205,155 @@ async fn send_agent_message(
     Ok(())
 }
 
+// ============================================================================
+// Local Agent Management Commands
+// ============================================================================
+
+/// Start a local AI agent session (in-app, no P2P)
+#[tauri::command(rename_all = "camelCase")]
+async fn local_start_agent(
+    agent_type_str: String,
+    project_path: String,
+    session_id: Option<String>,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    // Parse agent type
+    let agent_type = match agent_type_str.as_str() {
+        "claude" => AgentType::ClaudeCode,
+        "opencode" => AgentType::OpenCode,
+        "gemini" => AgentType::Gemini,
+        "copilot" => AgentType::Copilot,
+        "qwen" => AgentType::Qwen,
+        "custom" => AgentType::Custom,
+        _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
+    };
+
+    // Ensure agent manager is initialized
+    {
+        let mut agent_manager_guard = state.agent_manager.write().await;
+        if agent_manager_guard.is_none() {
+            let manager = Arc::new(AgentManager::new());
+            *agent_manager_guard = Some(manager.clone());
+            drop(agent_manager_guard);
+
+            // Start event broadcasting task
+            tokio::spawn(async move {
+                // Broadcast agent events to frontend
+                // Note: In local mode, we'll handle events differently than P2P mode
+                tracing::info!("Local agent event broadcaster started");
+            });
+        } else {
+            drop(agent_manager_guard);
+        }
+    }
+
+    // Get or create session ID
+    let session_id = if let Some(sid) = session_id.clone() {
+        sid
+    } else {
+        uuid::Uuid::new_v4().to_string()
+    };
+
+    // Start the agent session
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    let (_session_id, _metadata) = manager
+        .start_session_with_id(session_id.clone(), agent_type, project_path, vec![])
+        .await
+        .map_err(|e| format!("Failed to start local agent: {}", e))?;
+
+    // Subscribe to agent events for broadcasting to frontend
+    if let Some(mut event_rx) = manager.subscribe(&session_id).await {
+        // Clone session_id for use in the spawn closure
+        let session_id_for_spawn = session_id.clone();
+        tokio::spawn(async move {
+            // Convert agent events to frontend format
+            while let Ok(event) = event_rx.recv().await {
+                // Convert AgentTurnEvent to frontend-expected JSON
+                let event_payload = lib::message_adapter::event_to_message_content(&event.event, None);
+                let session_id_clone = session_id_for_spawn.clone();
+                let frontend_event = serde_json::json!({
+                    "sessionId": session_id_clone.clone(),
+                    "turnId": event.turn_id,
+                    "event": event_payload,
+                });
+
+                let _ = app_handle.emit("local-agent-event", &frontend_event);
+            }
+        });
+    }
+
+    Ok(session_id)
+}
+
+/// Stop a local agent session
+#[tauri::command(rename_all = "camelCase")]
+async fn local_stop_agent(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    manager
+        .stop_session(&session_id)
+        .await
+        .map_err(|e| format!("Failed to stop local agent: {}", e))
+}
+
+/// Send a message to a local agent
+#[tauri::command(rename_all = "camelCase")]
+async fn local_send_agent_message(
+    session_id: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    manager
+        .send_to_agent(&session_id, content)
+        .await
+        .map_err(|e| format!("Failed to send message to local agent: {}", e))
+}
+
+/// List all active local agent sessions
+#[tauri::command(rename_all = "camelCase")]
+async fn local_list_agents(state: State<'_, AppState>) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    let sessions = manager.list_sessions().await;
+    Ok(sessions)
+}
+
+/// Get agent session metadata (for session info display)
+#[tauri::command(rename_all = "camelCase")]
+async fn local_get_agent_sessions(state: State<'_, AppState>) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    let sessions = manager.list_sessions().await;
+    Ok(sessions)
+}
+
 /// Initialize tracing with conditional log levels based on build configuration
 fn init_tracing() {
     // Set different log levels based on build profile and features
@@ -2275,6 +2428,12 @@ pub fn run() {
             remote_spawn_session,
             send_agent_message,
             respond_to_agent_permission,
+            // Local Agent Commands
+            local_start_agent,
+            local_stop_agent,
+            local_send_agent_message,
+            local_list_agents,
+            local_get_agent_sessions,
         ])
         .setup(|_app| {
             // No additional setup needed - ensure_quic_client_initialized handles auto-initialization
