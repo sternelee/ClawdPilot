@@ -516,13 +516,17 @@ impl ClaudeStreamingSession {
                     match role {
                         "assistant" => {
                             // Handle assistant message content
-                            if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                            if let Some(content) = message.get("content").and_then(|c| c.as_array())
+                            {
                                 for block in content {
                                     let block_type = block.get("type").and_then(|t| t.as_str());
                                     match block_type {
                                         Some("text") => {
-                                            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
-                                                let delta = self.process_state.compute_text_delta(text);
+                                            if let Some(text) =
+                                                block.get("text").and_then(|t| t.as_str())
+                                            {
+                                                let delta =
+                                                    self.process_state.compute_text_delta(text);
                                                 if delta.is_empty() {
                                                     return None;
                                                 }

@@ -3117,7 +3117,7 @@ impl RemoteSpawnMessageHandler {
         // 使用 AgentManager 启动新的 agent 会话（使用指定的 session_id）
         let (session_id, metadata) = self
             .agent_manager
-            .start_session_with_id(session_id, agent_type, project_path.clone())
+            .start_session_with_id(session_id, agent_type, project_path.clone(), args.clone())
             .await
             .map_err(|e| {
                 tracing::error!("Failed to start agent session: {}", e);

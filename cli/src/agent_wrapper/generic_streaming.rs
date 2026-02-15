@@ -75,7 +75,7 @@ impl StreamingAgentSession for GenericStreamingSession {
         let mut cmd = Command::new(&self.command);
         cmd.current_dir(&self.working_dir);
         cmd.args(&self.base_args);
-        
+
         // Pass input as the last argument
         // TODO: Make this configurable (stdin vs arg)
         cmd.arg(&text);
@@ -94,7 +94,9 @@ impl StreamingAgentSession for GenericStreamingSession {
         let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
         let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
 
-        self.process_state.register_process(turn_id.to_string(), child).await;
+        self.process_state
+            .register_process(turn_id.to_string(), child)
+            .await;
 
         // Emit lifecycle events
         self.process_state.emit_event(
@@ -116,7 +118,7 @@ impl StreamingAgentSession for GenericStreamingSession {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
         let session_id = self.session_id.clone();
-        
+
         // Stream stderr in background
         let stderr_reader = BufReader::new(stderr);
         let session_id_clone = self.session_id.clone();
@@ -154,9 +156,9 @@ impl StreamingAgentSession for GenericStreamingSession {
 
         let stderr_output = stderr_handle.await.unwrap_or_default();
         if !stderr_output.is_empty() {
-             // Treat stderr as a warning/system message for now
-             // or text delta if it looks like content
-             self.process_state.emit_event(
+            // Treat stderr as a warning/system message for now
+            // or text delta if it looks like content
+            self.process_state.emit_event(
                 turn_id,
                 AgentEvent::TextDelta {
                     session_id: session_id.clone(),

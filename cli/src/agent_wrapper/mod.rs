@@ -3,6 +3,7 @@
 //! 此模块负责启动和管理各种 AI 编码代理（Claude Code, OpenCode, Gemini 等），
 //! 并处理与它们的 stdin/stdout 通信。
 
+pub mod acp;
 pub mod claude;
 pub mod claude_streaming;
 pub mod codex;
@@ -31,6 +32,7 @@ use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::agent_wrapper::acp::AcpStreamingSession;
 use crate::agent_wrapper::claude_streaming::ClaudeStreamingSession;
 use crate::agent_wrapper::generic_streaming::GenericStreamingSession;
 
@@ -65,6 +67,11 @@ pub trait StreamingAgentSession: Send + Sync {
 
     /// Interrupt the current operation
     async fn interrupt(&self) -> Result<(), String>;
+
+    /// Shutdown the session and release resources
+    async fn shutdown(&self) -> Result<(), String> {
+        self.interrupt().await
+    }
 }
 
 impl AgentManager {
@@ -90,11 +97,11 @@ impl AgentManager {
         &self,
         agent_type: AgentType,
         project_path: String,
-        _args: Vec<String>,
+        args: Vec<String>,
     ) -> Result<(String, AgentSessionMetadata)> {
         // Generate a new session ID
         let session_id = Uuid::new_v4().to_string();
-        self.start_session_with_id(session_id, agent_type, project_path)
+        self.start_session_with_id(session_id, agent_type, project_path, args)
             .await
     }
 
@@ -112,6 +119,7 @@ impl AgentManager {
         session_id: String,
         agent_type: AgentType,
         project_path: String,
+        args: Vec<String>,
     ) -> Result<(String, AgentSessionMetadata)> {
         info!(
             "Starting AI Agent session with ID {}: {:?} in {}",
@@ -149,64 +157,86 @@ impl AgentManager {
             .build_session_metadata(session_id.clone(), agent_type, expanded_path.clone())
             .await;
 
-        // Create the appropriate streaming session based on agent type
-        let session: Arc<dyn StreamingAgentSession> = match agent_type {
-            AgentType::ClaudeCode => {
-                let session = ClaudeStreamingSession::new(
-                    session_id.clone(),
-                    PathBuf::from(&expanded_path),
-                    Some(AgentConfig::default()),
-                );
-                Arc::new(session)
-            }
-            AgentType::Copilot => {
-                let session = GenericStreamingSession::new(
-                    session_id.clone(),
-                    AgentType::Copilot,
-                    "gh".to_string(),
-                    vec!["copilot".to_string(), "explain".to_string()], // Default to explain for now
-                    PathBuf::from(&expanded_path),
-                );
-                Arc::new(session)
-            }
-            AgentType::Qwen => {
-                let session = GenericStreamingSession::new(
-                    session_id.clone(),
-                    AgentType::Qwen,
-                    "qwen-agent".to_string(),
-                    vec![], // Assuming no extra args needed by default
-                    PathBuf::from(&expanded_path),
-                );
-                Arc::new(session)
-            }
-            AgentType::Custom => {
-                 // For custom agent, we need to know the command.
-                 // Currently AgentManager doesn't get custom command from start_session_with_id.
-                 // We might need to default to a shell or fail if not configured.
-                 // For now, let's assume 'opencode' or similar as a fallback, 
-                 // OR if the user provided a custom path in the 'project_path' (unlikely).
-                 // Better: use a default shell or echo for testing.
-                 // Real fix: Pass agent command in start_session args.
-                 
-                 // Using 'echo' for safe fallback if Custom is selected without config
-                let session = GenericStreamingSession::new(
-                    session_id.clone(),
-                    AgentType::Custom,
-                    "echo".to_string(), 
-                    vec![],
-                    PathBuf::from(&expanded_path),
-                );
-                Arc::new(session)
-            }
-            _ => {
-                // For other agent types, fall back to legacy implementation
-                // TODO: Implement streaming sessions for OpenCode, Codex, Gemini
-                return Err(anyhow::anyhow!(
-                    "Streaming mode not yet implemented for {:?}. Use legacy mode.",
-                    agent_type
-                ));
-            }
-        };
+        let session: Arc<dyn StreamingAgentSession> =
+            if let Some(candidates) = Self::resolve_acp_commands(agent_type, args)? {
+                let mut last_error: Option<anyhow::Error> = None;
+                let mut started: Option<AcpStreamingSession> = None;
+
+                for (command, command_args) in candidates {
+                    match AcpStreamingSession::spawn(
+                        session_id.clone(),
+                        agent_type,
+                        command.clone(),
+                        command_args.clone(),
+                        PathBuf::from(&expanded_path),
+                    )
+                    .await
+                    {
+                        Ok(acp_session) => {
+                            info!(
+                                "ACP session launched for {:?} using command '{}' with args {:?}",
+                                agent_type, command, command_args
+                            );
+                            started = Some(acp_session);
+                            break;
+                        }
+                        Err(err) => {
+                            warn!(
+                                "ACP launch failed for {:?} using command '{}' with args {:?}: {}",
+                                agent_type, command, command_args, err
+                            );
+                            last_error = Some(err);
+                        }
+                    }
+                }
+
+                let acp_session = started.ok_or_else(|| {
+                    last_error.unwrap_or_else(|| anyhow::anyhow!("No ACP launch candidates"))
+                })?;
+                Arc::new(acp_session)
+            } else {
+                match agent_type {
+                    AgentType::ClaudeCode => {
+                        let session = ClaudeStreamingSession::new(
+                            session_id.clone(),
+                            PathBuf::from(&expanded_path),
+                            Some(AgentConfig::default()),
+                        );
+                        Arc::new(session)
+                    }
+                    AgentType::Copilot => {
+                        let session = GenericStreamingSession::new(
+                            session_id.clone(),
+                            AgentType::Copilot,
+                            "gh".to_string(),
+                            vec!["copilot".to_string(), "explain".to_string()],
+                            PathBuf::from(&expanded_path),
+                        );
+                        Arc::new(session)
+                    }
+                    AgentType::Qwen => {
+                        let session = GenericStreamingSession::new(
+                            session_id.clone(),
+                            AgentType::Qwen,
+                            "qwen-agent".to_string(),
+                            vec![],
+                            PathBuf::from(&expanded_path),
+                        );
+                        Arc::new(session)
+                    }
+                    AgentType::Custom => {
+                        return Err(anyhow::anyhow!(
+                            "Custom agent requires command args in ACP mode"
+                        ));
+                    }
+                    _ => {
+                        return Err(anyhow::anyhow!(
+                            "No available session implementation for {:?}",
+                            agent_type
+                        ));
+                    }
+                }
+            };
 
         // Store the session
         {
@@ -301,10 +331,7 @@ impl AgentManager {
 
     /// Helper to run version command
     async fn run_version_cmd(&self, cmd: &str, args: &[&str]) -> Option<String> {
-        let output = tokio::process::Command::new(cmd)
-            .args(args)
-            .output()
-            .await;
+        let output = tokio::process::Command::new(cmd).args(args).output().await;
 
         output.ok().and_then(|o| {
             let version = String::from_utf8_lossy(&o.stdout).trim().to_string();
@@ -314,6 +341,116 @@ impl AgentManager {
                 Some(version)
             }
         })
+    }
+
+    fn resolve_acp_commands(
+        agent_type: AgentType,
+        extra_args: Vec<String>,
+    ) -> Result<Option<Vec<(String, Vec<String>)>>> {
+        let mut candidates: Vec<(String, Vec<String>)> = Vec::new();
+        let append = |mut base: Vec<String>, tail: &[String]| {
+            base.extend_from_slice(tail);
+            base
+        };
+
+        if agent_type == AgentType::Custom {
+            let mut iter = extra_args.into_iter();
+            let command = iter
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Custom ACP agent requires command and args"))?;
+            return Ok(Some(vec![(command, iter.collect())]));
+        }
+
+        match agent_type {
+            // ACP registry indicates Claude Code should use Zed's adapter.
+            AgentType::ClaudeCode => {
+                candidates.push(("claude-code-acp".to_string(), extra_args.clone()));
+                candidates.push((
+                    "npx".to_string(),
+                    append(
+                        vec![
+                            "-y".to_string(),
+                            "@zed-industries/claude-code-acp@0.16.1".to_string(),
+                        ],
+                        &extra_args,
+                    ),
+                ));
+            }
+            AgentType::Gemini => {
+                candidates.push((
+                    "gemini".to_string(),
+                    append(vec!["--experimental-acp".to_string()], &extra_args),
+                ));
+                candidates.push((
+                    "npx".to_string(),
+                    append(
+                        vec![
+                            "-y".to_string(),
+                            "@google/gemini-cli@0.28.2".to_string(),
+                            "--experimental-acp".to_string(),
+                        ],
+                        &extra_args,
+                    ),
+                ));
+            }
+            AgentType::OpenCode => {
+                candidates.push((
+                    "opencode".to_string(),
+                    append(vec!["acp".to_string()], &extra_args),
+                ));
+            }
+            AgentType::Codex => {
+                candidates.push(("codex-acp".to_string(), extra_args.clone()));
+            }
+            AgentType::Copilot => {
+                candidates.push((
+                    "npx".to_string(),
+                    append(
+                        vec![
+                            "-y".to_string(),
+                            "@github/copilot-language-server@1.430.0".to_string(),
+                            "--acp".to_string(),
+                        ],
+                        &extra_args,
+                    ),
+                ));
+            }
+            AgentType::Qwen => {
+                candidates.push((
+                    "qwen".to_string(),
+                    append(
+                        vec!["--acp".to_string(), "--experimental-skills".to_string()],
+                        &extra_args,
+                    ),
+                ));
+                candidates.push((
+                    "qwen-code".to_string(),
+                    append(
+                        vec!["--acp".to_string(), "--experimental-skills".to_string()],
+                        &extra_args,
+                    ),
+                ));
+                candidates.push((
+                    "npx".to_string(),
+                    append(
+                        vec![
+                            "-y".to_string(),
+                            "@qwen-code/qwen-code@0.10.1".to_string(),
+                            "--acp".to_string(),
+                            "--experimental-skills".to_string(),
+                        ],
+                        &extra_args,
+                    ),
+                ));
+            }
+            AgentType::Custom => {}
+        }
+
+        if !candidates.is_empty() {
+            return Ok(Some(candidates));
+        }
+
+        Ok(None)
     }
 
     /// Subscribe to session events
@@ -450,7 +587,7 @@ impl AgentManager {
         {
             let sessions = self.streaming_sessions.read().await;
             if let Some(session) = sessions.get(session_id) {
-                let _ = session.interrupt().await;
+                let _ = session.shutdown().await;
             }
         }
 

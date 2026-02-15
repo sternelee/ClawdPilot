@@ -42,6 +42,8 @@ encoding_rs = "0.8.31"
 # QUIC protocol dependencies
 async-trait = "0.1"
 futures-util = "0.3"
+agent-client-protocol = "0.9.4"
+tokio-util = { version = "0.7", features = ["compat"] }
 
 # Logging dependencies
 chrono = "0.4"
