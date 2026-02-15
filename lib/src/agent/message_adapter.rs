@@ -300,7 +300,7 @@ pub fn build_permission_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent_wrapper::events::AgentEvent;
+    use super::events::AgentEvent;
 
     #[test]
     fn test_text_delta_conversion() {

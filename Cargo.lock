@@ -193,6 +193,7 @@ dependencies = [
  "iroh",
  "iroh-base",
  "iroh-tickets",
+ "lib",
  "rand 0.9.2",
  "regex",
  "riterm-shared",
@@ -950,6 +951,7 @@ dependencies = [
  "iroh",
  "iroh-tickets",
  "lazy_static",
+ "lib",
  "libc",
  "nix 0.30.1",
  "pin-project",
@@ -3477,6 +3479,29 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 [[package]]
 name = "lib"
 version = "0.1.0"
+dependencies = [
+ "aead 0.5.2",
+ "agent-client-protocol",
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "bincode",
+ "bytes",
+ "chacha20poly1305",
+ "futures",
+ "gethostname 0.5.0",
+ "hex",
+ "rand 0.9.2",
+ "regex",
+ "riterm-shared",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
 
 [[package]]
 name = "libappindicator"

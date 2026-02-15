@@ -27,7 +27,7 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::agent_wrapper::{AgentFactory, AgentManager};
+use lib::{AgentFactory, AgentManager};
 use crate::command_router::CommandRouter;
 use crate::shell::ShellDetector;
 use crate::terminal_logger::TerminalLogManager;
@@ -3022,7 +3022,7 @@ impl RemoteSpawnMessageHandler {
     fn start_event_forwarder(
         &self,
         session_id: String,
-        mut event_receiver: tokio::sync::broadcast::Receiver<crate::agent_wrapper::AgentTurnEvent>,
+        mut event_receiver: tokio::sync::broadcast::Receiver<lib::AgentTurnEvent>,
     ) {
         let quic_server = self.quic_server.clone();
         let forwarders_for_task = self.event_forwarders.clone();
@@ -3042,7 +3042,7 @@ impl RemoteSpawnMessageHandler {
                         );
 
                         // Convert event to P2P message
-                        let message = crate::agent_wrapper::message_adapter::build_agent_message(
+                        let message = lib::message_adapter::build_agent_message(
                             "cli".to_string(),
                             sid.clone(),
                             &turn_event.event,
@@ -3670,7 +3670,7 @@ mod tests {
     /// RED: This test should fail because event forwarding is not implemented yet
     #[tokio::test]
     async fn test_agent_event_forwarding_on_spawn() {
-        use crate::agent_wrapper::events::{AgentEvent, AgentTurnEvent};
+        use lib::events::{AgentEvent, AgentTurnEvent};
         use tokio::sync::broadcast;
 
         // Setup: Create a mock scenario where we have:
@@ -3717,7 +3717,7 @@ mod tests {
 
         // For now, we test the EventForwarder struct directly
         use crate::agent_wrapper::events::{AgentEvent, AgentTurnEvent};
-        use crate::agent_wrapper::message_adapter::event_to_message_content;
+        use lib::message_adapter::event_to_message_content;
         use riterm_shared::message_protocol::AgentMessageContent;
         use tokio::sync::broadcast;
 

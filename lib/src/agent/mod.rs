@@ -32,9 +32,9 @@ use tokio::sync::{RwLock, broadcast};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::agent_wrapper::acp::AcpStreamingSession;
-use crate::agent_wrapper::claude_streaming::ClaudeStreamingSession;
-use crate::agent_wrapper::generic_streaming::GenericStreamingSession;
+use acp::AcpStreamingSession;
+use claude_streaming::ClaudeStreamingSession;
+use generic_streaming::GenericStreamingSession;
 
 /// AI Agent 管理器
 ///

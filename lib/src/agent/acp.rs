@@ -20,8 +20,8 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-use crate::agent_wrapper::StreamingAgentSession;
-use crate::agent_wrapper::events::{AgentEvent, AgentTurnEvent};
+use super::StreamingAgentSession;
+use super::events::{AgentEvent, AgentTurnEvent};
 
 enum AcpCommand {
     Prompt {
