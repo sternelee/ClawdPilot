@@ -144,20 +144,16 @@ pub fn event_to_message_content(
         },
 
         // General notifications
-        AgentEvent::Notification {
-            level,
-            message,
-            ..
-        } => AgentMessageContent::SystemNotification {
-            level: level.clone(),
-            message: message.clone(),
-        },
+        AgentEvent::Notification { level, message, .. } => {
+            AgentMessageContent::SystemNotification {
+                level: level.clone(),
+                message: message.clone(),
+            }
+        }
 
         // File operations
         AgentEvent::FileOperation {
-            operation,
-            path,
-            ..
+            operation, path, ..
         } => AgentMessageContent::SystemNotification {
             level: NotificationLevel::Info,
             message: format!("File operation: {} {}", operation, path),

@@ -70,7 +70,7 @@ use std::time::Duration;
 
 use agent_client_protocol as acp;
 use agent_client_protocol::Agent;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use riterm_shared::message_protocol::AgentType;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
@@ -166,7 +166,8 @@ impl Default for RetryConfig {
 
 /// Calculate exponential backoff delay
 fn calculate_backoff(attempt: u32, config: &RetryConfig) -> Duration {
-    let delay = config.initial_backoff.as_millis() as f64 * config.backoff_multiplier.powi(attempt as i32);
+    let delay =
+        config.initial_backoff.as_millis() as f64 * config.backoff_multiplier.powi(attempt as i32);
     config.max_backoff.min(Duration::from_millis(delay as u64))
 }
 
@@ -183,9 +184,7 @@ enum AcpCommand {
         response_tx: oneshot::Sender<std::result::Result<(), String>>,
     },
     /// Shutdown the session
-    Shutdown {
-        response_tx: oneshot::Sender<()>,
-    },
+    Shutdown { response_tx: oneshot::Sender<()> },
     /// Query agent capabilities or status
     Query {
         query: String,
@@ -335,10 +334,7 @@ impl AcpStreamingSession {
         let (response_tx, response_rx) = oneshot::channel();
 
         self.command_tx
-            .send(AcpCommand::Query {
-                query,
-                response_tx,
-            })
+            .send(AcpCommand::Query { query, response_tx })
             .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
 
         response_rx
@@ -347,7 +343,11 @@ impl AcpStreamingSession {
     }
 
     /// Send a message to the agent
-    pub async fn send_message(&self, text: String, turn_id: &str) -> std::result::Result<(), String> {
+    pub async fn send_message(
+        &self,
+        text: String,
+        turn_id: &str,
+    ) -> std::result::Result<(), String> {
         debug!(
             "ACP send_message session={} agent={:?}",
             self.session_id, self.agent_type
@@ -362,9 +362,11 @@ impl AcpStreamingSession {
             })
             .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
 
-        response_rx
-            .await
-            .map_err(|_| String::from(AcpError::PromptFailed("Response channel closed".to_string())))?
+        response_rx.await.map_err(|_| {
+            String::from(AcpError::PromptFailed(
+                "Response channel closed".to_string(),
+            ))
+        })?
     }
 
     /// Interrupt current operation
@@ -379,14 +381,21 @@ impl AcpStreamingSession {
             .send(AcpCommand::Cancel { response_tx })
             .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
 
-        response_rx
-            .await
-            .map_err(|_| String::from(AcpError::CancelFailed("Response channel closed".to_string())))?
+        response_rx.await.map_err(|_| {
+            String::from(AcpError::CancelFailed(
+                "Response channel closed".to_string(),
+            ))
+        })?
     }
 
     /// Get pending permissions
-    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<PendingPermission>, String> {
-        debug!("ACP get_pending_permissions for session {}", self.session_id);
+    pub async fn get_pending_permissions(
+        &self,
+    ) -> std::result::Result<Vec<PendingPermission>, String> {
+        debug!(
+            "ACP get_pending_permissions for session {}",
+            self.session_id
+        );
         let (response_tx, response_rx) = oneshot::channel();
 
         self.manager_tx
@@ -437,7 +446,7 @@ impl AcpStreamingSession {
         response_rx
             .await
             .map_err(|_| "Shutdown response channel closed".to_string())?;
-        
+
         Ok(())
     }
 }
@@ -524,10 +533,7 @@ pub(super) fn resolve_command_path(command: &str) -> String {
     }
 
     // Fallback: try `which` command
-    if let Ok(output) = std::process::Command::new("which")
-        .arg(command)
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("which").arg(command).output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -537,10 +543,7 @@ pub(super) fn resolve_command_path(command: &str) -> String {
         }
     }
 
-    debug!(
-        "Could not resolve full path for '{}', using as-is",
-        command
-    );
+    debug!("Could not resolve full path for '{}', using as-is", command);
     command.to_string()
 }
 
@@ -574,14 +577,12 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         debug!("Setting HOME environment variable: {}", home);
     }
 
-    let mut child = cmd
-        .spawn()
-        .with_context(|| {
-            format!(
-                "Failed to spawn ACP agent command '{}' (resolved: '{}'): {:#?}",
-                params.command, resolved_command, params.args
-            )
-        })?;
+    let mut child = cmd.spawn().with_context(|| {
+        format!(
+            "Failed to spawn ACP agent command '{}' (resolved: '{}'): {:#?}",
+            params.command, resolved_command, params.args
+        )
+    })?;
 
     let stdin = child
         .stdin
@@ -649,7 +650,10 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
     // Initialize connection with retry logic
     let init_result = with_retry(
         params.retry_config.clone(),
-        format!("initialize ACP connection for session {}", params.session_id),
+        format!(
+            "initialize ACP connection for session {}",
+            params.session_id
+        ),
         || async {
             connection
                 .initialize(
@@ -763,7 +767,11 @@ where
         match op().await {
             Ok(result) => {
                 if attempt > 0 {
-                    info!("Operation '{}' succeeded on attempt {}", operation, attempt + 1);
+                    info!(
+                        "Operation '{}' succeeded on attempt {}",
+                        operation,
+                        attempt + 1
+                    );
                 }
                 return Ok(result);
             }
@@ -779,7 +787,10 @@ where
         }
     }
 
-    error!("Operation '{}' failed after {} attempts", operation, config.max_attempts);
+    error!(
+        "Operation '{}' failed after {} attempts",
+        operation, config.max_attempts
+    );
     Err(format!(
         "Failed after {} attempts: {}",
         config.max_attempts, last_error
@@ -805,9 +816,10 @@ async fn run_command_loop(
         response_tx: oneshot::Sender<acp::RequestPermissionOutcome>,
         created_at: std::time::Duration,
     }
-    
-    let mut pending_permissions: std::collections::HashMap<String, PendingPermissionEntry> = std::collections::HashMap::new();
-    
+
+    let mut pending_permissions: std::collections::HashMap<String, PendingPermissionEntry> =
+        std::collections::HashMap::new();
+
     loop {
         tokio::select! {
             Some(command) = command_rx.recv() => {

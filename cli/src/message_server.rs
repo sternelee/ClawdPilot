@@ -28,10 +28,10 @@ use tokio::sync::{RwLock, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use lib::{AgentFactory, AgentManager};
 use crate::command_router::CommandRouter;
 use crate::shell::ShellDetector;
 use crate::terminal_logger::TerminalLogManager;
+use lib::{AgentFactory, AgentManager};
 
 /// Connection information for status display
 #[derive(Debug, Clone)]
@@ -3581,9 +3581,7 @@ impl AgentControlMessageHandler {
             AgentControlAction::SendInterrupt => {
                 self.agent_manager.interrupt_session(&session_id).await
             }
-            AgentControlAction::Terminate => {
-                self.agent_manager.stop_session(&session_id).await
-            }
+            AgentControlAction::Terminate => self.agent_manager.stop_session(&session_id).await,
             AgentControlAction::Pause
             | AgentControlAction::Resume
             | AgentControlAction::GetStatus => {

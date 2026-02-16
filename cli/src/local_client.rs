@@ -72,17 +72,11 @@ impl LocalClientSession {
         // Spawn event listener
         let event_task = Some(tokio::spawn(async move {
             if let Some(receiver) = manager_clone.subscribe(&session_id_clone).await {
-                debug!(
-                    "Starting event listener for session {}",
-                    session_id_clone
-                );
+                debug!("Starting event listener for session {}", session_id_clone);
                 let mut recv = receiver;
                 while let Ok(event) = recv.recv().await {
                     // Handle events - update pending permissions
-                    if matches!(
-                        &event.event,
-                        lib::agent::AgentEvent::ApprovalRequest { .. }
-                    ) {
+                    if matches!(&event.event, lib::agent::AgentEvent::ApprovalRequest { .. }) {
                         debug!("Received approval request event: {:?}", event);
                         // The session will handle permission storage internally
                         // We can query permissions when listing

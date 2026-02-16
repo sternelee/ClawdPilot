@@ -77,10 +77,13 @@ impl Agent for ClaudeCodeAgent {
     fn default_args(&self) -> Vec<String> {
         vec![
             "-p".to_string(),
-            "--output-format".to_string(), "stream-json".to_string(),
-            "--input-format".to_string(), "stream-json".to_string(),
+            "--output-format".to_string(),
+            "stream-json".to_string(),
+            "--input-format".to_string(),
+            "stream-json".to_string(),
             "--verbose".to_string(),
-            "--permission-prompt-tool".to_string(), "stdio".to_string(),
+            "--permission-prompt-tool".to_string(),
+            "stdio".to_string(),
         ]
     }
 
@@ -102,7 +105,9 @@ impl Agent for ClaudeCodeAgent {
     fn get_version(&self) -> Result<String> {
         let output = Command::new("claude").arg("--version").output()?;
         if !output.status.success() {
-            return Err(anyhow::anyhow!("Failed to get Claude Code version. Ensure 'claude' CLI is installed."));
+            return Err(anyhow::anyhow!(
+                "Failed to get Claude Code version. Ensure 'claude' CLI is installed."
+            ));
         }
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
@@ -364,7 +369,7 @@ impl AgentFactory {
             AgentType::Copilot => Box::new(CopilotAgent),
             AgentType::Qwen => Box::new(QwenAgent),
             AgentType::AcpAgent => Box::new(ClaudeCodeAgent), // AcpAgent uses Claude as default
-            AgentType::Custom => Box::new(ClaudeCodeAgent), // Custom defaults to Claude
+            AgentType::Custom => Box::new(ClaudeCodeAgent),   // Custom defaults to Claude
         }
     }
 

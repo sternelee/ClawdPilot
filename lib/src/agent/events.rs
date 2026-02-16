@@ -460,19 +460,15 @@ impl AgentEvent {
                 }
             }
 
-            AgentEvent::Notification {
-                level,
-                message,
-                ..
-            } => AgentMessageContent::SystemNotification {
-                level: level.clone(),
-                message: message.clone(),
-            },
+            AgentEvent::Notification { level, message, .. } => {
+                AgentMessageContent::SystemNotification {
+                    level: level.clone(),
+                    message: message.clone(),
+                }
+            }
 
             AgentEvent::FileOperation {
-                operation,
-                path,
-                ..
+                operation, path, ..
             } => AgentMessageContent::SystemNotification {
                 level: NotificationLevel::Info,
                 message: format!("File operation: {} {}", operation, path),
@@ -486,7 +482,9 @@ impl AgentEvent {
             } => {
                 let msg = match exit_code {
                     Some(0) => format!("Command completed: {}\n{}", command, output),
-                    Some(code) => format!("Command failed (exit {}): {}\n{}", code, command, output),
+                    Some(code) => {
+                        format!("Command failed (exit {}): {}\n{}", code, command, output)
+                    }
                     None => format!("Command output: {}\n{}", command, output),
                 };
                 AgentMessageContent::SystemNotification {

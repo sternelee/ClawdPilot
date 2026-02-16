@@ -274,10 +274,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         sessionStore.addSession(session);
       }
 
-      notificationStore.success("Loaded local sessions", "System");
     } catch (error) {
       console.error("Failed to load local sessions:", error);
-      notificationStore.error("Failed to load local sessions", "Error");
     }
   };
 

@@ -467,17 +467,18 @@ async fn handle_slash_command(session: &LocalClientSession, command: &str) -> Re
             } else {
                 None
             };
-            match session.respond_to_permission(request_id, false, reason).await {
+            match session
+                .respond_to_permission(request_id, false, reason)
+                .await
+            {
                 Ok(_) => println!("❌ Permission denied"),
                 Err(e) => eprintln!("❌ Failed to deny permission: {}", e),
             }
         }
-        "/interrupt" => {
-            match session.interrupt().await {
-                Ok(_) => println!("⛔ Operation interrupted"),
-                Err(e) => eprintln!("❌ Failed to interrupt: {}", e),
-            }
-        }
+        "/interrupt" => match session.interrupt().await {
+            Ok(_) => println!("⛔ Operation interrupted"),
+            Err(e) => eprintln!("❌ Failed to interrupt: {}", e),
+        },
         "/quit" | "/exit" => {
             println!("👋 Exiting session...");
             return Err(anyhow::anyhow!("quit_command"));

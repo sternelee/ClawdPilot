@@ -13,14 +13,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use riterm_shared::message_protocol::AgentType;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 pub use acp::AcpStreamingSession;
 pub use claude_sdk::ClaudeSdkSession;
-pub use events::{AgentEvent, AgentTurnEvent, PendingPermission, PermissionMode, PermissionResponse};
+pub use events::{
+    AgentEvent, AgentTurnEvent, PendingPermission, PermissionMode, PermissionResponse,
+};
 pub use factory::{Agent, AgentAvailability, AgentFactory};
 pub use message_adapter::event_to_message_content;
 
@@ -62,7 +64,11 @@ impl SessionKind {
     }
 
     /// Send a message to the agent.
-    pub async fn send_message(&self, text: String, turn_id: &str) -> std::result::Result<(), String> {
+    pub async fn send_message(
+        &self,
+        text: String,
+        turn_id: &str,
+    ) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.send_message(text, turn_id).await,
             SessionKind::Sdk(s) => s.send_message(text, turn_id).await,
@@ -78,7 +84,9 @@ impl SessionKind {
     }
 
     /// Get pending permission requests.
-    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<PendingPermission>, String> {
+    pub async fn get_pending_permissions(
+        &self,
+    ) -> std::result::Result<Vec<PendingPermission>, String> {
         match self {
             SessionKind::Acp(s) => s.get_pending_permissions().await,
             SessionKind::Sdk(s) => s.get_pending_permissions().await,
@@ -174,11 +182,7 @@ impl AgentManager {
         home_dir: Option<String>,
         _source: String,
     ) -> Result<()> {
-        info!(
-            "Starting {:?} session with ID: {}",
-            agent_type,
-            session_id
-        );
+        info!("Starting {:?} session with ID: {}", agent_type, session_id);
 
         let session: Arc<SessionKind> = if agent_type == AgentType::ClaudeCode {
             // Claude Code uses SDK Control Protocol
@@ -197,12 +201,7 @@ impl AgentManager {
                 home_dir,
             )
             .await
-            .with_context(|| {
-                format!(
-                    "Failed to start SDK session for {:?}",
-                    agent_type
-                )
-            })?;
+            .with_context(|| format!("Failed to start SDK session for {:?}", agent_type))?;
 
             Arc::new(SessionKind::Sdk(Arc::new(sdk_session)))
         } else {
@@ -221,12 +220,7 @@ impl AgentManager {
                 home_dir,
             )
             .await
-            .with_context(|| {
-                format!(
-                    "Failed to start ACP session for {:?}",
-                    agent_type
-                )
-            })?;
+            .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?;
 
             Arc::new(SessionKind::Acp(Arc::new(acp_session)))
         };
@@ -331,7 +325,10 @@ impl AgentManager {
     }
 
     /// Subscribe to events from a session
-    pub async fn subscribe(&self, session_id: &str) -> Option<tokio::sync::broadcast::Receiver<AgentTurnEvent>> {
+    pub async fn subscribe(
+        &self,
+        session_id: &str,
+    ) -> Option<tokio::sync::broadcast::Receiver<AgentTurnEvent>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).map(|s| s.subscribe())
     }

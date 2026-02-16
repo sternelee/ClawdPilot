@@ -14,13 +14,13 @@ use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::Subscribe
 
 mod tcp_forwarding;
 
+use lib::AgentManager;
 use riterm_shared::{
     AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, Event,
     EventListener, EventType, IODataType, Message, MessageBuilder, MessagePayload,
     QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType, TcpForwardingAction,
     TcpForwardingType, TerminalAction,
 };
-use lib::AgentManager;
 
 use crate::tcp_forwarding::TcpForwardingManager;
 
@@ -2277,17 +2277,20 @@ async fn local_start_agent(
 
     let working_dir = std::path::PathBuf::from(&expanded_project_path);
     if !working_dir.exists() {
-        return Err(format!("Project path does not exist: {}", expanded_project_path));
+        return Err(format!(
+            "Project path does not exist: {}",
+            expanded_project_path
+        ));
     }
 
     manager
         .start_session_with_id(
             session_id.clone(),
             agent_type,
-            None,           // binary_path
-            vec![],         // extra_args
-            working_dir,    // working_dir
-            None,           // home_dir
+            None,                // binary_path
+            vec![],              // extra_args
+            working_dir,         // working_dir
+            None,                // home_dir
             "local".to_string(), // source
         )
         .await
@@ -2301,7 +2304,8 @@ async fn local_start_agent(
             // Convert agent events to frontend format
             while let Ok(event) = event_rx.recv().await {
                 // Convert AgentTurnEvent to frontend-expected JSON
-                let event_payload = lib::message_adapter::event_to_message_content(&event.event, None);
+                let event_payload =
+                    lib::message_adapter::event_to_message_content(&event.event, None);
                 let session_id_clone = session_id_for_spawn.clone();
                 let frontend_event = serde_json::json!({
                     "sessionId": session_id_clone.clone(),
@@ -2319,10 +2323,7 @@ async fn local_start_agent(
 
 /// Stop a local agent session
 #[tauri::command(rename_all = "camelCase")]
-async fn local_stop_agent(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+async fn local_stop_agent(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = agent_manager_guard
         .as_ref()
@@ -2356,7 +2357,9 @@ async fn local_send_agent_message(
 
 /// List all active local agent sessions
 #[tauri::command(rename_all = "camelCase")]
-async fn local_list_agents(state: State<'_, AppState>) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
+async fn local_list_agents(
+    state: State<'_, AppState>,
+) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = agent_manager_guard
         .as_ref()
@@ -2366,7 +2369,10 @@ async fn local_list_agents(state: State<'_, AppState>) -> Result<Vec<riterm_shar
     let session_ids = manager.list_sessions().await;
     let mut sessions = Vec::new();
     for sid in session_ids {
-        let agent_type = manager.get_session_agent_type(&sid).await.unwrap_or(AgentType::Custom);
+        let agent_type = manager
+            .get_session_agent_type(&sid)
+            .await
+            .unwrap_or(AgentType::Custom);
         sessions.push(riterm_shared::message_protocol::AgentSessionMetadata {
             session_id: sid,
             agent_type,
@@ -2387,7 +2393,9 @@ async fn local_list_agents(state: State<'_, AppState>) -> Result<Vec<riterm_shar
 
 /// Get agent session metadata (for session info display)
 #[tauri::command(rename_all = "camelCase")]
-async fn local_get_agent_sessions(state: State<'_, AppState>) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
+async fn local_get_agent_sessions(
+    state: State<'_, AppState>,
+) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = agent_manager_guard
         .as_ref()
@@ -2397,7 +2405,10 @@ async fn local_get_agent_sessions(state: State<'_, AppState>) -> Result<Vec<rite
     let session_ids = manager.list_sessions().await;
     let mut sessions = Vec::new();
     for sid in session_ids {
-        let agent_type = manager.get_session_agent_type(&sid).await.unwrap_or(AgentType::Custom);
+        let agent_type = manager
+            .get_session_agent_type(&sid)
+            .await
+            .unwrap_or(AgentType::Custom);
         sessions.push(riterm_shared::message_protocol::AgentSessionMetadata {
             session_id: sid,
             agent_type,
