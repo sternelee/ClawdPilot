@@ -132,12 +132,40 @@ impl AgentManager {
     }
 
     /// Stop an agent session
+    ///
+    /// This method gracefully shuts down the session by calling shutdown() on the
+    /// ACP streaming session, which sends a Shutdown command to the ACP runtime.
     pub async fn stop_session(&self, session_id: &str) -> Result<()> {
+        let sessions = self.sessions.read().await;
+
+        if let Some(session) = sessions.get(session_id) {
+            debug!("Shutting down session: {}", session_id);
+
+            // Call the session's shutdown method which sends the Shutdown command
+            // to the ACP runtime
+            session
+                .shutdown()
+                .await
+                .map_err(|e| anyhow!("Failed to shutdown session {}: {}", session_id, e))?;
+
+            info!("✅ Session shut down: {}", session_id);
+            Ok(())
+        } else {
+            warn!("Session not found: {}", session_id);
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Force stop an agent session (immediate termination)
+    ///
+    /// This method immediately removes the session without graceful shutdown.
+    /// Use this only when graceful shutdown fails or is not needed.
+    pub async fn force_stop_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.write().await;
 
         if sessions.remove(session_id).is_some() {
-            debug!("Stopping session: {}", session_id);
-            info!("✅ Session stopped: {}", session_id);
+            debug!("Force stopped session: {}", session_id);
+            info!("✅ Session force stopped: {}", session_id);
             Ok(())
         } else {
             warn!("Session not found: {}", session_id);

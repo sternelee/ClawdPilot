@@ -80,7 +80,23 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use super::events::{AgentEvent, AgentTurnEvent};
+use super::events::{AgentEvent, AgentTurnEvent, PendingPermission};
+
+/// Command types for permission management (sent to command loop)
+#[derive(Debug)]
+pub enum PermissionManagerCommand {
+    /// Get all pending permission requests
+    GetPendingPermissions {
+        response_tx: oneshot::Sender<Vec<PendingPermission>>,
+    },
+    /// Respond to a permission request
+    RespondToPermission {
+        request_id: String,
+        approved: bool,
+        reason: Option<String>,
+        response_tx: oneshot::Sender<std::result::Result<(), String>>,
+    },
+}
 
 /// Error types specific to ACP operations
 #[derive(Debug, thiserror::Error)]
@@ -112,6 +128,10 @@ pub enum AcpError {
     /// Agent process exited unexpectedly
     #[error("Agent process exited: {0}")]
     AgentProcessExited(String),
+
+    /// Permission response failed
+    #[error("Permission response failed: {0}")]
+    PermissionResponseError(String),
 }
 
 impl From<AcpError> for String {
@@ -171,6 +191,14 @@ enum AcpCommand {
         query: String,
         response_tx: oneshot::Sender<std::result::Result<serde_json::Value, String>>,
     },
+    /// Permission request from agent - stores the response sender for later resolution
+    PermissionRequest {
+        request_id: String,
+        tool_name: String,
+        input: serde_json::Value,
+        options: Vec<acp::PermissionOption>,
+        response_tx: oneshot::Sender<acp::RequestPermissionOutcome>,
+    },
 }
 
 pub struct AcpStreamingSession {
@@ -178,6 +206,7 @@ pub struct AcpStreamingSession {
     agent_type: AgentType,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     command_tx: mpsc::UnboundedSender<AcpCommand>,
+    manager_tx: mpsc::UnboundedSender<PermissionManagerCommand>,
     retry_config: RetryConfig,
 }
 
@@ -215,11 +244,14 @@ impl AcpStreamingSession {
     ) -> Result<Self> {
         let (event_sender, _) = broadcast::channel(1024);
         let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let (manager_tx, manager_rx) = mpsc::unbounded_channel();
         let (ready_tx, ready_rx) = oneshot::channel::<std::result::Result<(), String>>();
 
         let runtime_session_id = session_id.clone();
         let runtime_event_sender = event_sender.clone();
         let runtime_retry_config = retry_config.clone();
+        let runtime_manager_tx = manager_tx.clone();
+        let runtime_command_tx = command_tx.clone();
 
         let thread_name = format!("riterm-acp-{}", &session_id[..session_id.len().min(8)]);
 
@@ -237,8 +269,7 @@ impl AcpStreamingSession {
                     }
                 };
 
-                let local_set = tokio::task::LocalSet::new();
-                runtime.block_on(local_set.run_until(async move {
+                runtime.block_on(async move {
                     if let Err(err) = run_acp_runtime(AcpRuntimeParams {
                         session_id: runtime_session_id,
                         agent_type,
@@ -247,7 +278,10 @@ impl AcpStreamingSession {
                         working_dir,
                         home_dir,
                         event_sender: runtime_event_sender,
+                        command_tx: runtime_command_tx,
                         command_rx,
+                        manager_tx: runtime_manager_tx,
+                        manager_rx,
                         ready_tx,
                         retry_config: runtime_retry_config,
                     })
@@ -255,7 +289,7 @@ impl AcpStreamingSession {
                     {
                         error!("ACP runtime exited with error: {err}");
                     }
-                }));
+                });
             })
             .with_context(|| format!("Failed to spawn ACP thread for session {session_id}"))?;
 
@@ -265,6 +299,7 @@ impl AcpStreamingSession {
                 agent_type,
                 event_sender,
                 command_tx,
+                manager_tx,
                 retry_config,
             }),
             Ok(Err(err)) => Err(anyhow!(err)),
@@ -348,25 +383,59 @@ impl AcpStreamingSession {
     }
 
     /// Get pending permissions
-    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<super::events::PendingPermission>, String> {
-        // ACP handles permissions internally via the request_permission callback
+    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<PendingPermission>, String> {
         debug!("ACP get_pending_permissions for session {}", self.session_id);
-        Ok(vec![])
+        let (response_tx, response_rx) = oneshot::channel();
+
+        self.manager_tx
+            .send(PermissionManagerCommand::GetPendingPermissions { response_tx })
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
+
+        response_rx
+            .await
+            .map_err(|_| "Get pending permissions response channel closed".to_string())
     }
 
     /// Respond to a permission request
     pub async fn respond_to_permission(
         &self,
-        _request_id: String,
-        _approved: bool,
-        _reason: Option<String>,
+        request_id: String,
+        approved: bool,
+        reason: Option<String>,
     ) -> std::result::Result<(), String> {
-        // ACP handles permissions internally via request_permission trait method
-        // The permission response is already handled in the AcpClientHandler
         debug!(
             "ACP permission response for session {}: request_id={}, approved={}",
-            self.session_id, _request_id, _approved
+            self.session_id, request_id, approved
         );
+        let (response_tx, response_rx) = oneshot::channel();
+
+        self.manager_tx
+            .send(PermissionManagerCommand::RespondToPermission {
+                request_id,
+                approved,
+                reason,
+                response_tx,
+            })
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
+
+        response_rx
+            .await
+            .map_err(|_| "Permission response channel closed".to_string())?
+    }
+
+    /// Gracefully shut down the ACP session
+    pub async fn shutdown(&self) -> std::result::Result<(), String> {
+        debug!("ACP shutdown for session {}", self.session_id);
+        let (response_tx, response_rx) = oneshot::channel();
+
+        self.command_tx
+            .send(AcpCommand::Shutdown { response_tx })
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
+
+        response_rx
+            .await
+            .map_err(|_| "Shutdown response channel closed".to_string())?;
+        
         Ok(())
     }
 }
@@ -380,7 +449,10 @@ struct AcpRuntimeParams {
     working_dir: PathBuf,
     home_dir: Option<String>,
     event_sender: broadcast::Sender<AgentTurnEvent>,
+    command_tx: mpsc::UnboundedSender<AcpCommand>,
     command_rx: mpsc::UnboundedReceiver<AcpCommand>,
+    manager_tx: mpsc::UnboundedSender<PermissionManagerCommand>,
+    manager_rx: mpsc::UnboundedReceiver<PermissionManagerCommand>,
     ready_tx: oneshot::Sender<std::result::Result<(), String>>,
     retry_config: RetryConfig,
 }
@@ -437,6 +509,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         event_sender: params.event_sender.clone(),
         active_turn: active_turn.clone(),
         tool_name_map: tool_name_map.clone(),
+        command_tx: params.command_tx.clone(),
     };
 
     let session_id_for_stderr = params.session_id.clone();
@@ -550,6 +623,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         active_turn,
         params.event_sender.clone(),
         params.command_rx,
+        params.manager_rx,
         params.retry_config.clone(),
     )
     .await;
@@ -621,10 +695,24 @@ async fn run_command_loop(
     active_turn: Arc<RwLock<Option<String>>>,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     mut command_rx: mpsc::UnboundedReceiver<AcpCommand>,
+    mut manager_rx: mpsc::UnboundedReceiver<PermissionManagerCommand>,
     retry_config: RetryConfig,
 ) {
-    while let Some(command) = command_rx.recv().await {
-        match command {
+    // Store pending permissions and their response channels
+    struct PendingPermissionEntry {
+        tool_name: String,
+        input: serde_json::Value,
+        options: Vec<acp::PermissionOption>,
+        response_tx: oneshot::Sender<acp::RequestPermissionOutcome>,
+        created_at: std::time::Duration,
+    }
+    
+    let mut pending_permissions: std::collections::HashMap<String, PendingPermissionEntry> = std::collections::HashMap::new();
+    
+    loop {
+        tokio::select! {
+            Some(command) = command_rx.recv() => {
+                match command {
             AcpCommand::Prompt {
                 text,
                 turn_id,
@@ -723,6 +811,79 @@ async fn run_command_loop(
                 let _ = response_tx.send(());
                 break;
             }
+            AcpCommand::PermissionRequest { request_id, tool_name, input, options, response_tx } => {
+                // Store the permission request and response channel for later resolution
+                debug!("Storing permission request for later resolution: {}", request_id);
+                pending_permissions.insert(request_id, PendingPermissionEntry {
+                    tool_name: tool_name.clone(),
+                    input: input.clone(),
+                    options,
+                    response_tx,
+                    created_at: std::time::Duration::from_secs(0), // TODO: use actual timestamp
+                });
+            }
+        }
+            }
+            Some(manager_command) = manager_rx.recv() => {
+                match manager_command {
+                    PermissionManagerCommand::GetPendingPermissions { response_tx } => {
+                        // Build list of pending permissions for external inspection using stored details
+                        let pending: Vec<PendingPermission> = pending_permissions
+                            .iter()
+                            .map(|(request_id, entry)| {
+                                PendingPermission {
+                                    request_id: request_id.clone(),
+                                    session_id: session_id.clone(),
+                                    tool_name: entry.tool_name.clone(),
+                                    tool_params: serde_json::Value::Null, // Note: Could parse input if needed
+                                    message: None,
+                                    created_at: 0,
+                                    response_tx: None,
+                                }
+                            })
+                            .collect();
+                        let _ = response_tx.send(pending);
+                    }
+                    PermissionManagerCommand::RespondToPermission { request_id, approved, reason: _reason, response_tx: manager_response_tx } => {
+                        // Resolve a pending permission request
+                        if let Some(entry) = pending_permissions.remove(&request_id) {
+                            debug!("Resolving permission request: {} (approved: {})", request_id, approved);
+                            let outcome = if approved {
+                                // Find an appropriate permission option from the stored options
+                                // If there are Allow* options, use one of them; otherwise use the first available
+                                let selected_option = entry.options.iter()
+                                    .find(|opt| matches!(opt.kind, acp::PermissionOptionKind::AllowOnce | acp::PermissionOptionKind::AllowAlways))
+                                    .or(entry.options.first());
+
+                                match selected_option {
+                                    Some(option) => acp::RequestPermissionOutcome::Selected(
+                                        acp::SelectedPermissionOutcome::new(option.option_id.clone()),
+                                    ),
+                                    None => {
+                                        warn!("No permission options available for approved request: {}", request_id);
+                                        acp::RequestPermissionOutcome::Cancelled
+                                    }
+                                }
+                            } else {
+                                acp::RequestPermissionOutcome::Cancelled
+                            };
+                            match entry.response_tx.send(outcome) {
+                                Ok(_) => {
+                                    // Successfully resolved the permission request
+                                    let _ = manager_response_tx.send(Ok(()));
+                                }
+                                Err(_) => {
+                                    warn!("Failed to send permission outcome for {} - channel closed", request_id);
+                                    let _ = manager_response_tx.send(Err("Permission channel closed".to_string()));
+                                }
+                            }
+                        } else {
+                            warn!("Received response for unknown permission request: {}", request_id);
+                            let _ = manager_response_tx.send(Err("Permission request not found".to_string()));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -749,6 +910,7 @@ struct AcpClientHandler {
     event_sender: broadcast::Sender<AgentTurnEvent>,
     active_turn: Arc<RwLock<Option<String>>>,
     tool_name_map: Arc<Mutex<HashMap<String, String>>>,
+    command_tx: mpsc::UnboundedSender<AcpCommand>,
 }
 
 impl AcpClientHandler {
@@ -895,18 +1057,50 @@ impl acp::Client for AcpClientHandler {
             .clone()
             .unwrap_or_else(|| "tool".to_string());
 
+        let request_id = args.tool_call.tool_call_id.0.to_string();
+        let input = args.tool_call.fields.raw_input.clone();
+
+        // Emit approval request event
         self.emit_event(AgentEvent::ApprovalRequest {
             session_id: self.session_id.clone(),
-            request_id: args.tool_call.tool_call_id.0.to_string(),
-            tool_name,
-            input: args.tool_call.fields.raw_input.clone(),
+            request_id: request_id.clone(),
+            tool_name: tool_name.clone(),
+            input: input.clone(),
             message: Some("Agent requested permission".to_string()),
         })
         .await;
 
-        Ok(acp::RequestPermissionResponse::new(
-            Self::choose_permission_option(&args.options),
-        ))
+        // Create oneshot channel to receive permission outcome from external responder
+        let (outcome_tx, outcome_rx) = oneshot::channel::<acp::RequestPermissionOutcome>();
+
+        // Send permission request to command loop for storage and later resolution
+        let send_result = self.command_tx.send(AcpCommand::PermissionRequest {
+            request_id: request_id.clone(),
+            tool_name,
+            input: input.unwrap_or_else(|| serde_json::Value::Null),
+            options: args.options.clone(),
+            response_tx: outcome_tx,
+        });
+
+        if send_result.is_err() {
+            // Command channel closed, fall back to auto-approval
+            warn!("Permission request channel closed, auto-approving");
+            return Ok(acp::RequestPermissionResponse::new(
+                Self::choose_permission_option(&args.options),
+            ));
+        }
+
+        // Wait for permission outcome from external response
+        match outcome_rx.await {
+            Ok(outcome) => Ok(acp::RequestPermissionResponse::new(outcome)),
+            Err(_) => {
+                // Outcome channel closed, fall back to auto-approval
+                warn!("Permission outcome channel closed, auto-approving");
+                Ok(acp::RequestPermissionResponse::new(
+                    Self::choose_permission_option(&args.options),
+                ))
+            }
+        }
     }
 
     async fn session_notification(&self, args: acp::SessionNotification) -> acp::Result<()> {
