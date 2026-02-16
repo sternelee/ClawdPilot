@@ -80,7 +80,6 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use super::StreamingAgentSession;
 use super::events::{AgentEvent, AgentTurnEvent};
 
 /// Error types specific to ACP operations
@@ -190,6 +189,7 @@ impl AcpStreamingSession {
         command: String,
         args: Vec<String>,
         working_dir: PathBuf,
+        home_dir: Option<String>,
     ) -> Result<Self> {
         Self::spawn_with_config(
             session_id,
@@ -197,6 +197,7 @@ impl AcpStreamingSession {
             command,
             args,
             working_dir,
+            home_dir,
             RetryConfig::default(),
         )
         .await
@@ -209,6 +210,7 @@ impl AcpStreamingSession {
         command: String,
         args: Vec<String>,
         working_dir: PathBuf,
+        home_dir: Option<String>,
         retry_config: RetryConfig,
     ) -> Result<Self> {
         let (event_sender, _) = broadcast::channel(1024);
@@ -243,6 +245,7 @@ impl AcpStreamingSession {
                         command,
                         args,
                         working_dir,
+                        home_dir,
                         event_sender: runtime_event_sender,
                         command_rx,
                         ready_tx,
@@ -271,6 +274,21 @@ impl AcpStreamingSession {
         }
     }
 
+    /// Get session ID
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    /// Get agent type
+    pub fn agent_type(&self) -> AgentType {
+        self.agent_type
+    }
+
+    /// Subscribe to agent events
+    pub fn subscribe(&self) -> broadcast::Receiver<AgentTurnEvent> {
+        self.event_sender.subscribe()
+    }
+
     /// Query agent capabilities or status
     pub async fn query(&self, query: String) -> std::result::Result<serde_json::Value, String> {
         debug!(
@@ -290,26 +308,12 @@ impl AcpStreamingSession {
             .await
             .map_err(|_| "Query response channel closed".to_string())?
     }
-}
 
-#[async_trait::async_trait]
-impl StreamingAgentSession for AcpStreamingSession {
-    fn session_id(&self) -> &str {
-        &self.session_id
-    }
-
-    fn agent_type(&self) -> AgentType {
-        self.agent_type
-    }
-
-    fn subscribe(&self) -> broadcast::Receiver<AgentTurnEvent> {
-        self.event_sender.subscribe()
-    }
-
-    async fn send_message(&self, text: String, turn_id: &str) -> std::result::Result<(), String> {
+    /// Send a message to the agent
+    pub async fn send_message(&self, text: String, turn_id: &str) -> std::result::Result<(), String> {
         debug!(
-            "ACP send_message session={} agent={:?} turn={}",
-            self.session_id, self.agent_type, turn_id
+            "ACP send_message session={} agent={:?}",
+            self.session_id, self.agent_type
         );
         let (response_tx, response_rx) = oneshot::channel();
 
@@ -326,7 +330,8 @@ impl StreamingAgentSession for AcpStreamingSession {
             .map_err(|_| String::from(AcpError::PromptFailed("Response channel closed".to_string())))?
     }
 
-    async fn interrupt(&self) -> std::result::Result<(), String> {
+    /// Interrupt current operation
+    pub async fn interrupt(&self) -> std::result::Result<(), String> {
         debug!(
             "ACP interrupt session={} agent={:?}",
             self.session_id, self.agent_type
@@ -342,18 +347,15 @@ impl StreamingAgentSession for AcpStreamingSession {
             .map_err(|_| String::from(AcpError::CancelFailed("Response channel closed".to_string())))?
     }
 
-    async fn shutdown(&self) -> std::result::Result<(), String> {
-        let (response_tx, response_rx) = oneshot::channel();
-
-        self.command_tx
-            .send(AcpCommand::Shutdown { response_tx })
-            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
-
-        let _ = response_rx.await;
-        Ok(())
+    /// Get pending permissions
+    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<super::events::PendingPermission>, String> {
+        // ACP handles permissions internally via the request_permission callback
+        debug!("ACP get_pending_permissions for session {}", self.session_id);
+        Ok(vec![])
     }
 
-    async fn respond_to_permission(
+    /// Respond to a permission request
+    pub async fn respond_to_permission(
         &self,
         _request_id: String,
         _approved: bool,
@@ -361,7 +363,6 @@ impl StreamingAgentSession for AcpStreamingSession {
     ) -> std::result::Result<(), String> {
         // ACP handles permissions internally via request_permission trait method
         // The permission response is already handled in the AcpClientHandler
-        // This method is provided for compatibility with the trait but doesn't need to do anything
         debug!(
             "ACP permission response for session {}: request_id={}, approved={}",
             self.session_id, _request_id, _approved
@@ -370,12 +371,14 @@ impl StreamingAgentSession for AcpStreamingSession {
     }
 }
 
+/// Parameters for the ACP runtime task
 struct AcpRuntimeParams {
     session_id: String,
     agent_type: AgentType,
     command: String,
     args: Vec<String>,
     working_dir: PathBuf,
+    home_dir: Option<String>,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     command_rx: mpsc::UnboundedReceiver<AcpCommand>,
     ready_tx: oneshot::Sender<std::result::Result<(), String>>,
@@ -388,12 +391,20 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         params.session_id, params.agent_type, params.command, params.args
     );
 
-    let mut child = Command::new(&params.command)
-        .args(&params.args)
+    let mut cmd = Command::new(&params.command);
+    cmd.args(&params.args)
         .current_dir(&params.working_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // Set HOME directory if specified
+    if let Some(ref home) = params.home_dir {
+        cmd.env("HOME", home);
+        debug!("Setting HOME environment variable: {}", home);
+    }
+
+    let mut child = cmd
         .spawn()
         .with_context(|| {
             format!(

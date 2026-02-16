@@ -1,7 +1,11 @@
 //! 统一 AI Agent 接口
-#![allow(dead_code)]
 //!
 //! 此模块定义了统一的 AI Agent 接口，用于管理不同类型的 AI 编码工具。
+//!
+//! # ACP-Based Architecture
+//!
+//! 所有 agent 类型都通过 ACP (Agent Client Protocol) 接入。
+//! 不同 agent 类型只是提供不同的命令和配置参数。
 
 use anyhow::Result;
 use riterm_shared::message_protocol::AgentType;
@@ -23,21 +27,24 @@ pub struct AgentAvailability {
 }
 
 /// 统一的 Agent 接口
+///
+/// 所有 agent 类型都通过 ACP 协议接入，因此都需要提供
+/// ACP 兼容的命令和参数配置。
 pub trait Agent {
     /// 获取 agent 类型
     fn agent_type(&self) -> AgentType;
 
-    /// 获取默认命令
+    /// 获取命令名称
     fn command(&self) -> &str;
+
+    /// 获取 ACP 兼容的默认参数（通常包含 --stdio）
+    fn default_args(&self) -> Vec<String>;
 
     /// 检查是否可用
     fn check_available(&self) -> Result<AgentAvailability>;
 
     /// 获取版本
     fn get_version(&self) -> Result<String>;
-
-    /// 获取默认参数
-    fn default_args(&self) -> Vec<String>;
 
     /// 构建启动命令
     fn build_command(&self, project_path: &Path, extra_args: Vec<String>) -> Command {
@@ -49,7 +56,10 @@ pub trait Agent {
     }
 }
 
-/// Claude Code Agent
+/// Claude Code Agent (ACP compatible)
+///
+/// Claude Code is an ACP-compatible agent that communicates via JSON-RPC 2.0
+/// over stdio using the --stdio flag.
 pub struct ClaudeCodeAgent;
 
 impl Agent for ClaudeCodeAgent {
@@ -59,6 +69,11 @@ impl Agent for ClaudeCodeAgent {
 
     fn command(&self) -> &str {
         "claude"
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        // Claude Code uses --stdio for ACP communication
+        vec!["--stdio".to_string()]
     }
 
     fn check_available(&self) -> Result<AgentAvailability> {
@@ -87,15 +102,11 @@ impl Agent for ClaudeCodeAgent {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-
-    fn default_args(&self) -> Vec<String> {
-        // Claude Code runs in interactive mode by default (MCP over stdio)
-        // No special flags needed
-        vec![]
-    }
 }
 
-/// OpenCode Agent
+/// OpenCode Agent (ACP compatible)
+///
+/// OpenCode is an ACP-compatible agent that communicates via JSON-RPC 2.0.
 pub struct OpenCodeAgent;
 
 impl Agent for OpenCodeAgent {
@@ -105,6 +116,11 @@ impl Agent for OpenCodeAgent {
 
     fn command(&self) -> &str {
         "opencode"
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        // OpenCode uses --stdio for ACP communication
+        vec!["--stdio".to_string()]
     }
 
     fn check_available(&self) -> Result<AgentAvailability> {
@@ -133,13 +149,11 @@ impl Agent for OpenCodeAgent {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-
-    fn default_args(&self) -> Vec<String> {
-        vec!["--non-interactive".to_string()]
-    }
 }
 
-/// Gemini CLI Agent
+/// Gemini CLI Agent (ACP compatible)
+///
+/// Gemini CLI is an ACP-compatible agent that communicates via JSON-RPC 2.0.
 pub struct GeminiAgent;
 
 impl Agent for GeminiAgent {
@@ -151,8 +165,13 @@ impl Agent for GeminiAgent {
         "gemini"
     }
 
+    fn default_args(&self) -> Vec<String> {
+        // Gemini CLI uses --stdio for ACP communication
+        vec!["--stdio".to_string()]
+    }
+
     fn check_available(&self) -> Result<AgentAvailability> {
-        let output = Command::new(self.command()).arg("version").output()?;
+        let output = Command::new(self.command()).arg("--version").output()?;
 
         let available = output.status.success();
         let version = if available {
@@ -169,7 +188,7 @@ impl Agent for GeminiAgent {
     }
 
     fn get_version(&self) -> Result<String> {
-        let output = Command::new(self.command()).arg("version").output()?;
+        let output = Command::new(self.command()).arg("--version").output()?;
 
         if !output.status.success() {
             return Err(anyhow::anyhow!("Failed to get Gemini version"));
@@ -177,13 +196,11 @@ impl Agent for GeminiAgent {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-
-    fn default_args(&self) -> Vec<String> {
-        vec!["chat".to_string(), "--non-interactive".to_string()]
-    }
 }
 
-/// OpenAI Codex Agent
+/// OpenAI Codex Agent (ACP compatible)
+///
+/// Codex is an ACP-compatible agent that communicates via JSON-RPC 2.0.
 pub struct CodexAgent;
 
 impl Agent for CodexAgent {
@@ -193,6 +210,11 @@ impl Agent for CodexAgent {
 
     fn command(&self) -> &str {
         "codex"
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        // Codex uses --stdio for ACP communication
+        vec!["--stdio".to_string()]
     }
 
     fn check_available(&self) -> Result<AgentAvailability> {
@@ -221,15 +243,11 @@ impl Agent for CodexAgent {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-
-    fn default_args(&self) -> Vec<String> {
-        vec![
-            "exec".to_string(), // Run non-interactively
-        ]
-    }
 }
 
-/// GitHub Copilot Agent
+/// GitHub Copilot Agent (ACP compatible)
+///
+/// GitHub Copilot is an ACP-compatible agent that communicates via JSON-RPC 2.0.
 pub struct CopilotAgent;
 
 impl Agent for CopilotAgent {
@@ -239,6 +257,11 @@ impl Agent for CopilotAgent {
 
     fn command(&self) -> &str {
         "gh"
+    }
+
+    fn default_args(&self) -> Vec<String> {
+        // GitHub Copilot uses copilot --stdio for ACP communication
+        vec!["copilot".to_string(), "--stdio".to_string()]
     }
 
     fn check_available(&self) -> Result<AgentAvailability> {
@@ -271,13 +294,11 @@ impl Agent for CopilotAgent {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-
-    fn default_args(&self) -> Vec<String> {
-        vec!["copilot".to_string(), "repl".to_string()]
-    }
 }
 
-/// Qwen Agent
+/// Qwen Code Agent (ACP compatible)
+///
+/// Qwen Code is an ACP-compatible agent that communicates via JSON-RPC 2.0.
 pub struct QwenAgent;
 
 impl Agent for QwenAgent {
@@ -289,8 +310,12 @@ impl Agent for QwenAgent {
         "qwen-agent"
     }
 
+    fn default_args(&self) -> Vec<String> {
+        // Qwen Code uses --stdio for ACP communication
+        vec!["--stdio".to_string()]
+    }
+
     fn check_available(&self) -> Result<AgentAvailability> {
-        // Assuming qwen-agent is the command
         let output = Command::new(self.command()).arg("--version").output()?;
 
         let available = output.status.success();
@@ -316,10 +341,6 @@ impl Agent for QwenAgent {
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     }
-
-    fn default_args(&self) -> Vec<String> {
-        vec![]
-    }
 }
 
 /// Agent 工厂
@@ -327,6 +348,9 @@ pub struct AgentFactory;
 
 impl AgentFactory {
     /// 根据 AgentType 创建对应的 Agent 实现
+    ///
+    /// 所有 agent 类型都提供 ACP 兼容的配置，因此可以统一通过
+    /// AcpStreamingSession 进行通信。
     pub fn create(agent_type: AgentType) -> Box<dyn Agent> {
         match agent_type {
             AgentType::ClaudeCode => Box::new(ClaudeCodeAgent),
@@ -335,10 +359,8 @@ impl AgentFactory {
             AgentType::Gemini => Box::new(GeminiAgent),
             AgentType::Copilot => Box::new(CopilotAgent),
             AgentType::Qwen => Box::new(QwenAgent),
-            AgentType::Custom => {
-                // 自定义 agent 需要用户提供命令
-                Box::new(ClaudeCodeAgent) // 默认回退到 Claude
-            }
+            AgentType::AcpAgent => Box::new(ClaudeCodeAgent), // AcpAgent uses Claude as default
+            AgentType::Custom => Box::new(ClaudeCodeAgent), // Custom defaults to Claude
         }
     }
 
@@ -361,7 +383,7 @@ impl AgentFactory {
                 Ok(availability) => {
                     if availability.available {
                         info!(
-                            "✅ {:?} is available: {}",
+                            "✅ {:?} is available (ACP-compatible): {}",
                             agent_type,
                             availability
                                 .version
@@ -408,6 +430,14 @@ impl AgentFactory {
 
         None
     }
+
+    /// 获取 agent 的 ACP 命令和参数
+    ///
+    /// 返回 (command, args) 元组，用于启动 ACP 会话。
+    pub fn get_acp_command(agent_type: AgentType) -> (String, Vec<String>) {
+        let agent = Self::create(agent_type);
+        (agent.command().to_string(), agent.default_args())
+    }
 }
 
 #[cfg(test)]
@@ -419,13 +449,20 @@ mod tests {
         let claude = AgentFactory::create(AgentType::ClaudeCode);
         assert_eq!(claude.agent_type(), AgentType::ClaudeCode);
         assert_eq!(claude.command(), "claude");
+        assert!(claude.default_args().contains(&"--stdio".to_string()));
+    }
+
+    #[test]
+    fn test_acp_command() {
+        let (cmd, args) = AgentFactory::get_acp_command(AgentType::ClaudeCode);
+        assert_eq!(cmd, "claude");
+        assert!(args.contains(&"--stdio".to_string()));
     }
 
     #[test]
     fn test_agent_factory_get_default() {
         // 这个测试依赖于系统上是否安装了相应的工具
         let default = AgentFactory::get_default();
-        // 不断言结果，因为测试环境可能没有安装这些工具
         println!("Default agent: {:?}", default);
     }
 }

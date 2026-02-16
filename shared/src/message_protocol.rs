@@ -569,6 +569,8 @@ pub enum AgentType {
     Copilot,
     /// Qwen Code (Alibaba Cloud)
     Qwen,
+    /// Agent Client Protocol (ACP) compatible agent
+    AcpAgent,
     /// 其他自定义 Agent
     Custom,
 }

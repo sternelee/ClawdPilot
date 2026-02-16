@@ -39,27 +39,16 @@ pub trait AgentSession: Send + Sync {
     fn subscribe(&self) -> broadcast::Receiver<AgentTurnEvent>;
 
     /// Send a message to the agent and stream the response
-    fn send_message(
-        &self,
-        text: String,
-        turn_id: &str,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    fn send_message(&self, text: String, turn_id: &str) -> impl std::future::Future<Output = Result<(), String>> + Send;
 
     /// Interrupt the current operation
     fn interrupt(&self) -> impl std::future::Future<Output = Result<(), String>> + Send;
 
     /// Get pending permission requests
-    fn get_pending_permissions(
-        &self,
-    ) -> impl std::future::Future<Output = Vec<PendingPermission>> + Send;
+    fn get_pending_permissions(&self) -> impl std::future::Future<Output = Vec<PendingPermission>> + Send;
 
     /// Respond to a permission request
-    fn respond_to_permission(
-        &self,
-        request_id: &str,
-        approved: bool,
-        reason: Option<String>,
-    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    fn respond_to_permission(&self, request_id: &str, approved: bool, reason: Option<String>) -> impl std::future::Future<Output = Result<(), String>> + Send;
 }
 
 /// Shared state for managing agent processes

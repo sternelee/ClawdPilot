@@ -353,20 +353,17 @@ async fn run_agent_session(agent: String, project: String, args: Vec<String>) ->
     }
 
     // 启动会话
-    let (session_id, metadata) = manager
-        .start_session(agent_type, project, args)
+    let session_id = manager
+        .start_session(agent_type, None, args, project_path.clone(), None, "local".to_string())
         .await
         .context("Failed to start agent session")?;
 
     println!();
     println!("🤖 AI Agent Session Started");
     println!();
-    println!("   Type:     {:?}", metadata.agent_type);
-    println!("   Session:  {}", metadata.session_id);
-    println!("   Project:  {}", metadata.project_path);
-    if let Some(branch) = metadata.git_branch {
-        println!("   Branch:   {}", branch);
-    }
+    println!("   Type:     {:?}", agent_type);
+    println!("   Session:  {}", session_id);
+    println!("   Project:  {}", project);
     println!();
     println!("💬 Type your message and press Enter to send.");
     println!("   Press Ctrl+C to exit.");
@@ -386,7 +383,7 @@ async fn run_agent_session(agent: String, project: String, args: Vec<String>) ->
         }
 
         // 发送消息到 agent
-        if let Err(e) = manager.send_to_agent(&session_id, line).await {
+        if let Err(e) = manager.send_message(&session_id, line).await {
             eprintln!("❌ Failed to send message: {}", e);
         }
     }

@@ -20,7 +20,7 @@ use riterm_shared::{
     QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType, TcpForwardingAction,
     TcpForwardingType, TerminalAction,
 };
-use lib::{AgentManager, AgentTurnEvent};
+use lib::AgentManager;
 
 use crate::tcp_forwarding::TcpForwardingManager;
 
@@ -2262,8 +2262,16 @@ async fn local_start_agent(
         .ok_or("Agent manager not initialized")?
         .clone();
 
-    let (_session_id, _metadata) = manager
-        .start_session_with_id(session_id.clone(), agent_type, project_path, vec![])
+    manager
+        .start_session_with_id(
+            session_id.clone(),
+            agent_type,
+            None,           // binary_path
+            vec![],         // extra_args
+            std::path::PathBuf::from(&project_path), // working_dir
+            None,           // home_dir
+            "local".to_string(), // source
+        )
         .await
         .map_err(|e| format!("Failed to start local agent: {}", e))?;
 
@@ -2323,7 +2331,7 @@ async fn local_send_agent_message(
         .clone();
 
     manager
-        .send_to_agent(&session_id, content)
+        .send_message(&session_id, content)
         .await
         .map_err(|e| format!("Failed to send message to local agent: {}", e))
 }
@@ -2337,7 +2345,25 @@ async fn local_list_agents(state: State<'_, AppState>) -> Result<Vec<riterm_shar
         .ok_or("Agent manager not initialized")?
         .clone();
 
-    let sessions = manager.list_sessions().await;
+    let session_ids = manager.list_sessions().await;
+    let mut sessions = Vec::new();
+    for sid in session_ids {
+        let agent_type = manager.get_session_agent_type(&sid).await.unwrap_or(AgentType::Custom);
+        sessions.push(riterm_shared::message_protocol::AgentSessionMetadata {
+            session_id: sid,
+            agent_type,
+            project_path: String::new(),
+            started_at: 0,
+            active: true,
+            controlled_by_remote: false,
+            hostname: String::new(),
+            os: String::new(),
+            agent_version: None,
+            current_dir: String::new(),
+            git_branch: None,
+            machine_id: String::new(),
+        });
+    }
     Ok(sessions)
 }
 
@@ -2350,7 +2376,25 @@ async fn local_get_agent_sessions(state: State<'_, AppState>) -> Result<Vec<rite
         .ok_or("Agent manager not initialized")?
         .clone();
 
-    let sessions = manager.list_sessions().await;
+    let session_ids = manager.list_sessions().await;
+    let mut sessions = Vec::new();
+    for sid in session_ids {
+        let agent_type = manager.get_session_agent_type(&sid).await.unwrap_or(AgentType::Custom);
+        sessions.push(riterm_shared::message_protocol::AgentSessionMetadata {
+            session_id: sid,
+            agent_type,
+            project_path: String::new(),
+            started_at: 0,
+            active: true,
+            controlled_by_remote: false,
+            hostname: String::new(),
+            os: String::new(),
+            agent_version: None,
+            current_dir: String::new(),
+            git_branch: None,
+            machine_id: String::new(),
+        });
+    }
     Ok(sessions)
 }
 

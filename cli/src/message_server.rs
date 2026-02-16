@@ -18,6 +18,7 @@ use riterm_shared::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -3115,9 +3116,16 @@ impl RemoteSpawnMessageHandler {
         );
 
         // 使用 AgentManager 启动新的 agent 会话（使用指定的 session_id）
-        let (session_id, metadata) = self
-            .agent_manager
-            .start_session_with_id(session_id, agent_type, project_path.clone(), args.clone())
+        self.agent_manager
+            .start_session_with_id(
+                session_id.clone(),
+                agent_type,
+                None,
+                args.clone(),
+                PathBuf::from(project_path.clone()),
+                None,
+                "remote".to_string(),
+            )
             .await
             .map_err(|e| {
                 tracing::error!("Failed to start agent session: {}", e);
@@ -3151,7 +3159,6 @@ impl RemoteSpawnMessageHandler {
             "session_id": session_id,
             "agent_type": format!("{:?}", agent_type),
             "project_path": project_path,
-            "metadata": metadata,
         });
 
         let response = MessageBuilder::response(
@@ -3358,7 +3365,7 @@ impl SlashCommandMessageHandler {
 
         // 直接发送命令到 Agent 的 stdin
         self.agent_manager
-            .send_to_agent(&session_id, raw_command.clone())
+            .send_message(&session_id, raw_command.clone())
             .await?;
 
         // 发送确认响应
@@ -3402,14 +3409,20 @@ impl SlashCommandMessageHandler {
                 project_path,
                 args,
             } => {
-                let (new_session_id, metadata) = self
+                let new_session_id = self
                     .agent_manager
-                    .start_session(agent_type, project_path, args)
+                    .start_session(
+                        agent_type,
+                        None,
+                        args,
+                        PathBuf::from(project_path),
+                        None,
+                        "local".to_string(),
+                    )
                     .await?;
 
                 let response_data = serde_json::json!({
                     "session_id": new_session_id,
-                    "metadata": metadata,
                 });
 
                 Ok(Some(MessageBuilder::response(
@@ -3434,9 +3447,10 @@ impl SlashCommandMessageHandler {
             }
             BuiltinCommand::ListCommands => {
                 // 获取当前会话的 Agent 类型
-                let metadata = self.agent_manager.get_session_metadata(&session_id).await;
-                let agent_type = metadata
-                    .map(|m| m.agent_type)
+                let agent_type = self
+                    .agent_manager
+                    .get_session_agent_type(&session_id)
+                    .await
                     .unwrap_or(AgentType::ClaudeCode);
 
                 let router = CommandRouter::new(agent_type);
@@ -3464,10 +3478,13 @@ impl SlashCommandMessageHandler {
                 )))
             }
             BuiltinCommand::GetAgentInfo => {
-                let metadata = self.agent_manager.get_session_metadata(&session_id).await;
+                let agent_type = self.agent_manager.get_session_agent_type(&session_id).await;
 
-                if let Some(meta) = metadata {
-                    let response_data = serde_json::to_value(meta)?;
+                if let Some(agent_type) = agent_type {
+                    let response_data = serde_json::json!({
+                        "session_id": session_id,
+                        "agent_type": format!("{:?}", agent_type),
+                    });
                     Ok(Some(MessageBuilder::response(
                         "cli".to_string(),
                         req_id,
@@ -3555,11 +3572,27 @@ impl AgentControlMessageHandler {
 
         let req_id = request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
 
-        match self
-            .agent_manager
-            .send_control(&session_id, action.clone())
-            .await
-        {
+        let result = match &action {
+            AgentControlAction::SendInput { content } => {
+                self.agent_manager
+                    .send_message(&session_id, content.clone())
+                    .await
+            }
+            AgentControlAction::SendInterrupt => {
+                self.agent_manager.interrupt_session(&session_id).await
+            }
+            AgentControlAction::Terminate => {
+                self.agent_manager.stop_session(&session_id).await
+            }
+            AgentControlAction::Pause
+            | AgentControlAction::Resume
+            | AgentControlAction::GetStatus => {
+                // These actions are not directly supported by the new API
+                Ok(())
+            }
+        };
+
+        match result {
             Ok(()) => {
                 let response_data = serde_json::json!({
                     "session_id": session_id,
