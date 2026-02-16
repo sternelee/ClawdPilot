@@ -463,7 +463,7 @@ struct AcpRuntimeParams {
 /// Get an extended PATH that includes common binary directories.
 /// macOS GUI apps don't inherit the user's shell PATH, so we need to
 /// explicitly include directories where tools like `claude`, `gemini`, etc. are installed.
-fn get_extended_path() -> String {
+pub(super) fn get_extended_path() -> String {
     let current_path = std::env::var("PATH").unwrap_or_default();
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
 
@@ -496,7 +496,7 @@ fn get_extended_path() -> String {
 
 /// Resolve a command name to its full path by searching common directories.
 /// Returns the original command if no full path is found (will rely on PATH).
-fn resolve_command_path(command: &str) -> String {
+pub(super) fn resolve_command_path(command: &str) -> String {
     // If already an absolute path, return as-is
     if command.starts_with('/') {
         return command.to_string();

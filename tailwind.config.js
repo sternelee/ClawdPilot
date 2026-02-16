@@ -53,25 +53,5 @@ export default {
       },
     },
   },
-  plugins: [
-    require("daisyui")
-  ],
-  daisyui: {
-    themes: [
-      "light",
-      "dark",
-      "corporate",
-      "business",
-      "night",
-      "forest",
-      "dracula",
-      "luxury",
-      "synthwave",
-      "terminal",
-    ],
-    darkTheme: "light",
-    base: true,
-    styled: true,
-    utils: true,
-  },
+  plugins: [],
 }

@@ -1,48 +1,25 @@
 import { createSignal, createEffect, onMount, For } from "solid-js";
+import { Button } from "./primitives";
 
 interface ThemeSwitcherProps {
   class?: string;
 }
 
-// DaisyUI themes list - you can customize this list
+// Supported themes in the local token system
 const themes = [
-  "light",
-  "dark",
-  "cupcake",
-  "bumblebee",
-  "emerald",
   "corporate",
-  "synthwave",
-  "retro",
-  "cyberpunk",
-  "valentine",
-  "halloween",
-  "garden",
-  "forest",
-  "aqua",
-  "lofi",
-  "pastel",
-  "fantasy",
-  "wireframe",
-  "black",
-  "luxury",
-  "dracula",
-  "cmyk",
-  "autumn",
   "business",
-  "acid",
-  "lemonade",
+  "dark",
+  "dracula",
+  "forest",
+  "light",
+  "luxury",
   "night",
-  "coffee",
-  "winter",
-  "dim",
-  "nord",
-  "sunset",
+  "synthwave",
 ];
 
 export function ThemeSwitcher(props: ThemeSwitcherProps) {
   const [currentTheme, setCurrentTheme] = createSignal("riterm-mobile");
-  const [isOpen, setIsOpen] = createSignal(true);
 
   // Load theme from localStorage on mount
   onMount(() => {
@@ -60,7 +37,6 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
 
   const handleThemeChange = (theme: string) => {
     setCurrentTheme(theme);
-    setIsOpen(false);
   };
 
   const getThemeDisplayName = (theme: string) => {
@@ -69,11 +45,10 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
       : theme.charAt(0).toUpperCase() + theme.slice(1);
   };
 
-  console.log(currentTheme(), isOpen());
-
   return (
-    <details class={`dropdown dropdown-end ${props.class || ""}`}>
-      <summary class="btn btn-ghost btn-circle" title="切换主题">
+    <details class={`relative ${props.class || ""}`}>
+      <summary title="切换主题">
+        <Button variant="ghost" size="icon">
         <svg
           width="20"
           height="20"
@@ -89,15 +64,17 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
             d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v6a2 2 0 002 2h4a2 2 0 002-2V5z"
           ></path>
         </svg>
+        </Button>
       </summary>
-      <ul class="dropdown-content menu flex flex-col flex-nowrap bg-base-200 rounded-box z-[1] w-fit p-2 shadow-2xl max-h-80 overflow-y-auto">
-        <li class="menu-title">
-          <span>选择主题</span>
+      <ul class="absolute right-0 z-[80] mt-2 flex max-h-80 w-52 flex-col overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-2xl">
+        <li class="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          选择主题
         </li>
         {/* Current RiTerm theme */}
         <li>
-          <a
-            class={`btn ${currentTheme() === "riterm-mobile" ? "active" : ""}`}
+          <button
+            type="button"
+            class={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${currentTheme() === "riterm-mobile" ? "bg-primary text-primary-foreground" : ""}`}
             onClick={() => handleThemeChange("riterm-mobile")}
           >
             <svg
@@ -111,14 +88,15 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
               <path d="M13 3L4 14h7v7l9-11h-7V3z" />
             </svg>
             RiTerm
-          </a>
+          </button>
         </li>
-        {/* DaisyUI themes */}
+        {/* Additional themes */}
         <For each={themes}>
           {(theme) => (
             <li>
-              <a
-                class={`btn ${currentTheme() === theme ? "active" : ""}`}
+              <button
+                type="button"
+                class={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${currentTheme() === theme ? "bg-primary text-primary-foreground" : ""}`}
                 onClick={() => handleThemeChange(theme)}
               >
                 <div class="flex items-center gap-2">
@@ -129,7 +107,7 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
                   ></div>
                   {getThemeDisplayName(theme)}
                 </div>
-              </a>
+              </button>
             </li>
           )}
         </For>

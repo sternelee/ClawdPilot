@@ -1,9 +1,10 @@
 //! Agent management module
 //!
-//! This module provides unified agent session management through ACP (Agent Client Protocol).
-//! All agent types communicate via ACP using JSON-RPC 2.0 over stdio.
+//! This module provides unified agent session management.
+//! ClaudeCode uses SDK Control Protocol directly, other agents use ACP.
 
 pub mod acp;
+pub mod claude_sdk;
 pub mod events;
 pub mod factory;
 pub mod message_adapter;
@@ -18,18 +19,102 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 pub use acp::AcpStreamingSession;
+pub use claude_sdk::ClaudeSdkSession;
 pub use events::{AgentEvent, AgentTurnEvent, PendingPermission, PermissionMode, PermissionResponse};
 pub use factory::{Agent, AgentAvailability, AgentFactory};
 pub use message_adapter::event_to_message_content;
 
+/// Session kind enum for unified agent management.
+///
+/// This enum wraps both ACP and SDK session types, providing
+/// a unified interface through delegation methods.
+#[derive(Clone)]
+pub enum SessionKind {
+    /// ACP-based session (for OpenCode, Gemini, etc.)
+    Acp(Arc<AcpStreamingSession>),
+    /// SDK Control Protocol session (for Claude Code)
+    Sdk(Arc<ClaudeSdkSession>),
+}
+
+impl SessionKind {
+    /// Get session ID.
+    pub fn session_id(&self) -> &str {
+        match self {
+            SessionKind::Acp(s) => s.session_id(),
+            SessionKind::Sdk(s) => s.session_id(),
+        }
+    }
+
+    /// Get agent type.
+    pub fn agent_type(&self) -> AgentType {
+        match self {
+            SessionKind::Acp(s) => s.agent_type(),
+            SessionKind::Sdk(s) => s.agent_type(),
+        }
+    }
+
+    /// Subscribe to agent events.
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<AgentTurnEvent> {
+        match self {
+            SessionKind::Acp(s) => s.subscribe(),
+            SessionKind::Sdk(s) => s.subscribe(),
+        }
+    }
+
+    /// Send a message to the agent.
+    pub async fn send_message(&self, text: String, turn_id: &str) -> std::result::Result<(), String> {
+        match self {
+            SessionKind::Acp(s) => s.send_message(text, turn_id).await,
+            SessionKind::Sdk(s) => s.send_message(text, turn_id).await,
+        }
+    }
+
+    /// Interrupt current operation.
+    pub async fn interrupt(&self) -> std::result::Result<(), String> {
+        match self {
+            SessionKind::Acp(s) => s.interrupt().await,
+            SessionKind::Sdk(s) => s.interrupt().await,
+        }
+    }
+
+    /// Get pending permission requests.
+    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<PendingPermission>, String> {
+        match self {
+            SessionKind::Acp(s) => s.get_pending_permissions().await,
+            SessionKind::Sdk(s) => s.get_pending_permissions().await,
+        }
+    }
+
+    /// Respond to a permission request.
+    pub async fn respond_to_permission(
+        &self,
+        request_id: String,
+        approved: bool,
+        reason: Option<String>,
+    ) -> std::result::Result<(), String> {
+        match self {
+            SessionKind::Acp(s) => s.respond_to_permission(request_id, approved, reason).await,
+            SessionKind::Sdk(s) => s.respond_to_permission(request_id, approved, reason).await,
+        }
+    }
+
+    /// Gracefully shut down the session.
+    pub async fn shutdown(&self) -> std::result::Result<(), String> {
+        match self {
+            SessionKind::Acp(s) => s.shutdown().await,
+            SessionKind::Sdk(s) => s.shutdown().await,
+        }
+    }
+}
+
 /// Agent manager for managing multiple agent sessions
 ///
 /// The AgentManager is responsible for creating and managing agent sessions.
-/// All sessions use ACP (Agent Client Protocol) for communication.
+/// ClaudeCode uses SDK Control Protocol; other agents use ACP.
 #[derive(Clone)]
 pub struct AgentManager {
     /// Active sessions by session ID
-    sessions: Arc<RwLock<HashMap<String, Arc<AcpStreamingSession>>>>,
+    sessions: Arc<RwLock<HashMap<String, Arc<SessionKind>>>>,
 }
 
 impl AgentManager {
@@ -77,8 +162,8 @@ impl AgentManager {
 
     /// Start an agent session with specific session ID
     ///
-    /// This method creates an ACP-based session for the specified agent type.
-    /// All agents communicate via JSON-RPC 2.0 over stdio.
+    /// For ClaudeCode, this creates a SDK Control Protocol session.
+    /// For other agents, this creates an ACP-based session.
     pub async fn start_session_with_id(
         &self,
         session_id: String,
@@ -90,59 +175,84 @@ impl AgentManager {
         _source: String,
     ) -> Result<()> {
         info!(
-            "Starting {:?} session (ACP) with ID: {}",
+            "Starting {:?} session with ID: {}",
             agent_type,
             session_id
         );
 
-        // Get ACP command and default arguments for this agent type
-        let (command, default_args) = AgentFactory::get_acp_command(agent_type);
+        let session: Arc<SessionKind> = if agent_type == AgentType::ClaudeCode {
+            // Claude Code uses SDK Control Protocol
+            let (command, default_args) = AgentFactory::get_sdk_command(agent_type)
+                .ok_or_else(|| anyhow!("No SDK command available for ClaudeCode"))?;
 
-        // Combine default arguments with extra arguments
-        let mut args = default_args;
-        args.extend(extra_args);
+            let mut args = default_args;
+            args.extend(extra_args);
 
-        // Create ACP streaming session
-        let session = AcpStreamingSession::spawn(
-            session_id.clone(),
-            agent_type,
-            if let Some(bin_path) = binary_path {
-                bin_path
-            } else {
-                command
-            },
-            args,
-            working_dir,
-            home_dir,
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to start ACP session for {:?}",
-                agent_type
+            let sdk_session = ClaudeSdkSession::spawn(
+                session_id.clone(),
+                agent_type,
+                binary_path.unwrap_or(command),
+                args,
+                working_dir,
+                home_dir,
             )
-        })?;
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to start SDK session for {:?}",
+                    agent_type
+                )
+            })?;
+
+            Arc::new(SessionKind::Sdk(Arc::new(sdk_session)))
+        } else {
+            // Other agents use ACP
+            let (command, default_args) = AgentFactory::get_acp_command(agent_type);
+
+            let mut args = default_args;
+            args.extend(extra_args);
+
+            let acp_session = AcpStreamingSession::spawn(
+                session_id.clone(),
+                agent_type,
+                binary_path.unwrap_or(command),
+                args,
+                working_dir,
+                home_dir,
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to start ACP session for {:?}",
+                    agent_type
+                )
+            })?;
+
+            Arc::new(SessionKind::Acp(Arc::new(acp_session)))
+        };
 
         // Store session
         let mut sessions = self.sessions.write().await;
-        sessions.insert(session_id.clone(), Arc::new(session));
+        sessions.insert(session_id.clone(), session);
 
-        info!("✅ ACP session started: {}", session_id);
+        let protocol_name = if agent_type == AgentType::ClaudeCode {
+            "SDK Control Protocol"
+        } else {
+            "ACP"
+        };
+        info!("✅ {} session started: {}", protocol_name, session_id);
         Ok(())
     }
 
     /// Stop an agent session
     ///
-    /// This method gracefully shuts down the session by calling shutdown() on the
-    /// ACP streaming session, which sends a Shutdown command to the ACP runtime.
+    /// This method gracefully shuts down the session by calling shutdown().
     pub async fn stop_session(&self, session_id: &str) -> Result<()> {
         let sessions = self.sessions.read().await;
 
         if let Some(session) = sessions.get(session_id) {
             debug!("Shutting down session: {}", session_id);
 
-            // Call the session's shutdown method which sends the Shutdown command
-            // to the ACP runtime
             session
                 .shutdown()
                 .await
@@ -227,7 +337,7 @@ impl AgentManager {
     }
 
     /// Get a session reference
-    pub async fn get_session(&self, session_id: &str) -> Option<Arc<AcpStreamingSession>> {
+    pub async fn get_session(&self, session_id: &str) -> Option<Arc<SessionKind>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).cloned()
     }

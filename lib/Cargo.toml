@@ -27,6 +27,7 @@ tokio-util = { version = "0.7", features = ["compat"] }
 gethostname = "0.5"
 regex = "1.10"
 thiserror = "1.0"
+libc = "0.2"
 
 # Shared crate
 riterm-shared = { path = "../shared" }

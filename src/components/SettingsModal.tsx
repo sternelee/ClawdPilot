@@ -6,6 +6,13 @@ import {
   LanguageType,
   FontSizeType,
 } from "../stores/settingsStore";
+import {
+  Button,
+  Dialog,
+  Label,
+  Select,
+  Switch,
+} from "./ui/primitives";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,108 +34,82 @@ export function SettingsModal(props: SettingsModalProps) {
 
   return (
     <Show when={props.isOpen}>
-      <div class="modal modal-open">
-        <div class="modal-box w-11/12 max-w-2xl">
-          <h3 class="font-bold text-lg">{t("settings.title")}</h3>
+      <Dialog
+        open={props.isOpen}
+        onClose={props.onClose}
+        contentClass="w-11/12 max-w-2xl"
+      >
+        <h3 class="text-lg font-bold">{t("settings.title")}</h3>
 
-          <div class="py-4 space-y-6">
-            {/* Theme Selection */}
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">
-                  {t("settings.theme")}
-                </span>
-              </label>
-              <select
-                class="select select-bordered w-full"
-                value={settingsStore.get().theme}
-                onChange={(e) =>
-                  settingsStore.setTheme(e.currentTarget.value as ThemeType)
-                }
-              >
-                {themeOptions.map((theme) => (
-                  <option value={theme.value}>{theme.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Language Selection */}
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">
-                  {t("settings.language")}
-                </span>
-              </label>
-              <select
-                class="select select-bordered w-full"
-                value={settingsStore.get().language}
-                onChange={(e) =>
-                  settingsStore.setLanguage(
-                    e.currentTarget.value as LanguageType,
-                  )
-                }
-              >
-                <option value="en">English</option>
-                <option value="zh-CN">简体中文</option>
-              </select>
-            </div>
-
-            {/* Font Size */}
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text font-medium">
-                  {t("settings.fontSize")}
-                </span>
-              </label>
-              <select
-                class="select select-bordered w-full"
-                value={settingsStore.get().fontSize}
-                onChange={(e) =>
-                  settingsStore.setFontSize(
-                    e.currentTarget.value as FontSizeType,
-                  )
-                }
-              >
-                <option value="small">{t("fontSize.small")}</option>
-                <option value="medium">{t("fontSize.medium")}</option>
-                <option value="large">{t("fontSize.large")}</option>
-                <option value="extra-large">{t("fontSize.extra-large")}</option>
-              </select>
-            </div>
-
-            {/* Toggle Settings */}
-            <div class="form-control">
-              <label class="cursor-pointer label">
-                <span class="label-text font-medium">
-                  {t("settings.animations")}
-                </span>
-                <input
-                  type="checkbox"
-                  class="toggle toggle-primary"
-                  checked={settingsStore.get().enableAnimations}
-                  onChange={() => settingsStore.toggleAnimations()}
-                />
-              </label>
-            </div>
+        <div class="space-y-6 py-4">
+          <div class="space-y-2">
+            <Label>{t("settings.theme")}</Label>
+            <Select
+              value={settingsStore.get().theme}
+              onChange={(e) =>
+                settingsStore.setTheme(e.currentTarget.value as ThemeType)
+              }
+            >
+              {themeOptions.map((theme) => (
+                <option value={theme.value}>{theme.label}</option>
+              ))}
+            </Select>
           </div>
 
-          <div class="modal-action">
-            <button class="btn btn-ghost" onClick={props.onClose}>
-              {t("action.cancel")}
-            </button>
-            <button
-              class="btn btn-error"
-              onClick={() => {
-                settingsStore.resetToDefaults();
-                props.onClose();
-              }}
+          <div class="space-y-2">
+            <Label>{t("settings.language")}</Label>
+            <Select
+              value={settingsStore.get().language}
+              onChange={(e) =>
+                settingsStore.setLanguage(e.currentTarget.value as LanguageType)
+              }
             >
-              {t("action.reset")}
-            </button>
+              <option value="en">English</option>
+              <option value="zh-CN">简体中文</option>
+            </Select>
+          </div>
+
+          <div class="space-y-2">
+            <Label>{t("settings.fontSize")}</Label>
+            <Select
+              value={settingsStore.get().fontSize}
+              onChange={(e) =>
+                settingsStore.setFontSize(
+                  e.currentTarget.value as FontSizeType,
+                )
+              }
+            >
+              <option value="small">{t("fontSize.small")}</option>
+              <option value="medium">{t("fontSize.medium")}</option>
+              <option value="large">{t("fontSize.large")}</option>
+              <option value="extra-large">{t("fontSize.extra-large")}</option>
+            </Select>
+          </div>
+
+          <div class="flex items-center justify-between rounded-lg border border-border p-3">
+            <Label>{t("settings.animations")}</Label>
+            <Switch
+              checked={settingsStore.get().enableAnimations}
+              onChange={() => settingsStore.toggleAnimations()}
+            />
           </div>
         </div>
-        <div class="modal-backdrop" onClick={props.onClose} />
-      </div>
+
+        <div class="flex justify-end gap-2">
+          <Button variant="ghost" onClick={props.onClose}>
+            {t("action.cancel")}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              settingsStore.resetToDefaults();
+              props.onClose();
+            }}
+          >
+            {t("action.reset")}
+          </Button>
+        </div>
+      </Dialog>
     </Show>
   );
 }

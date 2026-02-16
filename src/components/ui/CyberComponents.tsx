@@ -1,9 +1,22 @@
-import { JSX } from 'solid-js';
+import { JSX, Show } from "solid-js";
+import {
+  Alert,
+  Button,
+  Card,
+  CardActions,
+  CardBody,
+  CardTitle,
+  Dialog,
+  Input,
+  Select,
+  Spinner,
+  Switch,
+} from "./primitives";
+import { cn } from "~/lib/utils";
 
-// 简化的按钮组件
 export interface SimpleButtonProps {
-  variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'error' | 'warning';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: "primary" | "secondary" | "accent" | "ghost" | "error" | "warning";
+  size?: "sm" | "md" | "lg";
   loading?: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -12,36 +25,33 @@ export interface SimpleButtonProps {
 }
 
 export function SimpleButton(props: SimpleButtonProps) {
-  const variantClasses = {
-    primary: 'btn-primary',
-    secondary: 'btn-secondary', 
-    accent: 'btn-accent',
-    ghost: 'btn-ghost',
-    error: 'btn-error',
-    warning: 'btn-warning'
-  };
-  
+  const mappedVariant =
+    props.variant === "error"
+      ? "destructive"
+      : props.variant === "warning"
+        ? "warning"
+        : props.variant === "accent"
+          ? "secondary"
+          : props.variant ?? "primary";
+
   return (
-    <button
-      class={`btn btn-${props.size || 'md'} ${variantClasses[props.variant || 'primary']} ${props.class || ''}`}
-      classList={{
-        'loading': props.loading,
-        'btn-disabled': props.disabled
-      }}
-      disabled={props.disabled || props.loading}
+    <Button
+      variant={mappedVariant}
+      size={props.size ?? "md"}
+      loading={props.loading}
+      disabled={props.disabled}
       onClick={props.onClick}
+      class={props.class}
     >
       {props.children}
-    </button>
+    </Button>
   );
 }
 
-// 兼容性别名
 export const CyberButton = SimpleButton;
 
-// 简化的输入框组件
 export interface SimpleInputProps {
-  type?: 'text' | 'password' | 'email' | 'url';
+  type?: "text" | "password" | "email" | "url";
   placeholder?: string;
   value?: string;
   onInput?: (value: string) => void;
@@ -53,33 +63,27 @@ export interface SimpleInputProps {
 
 export function SimpleInput(props: SimpleInputProps) {
   return (
-    <div class="form-control w-full">
-      <input
-        type={props.type || 'text'}
+    <div class="w-full space-y-1.5">
+      <Input
+        type={props.type || "text"}
         placeholder={props.placeholder}
-        value={props.value || ''}
+        value={props.value || ""}
         onInput={(e) => props.onInput?.(e.currentTarget.value)}
         disabled={props.disabled}
-        class={`input input-bordered w-full ${props.class || ''}`}
+        class={props.class}
       />
-      {props.error && (
-        <label class="label">
-          <span class="label-text-alt text-error">{props.error}</span>
-        </label>
-      )}
-      {props.success && (
-        <label class="label">
-          <span class="label-text-alt text-success">{props.success}</span>
-        </label>
-      )}
+      <Show when={props.error}>
+        <p class="text-xs text-error">{props.error}</p>
+      </Show>
+      <Show when={props.success}>
+        <p class="text-xs text-success">{props.success}</p>
+      </Show>
     </div>
   );
 }
 
-// 兼容性别名
 export const CyberInput = SimpleInput;
 
-// 简化的卡片组件  
 export interface SimpleCardProps {
   title?: string;
   subtitle?: string;
@@ -90,31 +94,25 @@ export interface SimpleCardProps {
 
 export function SimpleCard(props: SimpleCardProps) {
   return (
-    <div class={`card bg-base-100 shadow-md ${props.class || ''}`}>
-      <div class="card-body">
-        {props.title && (
-          <h2 class="card-title">{props.title}</h2>
-        )}
-        {props.subtitle && (
+    <Card class={cn("bg-base-100 shadow-md", props.class)}>
+      <CardBody>
+        <Show when={props.title}>
+          <CardTitle>{props.title}</CardTitle>
+        </Show>
+        <Show when={props.subtitle}>
           <p class="text-sm text-base-content opacity-70">{props.subtitle}</p>
-        )}
-        <div class="mt-4">
-          {props.children}
-        </div>
-        {props.actions && (
-          <div class="card-actions justify-end mt-4">
-            {props.actions}
-          </div>
-        )}
-      </div>
-    </div>
+        </Show>
+        <div class="mt-4">{props.children}</div>
+        <Show when={props.actions}>
+          <CardActions class="justify-end">{props.actions}</CardActions>
+        </Show>
+      </CardBody>
+    </Card>
   );
 }
 
-// 兼容性别名
 export const CyberCard = SimpleCard;
 
-// 简化的选择框组件
 export interface SimpleSelectProps {
   options: { value: string; label: string }[];
   value?: string;
@@ -126,28 +124,26 @@ export interface SimpleSelectProps {
 
 export function SimpleSelect(props: SimpleSelectProps) {
   return (
-    <select
-      class={`select select-bordered w-full ${props.class || ''}`}
-      value={props.value || ''}
+    <Select
+      value={props.value || ""}
       onChange={(e) => props.onChange?.(e.currentTarget.value)}
       disabled={props.disabled}
+      class={props.class}
     >
-      {props.placeholder && (
-        <option disabled value="">{props.placeholder}</option>
-      )}
-      {props.options.map(option => (
-        <option value={option.value}>
-          {option.label}
+      <Show when={props.placeholder}>
+        <option disabled value="">
+          {props.placeholder}
         </option>
+      </Show>
+      {props.options.map((option) => (
+        <option value={option.value}>{option.label}</option>
       ))}
-    </select>
+    </Select>
   );
 }
 
-// 兼容性别名
 export const CyberSelect = SimpleSelect;
 
-// 简化的切换组件
 export interface SimpleToggleProps {
   checked?: boolean;
   onChange?: (checked: boolean) => void;
@@ -158,169 +154,137 @@ export interface SimpleToggleProps {
 
 export function SimpleToggle(props: SimpleToggleProps) {
   return (
-    <div class={`form-control ${props.class || ''}`}>
-      <label class="label cursor-pointer">
-        {props.label && (
-          <span class="label-text">{props.label}</span>
-        )}
-        <input
-          type="checkbox"
-          class="toggle toggle-primary"
-          checked={props.checked || false}
-          onChange={(e) => props.onChange?.(e.currentTarget.checked)}
-          disabled={props.disabled}
-        />
-      </label>
-    </div>
+    <Switch
+      class={props.class}
+      checked={props.checked || false}
+      onChange={(e) => props.onChange?.(e.currentTarget.checked)}
+      disabled={props.disabled}
+      label={props.label}
+    />
   );
 }
 
-// 兼容性别名
 export const CyberToggle = SimpleToggle;
 
-// 简化的进度条组件
 export interface SimpleProgressProps {
-  value: number; // 0-100
+  value: number;
   label?: string;
-  color?: 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'error';
+  color?: "primary" | "secondary" | "accent" | "success" | "warning" | "error";
   class?: string;
 }
 
 export function SimpleProgress(props: SimpleProgressProps) {
-  const colorClasses = {
-    primary: 'progress-primary',
-    secondary: 'progress-secondary',
-    accent: 'progress-accent', 
-    success: 'progress-success',
-    warning: 'progress-warning',
-    error: 'progress-error'
+  const getColor = () => {
+    switch (props.color) {
+      case "secondary":
+      case "accent":
+        return "text-secondary";
+      case "success":
+        return "text-success";
+      case "warning":
+        return "text-warning";
+      case "error":
+        return "text-error";
+      default:
+        return "text-primary";
+    }
   };
-  
-  const colorClass = colorClasses[props.color || 'primary'];
-  
+
   return (
     <div class={props.class}>
-      {props.label && (
-        <div class="flex justify-between text-sm mb-1">
+      <Show when={props.label}>
+        <div class="mb-1 flex justify-between text-sm">
           <span>{props.label}</span>
           <span>{props.value}%</span>
         </div>
-      )}
-      <progress 
-        class={`progress w-full ${colorClass}`}
-        value={props.value} 
-        max="100"
-      />
+      </Show>
+      <div class="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          class={cn("h-full transition-all", getColor(), "bg-current")}
+          style={{ width: `${Math.max(0, Math.min(100, props.value))}%` }}
+        />
+      </div>
     </div>
   );
 }
 
-// 兼容性别名
 export const CyberProgress = SimpleProgress;
 
-// 简化的警告组件
 export interface SimpleAlertProps {
-  type: 'info' | 'success' | 'warning' | 'error';
+  type: "info" | "success" | "warning" | "error";
   message: string;
   class?: string;
 }
 
 export function SimpleAlert(props: SimpleAlertProps) {
   return (
-    <div class={`alert alert-${props.type} ${props.class || ''}`}>
+    <Alert variant={props.type} class={props.class}>
       <span>{props.message}</span>
-    </div>
+    </Alert>
   );
 }
 
-// 兼容性别名
 export const CyberAlert = SimpleAlert;
 
-// 简化的加载组件
 export interface SimpleSpinnerProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: "sm" | "md" | "lg";
   label?: string;
   class?: string;
 }
 
 export function SimpleSpinner(props: SimpleSpinnerProps) {
-  const sizeClasses = {
-    sm: 'loading-sm',
-    md: 'loading-md',
-    lg: 'loading-lg'
-  };
-  
-  const sizeClass = sizeClasses[props.size || 'md'];
-  
   return (
-    <div class={`flex items-center gap-3 ${props.class || ''}`}>
-      <span class={`loading loading-spinner ${sizeClass} text-primary`}></span>
-      {props.label && (
+    <div class={cn("flex items-center gap-3", props.class)}>
+      <Spinner size={props.size || "md"} class="text-primary" />
+      <Show when={props.label}>
         <span>{props.label}</span>
-      )}
+      </Show>
     </div>
   );
 }
 
-// 兼容性别名
 export const CyberSpinner = SimpleSpinner;
 
-// 简化的模态框组件
 export interface SimpleModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: JSX.Element;
   actions?: JSX.Element;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: "sm" | "md" | "lg" | "xl";
   class?: string;
 }
 
 export function SimpleModal(props: SimpleModalProps) {
-  const sizeClasses = {
-    sm: 'max-w-sm',
-    md: 'max-w-md',
-    lg: 'max-w-lg', 
-    xl: 'max-w-xl'
+  const sizeClass = () => {
+    switch (props.size) {
+      case "sm":
+        return "max-w-sm";
+      case "lg":
+        return "max-w-lg";
+      case "xl":
+        return "max-w-xl";
+      default:
+        return "max-w-md";
+    }
   };
-  
+
   return (
-    <div 
-      class={`modal ${props.open ? 'modal-open' : ''}`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          props.onClose();
-        }
-      }}
-    >
-      <div class={`modal-box ${sizeClasses[props.size || 'md']} ${props.class || ''}`}>
-        <div class="flex items-center justify-between mb-4">
-          {props.title && (
-            <h3 class="font-bold text-lg">
-              {props.title}
-            </h3>
-          )}
-          <button 
-            class="btn btn-sm btn-circle btn-ghost"
-            onClick={props.onClose}
-          >
-            ✕
-          </button>
-        </div>
-        
-        <div class="modal-content py-4">
-          {props.children}
-        </div>
-        
-        {props.actions && (
-          <div class="modal-action">
-            {props.actions}
-          </div>
-        )}
+    <Dialog open={props.open} onClose={props.onClose} contentClass={cn(sizeClass(), props.class)}>
+      <div class="mb-4 flex items-center justify-between">
+        <Show when={props.title}>
+          <h3 class="text-lg font-bold">{props.title}</h3>
+        </Show>
+        <Button variant="ghost" size="icon" class="h-8 w-8" onClick={props.onClose}>
+          ✕
+        </Button>
       </div>
-    </div>
+      <div class="py-2">{props.children}</div>
+      <Show when={props.actions}>
+        <div class="mt-4 flex justify-end gap-2">{props.actions}</div>
+      </Show>
+    </Dialog>
   );
 }
 
-// 兼容性别名
 export const CyberModal = SimpleModal;

@@ -5,11 +5,12 @@
  * for multi-session AI agent management.
  */
 
-import { createSignal, Show, type Component } from "solid-js";
+import { createSignal, createEffect, createMemo, Show, type Component } from "solid-js";
 import { SessionSidebar } from "./SessionSidebar";
 import { ChatView } from "./ChatView";
-import { sessionStore, type AgentType, type SessionMode } from "../stores/sessionStore";
+import { sessionStore } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
+import { Button } from "./ui/primitives";
 
 // ============================================================================
 // Icons
@@ -28,11 +29,14 @@ const MenuIcon: Component = () => (
 export const AppLayout: Component = () => {
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
 
-  const activeSession = () => sessionStore.getActiveSession();
-  const sessionMode = () => {
+  // Use createMemo to make activeSession reactive
+  const activeSession = createMemo(() => sessionStore.getActiveSession());
+
+  // Debug logging
+  createEffect(() => {
     const session = activeSession();
-    return session?.mode as SessionMode | undefined;
-  };
+    console.log("[AppLayout] activeSession changed:", session?.sessionId, "mode:", session?.mode);
+  });
 
   const handleSendMessage = (message: string) => {
     const session = activeSession();
@@ -42,7 +46,7 @@ export const AppLayout: Component = () => {
     }
 
     // For local sessions, send to local agent backend
-    if (sessionMode() === "local") {
+    if (session?.mode === "local") {
       console.log("Sending message to local session:", session.sessionId, message);
       // Local agent message is handled directly in ChatView
     } else {
@@ -62,12 +66,14 @@ export const AppLayout: Component = () => {
   return (
     <div class="flex h-screen bg-base-200 overflow-hidden">
       {/* Mobile Menu Button */}
-      <button
-        class="lg:hidden fixed top-4 left-4 z-50 btn btn-circle btn-sm bg-base-100 shadow-md"
+      <Button
+        class="fixed left-4 top-4 z-50 hidden bg-card shadow-md lg:hidden"
+        size="icon"
+        variant="ghost"
         onClick={() => setSidebarOpen(!sidebarOpen())}
       >
         <MenuIcon />
-      </button>
+      </Button>
 
       {/* Sidebar */}
       <SessionSidebar
@@ -87,23 +93,23 @@ export const AppLayout: Component = () => {
                 <p class="text-base-content/70 mb-6">
                   Manage multiple AI agent sessions in one place. Create a new session to get started.
                 </p>
-                <button
-                  class="btn btn-primary"
+                <Button
+                  variant="primary"
                   onClick={() => setSidebarOpen(true)}
                 >
                   Create Session
-                </button>
+                </Button>
               </div>
             </div>
           }
         >
           {(session) => {
-            const s = session as unknown as { sessionId: string; agentType: AgentType };
+            // session is already the AgentSessionMetadata object
             return (
               <ChatView
-                sessionId={s.sessionId}
-                agentType={s.agentType}
-                sessionMode={sessionMode()}
+                sessionId={session().sessionId}
+                agentType={session().agentType}
+                sessionMode={session().mode}
                 onSendMessage={handleSendMessage}
                 onPermissionResponse={handlePermissionResponse}
               />

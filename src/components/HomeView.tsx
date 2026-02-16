@@ -15,6 +15,17 @@ import {
   getTicketHistory,
 } from "../utils/localStorage";
 import { getTicketDisplayId } from "../utils/ticketParser";
+import {
+  Badge,
+  Button,
+  Card,
+  CardActions,
+  CardBody,
+  CardTitle,
+  Dialog,
+  Input,
+  Spinner,
+} from "./ui/primitives";
 
 /**
  * Validate a session ticket format.
@@ -130,70 +141,72 @@ export function HomeView(props: HomeViewProps) {
   // Login Modal
   const renderLoginModal = () => (
     <Show when={showLoginModal()}>
-      <div class="fixed inset-0 bg-base-300/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="card bg-base-100 shadow-2xl w-full max-w-md">
-          <div class="card-body">
-            <h2 class="card-title justify-center text-2xl mb-4">
-              Account Login
-            </h2>
+      <Dialog
+        open={showLoginModal()}
+        onClose={() => setShowLoginModal(false)}
+        contentClass="max-w-md"
+      >
+        <Card class="border-0 shadow-none">
+          <CardBody class="p-0">
+            <CardTitle class="mb-4 justify-center text-2xl">Account Login</CardTitle>
 
-            <div class="form-control w-full">
-              <label class="label" for="username-input">
-                <span class="label-text">Username</span>
-              </label>
-              <input
-                id="username-input"
-                type="text"
-                placeholder="Enter username"
-                class="input input-bordered w-full"
-                value={username()}
-                onInput={(e) => setUsername(e.currentTarget.value)}
-              />
+            <div class="space-y-4">
+              <div class="space-y-2">
+                <label for="username-input" class="text-sm font-medium">
+                  Username
+                </label>
+                <Input
+                  id="username-input"
+                  type="text"
+                  placeholder="Enter username"
+                  value={username()}
+                  onInput={(e) => setUsername(e.currentTarget.value)}
+                />
+              </div>
+
+              <div class="space-y-2">
+                <label for="password-input" class="text-sm font-medium">
+                  Password
+                </label>
+                <Input
+                  id="password-input"
+                  type="password"
+                  placeholder="Enter password"
+                  value={password()}
+                  onInput={(e) => setPassword(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === "Enter" &&
+                      username().trim() &&
+                      password().trim()
+                    ) {
+                      handleLogin();
+                    }
+                  }}
+                />
+              </div>
             </div>
 
-            <div class="form-control w-full mt-4">
-              <label class="label" for="password-input">
-                <span class="label-text">Password</span>
-              </label>
-              <input
-                id="password-input"
-                type="password"
-                placeholder="Enter password"
-                class="input input-bordered w-full"
-                value={password()}
-                onInput={(e) => setPassword(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    username().trim() &&
-                    password().trim()
-                  ) {
-                    handleLogin();
-                  }
-                }}
-              />
-            </div>
-
-            <div class="card-actions justify-end mt-8">
-              <button
+            <CardActions class="mt-8 justify-end">
+              <Button
                 type="button"
-                class="btn btn-ghost"
+                variant="ghost"
                 onClick={() => setShowLoginModal(false)}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                class="btn btn-primary"
+                variant="primary"
                 onClick={handleLogin}
                 disabled={!username().trim() || !password().trim()}
               >
                 Login
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+              </Button>
+            </CardActions>
+          </CardBody>
+        </Card>
+      </Dialog>
     </Show>
   );
 
@@ -210,35 +223,39 @@ export function HomeView(props: HomeViewProps) {
         </div>
 
         {/* Tab Navigation */}
-        <div class="tabs tabs-boxed bg-base-100/50 p-1 mb-8">
-          <button
-            class={`tab tab-lg ${activeTab() === "remote" ? "tab-active" : ""}`}
+        <div class="mb-8 inline-flex rounded-xl border border-border bg-muted p-1">
+          <Button
+            variant={activeTab() === "remote" ? "primary" : "ghost"}
+            size="lg"
+            class="h-9"
             onClick={() => setActiveTab("remote")}
           >
             🌐 Remote Session
-          </button>
-          <button
-            class={`tab tab-lg ${activeTab() === "local" ? "tab-active" : ""}`}
+          </Button>
+          <Button
+            variant={activeTab() === "local" ? "primary" : "ghost"}
+            size="lg"
+            class="h-9"
             onClick={() => setActiveTab("local")}
           >
             💻 Local Agent
-          </button>
+          </Button>
         </div>
 
         {/* Remote Mode Content */}
         <Show when={activeTab() === "remote"}>
-          <div class="card bg-base-100 shadow-xl w-full max-w-lg overflow-hidden">
-            <div class="card-body p-8">
-              <h2 class="card-title text-xl mb-6">Connect to Remote Session</h2>
+          <Card class="w-full max-w-lg overflow-hidden shadow-xl">
+            <CardBody class="p-8">
+              <CardTitle class="mb-6 text-xl">Connect to Remote Session</CardTitle>
 
-              <div class="form-control w-full">
-                <div class="join w-full">
-                  <input
+              <div class="w-full space-y-2">
+                <div class="flex w-full gap-2">
+                  <Input
                     type="text"
                     value={props.sessionTicket}
                     onInput={(e) => props.onTicketInput(e.currentTarget.value)}
                     placeholder="Paste session ticket here..."
-                    class="input input-bordered input-lg w-full join-item focus:outline-none"
+                    class="h-11 flex-1 text-base"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && props.sessionTicket.trim()) {
                         handleConnect();
@@ -248,19 +265,21 @@ export function HomeView(props: HomeViewProps) {
                     aria-label="Session Ticket"
                   />
                   <Show when={isMobile}>
-                    <button
+                    <Button
                       type="button"
-                      class="btn btn-lg btn-square join-item"
+                      variant="secondary"
+                      size="icon"
+                      class="h-11 w-11"
                       onClick={handleShowQRScanner}
                       title="Scan QR Code"
                     >
                       📷
-                    </button>
+                    </Button>
                   </Show>
                 </div>
                 <Show when={props.connectionError}>
-                  <div class="label">
-                    <span class="label-text-alt text-error flex items-center gap-1">
+                  <div class="text-sm text-error">
+                    <span class="flex items-center gap-1">
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         class="h-4 w-4"
@@ -280,10 +299,11 @@ export function HomeView(props: HomeViewProps) {
                 </Show>
               </div>
 
-              <div class="card-actions mt-6">
-                <button
+              <CardActions class="mt-6">
+                <Button
                   type="button"
-                  class="btn btn-primary btn-lg w-full shadow-lg hover:shadow-xl transition-shadow"
+                  size="lg"
+                  class="w-full shadow-lg hover:shadow-xl"
                   onClick={handleConnect}
                   disabled={!props.sessionTicket.trim() || props.connecting}
                 >
@@ -291,12 +311,12 @@ export function HomeView(props: HomeViewProps) {
                     when={props.connecting}
                     fallback={<span>Connect Now</span>}
                   >
-                    <span class="loading loading-spinner"></span>
+                    <Spinner />
                     Connecting...
                   </Show>
-                </button>
-              </div>
-            </div>
+                </Button>
+              </CardActions>
+            </CardBody>
 
             {/* History Section */}
             <Show when={ticketHistory().length > 0}>
@@ -327,52 +347,58 @@ export function HomeView(props: HomeViewProps) {
                 </div>
               </div>
             </Show>
-          </div>
+          </Card>
         </Show>
 
         {/* Local Mode Content */}
         <Show when={activeTab() === "local"}>
-          <div class="card bg-base-100 shadow-xl w-full max-w-lg overflow-hidden">
-            <div class="card-body p-8 text-center">
+          <Card class="w-full max-w-lg overflow-hidden shadow-xl">
+            <CardBody class="p-8 text-center">
               <div class="w-16 h-16 rounded-2xl bg-primary/10 text-primary text-3xl flex items-center justify-center mx-auto mb-4">
                 💻
               </div>
-              <h2 class="card-title text-xl mb-2 justify-center">Local Agent Mode</h2>
+              <CardTitle class="mb-2 justify-center text-xl">Local Agent Mode</CardTitle>
               <p class="text-base-content/60 mb-6">
                 Manage AI agents directly on your machine without connecting to a remote CLI.
               </p>
 
               <div class="space-y-3">
-                <button
+                <Button
                   type="button"
-                  class="btn btn-primary btn-lg w-full"
+                  size="lg"
+                  class="w-full"
                   onClick={handleEnterLocalMode}
                 >
                   Enter Session Manager
-                </button>
+                </Button>
 
-                <div class="divider text-base-content/40">or</div>
+                <div class="relative py-1 text-center text-base-content/40">
+                  <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
+                  <span class="relative bg-card px-2 text-sm">or</span>
+                </div>
 
-                <button
+                <Button
                   type="button"
-                  class="btn btn-outline btn-lg w-full"
+                  variant="outline"
+                  size="lg"
+                  class="w-full"
                   onClick={() => setActiveTab("remote")}
                 >
                   Connect to Remote CLI
-                </button>
+                </Button>
               </div>
 
               <div class="mt-6 p-4 bg-base-200 rounded-lg text-left">
                 <h4 class="font-semibold text-sm mb-2">Supported Agents:</h4>
                 <div class="flex flex-wrap gap-2">
-                  <span class="badge badge-primary">Claude Code</span>
-                  <span class="badge badge-secondary">Gemini CLI</span>
-                  <span class="badge badge-accent">OpenCode</span>
-                  <span class="badge badge-neutral">GitHub Copilot</span>
+                  <Badge variant="primary">Claude Code</Badge>
+                  <Badge variant="secondary">Gemini CLI</Badge>
+                  <Badge>OpenCode</Badge>
+                  <Badge variant="neutral">GitHub Copilot</Badge>
                 </div>
               </div>
-            </div>
-          </div>
+            </CardBody>
+          </Card>
         </Show>
 
         {/* Footer */}

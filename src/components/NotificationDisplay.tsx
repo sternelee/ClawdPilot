@@ -6,6 +6,7 @@
 
 import { Component, For, Show } from 'solid-js'
 import { notificationStore, Notification } from '../stores/notificationStore'
+import { Alert, Button } from './ui/primitives'
 
 // ============================================================================
 // Types
@@ -63,12 +64,12 @@ const getNotificationIcon = (type: Notification['type']) => {
   }
 }
 
-const getNotificationColor = (type: Notification['type']): string => {
+const getNotificationColor = (type: Notification['type']): 'info' | 'success' | 'warning' | 'error' => {
   switch (type) {
-    case 'info': return 'alert-info'
-    case 'success': return 'alert-success'
-    case 'warning': return 'alert-warning'
-    case 'error': return 'alert-error'
+    case 'info': return 'info'
+    case 'success': return 'success'
+    case 'warning': return 'warning'
+    case 'error': return 'error'
   }
 }
 
@@ -100,8 +101,9 @@ const NotificationItem = (props: { notification: Notification }) => {
   }
 
   return (
-    <div
-      class={`alert ${getNotificationColor(props.notification.type)} shadow-lg max-w-sm w-full mb-2`}
+    <Alert
+      variant={getNotificationColor(props.notification.type)}
+      class="relative mb-2 w-full max-w-sm shadow-lg"
       classList={{
         'opacity-0 translate-x-full': props.notification.dismissed,
         'opacity-100 translate-x-0': !props.notification.dismissed
@@ -123,12 +125,13 @@ const NotificationItem = (props: { notification: Notification }) => {
           <div class="flex gap-2 mt-2">
             <For each={props.notification.actions || []}>
               {(action, index) => (
-                <button
-                  class={`btn btn-xs ${action.primary ? 'btn-primary' : 'btn-ghost'}`}
+                <Button
+                  size="xs"
+                  variant={action.primary ? 'primary' : 'ghost'}
                   onClick={() => handleAction(index())}
                 >
                   {action.label}
-                </button>
+                </Button>
               )}
             </For>
           </div>
@@ -146,13 +149,15 @@ const NotificationItem = (props: { notification: Notification }) => {
       </Show>
 
       {/* Dismiss button */}
-      <button
-        class="btn btn-ghost btn-sm btn-circle"
+      <Button
+        size="icon"
+        variant="ghost"
+        class="h-8 w-8"
         onClick={handleDismiss}
       >
         <CloseIcon />
-      </button>
-    </div>
+      </Button>
+    </Alert>
   )
 }
 

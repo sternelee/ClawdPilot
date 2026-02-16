@@ -1,15 +1,22 @@
 /**
  * SessionSidebar Component
  *
- * Sidebar for managing AI agent sessions (both local and remote).
- * Supports switching between local and remote modes.
+ * Sidebar for managing AI agent sessions in a unified list.
  */
 
-import { createSignal, Show, For, type Component } from "solid-js";
+import { createSignal, onMount, Show, For, type Component } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import { sessionStore, type SessionMode } from "../stores/sessionStore";
+import { sessionStore } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { AgentType } from "../stores/sessionStore";
+import {
+  Alert,
+  Button,
+  Dialog,
+  Input,
+  Select,
+  Textarea,
+} from "./ui/primitives";
 
 // ============================================================================
 // Icons
@@ -131,9 +138,9 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       <div class="flex-shrink-0">
         <Show
           when={session()?.mode === "local"}
-          fallback={<LocalIcon />}
+          fallback={<RemoteIcon />}
         >
-          <RemoteIcon />
+          <LocalIcon />
         </Show>
       </div>
 
@@ -170,9 +177,11 @@ const SessionItem: Component<SessionItemProps> = (props) => {
           <span class="w-2 h-2 rounded-full bg-success animate-pulse" />
         )}
         <Show when={session()?.mode === "local" && props.onSpawnRemoteSession}>
-          <button
+          <Button
             type="button"
-            class="btn btn-ghost btn-xs"
+            variant="ghost"
+            size="xs"
+            class="h-6 px-2"
             onClick={(e) => {
               e.stopPropagation();
               if (props.onSpawnRemoteSession) {
@@ -182,7 +191,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             title="Spawn remote session"
           >
             <PlusIcon />
-          </button>
+          </Button>
         </Show>
       </div>
 
@@ -209,7 +218,6 @@ interface SessionSidebarProps {
 }
 
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
-  const [mode, setMode] = createSignal<SessionMode>("remote");
   const [showNewSessionModal, setShowNewSessionModal] = createSignal(false);
   const [newSessionAgent, setNewSessionAgent] = createSignal<AgentType>("claude");
   const [newSessionPath, setNewSessionPath] = createSignal("");
@@ -227,11 +235,38 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   // Load local sessions on mount
   const handleLoadLocalSessions = async () => {
     try {
-      const localSessions = await invoke<ReturnType<typeof sessionStore.getSessions>>("local_list_agents");
-      // Add mode property to each session
+      // 定义后端返回的类型
+      type BackendSessionMetadata = {
+        session_id: string;
+        agentType: string;
+        projectPath: string;
+        startedAt: number;
+        active: boolean;
+        controlledByRemote: boolean;
+        hostname: string;
+        os: string;
+        agentVersion?: string;
+        currentDir: string;
+        gitBranch?: string;
+        machineId: string;
+      };
+
+      const localSessions = await invoke<BackendSessionMetadata[]>("local_list_agents");
+      // Add mode property to each session and convert session_id to sessionId
       const sessionsWithMode = localSessions.map((s) => ({
-        ...s,
-        mode: "local" as SessionMode,
+        sessionId: s.session_id,
+        agentType: s.agentType as AgentType,
+        projectPath: s.projectPath,
+        startedAt: s.startedAt,
+        active: s.active,
+        controlledByRemote: s.controlledByRemote,
+        hostname: s.hostname,
+        os: s.os,
+        agentVersion: s.agentVersion,
+        currentDir: s.currentDir,
+        gitBranch: s.gitBranch,
+        machineId: s.machineId,
+        mode: "local" as const,
       }));
 
       // Update sessions in store
@@ -239,23 +274,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         sessionStore.addSession(session);
       }
 
-      setMode("local");
       notificationStore.success("Loaded local sessions", "System");
     } catch (error) {
       console.error("Failed to load local sessions:", error);
       notificationStore.error("Failed to load local sessions", "Error");
     }
-  };
-
-  const handleSessionClick = (sessionId: string) => {
-    const session = sessionStore.getSession(sessionId);
-    if (session?.mode === "remote") {
-      // For remote sessions, switch to remote mode
-      setMode("remote");
-    } else {
-      setMode("local");
-    }
-    sessionStore.setActiveSession(sessionId);
   };
 
   const handleCloseSession = (e: Event, sessionId: string) => {
@@ -306,7 +329,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       sessionStore.setActiveSession(sessionId);
       setShowNewSessionModal(false);
       setSessionTicket("");
-      setMode("remote");
       notificationStore.success("Connected to remote host", "System");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -334,7 +356,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       projectPath: newSessionPath(),
       sessionId: undefined,
     }).then((sessionId) => {
-      const newSession: ReturnType<typeof sessionStore.getSession> = {
+      const newSession = {
         sessionId,
         agentType: newSessionAgent(),
         projectPath: newSessionPath(),
@@ -345,7 +367,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         os: navigator.userAgent,
         currentDir: newSessionPath(),
         machineId: "local",
-        mode: "local",
+        mode: "local" as const,
       };
 
       sessionStore.addSession(newSession);
@@ -354,7 +376,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       setNewSessionPath("");
       notificationStore.success("Local agent session started", "System");
     }).catch((error) => {
-      console.error("Failed to start local agent:", error);
+      console.error("[handleCreateSession] Failed to start local agent:", error);
       notificationStore.error("Failed to start local agent", "Error");
     });
   };
@@ -378,6 +400,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     });
   };
 
+  onMount(() => {
+    void handleLoadLocalSessions();
+  });
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -395,42 +421,12 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           ${props.isOpen ? "translate-x-0" : "-translate-x-full lg:hidden"}
         `}
       >
-        {/* Mode Toggle */}
+        {/* Header */}
         <div class="flex items-center justify-between p-4 border-b border-base-300">
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class={`btn btn-sm ${mode() === "remote" ? "btn-active" : "btn-ghost"}`}
-              onClick={() => {
-                setMode("remote");
-                handleLoadLocalSessions();
-              }}
-            >
-              <RemoteIcon />
-              Remote
-            </button>
-            <button
-              type="button"
-              class={`btn btn-sm ${mode() === "local" ? "btn-active" : "btn-ghost"}`}
-              onClick={() => setMode("local")}
-            >
-              <LocalIcon />
-              Local
-            </button>
-          </div>
-          <button
-            class="btn btn-sm btn-ghost btn-circle"
-            onClick={props.onToggle}
-          >
+          <h3 class="text-sm font-semibold">Sessions</h3>
+          <Button size="icon" variant="ghost" class="h-8 w-8" onClick={props.onToggle}>
             <CloseIcon />
-          </button>
-        </div>
-
-        {/* Session List Header */}
-        <div class="p-3 border-b border-base-200">
-          <h3 class="text-xs font-bold text-base-content/50 uppercase">
-            {mode() === "local" ? "Local Sessions" : "Remote Sessions"}
-          </h3>
+          </Button>
         </div>
 
         {/* Session List */}
@@ -441,7 +437,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 <SessionItem
                   session={session}
                   isActive={session.sessionId === activeSession()?.sessionId}
-                  onClick={() => handleSessionClick(session.sessionId)}
+                  onClick={() => sessionStore.setActiveSession(session.sessionId)}
                   onClose={(e) => handleCloseSession(e, session.sessionId)}
                   onSpawnRemoteSession={handleSpawnRemoteSession}
                 />
@@ -452,7 +448,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             <div class="text-center py-8 text-base-content/50">
               <p class="text-sm">No active sessions</p>
               <p class="text-xs mt-1">
-                {mode() === "remote" ? "Connect to a remote CLI" : "Create a local agent session"}
+                Create a local session or connect to a remote CLI
               </p>
             </div>
           </Show>
@@ -464,22 +460,27 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             <div class="text-xs text-base-content/50">
               {activeSessions().length} active session{activeSessions().length !== 1 ? "s" : ""}
             </div>
-            <button
+            <Button
               type="button"
-              class="btn btn-primary btn-sm"
+              size="sm"
+              variant="primary"
               onClick={() => setShowNewSessionModal(true)}
               title="New Session"
             >
               <PlusIcon />
-            </button>
+            </Button>
           </div>
         </div>
       </aside>
 
       {/* New Session Modal */}
       <Show when={showNewSessionModal()}>
-        <dialog class="modal modal-open">
-          <div class="modal-box max-w-md">
+        <Dialog
+          open={showNewSessionModal()}
+          onClose={() => setShowNewSessionModal(false)}
+          contentClass="max-w-md"
+        >
+          <div>
             <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
               <PlusIcon />
               New Session
@@ -487,36 +488,36 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
             {/* Mode Toggle */}
             <div class="flex gap-2 mb-4">
-              <button
+              <Button
                 type="button"
-                class={`btn ${newSessionMode() === "remote" ? "btn-active" : "btn-ghost"}`}
+                variant={newSessionMode() === "remote" ? "primary" : "ghost"}
                 onClick={() => {
                   setNewSessionMode("remote");
                   setConnectionError(null);
                 }}
               >
                 <RemoteIcon /> Remote
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                class={`btn ${newSessionMode() === "local" ? "btn-active" : "btn-ghost"}`}
+                variant={newSessionMode() === "local" ? "primary" : "ghost"}
                 onClick={() => {
                   setNewSessionMode("local");
                   setConnectionError(null);
                 }}
               >
                 <LocalIcon /> Local
-              </button>
+              </Button>
             </div>
 
             {/* Remote Mode: Ticket Input */}
             <Show when={newSessionMode() === "remote"}>
-              <div class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text font-semibold">Session Ticket</span>
+              <div class="mb-4 space-y-2">
+                <label class="text-sm font-semibold">
+                  Session Ticket
                 </label>
-                <textarea
-                  class="textarea textarea-bordered w-full font-mono text-sm h-24"
+                <Textarea
+                  class="h-24 font-mono text-sm"
                   placeholder="Paste the session ticket from CLI host..."
                   value={sessionTicket()}
                   onInput={(e) => {
@@ -530,31 +531,26 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                     }
                   }}
                 />
-                <label class="label">
-                  <span class="label-text-alt text-base-content/50">
-                    Run `cli host` to get a session ticket
-                  </span>
-                </label>
+                <p class="text-xs text-base-content/50">
+                  Run `cli host` to get a session ticket
+                </p>
               </div>
 
               <Show when={connectionError()}>
-                <div class="alert alert-error mb-4 py-2">
+                <Alert variant="error" class="mb-4 py-2">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
                   </svg>
                   <span class="text-sm">{connectionError()}</span>
-                </div>
+                </Alert>
               </Show>
             </Show>
 
             {/* Local Mode: Agent Config */}
             <Show when={newSessionMode() === "local"}>
-              <div class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text font-semibold">Agent Type</span>
-                </label>
-                <select
-                  class="select select-bordered w-full"
+              <div class="mb-4 space-y-2">
+                <label class="text-sm font-semibold">Agent Type</label>
+                <Select
                   value={newSessionAgent()}
                   onChange={(e) => setNewSessionAgent(e.currentTarget.value as AgentType)}
                 >
@@ -564,27 +560,25 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                   <option value="copilot">GitHub Copilot</option>
                   <option value="qwen">Qwen Code</option>
                   <option value="custom">Custom</option>
-                </select>
+                </Select>
               </div>
 
-              <div class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text font-semibold">Project Path</span>
-                </label>
-                <input
+              <div class="mb-4 space-y-2">
+                <label class="text-sm font-semibold">Project Path</label>
+                <Input
                   type="text"
                   value={newSessionPath()}
                   onInput={(e) => setNewSessionPath(e.currentTarget.value)}
                   placeholder="/path/to/project"
-                  class="input input-bordered w-full font-mono text-sm"
+                  class="font-mono text-sm"
                 />
               </div>
             </Show>
 
-            <div class="modal-action">
-              <button
+            <div class="mt-6 flex justify-end gap-2">
+              <Button
                 type="button"
-                class="btn btn-ghost"
+                variant="ghost"
                 onClick={() => {
                   setShowNewSessionModal(false);
                   setConnectionError(null);
@@ -592,41 +586,38 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 }}
               >
                 Cancel
-              </button>
+              </Button>
               <Show
                 when={newSessionMode() === "remote"}
                 fallback={
-                  <button
+                  <Button
                     type="button"
-                    class="btn btn-primary"
+                    variant="primary"
                     onClick={handleCreateSession}
                     disabled={!newSessionPath().trim()}
                   >
                     Create Session
-                  </button>
+                  </Button>
                 }
               >
-                <button
+                <Button
                   type="button"
-                  class="btn btn-primary"
+                  variant="primary"
                   onClick={handleRemoteConnect}
                   disabled={!sessionTicket().trim() || connecting()}
+                  loading={connecting()}
                 >
                   <Show
                     when={connecting()}
                     fallback={<span>Connect</span>}
                   >
-                    <span class="loading loading-spinner loading-sm" />
                     Connecting...
                   </Show>
-                </button>
+                </Button>
               </Show>
             </div>
           </div>
-          <form method="dialog" class="modal-backdrop">
-            <button onClick={() => setShowNewSessionModal(false)}>close</button>
-          </form>
-        </dialog>
+        </Dialog>
       </Show>
     </>
   );

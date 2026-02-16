@@ -1,5 +1,6 @@
 import { createSignal, Show, For, createEffect, onCleanup } from "solid-js";
 import { getDeviceCapabilities, HapticFeedback } from "../../utils/mobile";
+import { Badge, Button } from "./primitives";
 
 export interface NavigationItem {
   id: string;
@@ -177,20 +178,22 @@ export function MobileNavigation(props: MobileNavigationProps) {
   return (
     <>
       {/* Top Status Bar - Mobile First with Safe Area */}
-      <div class="navbar bg-base-100 border-b border-base-300 min-h-10 px-4 mobile-safe-top sticky top-0 z-40">
-        <div class="navbar-start">
+      <div class="sticky top-0 z-40 flex min-h-10 items-center justify-between border-b border-base-300 bg-base-100 px-4 mobile-safe-top">
+        <div class="flex items-center">
           <div class="flex items-center space-x-2">
-            <button
-              class="btn btn-ghost btn-sm px-2 py-1"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="px-2 py-1"
               onClick={() => setShowStatusPanel(!showStatusPanel())}
             >
               <span class="text-lg hidden sm:inline">⚡</span>
               <span class="font-bold text-sm sm:text-base">RiTerm</span>
-            </button>
+            </Button>
           </div>
         </div>
 
-        <div class="navbar-center">
+        <div class="flex items-center">
           <div class="flex items-center space-x-2 text-sm">
             <span class="font-mono text-xs sm:text-sm">
               {props.currentTime}
@@ -198,21 +201,25 @@ export function MobileNavigation(props: MobileNavigationProps) {
           </div>
         </div>
 
-        <div class="navbar-end">
+        <div class="flex items-center">
           <div class="flex items-center space-x-1 sm:space-x-2">
             {/* Quick actions for mobile */}
             <Show when={isMobile && !showBottomNav()}>
-              <button
-                class="btn btn-primary btn-sm px-2 py-1"
+              <Button
+                variant="primary"
+                size="sm"
+                class="px-2 py-1"
                 onClick={handleQuickConnect}
                 title="Quick Connect"
               >
                 <span class="text-xs">🔗</span>
-              </button>
+              </Button>
             </Show>
 
-            <button
-              class={`btn btn-ghost btn-sm py-1 ${getStatusColor()}`}
+            <Button
+              variant="ghost"
+              size="sm"
+              class={`py-1 ${getStatusColor()}`}
               onClick={() => setShowStatusPanel(!showStatusPanel())}
               title="Network Status"
             >
@@ -220,25 +227,29 @@ export function MobileNavigation(props: MobileNavigationProps) {
               <Show when={props.isConnected}>
                 <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
               </Show>
-            </button>
+            </Button>
 
             <Show when={props.isConnected}>
-              <button
-                class="btn btn-error btn-sm px-2 py-1"
+              <Button
+                variant="destructive"
+                size="sm"
+                class="px-2 py-1"
                 onClick={handleDisconnect}
                 title="Disconnect"
               >
                 <span class="text-xs">🔌</span>
-              </button>
+              </Button>
             </Show>
 
-            <button
-              class="btn btn-ghost btn-sm px-2 py-1"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="px-2 py-1"
               onClick={handleShowSettings}
               title="Settings"
             >
               <span class="text-xs">⚙️</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -252,11 +263,12 @@ export function MobileNavigation(props: MobileNavigationProps) {
               <div class={`text-xs ${getStatusColor()}`}>{props.status}</div>
             </div>
             <div class="flex items-center space-x-2">
-              <div
-                class={`badge badge-sm ${props.isConnected ? "badge-success" : "badge-neutral"}`}
+              <Badge
+                variant={props.isConnected ? "success" : "neutral"}
+                class="h-5 px-2 text-[10px]"
               >
                 {props.isConnected ? "Connected" : "Offline"}
-              </div>
+              </Badge>
               <div class="flex">
                 <For each={[1, 2, 3, 4]}>
                   {(level) => (
@@ -296,9 +308,9 @@ export function MobileNavigation(props: MobileNavigationProps) {
                   <span class="text-lg mb-1">{item.icon}</span>
                   <span class="text-xs font-medium">{item.title}</span>
                   <Show when={item.badge}>
-                    <div class="badge badge-xs badge-primary absolute -top-1 -right-1">
+                    <Badge variant="primary" class="absolute -right-1 -top-1 h-4 px-1 text-[9px]">
                       {item.badge}
-                    </div>
+                    </Badge>
                   </Show>
                 </button>
               )}

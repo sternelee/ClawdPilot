@@ -2,7 +2,7 @@
  * RiTerm App
  *
  * Main application entry point - AI Agent P2P Remote Management
- * Multi-session management with SolidJS + DaisyUI
+ * Multi-session management with SolidJS + Solid UI tokens
  */
 
 import { createSignal, onMount, onCleanup } from "solid-js";

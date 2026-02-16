@@ -1,7 +1,7 @@
 /**
  * ChatView Component
  *
- * Main chat interface for AI agent interactions with DaisyUI styling.
+ * Main chat interface for AI agent interactions with the shared UI token system.
  * Displays messages, handles user input, shows permission requests, and supports slash commands.
  */
 
@@ -19,6 +19,95 @@ import { chatStore } from "../stores/chatStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { ChatMessage, PermissionRequest } from "../stores/chatStore";
+import {
+  Alert,
+  Badge,
+  Button,
+  Dialog,
+  Input,
+  Kbd,
+  Select,
+  Spinner,
+} from "./ui/primitives";
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+interface ParsedEvent {
+  type: string;
+  // Fields from externally tagged format (Rust serialization)
+  text?: string;
+  content?: string;
+  thinking?: boolean;
+  turnId?: string;
+  result?: unknown;
+  error?: string;
+  toolName?: string;
+  status?: string;
+  output?: string;
+  // Fields from inline format
+  data?: unknown;
+}
+
+/**
+ * Parse event from either format:
+ * 1. Rust externally tagged: {TurnStarted: {turn_id: "..."}} -> type: "turn_started"
+ * 2. Frontend inline format: {type: "text_delta", content: "..."}
+ */
+function parseEvent(eventObj: Record<string, unknown>): ParsedEvent {
+  // Check for inline format first (type: "text_delta")
+  if ("type" in eventObj) {
+    const result: ParsedEvent = { type: eventObj.type as string };
+    // Copy all other properties
+    for (const key of Object.keys(eventObj)) {
+      if (key !== "type") {
+        (result as unknown as Record<string, unknown>)[key] = eventObj[key];
+      }
+    }
+    return result;
+  }
+
+  // Check for externally tagged format (Rust serialization)
+  const typeMapping: Record<string, string> = {
+    TextDelta: "text_delta",
+    ReasoningDelta: "reasoning_delta",
+    TurnStarted: "turn_started",
+    TurnCompleted: "turn_completed",
+    TurnError: "turn_error",
+    ToolCall: "tool_call",
+    ToolResult: "tool_result",
+    MessageStart: "message_start",
+    MessageEnd: "message_end",
+    Ping: "ping",
+  };
+
+  // Find the event type key
+  for (const [key, value] of Object.entries(eventObj)) {
+    if (typeMapping[key]) {
+      const parsed: ParsedEvent = { type: typeMapping[key] };
+      if (value && typeof value === "object") {
+        const obj = value as Record<string, unknown>;
+        // Extract common fields
+        if ("text" in obj) parsed.text = obj.text as string;
+        if ("content" in obj) parsed.content = obj.content as string;
+        if ("thinking" in obj) parsed.thinking = obj.thinking as boolean;
+        if ("turn_id" in obj) parsed.turnId = obj.turn_id as string;
+        if ("result" in obj) parsed.result = obj.result;
+        if ("error" in obj) parsed.error = obj.error as string;
+        if ("tool_name" in obj || "toolName" in obj) {
+          parsed.toolName = (obj.tool_name || obj.toolName) as string;
+        }
+        if ("status" in obj) parsed.status = obj.status as string;
+        if ("output" in obj) parsed.output = obj.output as string;
+        if ("data" in obj) parsed.data = obj.data;
+      }
+      return parsed;
+    }
+  }
+
+  return { type: "unknown" };
+}
 
 // ============================================================================
 // Types
@@ -205,44 +294,35 @@ const ToolIcon = () => (
 function MessageBubble(props: { message: ChatMessage }) {
   const isUser = () => props.message.role === "user";
   const isSystem = () => props.message.role === "system";
+  const bubbleClass = () => {
+    if (isUser()) return "bg-primary text-primary-foreground border-primary";
+    if (isSystem()) return "bg-foreground text-background border-foreground";
+    return "bg-secondary text-secondary-foreground border-secondary";
+  };
 
   return (
-    <div class={`chat ${isUser() ? "chat-end" : "chat-start"}`}>
-      <div class="chat-header">
+    <div class={`flex flex-col gap-1 ${isUser() ? "items-end" : "items-start"}`}>
+      <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <Show when={isUser()}>
-          <div class="chat-image avatar">
-            <div class="w-8 h-8 rounded-full bg-primary text-primary-content flex items-center justify-center">
-              <UserIcon />
-            </div>
+          <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <UserIcon />
           </div>
         </Show>
         <Show when={!isUser() && !isSystem()}>
-          <div class="chat-image avatar">
-            <div class="w-8 h-8 rounded-full bg-secondary text-secondary-content flex items-center justify-center">
-              <BotIcon />
-            </div>
+          <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-secondary-foreground">
+            <BotIcon />
           </div>
         </Show>
         <Show when={isSystem()}>
-          <div class="chat-image avatar">
-            <div class="w-8 h-8 rounded-full bg-neutral text-neutral-content flex items-center justify-center">
-              <BotIcon />
-            </div>
+          <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background">
+            <BotIcon />
           </div>
         </Show>
-        <time class="text-xs opacity-50 ml-2">
+        <time class="opacity-70">
           {new Date(props.message.timestamp || Date.now()).toLocaleTimeString()}
         </time>
       </div>
-      <div
-        class={`chat-bubble ${
-          isUser()
-            ? "chat-bubble-primary"
-            : isSystem()
-              ? "chat-bubble-neutral"
-              : "chat-bubble-secondary"
-        }`}
-      >
+      <div class={`max-w-[min(38rem,92vw)] rounded-xl border px-4 py-3 ${bubbleClass()}`}>
         <div class="whitespace-pre-wrap break-words text-sm">
           {props.message.content}
         </div>
@@ -252,16 +332,18 @@ function MessageBubble(props: { message: ChatMessage }) {
           <div class="mt-2 flex flex-wrap gap-1">
             <For each={props.message.toolCalls}>
               {(tool) => (
-                <div class="badge badge-ghost badge-sm">
+                <Badge class="h-5 px-2 text-[10px]" variant="default">
                   <ToolIcon />
                   {tool.toolName}
-                </div>
+                </Badge>
               )}
             </For>
           </div>
         </Show>
         <Show when={props.message.thinking}>
-          <span class="loading loading-dots loading-sm mt-2"></span>
+          <span class="mt-2 inline-flex">
+            <Spinner size="sm" />
+          </span>
         </Show>
       </div>
     </div>
@@ -275,39 +357,42 @@ function PermissionRequestCard(props: {
   onApproveForSession: () => void;
 }) {
   return (
-    <div class="alert alert-warning shadow-lg mx-4 max-w-2xl">
+    <Alert variant="warning" class="mx-4 max-w-2xl shadow-lg">
       <WarningIcon />
       <div class="flex-1">
         <h3 class="font-bold">Permission Request</h3>
         <div class="text-sm opacity-80">{props.permission.description}</div>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
-        <button
+        <Button
           type="button"
           onClick={props.onApprove}
-          class="btn btn-success btn-sm"
+          variant="success"
+          size="sm"
         >
           <CheckIcon />
           Approve Once
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={props.onApproveForSession}
-          class="btn btn-primary btn-sm"
+          variant="primary"
+          size="sm"
         >
           <CheckIcon />
           Approve Session
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={props.onDeny}
-          class="btn btn-error btn-sm"
+          variant="destructive"
+          size="sm"
         >
           <XIcon />
           Deny
-        </button>
+        </Button>
       </div>
-    </div>
+    </Alert>
   );
 }
 
@@ -358,13 +443,15 @@ export function ChatView(props: ChatViewProps) {
             event: Record<string, unknown>;
           };
           if (data.sessionId === props.sessionId) {
-            const eventType = data.event?.type as string;
-            const content = data.event?.content as string | undefined;
+            // Parse event using helper that handles both Rust and frontend formats
+            const parsed = parseEvent(data.event);
+            const eventType = parsed.type;
+            const content = parsed.content || parsed.text || "";
+            const thinking = parsed.thinking || false;
 
             // Handle different event types from local agent
             switch (eventType) {
               case "text_delta":
-                const thinking = data.event?.thinking as boolean || false;
                 const deltaContent = content || "";
                 // Update or create message
                 const currentMessages = messages();
@@ -403,7 +490,7 @@ export function ChatView(props: ChatViewProps) {
 
               case "turn_error":
                 setIsStreaming(false);
-                const error = content || "Unknown error";
+                const error = parsed.error || "Unknown error";
                 chatStore.addMessage(props.sessionId, {
                   role: "system",
                   content: `Error: ${error}`,
@@ -411,9 +498,9 @@ export function ChatView(props: ChatViewProps) {
                 break;
 
               case "tool_call":
-                const toolName = data.event?.toolName as string || "unknown";
-                const status = data.event?.status as string || "started";
-                const toolOutput = data.event?.output as string | undefined;
+                const toolName = parsed.toolName || "unknown";
+                const status = parsed.status || "started";
+                const toolOutput = parsed.output as string | undefined;
                 chatStore.addMessage(props.sessionId, {
                   role: "system",
                   content: `[Tool: ${toolName}] Status: ${status}${toolOutput ? `\n${toolOutput}` : ""}`,
@@ -421,7 +508,7 @@ export function ChatView(props: ChatViewProps) {
                 break;
 
               default:
-                console.log("Unknown local agent event:", eventType);
+                console.log("[ChatView] Unknown local agent event:", eventType, parsed);
             }
           }
         } catch (e) {
@@ -555,8 +642,16 @@ export function ChatView(props: ChatViewProps) {
   };
 
   const handleSend = async () => {
+    const sessionId = props.sessionId;
+    console.log("[handleSend] sessionId:", sessionId, "sessionMode:", props.sessionMode);
+
     const content = inputValue().trim();
     if (!content) return;
+    if (!sessionId) {
+      console.error("[handleSend] sessionId is undefined!");
+      notificationStore.error("No active session", "Error");
+      return;
+    }
 
     setInputValue("");
     setIsStreaming(true);
@@ -564,10 +659,10 @@ export function ChatView(props: ChatViewProps) {
     if (content.startsWith("/")) {
       try {
         await invoke("send_slash_command", {
-          sessionId: props.sessionId,
+          sessionId,
           command: content,
         });
-        chatStore.addMessage(props.sessionId, {
+        chatStore.addMessage(sessionId, {
           role: "system",
           content: `Command sent: ${content}`,
         });
@@ -575,7 +670,7 @@ export function ChatView(props: ChatViewProps) {
         const errorMsg =
           error instanceof Error ? error.message : "Failed to send command";
         notificationStore.error(errorMsg, "Command Error");
-        chatStore.addMessage(props.sessionId, {
+        chatStore.addMessage(sessionId, {
           role: "system",
           content: `Error: ${errorMsg}`,
         });
@@ -585,16 +680,19 @@ export function ChatView(props: ChatViewProps) {
       // Check session mode and call appropriate backend command
       if (props.sessionMode === "local") {
         // Local agent - use local_send_agent_message
+        console.log("[ChatView] Sending to local agent:", sessionId, content.substring(0, 50));
         try {
           await invoke("local_send_agent_message", {
-            sessionId: props.sessionId,
+            sessionId,
             content,
           });
+          console.log("[ChatView] Message sent successfully");
         } catch (error) {
+          console.error("[ChatView] Failed to send message:", error);
           const errorMsg =
             error instanceof Error ? error.message : "Failed to send message to local agent";
           notificationStore.error(errorMsg, "Local Agent Error");
-          chatStore.addMessage(props.sessionId, {
+          chatStore.addMessage(sessionId, {
             role: "system",
             content: `Error: ${errorMsg}`,
           });
@@ -602,7 +700,7 @@ export function ChatView(props: ChatViewProps) {
         }
       } else {
         // Remote agent - add user message to store
-        chatStore.addMessage(props.sessionId, {
+        chatStore.addMessage(sessionId, {
           role: "user",
           content,
         });
@@ -766,7 +864,7 @@ export function ChatView(props: ChatViewProps) {
   return (
     <div class="flex flex-col h-full bg-base-200 relative">
       {/* Header */}
-      <div class="navbar bg-base-100 border-b border-base-300 px-4 py-3 shadow-sm z-20">
+      <div class="z-20 flex items-center justify-between border-b border-base-300 bg-base-100 px-4 py-3 shadow-sm">
         <div class="flex-1">
           <div class="flex items-center gap-3">
             <div class="text-primary">{getAgentIcon()}</div>
@@ -780,29 +878,33 @@ export function ChatView(props: ChatViewProps) {
                 {props.agentType === "custom" && "Custom Agent"}
               </h2>
               <div class="text-xs text-base-content/50">
-                Session: {props.sessionId.slice(0, 8)}
+                Session: {props.sessionId ? props.sessionId.slice(0, 8) : 'unknown'}
               </div>
             </div>
           </div>
         </div>
-        <div class="flex-none gap-2">
+        <div class="flex items-center gap-2">
           <Show when={isStreaming()}>
-            <button
+            <Button
               type="button"
-              class="btn btn-error btn-sm btn-outline gap-2 animate-pulse"
+              variant="destructive"
+              size="sm"
+              class="animate-pulse"
               onClick={handleAbort}
             >
               <StopIcon />
               <span class="hidden sm:inline">Stop</span>
-            </button>
+            </Button>
           </Show>
-          <button
+          <Button
             type="button"
             onClick={() => setShowSpawnModal(true)}
-            class="btn btn-ghost btn-sm btn-circle"
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8"
           >
             <PlusIcon />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -857,10 +959,12 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Scroll to bottom button */}
       <Show when={!isScrolledToBottom() && messages().length > 0}>
-        <button
+        <Button
           type="button"
           onClick={scrollToBottom}
-          class="btn btn-circle btn-sm fixed bottom-24 right-6 shadow-lg z-10 bg-base-100 hover:bg-base-200"
+          class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-base-100 shadow-lg"
+          size="icon"
+          variant="ghost"
           aria-label="Scroll to bottom"
         >
           <svg
@@ -878,63 +982,66 @@ export function ChatView(props: ChatViewProps) {
               d="M19 14l-7 7m0 0l-7-7m7 7V3"
             />
           </svg>
-        </button>
+        </Button>
       </Show>
 
       {/* Input Area */}
       <div class="p-4 bg-base-100 border-t border-base-300">
-        <div class="join w-full shadow-sm">
-          <input
+        <div class="flex w-full gap-2 shadow-sm">
+          <Input
             type="text"
             value={inputValue()}
             onInput={(e) => setInputValue(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type your message..."
-            class="input input-bordered join-item flex-1 focus:outline-none"
+            class="flex-1"
             aria-label="Chat input"
             autofocus
           />
-          <button
+          <Button
             type="button"
             onClick={handleSend}
             disabled={!inputValue().trim() || isStreaming()}
-            class="btn btn-primary join-item"
+            class="shrink-0"
             aria-label="Send message"
           >
             <Show
               when={!isStreaming()}
               fallback={
-                <span class="loading loading-spinner loading-xs"></span>
+                <Spinner size="xs" />
               }
             >
               <SendIcon />
             </Show>
-          </button>
+          </Button>
         </div>
         <div class="mt-2 flex justify-between px-1">
           <span class="text-xs text-base-content/40">Markdown supported</span>
           <span class="text-xs text-base-content/40">
-            <kbd class="kbd kbd-xs">Enter</kbd> to send
+            <Kbd>Enter</Kbd> to send
           </span>
         </div>
       </div>
 
       {/* Remote Spawn Modal */}
       <Show when={showSpawnModal()}>
-        <dialog class="modal modal-open">
-          <div class="modal-box max-w-md">
+        <Dialog
+          open={showSpawnModal()}
+          onClose={() => !isSpawning() && setShowSpawnModal(false)}
+          contentClass="max-w-md"
+        >
+          <div>
             <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
               <PlusIcon />
               Spawn New Remote Session
             </h3>
 
-            <div class="form-control mb-4">
-              <label class="label" for="agent-type">
-                <span class="label-text font-semibold">Agent Type</span>
+            <div class="mb-4 space-y-2">
+              <label class="text-sm font-semibold" for="agent-type">
+                Agent Type
               </label>
-              <select
+              <Select
                 id="agent-type"
-                class="select select-bordered w-full"
                 value={spawnAgentType()}
                 onInput={(e) =>
                   setSpawnAgentType(e.currentTarget.value as AgentType)
@@ -946,70 +1053,58 @@ export function ChatView(props: ChatViewProps) {
                 <option value="copilot">GitHub Copilot</option>
                 <option value="qwen">Qwen Code</option>
                 <option value="custom">Custom</option>
-              </select>
+              </Select>
             </div>
 
-            <div class="form-control mb-4">
-              <label class="label" for="project-path">
-                <span class="label-text font-semibold">Project Path</span>
+            <div class="mb-4 space-y-2">
+              <label class="text-sm font-semibold" for="project-path">
+                Project Path
               </label>
-              <input
+              <Input
                 id="project-path"
                 type="text"
                 placeholder="/path/to/project"
-                class="input input-bordered w-full font-mono text-sm"
+                class="font-mono text-sm"
                 value={spawnProjectPath()}
                 onInput={(e) => setSpawnProjectPath(e.currentTarget.value)}
               />
             </div>
 
-            <div class="form-control mb-6">
-              <label class="label" for="spawn-args">
-                <span class="label-text font-semibold">
-                  Additional Arguments
-                </span>
+            <div class="mb-6 space-y-2">
+              <label class="text-sm font-semibold" for="spawn-args">
+                Additional Arguments
               </label>
-              <input
+              <Input
                 id="spawn-args"
                 type="text"
                 placeholder="--arg1 value1"
-                class="input input-bordered w-full font-mono text-sm"
+                class="font-mono text-sm"
                 value={spawnArgs()}
                 onInput={(e) => setSpawnArgs(e.currentTarget.value)}
               />
             </div>
 
-            <div class="modal-action">
-              <button
+            <div class="flex justify-end gap-2">
+              <Button
                 type="button"
-                class="btn btn-ghost"
+                variant="ghost"
                 onClick={() => setShowSpawnModal(false)}
                 disabled={isSpawning()}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                class="btn btn-primary"
+                variant="primary"
                 onClick={handleSpawnSession}
-                disabled={isSpawning() || !spawnProjectPath().trim()}
+                disabled={!spawnProjectPath().trim()}
+                loading={isSpawning()}
               >
-                <Show when={isSpawning()}>
-                  <span class="loading loading-spinner loading-sm"></span>
-                </Show>
                 Spawn Session
-              </button>
+              </Button>
             </div>
           </div>
-          <form method="dialog" class="modal-backdrop">
-            <button
-              type="button"
-              onClick={() => !isSpawning() && setShowSpawnModal(false)}
-            >
-              close
-            </button>
-          </form>
-        </dialog>
+        </Dialog>
       </Show>
     </div>
   );

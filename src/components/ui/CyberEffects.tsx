@@ -1,8 +1,17 @@
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
+import {
+  Button,
+  Card,
+  CardBody,
+  CardTitle,
+  Dialog,
+  Input,
+  Select,
+  Switch,
+} from "./primitives";
 
-// 网络状态指示器组件
 export function NetworkIndicator(props: {
-  strength: number; // 0-4
+  strength: number;
   connected: boolean;
   class?: string;
 }) {
@@ -35,7 +44,6 @@ export function NetworkIndicator(props: {
   );
 }
 
-// DaisyUI 5 标准按钮组件
 export function ModernButton(props: {
   children: any;
   onClick?: () => void;
@@ -50,25 +58,34 @@ export function ModernButton(props: {
   disabled?: boolean;
   class?: string;
 }) {
-  const getButtonClasses = () => {
-    const baseClass = "btn";
-    const variantClass = props.variant ? `btn-${props.variant}` : "";
-    const sizeClass = props.size ? `btn-${props.size}` : "";
-    return `${baseClass} ${variantClass} ${sizeClass} ${props.class || ""}`;
+  const variant = () => {
+    if (props.variant === "accent") return "secondary";
+    if (props.variant === "neutral") return "outline";
+    return (props.variant ?? "primary") as
+      | "primary"
+      | "secondary"
+      | "ghost"
+      | "outline";
+  };
+
+  const size = () => {
+    if (props.size === "xl") return "lg";
+    return (props.size ?? "md") as "xs" | "sm" | "md" | "lg";
   };
 
   return (
-    <button
-      class={getButtonClasses()}
+    <Button
+      variant={variant()}
+      size={size()}
+      class={props.class}
       onClick={props.onClick}
       disabled={props.disabled}
     >
       {props.children}
-    </button>
+    </Button>
   );
 }
 
-// DaisyUI 5 标准输入框组件
 export function ModernInput(props: {
   value?: string;
   onInput?: (value: string) => void;
@@ -78,9 +95,9 @@ export function ModernInput(props: {
   class?: string;
 }) {
   return (
-    <input
+    <Input
       type={props.type || "text"}
-      class={`input input-bordered ${props.class || ""}`}
+      class={props.class}
       value={props.value || ""}
       onInput={(e) => props.onInput?.(e.currentTarget.value)}
       placeholder={props.placeholder}
@@ -89,35 +106,26 @@ export function ModernInput(props: {
   );
 }
 
-// DaisyUI 5 标准卡片组件
 export function ModernCard(props: {
   children: any;
   title?: string;
   class?: string;
   variant?: "bordered" | "compact";
 }) {
-  const getCardClasses = () => {
-    const baseClass = "card bg-base-100 shadow-xl";
-    const variantClass =
-      props.variant === "bordered"
-        ? "card-bordered"
-        : props.variant === "compact"
-          ? "card-compact"
-          : "";
-    return `${baseClass} ${variantClass} ${props.class || ""}`;
-  };
-
   return (
-    <div class={getCardClasses()}>
-      <div class="card-body">
-        {props.title && <h2 class="card-title">{props.title}</h2>}
+    <Card
+      class={`${props.variant === "compact" ? "shadow-none" : "shadow-xl"} ${props.class || ""}`}
+    >
+      <CardBody class={props.variant === "compact" ? "p-4" : "p-6"}>
+        <Show when={props.title}>
+          <CardTitle>{props.title}</CardTitle>
+        </Show>
         {props.children}
-      </div>
-    </div>
+      </CardBody>
+    </Card>
   );
 }
 
-// DaisyUI 5 标准模态框组件
 export function ModernModal(props: {
   children: any;
   isOpen: boolean;
@@ -125,28 +133,20 @@ export function ModernModal(props: {
   title?: string;
 }) {
   return (
-    <>
-      {props.isOpen && (
-        <>
-          <div class="modal modal-open">
-            <div class="modal-box">
-              {props.title && <h3 class="font-bold text-lg">{props.title}</h3>}
-              <div class="py-4">{props.children}</div>
-              <div class="modal-action">
-                <ModernButton variant="ghost" onClick={props.onClose}>
-                  关闭
-                </ModernButton>
-              </div>
-            </div>
-            <div class="modal-backdrop" onClick={props.onClose} />
-          </div>
-        </>
-      )}
-    </>
+    <Dialog open={props.isOpen} onClose={props.onClose}>
+      <Show when={props.title}>
+        <h3 class="text-lg font-bold">{props.title}</h3>
+      </Show>
+      <div class="py-4">{props.children}</div>
+      <div class="mt-2 flex justify-end">
+        <ModernButton variant="ghost" onClick={props.onClose}>
+          关闭
+        </ModernButton>
+      </div>
+    </Dialog>
   );
 }
 
-// DaisyUI 5 标准选择框组件
 export function ModernSelect(props: {
   value?: string;
   onChange?: (value: string) => void;
@@ -155,24 +155,23 @@ export function ModernSelect(props: {
   class?: string;
 }) {
   return (
-    <select
-      class={`select select-bordered ${props.class || ""}`}
+    <Select
+      class={props.class}
       value={props.value}
       onChange={(e) => props.onChange?.(e.currentTarget.value)}
     >
-      {props.placeholder && (
-        <option disabled selected>
+      <Show when={props.placeholder}>
+        <option disabled value="">
           {props.placeholder}
         </option>
-      )}
+      </Show>
       {props.options.map((option) => (
         <option value={option.value}>{option.label}</option>
       ))}
-    </select>
+    </Select>
   );
 }
 
-// DaisyUI 5 标准切换组件
 export function ModernToggle(props: {
   checked?: boolean;
   onChange?: (checked: boolean) => void;
@@ -180,29 +179,21 @@ export function ModernToggle(props: {
   class?: string;
 }) {
   return (
-    <div class="form-control">
-      <label class="cursor-pointer label">
-        {props.label && <span class="label-text">{props.label}</span>}
-        <input
-          type="checkbox"
-          class={`toggle toggle-primary ${props.class || ""}`}
-          checked={props.checked}
-          onChange={(e) => props.onChange?.(e.currentTarget.checked)}
-        />
-      </label>
-    </div>
+    <Switch
+      class={props.class}
+      label={props.label}
+      checked={props.checked}
+      onChange={(e) => props.onChange?.(e.currentTarget.checked)}
+    />
   );
 }
 
-// 简单的背景组件
 export function SubtleBackground() {
   return <div class="fixed inset-0 pointer-events-none z-0 bg-base-100" />;
 }
 
-// 组合背景组件
 export function ModernBackground() {
   return <SubtleBackground />;
 }
 
-// 兼容性别名
 export const CyberBackground = ModernBackground;
