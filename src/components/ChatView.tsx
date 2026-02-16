@@ -29,6 +29,7 @@ import {
   Select,
   Spinner,
 } from "./ui/primitives";
+import { MarkdownRenderer } from "solid-markdown-wasm";
 
 // ============================================================================
 // Helper Functions
@@ -343,7 +344,9 @@ function MessageBubble(props: { message: ChatMessage }) {
   };
 
   return (
-    <div class={`flex flex-col gap-1 ${isUser() ? "items-end" : "items-start"}`}>
+    <div
+      class={`flex flex-col gap-1 ${isUser() ? "items-end" : "items-start"}`}
+    >
       <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <Show when={isUser()}>
           <div class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
@@ -364,9 +367,11 @@ function MessageBubble(props: { message: ChatMessage }) {
           {new Date(props.message.timestamp || Date.now()).toLocaleTimeString()}
         </time>
       </div>
-      <div class={`max-w-[min(38rem,92vw)] rounded-xl border px-4 py-3 ${bubbleClass()}`}>
-        <div class="whitespace-pre-wrap break-words text-sm">
-          {props.message.content}
+      <div
+        class={`max-w-[min(38rem,92vw)] rounded-xl border px-4 py-3 ${bubbleClass()}`}
+      >
+        <div class="prose prose-sm wrap-break-words text-sm max-w-none">
+          <MarkdownRenderer markdown={props.message.content} />
         </div>
         <Show
           when={props.message.toolCalls && props.message.toolCalls.length > 0}
@@ -522,8 +527,12 @@ export function ChatView(props: ChatViewProps) {
               case "turn_completed":
                 setIsStreaming(false);
                 const currentMessages2 = messages();
-                const lastMessage2 = currentMessages2[currentMessages2.length - 1];
-                if (lastMessage2?.role === "assistant" && lastMessage2.thinking) {
+                const lastMessage2 =
+                  currentMessages2[currentMessages2.length - 1];
+                if (
+                  lastMessage2?.role === "assistant" &&
+                  lastMessage2.thinking
+                ) {
                   chatStore.updateMessage(props.sessionId, lastMessage2.id, {
                     thinking: false,
                   });
@@ -576,7 +585,9 @@ export function ChatView(props: ChatViewProps) {
               case "tool_inputUpdated":
                 const updateToolName = parsed.toolName || "unknown";
                 const updatedInput = parsed.input;
-                const updateStr = updatedInput ? JSON.stringify(updatedInput) : "";
+                const updateStr = updatedInput
+                  ? JSON.stringify(updatedInput)
+                  : "";
                 chatStore.addMessage(props.sessionId, {
                   role: "system",
                   content: `[Tool: ${updateToolName} input updated]${updateStr ? `\n${updateStr}` : ""}`,
@@ -593,7 +604,9 @@ export function ChatView(props: ChatViewProps) {
                     content: `[Tool: ${compToolName} failed]\nError: ${compError}`,
                   });
                 } else {
-                  const outputStr = compOutput ? JSON.stringify(compOutput) : "";
+                  const outputStr = compOutput
+                    ? JSON.stringify(compOutput)
+                    : "";
                   chatStore.addMessage(props.sessionId, {
                     role: "system",
                     content: `[Tool: ${compToolName} completed]${outputStr ? `\n${outputStr}` : ""}`,
@@ -603,7 +616,8 @@ export function ChatView(props: ChatViewProps) {
 
               case "approval_request":
                 const permToolName = parsed.toolName || "unknown";
-                const permMessage = parsed.message || `Permission request for ${permToolName}`;
+                const permMessage =
+                  parsed.message || `Permission request for ${permToolName}`;
                 const permInput = parsed.input;
                 const permRequestDesc = `${permMessage}${permInput ? `\nInput: ${JSON.stringify(permInput)}` : ""}`;
                 chatStore.addPermissionRequest(props.sessionId, {
@@ -647,8 +661,10 @@ export function ChatView(props: ChatViewProps) {
                 if (inputTokens || outputTokens || modelUsage) {
                   const usageParts: string[] = [];
                   if (modelUsage) usageParts.push(`Model: ${modelUsage}`);
-                  if (inputTokens !== undefined) usageParts.push(`Input tokens: ${inputTokens}`);
-                  if (outputTokens !== undefined) usageParts.push(`Output tokens: ${outputTokens}`);
+                  if (inputTokens !== undefined)
+                    usageParts.push(`Input tokens: ${inputTokens}`);
+                  if (outputTokens !== undefined)
+                    usageParts.push(`Output tokens: ${outputTokens}`);
                   chatStore.addMessage(props.sessionId, {
                     role: "system",
                     content: `[Token Usage] ${usageParts.join(" | ")}`,
@@ -690,7 +706,7 @@ export function ChatView(props: ChatViewProps) {
 
               case "terminal_output":
                 const termCmd = parsed.command || "";
-                const termOutput = parsed.output as string || "";
+                const termOutput = (parsed.output as string) || "";
                 const termExitCode = parsed.exitCode;
                 if (termCmd) {
                   if (termExitCode === 0) {
@@ -713,7 +729,11 @@ export function ChatView(props: ChatViewProps) {
                 break;
 
               default:
-                console.log("[ChatView] Unknown local agent event:", eventType, parsed);
+                console.log(
+                  "[ChatView] Unknown local agent event:",
+                  eventType,
+                  parsed,
+                );
             }
           }
         } catch (e) {
@@ -772,7 +792,7 @@ export function ChatView(props: ChatViewProps) {
                 (!messageId && lastMessage?.role === "assistant")
               ) {
                 chatStore.updateMessage(props.sessionId, lastMessage.id, {
-                  content: content,  // Replace content instead of appending
+                  content: content, // Replace content instead of appending
                   thinking,
                   timestamp: Date.now(),
                 });
@@ -848,7 +868,12 @@ export function ChatView(props: ChatViewProps) {
 
   const handleSend = async () => {
     const sessionId = props.sessionId;
-    console.log("[handleSend] sessionId:", sessionId, "sessionMode:", props.sessionMode);
+    console.log(
+      "[handleSend] sessionId:",
+      sessionId,
+      "sessionMode:",
+      props.sessionMode,
+    );
 
     const content = inputValue().trim();
     if (!content) return;
@@ -860,6 +885,12 @@ export function ChatView(props: ChatViewProps) {
 
     setInputValue("");
     setIsStreaming(true);
+
+    // Reset textarea height
+    const textarea = document.querySelector<HTMLTextAreaElement>(
+      "textarea[aria-label='Chat input']",
+    );
+    if (textarea) textarea.style.height = "auto";
 
     if (content.startsWith("/")) {
       try {
@@ -885,7 +916,11 @@ export function ChatView(props: ChatViewProps) {
       // Check session mode and call appropriate backend command
       if (props.sessionMode === "local") {
         // Local agent - add user message to store before sending
-        console.log("[ChatView] Sending to local agent:", sessionId, content.substring(0, 50));
+        console.log(
+          "[ChatView] Sending to local agent:",
+          sessionId,
+          content.substring(0, 50),
+        );
         chatStore.addMessage(sessionId, {
           role: "user",
           content,
@@ -899,7 +934,9 @@ export function ChatView(props: ChatViewProps) {
         } catch (error) {
           console.error("[ChatView] Failed to send message:", error);
           const errorMsg =
-            error instanceof Error ? error.message : "Failed to send message to local agent";
+            error instanceof Error
+              ? error.message
+              : "Failed to send message to local agent";
           notificationStore.error(errorMsg, "Local Agent Error");
           chatStore.addMessage(sessionId, {
             role: "system",
@@ -1073,13 +1110,14 @@ export function ChatView(props: ChatViewProps) {
   return (
     <div class="flex flex-col h-full bg-base-200 relative">
       {/* Header */}
-      <div class="z-20 flex items-center justify-between border-b border-base-300 bg-base-100 px-4 py-3 shadow-sm">
+      <div class="z-20 flex items-center justify-between border-b border-base-300 bg-base-100 pr-4 pl-16 py-4 shadow-sm">
         <div class="flex-1">
           <div class="flex items-center gap-3">
             <div class="text-primary">{getAgentIcon()}</div>
             <div>
               <h2 class="text-lg font-semibold">
                 {props.agentType === "claude" && "Claude Code"}
+                {props.agentType === "codex" && "Codex"}
                 {props.agentType === "opencode" && "OpenCode"}
                 {props.agentType === "gemini" && "Gemini CLI"}
                 {props.agentType === "copilot" && "GitHub Copilot"}
@@ -1087,7 +1125,8 @@ export function ChatView(props: ChatViewProps) {
                 {props.agentType === "custom" && "Custom Agent"}
               </h2>
               <div class="text-xs text-base-content/50">
-                Session: {props.sessionId ? props.sessionId.slice(0, 8) : 'unknown'}
+                Session:{" "}
+                {props.sessionId ? props.sessionId.slice(0, 8) : "unknown"}
               </div>
             </div>
           </div>
@@ -1196,16 +1235,22 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Input Area */}
       <div class="p-4 bg-base-100 border-t border-base-300">
-        <div class="flex w-full gap-2 shadow-sm">
-          <Input
-            type="text"
+        <div class="flex w-full gap-2 shadow-sm items-end">
+          <textarea
             value={inputValue()}
-            onInput={(e) => setInputValue(e.currentTarget.value)}
+            onInput={(e) => {
+              setInputValue(e.currentTarget.value);
+              // Auto-resize
+              e.currentTarget.style.height = "auto";
+              e.currentTarget.style.height =
+                Math.min(e.currentTarget.scrollHeight, 200) + "px";
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Type your message..."
-            class="flex-1"
+            class="textarea textarea-bordered flex-1 min-h-10 max-h-50 resize-none leading-normal"
             aria-label="Chat input"
             autofocus
+            rows={1}
           />
           <Button
             type="button"
@@ -1214,12 +1259,7 @@ export function ChatView(props: ChatViewProps) {
             class="shrink-0"
             aria-label="Send message"
           >
-            <Show
-              when={!isStreaming()}
-              fallback={
-                <Spinner size="xs" />
-              }
-            >
+            <Show when={!isStreaming()} fallback={<Spinner size="xs" />}>
               <SendIcon />
             </Show>
           </Button>
@@ -1227,7 +1267,7 @@ export function ChatView(props: ChatViewProps) {
         <div class="mt-2 flex justify-between px-1">
           <span class="text-xs text-base-content/40">Markdown supported</span>
           <span class="text-xs text-base-content/40">
-            <Kbd>Enter</Kbd> to send
+            <Kbd>Shift+Enter</Kbd> new line, <Kbd>Enter</Kbd> to send
           </span>
         </div>
       </div>
@@ -1257,6 +1297,7 @@ export function ChatView(props: ChatViewProps) {
                 }
               >
                 <option value="claude">Claude Code</option>
+                <option value="codex">Codex</option>
                 <option value="opencode">OpenCode</option>
                 <option value="gemini">Gemini CLI</option>
                 <option value="copilot">GitHub Copilot</option>

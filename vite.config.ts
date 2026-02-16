@@ -3,11 +3,16 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import tailwindcss from "@tailwindcss/vite";
+import wasm from "vite-plugin-wasm";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [solid(), tailwindcss()],
+  plugins: [
+    wasm(), // Add this plugin (must be before solid())
+    solid(),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       "~": path.resolve(__dirname, "./src"),
@@ -24,4 +29,7 @@ export default defineConfig({
   },
   // Ensure proper base path for Tauri
   base: "./",
+  optimizeDeps: {
+    exclude: ["solid-markdown-wasm"],
+  },
 });

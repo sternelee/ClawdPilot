@@ -36,7 +36,6 @@ export default function App() {
       // Initialize P2P network
       const nodeId = await invoke<string>("initialize_network");
       console.log("Network initialized:", nodeId);
-      notificationStore.success("Network connected", "System");
 
       // Listen for agent session creation events
       setupEventListeners();
@@ -77,10 +76,7 @@ export default function App() {
       // Set as active session
       sessionStore.setActiveSession(payload.session_id);
 
-      notificationStore.success(
-        `${agentType} session created`,
-        "Session"
-      );
+      notificationStore.success(`${agentType} session created`, "Session");
     });
 
     // Cleanup on unmount
