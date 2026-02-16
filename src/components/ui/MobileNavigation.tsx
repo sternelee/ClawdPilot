@@ -30,7 +30,6 @@ export function MobileNavigation(props: MobileNavigationProps) {
 
   const deviceCapabilities = getDeviceCapabilities();
   const isMobile = deviceCapabilities.isMobile;
-  const isTablet = deviceCapabilities.isTablet;
 
   // Handle orientation changes
   createEffect(() => {
@@ -97,7 +96,8 @@ export function MobileNavigation(props: MobileNavigationProps) {
     props.onShowSettings?.();
   };
 
-  const handleShowHistory = () => {
+  // @ts-ignore reserved for future use
+  const _handleShowHistory = () => {
     HapticFeedback.light();
     props.onShowHistory?.();
   };

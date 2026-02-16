@@ -215,6 +215,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const [newSessionPath, setNewSessionPath] = createSignal("");
   const [newSessionMode, setNewSessionMode] = createSignal<"remote" | "local">("remote");
 
+  // Remote connection state
+  const [sessionTicket, setSessionTicket] = createSignal("");
+  const [connecting, setConnecting] = createSignal(false);
+  const [connectionError, setConnectionError] = createSignal<string | null>(null);
+
   const sessions = () => sessionStore.getSessions();
   const activeSession = () => sessionStore.getActiveSession();
   const activeSessions = () => sessionStore.getActiveSessions();
@@ -267,46 +272,69 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     notificationStore.success("Session closed", "System");
   };
 
+  // Handle remote ticket connection
+  const handleRemoteConnect = async () => {
+    const ticket = sessionTicket().trim();
+    if (!ticket) {
+      setConnectionError("Please enter a session ticket");
+      return;
+    }
+
+    setConnecting(true);
+    setConnectionError(null);
+
+    try {
+      const sessionId = await invoke<string>("connect_to_host", {
+        sessionTicket: ticket,
+      });
+
+      // Add remote session to store
+      sessionStore.addSession({
+        sessionId,
+        agentType: newSessionAgent(),
+        projectPath: "",
+        startedAt: Date.now(),
+        active: true,
+        controlledByRemote: false,
+        hostname: "remote",
+        os: "remote",
+        currentDir: "",
+        machineId: "remote",
+        mode: "remote",
+      });
+
+      sessionStore.setActiveSession(sessionId);
+      setShowNewSessionModal(false);
+      setSessionTicket("");
+      setMode("remote");
+      notificationStore.success("Connected to remote host", "System");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setConnectionError(errorMessage);
+      notificationStore.error(`Connection failed: ${errorMessage}`, "Error");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   const handleCreateSession = () => {
+    if (newSessionMode() === "remote") {
+      handleRemoteConnect();
+      return;
+    }
+
     if (!newSessionPath().trim()) {
       notificationStore.error("Please enter a project path", "Error");
       return;
     }
 
-    if (newSessionMode() === "local") {
-      // Create local agent session
-      invoke<string>("local_start_agent", {
-        agentType: newSessionAgent(),
-        projectPath: newSessionPath(),
-        sessionId: undefined,
-      }).then((sessionId) => {
-        const newSession: ReturnType<typeof sessionStore.getSession> = {
-          sessionId,
-          agentType: newSessionAgent(),
-          projectPath: newSessionPath(),
-          startedAt: Date.now(),
-          active: true,
-          controlledByRemote: false,
-          hostname: "localhost",
-          os: navigator.userAgent,
-          currentDir: newSessionPath(),
-          machineId: "local",
-          mode: "local",
-        };
-
-        sessionStore.addSession(newSession);
-        sessionStore.setActiveSession(sessionId);
-        setShowNewSessionModal(false);
-        setNewSessionPath("");
-        notificationStore.success("Local agent session started", "System");
-      }).catch((error) => {
-        console.error("Failed to start local agent:", error);
-        notificationStore.error("Failed to start local agent", "Error");
-      });
-    } else {
-      // Create remote session (existing flow)
-      const sessionId = `session_${Date.now()}`;
-      sessionStore.addSession({
+    // Create local agent session
+    invoke<string>("local_start_agent", {
+      agentTypeStr: newSessionAgent(),
+      projectPath: newSessionPath(),
+      sessionId: undefined,
+    }).then((sessionId) => {
+      const newSession: ReturnType<typeof sessionStore.getSession> = {
         sessionId,
         agentType: newSessionAgent(),
         projectPath: newSessionPath(),
@@ -317,13 +345,18 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         os: navigator.userAgent,
         currentDir: newSessionPath(),
         machineId: "local",
-        mode: "remote",
-      });
+        mode: "local",
+      };
+
+      sessionStore.addSession(newSession);
       sessionStore.setActiveSession(sessionId);
       setShowNewSessionModal(false);
       setNewSessionPath("");
-      notificationStore.success("Remote session created", "System");
-    }
+      notificationStore.success("Local agent session started", "System");
+    }).catch((error) => {
+      console.error("Failed to start local agent:", error);
+      notificationStore.error("Failed to start local agent", "Error");
+    });
   };
 
   // Handle spawning remote session from local session
@@ -360,7 +393,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         class={`fixed lg:static inset-y-0 left-0 z-50 w-80 bg-base-100 border-r border-base-300
           transform transition-transform duration-300 ease-in-out
           ${props.isOpen ? "translate-x-0" : "-translate-x-full lg:hidden"}
-        }`}
+        `}
       >
         {/* Mode Toggle */}
         <div class="flex items-center justify-between p-4 border-b border-base-300">
@@ -459,15 +492,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 class={`btn ${newSessionMode() === "remote" ? "btn-active" : "btn-ghost"}`}
                 onClick={() => {
                   setNewSessionMode("remote");
-                  // When switching to remote mode, clear local sessions
-                  if (newSessionMode() === "remote") {
-                    const allSessions = sessionStore.getSessions();
-                    for (const session of allSessions) {
-                      if (session.mode === "local") {
-                        sessionStore.removeSession(session.sessionId);
-                      }
-                    }
-                  }
+                  setConnectionError(null);
                 }}
               >
                 <RemoteIcon /> Remote
@@ -475,59 +500,127 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               <button
                 type="button"
                 class={`btn ${newSessionMode() === "local" ? "btn-active" : "btn-ghost"}`}
-                onClick={() => setNewSessionMode("local")}
+                onClick={() => {
+                  setNewSessionMode("local");
+                  setConnectionError(null);
+                }}
               >
                 <LocalIcon /> Local
               </button>
             </div>
 
-            <div class="form-control mb-4">
-              <label class="label">
-                <span class="label-text font-semibold">Agent Type</span>
-              </label>
-              <select
-                class="select select-bordered w-full"
-                value={newSessionAgent()}
-                onChange={(e) => setNewSessionAgent(e.currentTarget.value as AgentType)}
-              >
-                <option value="claude">Claude Code</option>
-                <option value="gemini">Gemini CLI</option>
-                <option value="opencode">OpenCode</option>
-                <option value="copilot">GitHub Copilot</option>
-                <option value="qwen">Qwen Code</option>
-                <option value="custom">Custom</option>
-              </select>
-            </div>
+            {/* Remote Mode: Ticket Input */}
+            <Show when={newSessionMode() === "remote"}>
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Session Ticket</span>
+                </label>
+                <textarea
+                  class="textarea textarea-bordered w-full font-mono text-sm h-24"
+                  placeholder="Paste the session ticket from CLI host..."
+                  value={sessionTicket()}
+                  onInput={(e) => {
+                    setSessionTicket(e.currentTarget.value);
+                    setConnectionError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && sessionTicket().trim()) {
+                      e.preventDefault();
+                      handleRemoteConnect();
+                    }
+                  }}
+                />
+                <label class="label">
+                  <span class="label-text-alt text-base-content/50">
+                    Run `cli host` to get a session ticket
+                  </span>
+                </label>
+              </div>
 
-            <div class="form-control mb-4">
-              <label class="label">
-                <span class="label-text font-semibold">Project Path</span>
-              </label>
-              <input
-                type="text"
-                value={newSessionPath()}
-                onInput={(e) => setNewSessionPath(e.currentTarget.value)}
-                placeholder="/path/to/project"
-                class="input input-bordered w-full font-mono text-sm"
-              />
-            </div>
+              <Show when={connectionError()}>
+                <div class="alert alert-error mb-4 py-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  </svg>
+                  <span class="text-sm">{connectionError()}</span>
+                </div>
+              </Show>
+            </Show>
+
+            {/* Local Mode: Agent Config */}
+            <Show when={newSessionMode() === "local"}>
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Agent Type</span>
+                </label>
+                <select
+                  class="select select-bordered w-full"
+                  value={newSessionAgent()}
+                  onChange={(e) => setNewSessionAgent(e.currentTarget.value as AgentType)}
+                >
+                  <option value="claude">Claude Code</option>
+                  <option value="gemini">Gemini CLI</option>
+                  <option value="opencode">OpenCode</option>
+                  <option value="copilot">GitHub Copilot</option>
+                  <option value="qwen">Qwen Code</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text font-semibold">Project Path</span>
+                </label>
+                <input
+                  type="text"
+                  value={newSessionPath()}
+                  onInput={(e) => setNewSessionPath(e.currentTarget.value)}
+                  placeholder="/path/to/project"
+                  class="input input-bordered w-full font-mono text-sm"
+                />
+              </div>
+            </Show>
 
             <div class="modal-action">
               <button
                 type="button"
                 class="btn btn-ghost"
-                onClick={() => setShowNewSessionModal(false)}
+                onClick={() => {
+                  setShowNewSessionModal(false);
+                  setConnectionError(null);
+                  setSessionTicket("");
+                }}
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                class="btn btn-primary"
-                onClick={handleCreateSession}
-                disabled={!newSessionPath().trim()}
+              <Show
+                when={newSessionMode() === "remote"}
+                fallback={
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    onClick={handleCreateSession}
+                    disabled={!newSessionPath().trim()}
+                  >
+                    Create Session
+                  </button>
+                }
               >
-                Create Session
-              </button>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  onClick={handleRemoteConnect}
+                  disabled={!sessionTicket().trim() || connecting()}
+                >
+                  <Show
+                    when={connecting()}
+                    fallback={<span>Connect</span>}
+                  >
+                    <span class="loading loading-spinner loading-sm" />
+                    Connecting...
+                  </Show>
+                </button>
+              </Show>
             </div>
           </div>
           <form method="dialog" class="modal-backdrop">

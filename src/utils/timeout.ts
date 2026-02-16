@@ -331,7 +331,8 @@ export async function promiseAllWithTimeout<T>(
     });
 
     if (errors.length > 0) {
-      throw new AggregateError(errors, `${errors.length} promises failed`);
+      const errorMessages = errors.map(e => e.message).join(', ');
+      throw new Error(`${errors.length} promises failed: ${errorMessages}`);
     }
 
     return values;

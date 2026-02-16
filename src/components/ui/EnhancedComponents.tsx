@@ -1,4 +1,4 @@
-import { createSignal, createEffect, Show, For, JSX } from "solid-js";
+import { createSignal, createEffect, Show, JSX } from "solid-js";
 
 // Enhanced Card Component with Mobile-First Design
 interface EnhancedCardProps {

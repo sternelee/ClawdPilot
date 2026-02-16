@@ -311,7 +311,8 @@ export const translations = {
 // Translation helper
 export const t = (key: string, lang?: LanguageType): string => {
   const currentLang = lang || settings().language;
-  return translations[currentLang]?.[key] || translations.en[key] || key;
+  const allTranslations = translations as Record<string, Record<string, string>>;
+  return allTranslations[currentLang]?.[key] || allTranslations.en[key] || key;
 };
 
 // Initialize theme on app start

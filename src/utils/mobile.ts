@@ -142,7 +142,7 @@ export class GestureRecognizer {
 
   private handleTouchStart(event: TouchEvent): void {
     const touches = Array.from(event.touches);
-    const touchPoints: TouchPoint[] = touches.map((touch, index) => ({
+    const touchPoints: TouchPoint[] = touches.map((touch, _index) => ({
       id: touch.identifier,
       x: touch.clientX,
       y: touch.clientY,
@@ -209,7 +209,7 @@ export class GestureRecognizer {
     }
   }
 
-  private handleTouchEnd(event: TouchEvent): void {
+  private handleTouchEnd(_event: TouchEvent): void {
     if (!this.currentGesture) return;
 
     // Clear long press timeout
@@ -248,7 +248,7 @@ export class GestureRecognizer {
     this.currentGesture = null;
   }
 
-  private handleTouchCancel(event: TouchEvent): void {
+  private handleTouchCancel(_event: TouchEvent): void {
     // Clear long press timeout
     if (this.longPressTimeout) {
       clearTimeout(this.longPressTimeout);
@@ -683,7 +683,7 @@ export class KeyboardManager {
   }
 
   static clear(): void {
-    this.fixedElements.forEach((config, element) => {
+    this.fixedElements.forEach((_config, element) => {
       this.unregisterFixedElement(element);
     });
   }
@@ -782,6 +782,7 @@ export class InputFocusManager {
     }
   }
 
+  // @ts-expect-error reserved for future use
   private static restoreScrollPosition(): void {
     if (this.scrollHistory.length > 0) {
       const lastPosition = this.scrollHistory.pop()!;

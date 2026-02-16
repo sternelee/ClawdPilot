@@ -77,7 +77,7 @@ export function KeyboardAwareContainer(props: KeyboardAwareContainerProps) {
     }
   };
 
-  const handleTouchEnd = (e: TouchEvent) => {
+  const handleTouchEnd = (_e: TouchEvent) => {
     if (!props.enablePullToHide || !isPulling()) return;
 
     const distance = pullDistance();

@@ -1,5 +1,6 @@
 // useToolbarPreferences - Persistent toolbar configuration
 import { createSignal, createEffect, onMount } from "solid-js";
+// @ts-ignore - QuickAccessToolbar may not exist yet
 import type { QuickAccessKey, ToolbarLayout, ToolbarPosition } from "../components/ui/QuickAccessToolbar";
 
 export interface ToolbarPreferences {
