@@ -2,38 +2,175 @@
 //!
 //! This module hosts ACP client connections to external agent processes
 //! and adapts ACP updates into RiTerm AgentEvent messages.
+//!
+//! # ACP Protocol Overview
+//!
+//! The Agent Client Protocol (ACP) is a JSON-RPC 2.0 based protocol for
+//! bidirectional communication between code editors and AI coding assistants.
+//!
+//! ## Key Features
+//!
+//! - **Bidirectional JSON-RPC 2.0**: Both frontend and backend can initiate commands
+//! - **Stdio-based communication**: Uses stdin/stdout for JSON-RPC message streaming
+//! - **Tool execution**: Agents can request to run tools (file operations, terminal commands, etc.)
+//! - **Permission system**: Fine-grained permission requests with user approval workflow
+//! - **Event streaming**: Real-time updates via session notifications
+//!
+//! # Usage Example
+//!
+//! ```no_run
+//! use riterm_lib::agent::{AgentManager, AgentType};
+//!
+//! # async fn example() -> anyhow::Result<()> {
+//! let mut manager = AgentManager::new();
+//!
+//! // Start an ACP-based agent session
+//! let session_id = manager.start_session_with_id(
+//!     AgentType::Claude,
+//!     "claude".to_string(),
+//!     vec!["--stdio".to_string()],
+//!     "/workspace".into(),
+//!     None,
+//!     "local".to_string(),
+//! ).await?;
+//!
+//! // Subscribe to agent events
+//! let mut events = manager.subscribe(&session_id)?;
+//!
+//! // Send a message to the agent
+//! manager.send_message(&session_id, "Help me refactor this code".to_string()).await?;
+//!
+//! // Process events as they arrive
+//! while let Ok(event) = events.recv().await {
+//!     println!("Agent event: {:?}", event);
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Architecture
+//!
+//! The ACP implementation consists of several key components:
+//!
+//! - **AcpStreamingSession**: Main session type implementing `StreamingAgentSession`
+//! - **AcpCommand**: Command enum for session control (Prompt, Cancel, Shutdown)
+//! - **AcpClientHandler**: Implements the `acp::Client` trait for ACP callbacks
+//! - **run_acp_runtime**: Runtime task managing the ACP connection and command loop
+//!
+//! # Error Handling
+//!
+//! The implementation uses structured error handling with automatic retry for transient
+//! failures. All errors are logged with session context for debugging.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Duration;
 
 use agent_client_protocol as acp;
 use agent_client_protocol::Agent;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use riterm_shared::message_protocol::AgentType;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc, oneshot};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use super::StreamingAgentSession;
 use super::events::{AgentEvent, AgentTurnEvent};
 
+/// Error types specific to ACP operations
+#[derive(Debug, thiserror::Error)]
+pub enum AcpError {
+    /// Session initialization failed
+    #[error("Failed to initialize ACP session: {0}")]
+    InitializationFailed(String),
+
+    /// Command channel closed
+    #[error("Command channel closed")]
+    CommandChannelClosed,
+
+    /// Runtime startup failed
+    #[error("Failed to start ACP runtime: {0}")]
+    RuntimeStartupFailed(String),
+
+    /// I/O operation failed
+    #[error("I/O error: {0}")]
+    IoError(String),
+
+    /// Prompt operation failed
+    #[error("Prompt failed: {0}")]
+    PromptFailed(String),
+
+    /// Cancel operation failed
+    #[error("Cancel failed: {0}")]
+    CancelFailed(String),
+
+    /// Agent process exited unexpectedly
+    #[error("Agent process exited: {0}")]
+    AgentProcessExited(String),
+}
+
+impl From<AcpError> for String {
+    fn from(err: AcpError) -> Self {
+        err.to_string()
+    }
+}
+
+/// Configuration for ACP session retry behavior
+#[derive(Clone, Debug)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts
+    pub max_attempts: u32,
+    /// Initial backoff duration
+    pub initial_backoff: Duration,
+    /// Maximum backoff duration
+    pub max_backoff: Duration,
+    /// Backoff multiplier for exponential backoff
+    pub backoff_multiplier: f64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            initial_backoff: Duration::from_millis(100),
+            max_backoff: Duration::from_secs(5),
+            backoff_multiplier: 2.0,
+        }
+    }
+}
+
+/// Calculate exponential backoff delay
+fn calculate_backoff(attempt: u32, config: &RetryConfig) -> Duration {
+    let delay = config.initial_backoff.as_millis() as f64 * config.backoff_multiplier.powi(attempt as i32);
+    config.max_backoff.min(Duration::from_millis(delay as u64))
+}
+
+/// ACP command types with response channels for bidirectional communication
 enum AcpCommand {
+    /// Send a prompt/message to the agent
     Prompt {
         text: String,
         turn_id: String,
         response_tx: oneshot::Sender<std::result::Result<(), String>>,
     },
+    /// Cancel the current operation
     Cancel {
         response_tx: oneshot::Sender<std::result::Result<(), String>>,
     },
+    /// Shutdown the session
     Shutdown {
         response_tx: oneshot::Sender<()>,
+    },
+    /// Query agent capabilities or status
+    Query {
+        query: String,
+        response_tx: oneshot::Sender<std::result::Result<serde_json::Value, String>>,
     },
 }
 
@@ -42,9 +179,11 @@ pub struct AcpStreamingSession {
     agent_type: AgentType,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     command_tx: mpsc::UnboundedSender<AcpCommand>,
+    retry_config: RetryConfig,
 }
 
 impl AcpStreamingSession {
+    /// Create a new ACP streaming session with default retry configuration
     pub async fn spawn(
         session_id: String,
         agent_type: AgentType,
@@ -52,12 +191,33 @@ impl AcpStreamingSession {
         args: Vec<String>,
         working_dir: PathBuf,
     ) -> Result<Self> {
+        Self::spawn_with_config(
+            session_id,
+            agent_type,
+            command,
+            args,
+            working_dir,
+            RetryConfig::default(),
+        )
+        .await
+    }
+
+    /// Create a new ACP streaming session with custom retry configuration
+    pub async fn spawn_with_config(
+        session_id: String,
+        agent_type: AgentType,
+        command: String,
+        args: Vec<String>,
+        working_dir: PathBuf,
+        retry_config: RetryConfig,
+    ) -> Result<Self> {
         let (event_sender, _) = broadcast::channel(1024);
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (ready_tx, ready_rx) = oneshot::channel::<std::result::Result<(), String>>();
 
         let runtime_session_id = session_id.clone();
         let runtime_event_sender = event_sender.clone();
+        let runtime_retry_config = retry_config.clone();
 
         let thread_name = format!("riterm-acp-{}", &session_id[..session_id.len().min(8)]);
 
@@ -86,6 +246,7 @@ impl AcpStreamingSession {
                         event_sender: runtime_event_sender,
                         command_rx,
                         ready_tx,
+                        retry_config: runtime_retry_config,
                     })
                     .await
                     {
@@ -101,12 +262,33 @@ impl AcpStreamingSession {
                 agent_type,
                 event_sender,
                 command_tx,
+                retry_config,
             }),
-            Ok(Err(err)) => Err(anyhow::anyhow!(err)),
-            Err(_) => Err(anyhow::anyhow!(
+            Ok(Err(err)) => Err(anyhow!(err)),
+            Err(_) => Err(anyhow!(
                 "ACP startup channel closed before session became ready"
             )),
         }
+    }
+
+    /// Query agent capabilities or status
+    pub async fn query(&self, query: String) -> std::result::Result<serde_json::Value, String> {
+        debug!(
+            "ACP query session={} agent={:?} query={}",
+            self.session_id, self.agent_type, query
+        );
+        let (response_tx, response_rx) = oneshot::channel();
+
+        self.command_tx
+            .send(AcpCommand::Query {
+                query,
+                response_tx,
+            })
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
+
+        response_rx
+            .await
+            .map_err(|_| "Query response channel closed".to_string())?
     }
 }
 
@@ -137,11 +319,11 @@ impl StreamingAgentSession for AcpStreamingSession {
                 turn_id: turn_id.to_string(),
                 response_tx,
             })
-            .map_err(|_| "ACP session command channel closed".to_string())?;
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
 
         response_rx
             .await
-            .map_err(|_| "ACP session prompt response channel closed".to_string())?
+            .map_err(|_| String::from(AcpError::PromptFailed("Response channel closed".to_string())))?
     }
 
     async fn interrupt(&self) -> std::result::Result<(), String> {
@@ -153,11 +335,11 @@ impl StreamingAgentSession for AcpStreamingSession {
 
         self.command_tx
             .send(AcpCommand::Cancel { response_tx })
-            .map_err(|_| "ACP session command channel closed".to_string())?;
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
 
         response_rx
             .await
-            .map_err(|_| "ACP session cancel response channel closed".to_string())?
+            .map_err(|_| String::from(AcpError::CancelFailed("Response channel closed".to_string())))?
     }
 
     async fn shutdown(&self) -> std::result::Result<(), String> {
@@ -165,9 +347,25 @@ impl StreamingAgentSession for AcpStreamingSession {
 
         self.command_tx
             .send(AcpCommand::Shutdown { response_tx })
-            .map_err(|_| "ACP session command channel closed".to_string())?;
+            .map_err(|_| String::from(AcpError::CommandChannelClosed))?;
 
         let _ = response_rx.await;
+        Ok(())
+    }
+
+    async fn respond_to_permission(
+        &self,
+        _request_id: String,
+        _approved: bool,
+        _reason: Option<String>,
+    ) -> std::result::Result<(), String> {
+        // ACP handles permissions internally via request_permission trait method
+        // The permission response is already handled in the AcpClientHandler
+        // This method is provided for compatibility with the trait but doesn't need to do anything
+        debug!(
+            "ACP permission response for session {}: request_id={}, approved={}",
+            self.session_id, _request_id, _approved
+        );
         Ok(())
     }
 }
@@ -181,6 +379,7 @@ struct AcpRuntimeParams {
     event_sender: broadcast::Sender<AgentTurnEvent>,
     command_rx: mpsc::UnboundedReceiver<AcpCommand>,
     ready_tx: oneshot::Sender<std::result::Result<(), String>>,
+    retry_config: RetryConfig,
 }
 
 async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
@@ -196,7 +395,12 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .with_context(|| format!("Failed to spawn ACP agent command {}", params.command))?;
+        .with_context(|| {
+            format!(
+                "Failed to spawn ACP agent command {}: {:#?}",
+                params.command, params.args
+            )
+        })?;
 
     let stdin = child
         .stdin
@@ -232,6 +436,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                 continue;
             }
             debug!("[ACP stderr][{}] {}", session_id_for_stderr, line);
+            warn!("ACP agent stderr: {}", line);
         }
     });
 
@@ -244,6 +449,10 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
     let event_sender_for_io_error = params.event_sender.clone();
     tokio::task::spawn_local(async move {
         if let Err(err) = io_task.await {
+            error!(
+                "[ACP IO Error] Session {}: Connection lost - {}",
+                session_id_for_io_error, err
+            );
             let _ = event_sender_for_io_error.send(AgentTurnEvent {
                 turn_id: Uuid::new_v4().to_string(),
                 event: AgentEvent::TurnError {
@@ -255,41 +464,61 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         }
     });
 
-    let init_result = connection
-        .initialize(
-            acp::InitializeRequest::new(acp::ProtocolVersion::LATEST)
-                .client_capabilities(
-                    acp::ClientCapabilities::new()
-                        .fs(acp::FileSystemCapability::new()
-                            .read_text_file(true)
-                            .write_text_file(true))
-                        .terminal(false),
+    // Initialize connection with retry logic
+    let init_result = with_retry(
+        params.retry_config.clone(),
+        format!("initialize ACP connection for session {}", params.session_id),
+        || async {
+            connection
+                .initialize(
+                    acp::InitializeRequest::new(acp::ProtocolVersion::LATEST)
+                        .client_capabilities(
+                            acp::ClientCapabilities::new()
+                                .fs(acp::FileSystemCapability::new()
+                                    .read_text_file(true)
+                                    .write_text_file(true))
+                                .terminal(false),
+                        )
+                        .client_info(
+                            acp::Implementation::new("riterm-cli", env!("CARGO_PKG_VERSION"))
+                                .title("RiTerm CLI"),
+                        ),
                 )
-                .client_info(
-                    acp::Implementation::new("riterm-cli", env!("CARGO_PKG_VERSION"))
-                        .title("RiTerm CLI"),
-                ),
-        )
-        .await;
+                .await
+        },
+    )
+    .await;
 
     if let Err(err) = init_result {
-        let _ = params
-            .ready_tx
-            .send(Err(format!("ACP initialize failed: {err}")));
-        return Err(anyhow::anyhow!("ACP initialize failed: {err}"));
+        let error_msg = format!("ACP initialize failed: {err}");
+        let _ = params.ready_tx.send(Err(error_msg.clone()));
+        return Err(anyhow::anyhow!(error_msg));
     }
 
-    let new_session_result = connection
-        .new_session(acp::NewSessionRequest::new(params.working_dir.clone()))
-        .await;
+    // Create session with retry logic
+    let new_session_result = with_retry(
+        params.retry_config.clone(),
+        format!("create ACP session for {}", params.session_id),
+        || async {
+            connection
+                .new_session(acp::NewSessionRequest::new(params.working_dir.clone()))
+                .await
+        },
+    )
+    .await;
 
     let acp_session_id = match new_session_result {
-        Ok(resp) => resp.session_id,
+        Ok(resp) => {
+            info!(
+                "ACP session created successfully: {} for session {}",
+                resp.session_id, params.session_id
+            );
+            resp.session_id
+        }
         Err(err) => {
-            let _ = params
-                .ready_tx
-                .send(Err(format!("ACP new_session failed: {err}")));
-            return Err(anyhow::anyhow!("ACP new_session failed: {err}"));
+            let error_msg = format!("ACP new_session failed: {err}");
+            let _ = params.ready_tx.send(Err(error_msg.clone()));
+            return Err(anyhow::anyhow!(error_msg));
         }
     };
 
@@ -310,13 +539,68 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         active_turn,
         params.event_sender.clone(),
         params.command_rx,
+        params.retry_config.clone(),
     )
     .await;
 
+    info!(
+        "ACP runtime shutting down for session {}, killing agent process",
+        params.session_id
+    );
     let _ = child.start_kill();
     let _ = child.wait().await;
 
     Ok(())
+}
+
+/// Execute an async operation with retry logic
+async fn with_retry<F, Fut, T>(
+    config: RetryConfig,
+    operation: String,
+    mut op: F,
+) -> std::result::Result<T, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = acp::Result<T>>,
+{
+    let mut last_error = String::new();
+
+    for attempt in 0..config.max_attempts {
+        if attempt > 0 {
+            let delay = calculate_backoff(attempt - 1, &config);
+            debug!(
+                "Retry attempt {} for '{}' after {:?}",
+                attempt + 1,
+                operation,
+                delay
+            );
+            tokio::time::sleep(delay).await;
+        }
+
+        match op().await {
+            Ok(result) => {
+                if attempt > 0 {
+                    info!("Operation '{}' succeeded on attempt {}", operation, attempt + 1);
+                }
+                return Ok(result);
+            }
+            Err(err) => {
+                last_error = format!("{:?}", err);
+                warn!(
+                    "Operation '{}' failed on attempt {}: {}",
+                    operation,
+                    attempt + 1,
+                    last_error
+                );
+            }
+        }
+    }
+
+    error!("Operation '{}' failed after {} attempts", operation, config.max_attempts);
+    Err(format!(
+        "Failed after {} attempts: {}",
+        config.max_attempts, last_error
+    ))
 }
 
 async fn run_command_loop(
@@ -326,6 +610,7 @@ async fn run_command_loop(
     active_turn: Arc<RwLock<Option<String>>>,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     mut command_rx: mpsc::UnboundedReceiver<AcpCommand>,
+    retry_config: RetryConfig,
 ) {
     while let Some(command) = command_rx.recv().await {
         match command {
@@ -347,12 +632,19 @@ async fn run_command_loop(
                     },
                 });
 
-                let result = connection
-                    .prompt(acp::PromptRequest::new(
-                        acp_session_id.clone(),
-                        vec![acp::ContentBlock::from(text)],
-                    ))
-                    .await;
+                let result = with_retry(
+                    retry_config.clone(),
+                    format!("prompt for session {}", session_id),
+                    || async {
+                        connection
+                            .prompt(acp::PromptRequest::new(
+                                acp_session_id.clone(),
+                                vec![acp::ContentBlock::from(text.clone())],
+                            ))
+                            .await
+                    },
+                )
+                .await;
 
                 match result {
                     Ok(response) => {
@@ -385,11 +677,33 @@ async fn run_command_loop(
                 *active = None;
             }
             AcpCommand::Cancel { response_tx } => {
-                let result = connection
-                    .cancel(acp::CancelNotification::new(acp_session_id.clone()))
-                    .await
-                    .map_err(|err| format!("ACP cancel failed: {err}"));
+                let result = with_retry(
+                    retry_config.clone(),
+                    format!("cancel for session {}", session_id),
+                    || async {
+                        connection
+                            .cancel(acp::CancelNotification::new(acp_session_id.clone()))
+                            .await
+                    },
+                )
+                .await;
+
+                let result = result.map_err(|err| format!("ACP cancel failed: {err}"));
                 let _ = response_tx.send(result.map(|_| ()));
+            }
+            AcpCommand::Query {
+                query,
+                response_tx,
+            } => {
+                // Handle query requests - currently returns basic session info
+                // This can be extended to support more complex queries
+                let result = serde_json::json!({
+                    "session_id": session_id,
+                    "agent_type": "acp",
+                    "query": query,
+                    "status": "active"
+                });
+                let _ = response_tx.send(Ok(result));
             }
             AcpCommand::Shutdown { response_tx } => {
                 let _ = connection

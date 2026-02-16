@@ -126,6 +126,57 @@ pub fn event_to_message_content(
             level: NotificationLevel::Info,
             message: data.to_string(),
         },
+
+        // Progress updates
+        AgentEvent::ProgressUpdate {
+            operation,
+            progress,
+            message,
+            ..
+        } => AgentMessageContent::SystemNotification {
+            level: NotificationLevel::Info,
+            message: format!(
+                "{}: {} ({:.0}%)",
+                operation,
+                message.as_deref().unwrap_or(""),
+                progress * 100.0
+            ),
+        },
+
+        // General notifications
+        AgentEvent::Notification {
+            level,
+            message,
+            ..
+        } => AgentMessageContent::SystemNotification {
+            level: level.clone(),
+            message: message.clone(),
+        },
+
+        // File operations
+        AgentEvent::FileOperation {
+            operation,
+            path,
+            ..
+        } => AgentMessageContent::SystemNotification {
+            level: NotificationLevel::Info,
+            message: format!("File operation: {} {}", operation, path),
+        },
+
+        // Terminal output
+        AgentEvent::TerminalOutput {
+            command,
+            output,
+            exit_code,
+            ..
+        } => AgentMessageContent::SystemNotification {
+            level: NotificationLevel::Info,
+            message: match exit_code {
+                Some(0) => format!("Command completed: {}\n{}", command, output),
+                Some(code) => format!("Command failed (exit {}): {}\n{}", code, command, output),
+                None => format!("Command output: {}\n{}", command, output),
+            },
+        },
     }
 }
 

@@ -13,8 +13,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #1922 | 1:48 AM | ✅ | Staged all modified files including documentation and frontend components | ~162 |
-| #1893 | 1:28 AM | 🔵 | TypeScript compilation errors identified | ~305 |
 | #1869 | 1:20 AM | 🔵 | TypeScript source file structure identified | ~156 |
-| #1859 | 1:18 AM | 🔵 | App frontend component structure identified | ~147 |
 </claude-mem-context>

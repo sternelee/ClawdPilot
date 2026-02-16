@@ -8,6 +8,7 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #1854 | 1:14 AM | 🔄 | Agent wrapper module migrated to riterm-lib | ~190 |
-| #1816 | 12:44 AM | 🔄 | Codex output parser module copied to lib/src/agent/codex.rs | ~77 |
-| #1805 | 12:43 AM | 🔄 | Agent mod.rs copied to lib/src/agent/ directory | ~155 |
+| #1818 | 12:44 AM | 🔄 | Qwen output parser module copied to lib/src/agent/qwen.rs | ~76 |
+| #1816 | " | 🔄 | Codex output parser module copied to lib/src/agent/codex.rs | ~77 |
+| #1813 | " | 🔄 | Claude output parser module copied to lib/src/agent/claude.rs | ~79 |
 </claude-mem-context>

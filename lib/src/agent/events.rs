@@ -4,6 +4,53 @@
 //! All agent types (Claude Code, OpenCode, Codex, Gemini) emit events
 //! that are converted to this unified format before being forwarded
 //! to P2P clients.
+//!
+//! # Event Types
+//!
+//! The event system provides granular visibility into agent operations:
+//!
+//! ## Session Lifecycle Events
+//! - `SessionStarted` - Agent session has been initialized
+//! - `SessionEnded` - Agent session has been terminated
+//!
+//! ## Turn/Response Events
+//! - `TurnStarted` - A new turn/response is being generated
+//! - `TextDelta` - Streaming text content from the agent
+//! - `ReasoningDelta` - Streaming reasoning/thinking content
+//! - `TurnCompleted` - The turn completed successfully
+//! - `TurnError` - The turn failed with an error
+//!
+//! ## Tool Execution Events
+//! - `ToolStarted` - A tool call has been initiated
+//! - `ToolInputUpdated` - Tool input is being streamed/updated
+//! - `ToolCompleted` - A tool call has finished (success or failure)
+//!
+//! ## Permission Events
+//! - `ApprovalRequest` - Agent requires user approval for an action
+//!
+//! ## Monitoring Events
+//! - `UsageUpdate` - Token usage and context information
+//! - `ProgressUpdate` - Progress indicator for long-running operations
+//! - `Notification` - General notifications with severity levels
+//!
+//! # Event Flow
+//!
+//! A typical agent interaction follows this event sequence:
+//!
+//! ```text
+//! SessionStarted
+//!   ├─> TurnStarted
+//!   │    ├─> ReasoningDelta (optional)
+//!   │    ├─> TextDelta (streaming)
+//!   │    │    ├─> ToolStarted
+//!   │    │    │    ├─> ApprovalRequest (if needed)
+//!   │    │    │    ├─> ToolInputUpdated (streaming)
+//!   │    │    │    └─> ToolCompleted
+//!   │    │    └─> TextDelta (continues)
+//!   │    └─> TurnCompleted or TurnError
+//!   └─> UsageUpdate (periodic)
+//! └─> SessionEnded
+//! ```
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -114,6 +161,46 @@ pub enum AgentEvent {
         model_context_window: Option<i64>,
     },
 
+    /// Progress update for long-running operations
+    #[serde(rename = "progress:update")]
+    ProgressUpdate {
+        session_id: String,
+        operation: String,
+        progress: f32, // 0.0 to 1.0
+        #[serde(skip_serializing_if = "Option::is_none")]
+        message: Option<String>,
+    },
+
+    /// General notification with severity level
+    #[serde(rename = "notification")]
+    Notification {
+        session_id: String,
+        level: NotificationLevel,
+        message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        details: Option<Value>,
+    },
+
+    /// File operation notification (for ACP file operations)
+    #[serde(rename = "file:operation")]
+    FileOperation {
+        session_id: String,
+        operation: FileOperationType,
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        status: Option<String>,
+    },
+
+    /// Terminal output from shell operations
+    #[serde(rename = "terminal:output")]
+    TerminalOutput {
+        session_id: String,
+        command: String,
+        output: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
+    },
+
     /// Raw agent-specific event (passthrough)
     #[serde(rename = "raw")]
     Raw {
@@ -121,6 +208,31 @@ pub enum AgentEvent {
         agent: AgentType,
         data: Value,
     },
+}
+
+/// File operation types for ACP file operations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FileOperationType {
+    Read,
+    Write,
+    Create,
+    Delete,
+    Move,
+    Copy,
+}
+
+impl std::fmt::Display for FileOperationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FileOperationType::Read => write!(f, "read"),
+            FileOperationType::Write => write!(f, "write"),
+            FileOperationType::Create => write!(f, "create"),
+            FileOperationType::Delete => write!(f, "delete"),
+            FileOperationType::Move => write!(f, "move"),
+            FileOperationType::Copy => write!(f, "copy"),
+        }
+    }
 }
 
 impl AgentEvent {
@@ -139,6 +251,10 @@ impl AgentEvent {
             AgentEvent::TurnError { session_id, .. } => session_id,
             AgentEvent::SessionEnded { session_id } => session_id,
             AgentEvent::UsageUpdate { session_id, .. } => session_id,
+            AgentEvent::ProgressUpdate { session_id, .. } => session_id,
+            AgentEvent::Notification { session_id, .. } => session_id,
+            AgentEvent::FileOperation { session_id, .. } => session_id,
+            AgentEvent::TerminalOutput { session_id, .. } => session_id,
             AgentEvent::Raw { session_id, .. } => session_id,
         }
     }
@@ -327,6 +443,57 @@ impl AgentEvent {
                 level: NotificationLevel::Info,
                 message: data.to_string(),
             },
+
+            AgentEvent::ProgressUpdate {
+                operation,
+                progress,
+                message,
+                ..
+            } => {
+                let msg = match message {
+                    Some(m) => format!("{}: {} ({:.0}%)", operation, m, progress * 100.0),
+                    None => format!("{}: {:.0}%", operation, progress * 100.0),
+                };
+                AgentMessageContent::SystemNotification {
+                    level: NotificationLevel::Info,
+                    message: msg,
+                }
+            }
+
+            AgentEvent::Notification {
+                level,
+                message,
+                ..
+            } => AgentMessageContent::SystemNotification {
+                level: level.clone(),
+                message: message.clone(),
+            },
+
+            AgentEvent::FileOperation {
+                operation,
+                path,
+                ..
+            } => AgentMessageContent::SystemNotification {
+                level: NotificationLevel::Info,
+                message: format!("File operation: {} {}", operation, path),
+            },
+
+            AgentEvent::TerminalOutput {
+                command,
+                output,
+                exit_code,
+                ..
+            } => {
+                let msg = match exit_code {
+                    Some(0) => format!("Command completed: {}\n{}", command, output),
+                    Some(code) => format!("Command failed (exit {}): {}\n{}", code, command, output),
+                    None => format!("Command output: {}\n{}", command, output),
+                };
+                AgentMessageContent::SystemNotification {
+                    level: NotificationLevel::Info,
+                    message: msg,
+                }
+            }
         }
     }
 }
