@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 pub use acp::AcpStreamingSession;
-pub use events::{AgentEvent, AgentTurnEvent, PermissionMode};
+pub use events::{AgentEvent, AgentTurnEvent, PendingPermission, PermissionMode, PermissionResponse};
 pub use factory::{Agent, AgentAvailability, AgentFactory};
 pub use message_adapter::event_to_message_content;
 
@@ -230,6 +230,63 @@ impl AgentManager {
     pub async fn get_session(&self, session_id: &str) -> Option<Arc<AcpStreamingSession>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).cloned()
+    }
+
+    /// Get pending permissions for a session
+    ///
+    /// This method retrieves all pending permission requests for the specified session.
+    /// These are permissions that the agent has requested but that haven't been approved or denied yet.
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID to get permissions for
+    ///
+    /// # Returns
+    /// List of pending permissions, or an error if the session doesn't exist
+    pub async fn get_pending_permissions(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<PendingPermission>> {
+        let sessions = self.sessions.read().await;
+
+        if let Some(session) = sessions.get(session_id) {
+            session
+                .get_pending_permissions()
+                .await
+                .map_err(|e| anyhow!("Failed to get pending permissions: {}", e))
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Respond to a permission request
+    ///
+    /// This method allows you to approve or deny a pending permission request.
+    ///
+    /// # Arguments
+    /// * `session_id` - The session ID
+    /// * `request_id` - The ID of the permission request
+    /// * `approved` - Whether to approve the request
+    /// * `reason` - Optional reason for the decision
+    ///
+    /// # Returns
+    /// Ok(()) if successful, or an error otherwise
+    pub async fn respond_to_permission(
+        &self,
+        session_id: &str,
+        request_id: String,
+        approved: bool,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let sessions = self.sessions.read().await;
+
+        if let Some(session) = sessions.get(session_id) {
+            session
+                .respond_to_permission(request_id, approved, reason)
+                .await
+                .map_err(|e| anyhow!("Failed to respond to permission: {}", e))
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
     }
 }
 

@@ -201,6 +201,7 @@ enum AcpCommand {
     },
 }
 
+#[allow(dead_code)]
 pub struct AcpStreamingSession {
     session_id: String,
     agent_type: AgentType,
@@ -441,6 +442,7 @@ impl AcpStreamingSession {
 }
 
 /// Parameters for the ACP runtime task
+#[allow(dead_code)]
 struct AcpRuntimeParams {
     session_id: String,
     agent_type: AgentType,
@@ -699,6 +701,7 @@ async fn run_command_loop(
     retry_config: RetryConfig,
 ) {
     // Store pending permissions and their response channels
+    #[allow(dead_code)]
     struct PendingPermissionEntry {
         tool_name: String,
         input: serde_json::Value,

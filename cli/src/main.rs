@@ -3,10 +3,11 @@ use clap::Parser;
 
 mod client;
 mod command_router;
+mod local_client;
 mod message_server;
 mod shell;
 mod terminal_logger;
-use lib::AgentManager;
+use local_client::{LocalClientConfig, LocalClientSession};
 use message_server::CliMessageServer;
 use riterm_shared::QuicMessageServerConfig;
 use tracing::info;
@@ -213,6 +214,7 @@ async fn run_host(
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn print_host_info(node_id: &str, ticket: &str, shell_path: &str) {
     // Generate QR code
     let qr_code = generate_qr_string(ticket);
@@ -322,7 +324,7 @@ fn print_general_help() {
     println!();
 }
 
-/// 运行 AI Agent 会话
+/// 运行 AI Agent 会话（使用 ACP）
 async fn run_agent_session(agent: String, project: String, args: Vec<String>) -> Result<()> {
     use riterm_shared::message_protocol::AgentType;
 
@@ -342,9 +344,6 @@ async fn run_agent_session(agent: String, project: String, args: Vec<String>) ->
         agent_type, project
     );
 
-    // 创建 Agent 管理器
-    let manager = AgentManager::new();
-
     // 检查项目路径是否存在
     let project_path = std::path::PathBuf::from(&project);
     if !project_path.exists() {
@@ -352,25 +351,41 @@ async fn run_agent_session(agent: String, project: String, args: Vec<String>) ->
         return Err(anyhow::anyhow!("Project path not found"));
     }
 
+    // 创建本地 ACP 客户端配置
+    let config = LocalClientConfig {
+        agent_type,
+        binary_path: None,
+        extra_args: args,
+        working_dir: project_path.clone(),
+        home_dir: None,
+    };
+
     // 启动会话
-    let session_id = manager
-        .start_session(agent_type, None, args, project_path.clone(), None, "local".to_string())
+    let session = LocalClientSession::new(config)
         .await
-        .context("Failed to start agent session")?;
+        .context("Failed to start ACP session")?;
+
+    let session_info = session.get_info();
 
     println!();
-    println!("🤖 AI Agent Session Started");
+    println!("🌐 ACP Agent Session Started (Native Mode)");
     println!();
-    println!("   Type:     {:?}", agent_type);
-    println!("   Session:  {}", session_id);
+    println!("   Type:     {:?}", session_info.agent_type);
+    println!("   Session:  {}", session_info.session_id);
     println!("   Project:  {}", project);
     println!();
+    println!("Commands:");
+    println!("  /listperms  - List pending permission requests");
+    println!("  /approve    - Approve a permission request");
+    println!("  /deny       - Deny a permission request");
+    println!("  /interrupt  - Interrupt current operation");
+    println!("  /quit       - Exit session");
+    println!();
     println!("💬 Type your message and press Enter to send.");
+    println!("   Type a slash command to interact with permissions.");
     println!("   Press Ctrl+C to exit.");
     println!();
 
-    // 简单的交互式循环
-    // TODO: 实现完整的 stdin/stdout 处理
     let stdin = tokio::io::stdin();
     let reader = tokio::io::BufReader::new(stdin);
     use tokio::io::AsyncBufReadExt;
@@ -382,17 +397,104 @@ async fn run_agent_session(agent: String, project: String, args: Vec<String>) ->
             continue;
         }
 
+        // 处理 slash commands
+        if line.starts_with('/') {
+            if let Err(e) = handle_slash_command(&session, &line).await {
+                eprintln!("❌ Command error: {}", e);
+            }
+            continue;
+        }
+
         // 发送消息到 agent
-        if let Err(e) = manager.send_message(&session_id, line).await {
+        if let Err(e) = session.send_message(line).await {
             eprintln!("❌ Failed to send message: {}", e);
         }
     }
 
     // 清理
-    let _ = manager.stop_session(&session_id).await;
+    if let Err(e) = session.shutdown().await {
+        eprintln!("⚠️ Failed to shutdown session: {}", e);
+    }
 
     println!();
     println!("👋 Session ended");
+
+    Ok(())
+}
+
+/// Handle slash commands in interactive mode
+async fn handle_slash_command(session: &LocalClientSession, command: &str) -> Result<()> {
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    if parts.is_empty() {
+        return Ok(());
+    }
+
+    match parts[0] {
+        "/listperms" => {
+            let perms = session.get_pending_permissions().await?;
+            if perms.is_empty() {
+                println!("✅ No pending permission requests");
+            } else {
+                println!("📋 Pending Permission Requests:");
+                for (i, perm) in perms.iter().enumerate() {
+                    println!("  {}. Request ID: {}", i + 1, perm.request_id);
+                    println!("     Tool: {}", perm.tool_name);
+                    if let Some(msg) = &perm.message {
+                        println!("     Message: {}", msg);
+                    }
+                }
+            }
+        }
+        "/approve" => {
+            if parts.len() < 2 {
+                println!("Usage: /approve <request_id>");
+                return Ok(());
+            }
+            let request_id = parts[1].to_string();
+            match session.respond_to_permission(request_id, true, None).await {
+                Ok(_) => println!("✅ Permission approved"),
+                Err(e) => eprintln!("❌ Failed to approve permission: {}", e),
+            }
+        }
+        "/deny" => {
+            if parts.len() < 2 {
+                println!("Usage: /deny <request_id>");
+                return Ok(());
+            }
+            let request_id = parts[1].to_string();
+            let reason = if parts.len() > 2 {
+                Some(parts[2..].join(" "))
+            } else {
+                None
+            };
+            match session.respond_to_permission(request_id, false, reason).await {
+                Ok(_) => println!("❌ Permission denied"),
+                Err(e) => eprintln!("❌ Failed to deny permission: {}", e),
+            }
+        }
+        "/interrupt" => {
+            match session.interrupt().await {
+                Ok(_) => println!("⛔ Operation interrupted"),
+                Err(e) => eprintln!("❌ Failed to interrupt: {}", e),
+            }
+        }
+        "/quit" | "/exit" => {
+            println!("👋 Exiting session...");
+            return Err(anyhow::anyhow!("quit_command"));
+        }
+        "/help" => {
+            println!("Available commands:");
+            println!("  /listperms  - List pending permission requests");
+            println!("  /approve <id> - Approve a permission request");
+            println!("  /deny <id> [reason] - Deny a permission request");
+            println!("  /interrupt  - Interrupt current operation");
+            println!("  /quit       - Exit session");
+        }
+        _ => {
+            println!("❓ Unknown command: {}", parts[0]);
+            println!("   Type /help for available commands");
+        }
+    }
 
     Ok(())
 }

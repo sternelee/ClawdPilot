@@ -351,7 +351,6 @@ pub fn build_permission_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::events::AgentEvent;
 
     #[test]
     fn test_text_delta_conversion() {
