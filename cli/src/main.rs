@@ -332,9 +332,12 @@ async fn run_agent_session(agent: String, project: String, args: Vec<String>) ->
         "claude" | "claude-code" => AgentType::ClaudeCode,
         "open" | "opencode" => AgentType::OpenCode,
         "gemini" => AgentType::Gemini,
+        "codex" => AgentType::Codex,
+        "copilot" => AgentType::Copilot,
+        "qwen" => AgentType::Qwen,
         _ => {
             eprintln!("❌ Unknown agent type: {}", agent);
-            eprintln!("   Supported: claude, opencode, gemini");
+            eprintln!("   Supported: claude, opencode, gemini, codex, copilot, qwen");
             return Err(anyhow::anyhow!("Unknown agent type"));
         }
     };

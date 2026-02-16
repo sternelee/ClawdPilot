@@ -5,6 +5,7 @@
 
 pub mod acp;
 pub mod claude_sdk;
+pub mod codex_acp;
 pub mod events;
 pub mod factory;
 pub mod message_adapter;
@@ -20,6 +21,7 @@ use tracing::{debug, info, warn};
 
 pub use acp::AcpStreamingSession;
 pub use claude_sdk::ClaudeSdkSession;
+pub use codex_acp::CodexAcpSession;
 pub use events::{
     AgentEvent, AgentTurnEvent, PendingPermission, PermissionMode, PermissionResponse,
 };
@@ -36,6 +38,8 @@ pub enum SessionKind {
     Acp(Arc<AcpStreamingSession>),
     /// SDK Control Protocol session (for Claude Code)
     Sdk(Arc<ClaudeSdkSession>),
+    /// Codex session via codex-core directly
+    CodexAcp(Arc<CodexAcpSession>),
 }
 
 impl SessionKind {
@@ -44,6 +48,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.session_id(),
             SessionKind::Sdk(s) => s.session_id(),
+            SessionKind::CodexAcp(s) => s.session_id(),
         }
     }
 
@@ -52,6 +57,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.agent_type(),
             SessionKind::Sdk(s) => s.agent_type(),
+            SessionKind::CodexAcp(s) => s.agent_type(),
         }
     }
 
@@ -60,6 +66,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.subscribe(),
             SessionKind::Sdk(s) => s.subscribe(),
+            SessionKind::CodexAcp(s) => s.subscribe(),
         }
     }
 
@@ -72,6 +79,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.send_message(text, turn_id).await,
             SessionKind::Sdk(s) => s.send_message(text, turn_id).await,
+            SessionKind::CodexAcp(s) => s.send_message(text, turn_id).await,
         }
     }
 
@@ -80,6 +88,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.interrupt().await,
             SessionKind::Sdk(s) => s.interrupt().await,
+            SessionKind::CodexAcp(s) => s.interrupt().await,
         }
     }
 
@@ -90,6 +99,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.get_pending_permissions().await,
             SessionKind::Sdk(s) => s.get_pending_permissions().await,
+            SessionKind::CodexAcp(s) => s.get_pending_permissions().await,
         }
     }
 
@@ -103,6 +113,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.respond_to_permission(request_id, approved, reason).await,
             SessionKind::Sdk(s) => s.respond_to_permission(request_id, approved, reason).await,
+            SessionKind::CodexAcp(s) => s.respond_to_permission(request_id, approved, reason).await,
         }
     }
 
@@ -111,6 +122,7 @@ impl SessionKind {
         match self {
             SessionKind::Acp(s) => s.shutdown().await,
             SessionKind::Sdk(s) => s.shutdown().await,
+            SessionKind::CodexAcp(s) => s.shutdown().await,
         }
     }
 }
@@ -204,6 +216,18 @@ impl AgentManager {
             .with_context(|| format!("Failed to start SDK session for {:?}", agent_type))?;
 
             Arc::new(SessionKind::Sdk(Arc::new(sdk_session)))
+        } else if agent_type == AgentType::Codex {
+            // Codex uses codex-core directly (in-process)
+            let codex_session = CodexAcpSession::spawn(
+                session_id.clone(),
+                agent_type,
+                working_dir,
+                home_dir,
+            )
+            .await
+            .with_context(|| format!("Failed to start Codex session"))?;
+
+            Arc::new(SessionKind::CodexAcp(Arc::new(codex_session)))
         } else {
             // Other agents use ACP
             let (command, default_args) = AgentFactory::get_acp_command(agent_type);
@@ -231,6 +255,8 @@ impl AgentManager {
 
         let protocol_name = if agent_type == AgentType::ClaudeCode {
             "SDK Control Protocol"
+        } else if agent_type == AgentType::Codex {
+            "Codex (codex-core)"
         } else {
             "ACP"
         };

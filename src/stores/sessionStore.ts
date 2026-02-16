@@ -19,6 +19,7 @@ export type AgentType =
   | "gemini"
   | "copilot"
   | "qwen"
+  | "codex"
   | "custom";
 
 export type SessionMode = "remote" | "local";

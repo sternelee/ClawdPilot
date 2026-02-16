@@ -2225,6 +2225,7 @@ async fn local_start_agent(
         "gemini" => AgentType::Gemini,
         "copilot" => AgentType::Copilot,
         "qwen" => AgentType::Qwen,
+        "codex" => AgentType::Codex,
         "custom" => AgentType::Custom,
         _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };

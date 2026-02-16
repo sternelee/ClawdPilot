@@ -23,25 +23,57 @@ import {
 // ============================================================================
 
 const PlusIcon: Component = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    class="w-5 h-5"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+  >
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M12 4v16m8-8H4"
+    />
   </svg>
 );
 
 const CloseIcon: Component = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    class="w-4 h-4"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+  >
+    <path
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="2"
+      d="M6 18L18 6M6 6l12 12"
+    />
   </svg>
 );
 
 const LocalIcon: Component = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    class="w-5 h-5"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
     <path d="M12 2C6.48 2 2 12s4.48 2 12 12H4c-1.1 0-2 .9-2 2-2V4c0-1.1-.9-2-2-2H4c-2.21 0-4-4.21 0-4s-2.21 0-4-4.21V8c0 2.21 0 4 4.21 4H4c1.1 0 2 .9 2 2 2h16c1.1 0 2 .9 2 2 2v-4c0-1.1.9-2 2-2H4c-2.21 0-4-4.21 0-4s2.21 0 4 4.21V8c0 2.21 0 4-4.21 4h-4.21c1.1 0 2-.9-2-2-2H4c-1.1 0-2-.9-2-2-2V4c0-1.1-.9-2-2-2H4c-2.21 0-4-4.21 0-4s-.21 0 4-4.21V4h16c1.1 0 2 .9 2 2 2v4c0-1.1.9-2 2-2H4c-2.21 0-4-4.21 0-4s-.21 0 4 4.21V8z" />
   </svg>
 );
 
 const RemoteIcon: Component = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    class="w-5 h-5"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+  >
     <path d="M20 4H4c-1.1 0-2 .9-2 2-2H3c-1.1 0-2-.9-2-2-2V8c0-1.1-.9-2-2-2H2c-2.21 0-4-4.21 0-4s2.21 0 4 4.21V6h18c1.1 0 2 .9 2 2 2v4c0-1.1.9-2 2-2h-4.21c-1.1 0 2-.9-2-2-2V4c0-1.1-.9-2-2-2H4c-2.21 0-4-4.21 0-4s2.21 0 4 4.21V8z" />
   </svg>
 );
@@ -58,6 +90,14 @@ const getAgentIcon = (agentType: AgentType) => {
         <div class={`${iconClass} text-purple-500`}>
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5zM12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5-10-5z" />
+          </svg>
+        </div>
+      );
+    case "codex":
+      return (
+        <div class={`${iconClass} text-emerald-500`}>
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z" />
           </svg>
         </div>
       );
@@ -128,18 +168,16 @@ const SessionItem: Component<SessionItemProps> = (props) => {
   return (
     <div
       class={`group relative flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200
-        ${props.isActive
-          ? "bg-primary/10 border-r-2 border-primary"
-          : "hover:bg-base-200/50 border-r-2 border-transparent"
+        ${
+          props.isActive
+            ? "bg-primary/10 border-r-2 border-primary"
+            : "hover:bg-base-200/50 border-r-2 border-transparent"
         }`}
       onClick={props.onClick}
     >
       {/* Mode Indicator */}
       <div class="flex-shrink-0">
-        <Show
-          when={session()?.mode === "local"}
-          fallback={<RemoteIcon />}
-        >
+        <Show when={session()?.mode === "local"} fallback={<RemoteIcon />}>
           <LocalIcon />
         </Show>
       </div>
@@ -152,17 +190,24 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       {/* Session Info */}
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <span class={`font-medium text-sm truncate ${props.isActive ? "text-primary" : ""}`}>
+          <span
+            class={`font-medium text-sm truncate ${props.isActive ? "text-primary" : ""}`}
+          >
             {session()?.agentType === "claude" && "Claude"}
             {session()?.agentType === "gemini" && "Gemini"}
             {session()?.agentType === "opencode" && "OpenCode"}
             {session()?.agentType === "copilot" && "Copilot"}
             {session()?.agentType === "qwen" && "Qwen"}
+            {session()?.agentType === "codex" && "Codex"}
             {session()?.agentType === "custom" && "Custom"}
           </span>
-          <span class={`text-xs text-base-content/50 ${
-            session()?.mode === "local" ? "bg-primary/20 px-2 py-0.5 rounded-full" : "bg-base-200 px-2 py-0.5 rounded-full"
-          }`}>
+          <span
+            class={`text-xs text-base-content/50 ${
+              session()?.mode === "local"
+                ? "bg-primary/20 px-2 py-0.5 rounded-full"
+                : "bg-base-200 px-2 py-0.5 rounded-full"
+            }`}
+          >
             {session()?.mode === "local" ? "Local" : "Remote"}
           </span>
         </div>
@@ -219,14 +264,19 @@ interface SessionSidebarProps {
 
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const [showNewSessionModal, setShowNewSessionModal] = createSignal(false);
-  const [newSessionAgent, setNewSessionAgent] = createSignal<AgentType>("claude");
+  const [newSessionAgent, setNewSessionAgent] =
+    createSignal<AgentType>("claude");
   const [newSessionPath, setNewSessionPath] = createSignal("");
-  const [newSessionMode, setNewSessionMode] = createSignal<"remote" | "local">("remote");
+  const [newSessionMode, setNewSessionMode] = createSignal<"remote" | "local">(
+    "remote",
+  );
 
   // Remote connection state
   const [sessionTicket, setSessionTicket] = createSignal("");
   const [connecting, setConnecting] = createSignal(false);
-  const [connectionError, setConnectionError] = createSignal<string | null>(null);
+  const [connectionError, setConnectionError] = createSignal<string | null>(
+    null,
+  );
 
   const sessions = () => sessionStore.getSessions();
   const activeSession = () => sessionStore.getActiveSession();
@@ -251,7 +301,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         machineId: string;
       };
 
-      const localSessions = await invoke<BackendSessionMetadata[]>("local_list_agents");
+      const localSessions =
+        await invoke<BackendSessionMetadata[]>("local_list_agents");
       // Add mode property to each session and convert session_id to sessionId
       const sessionsWithMode = localSessions.map((s) => ({
         sessionId: s.session_id,
@@ -273,7 +324,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       for (const session of sessionsWithMode) {
         sessionStore.addSession(session);
       }
-
     } catch (error) {
       console.error("Failed to load local sessions:", error);
     }
@@ -329,7 +379,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       setSessionTicket("");
       notificationStore.success("Connected to remote host", "System");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       setConnectionError(errorMessage);
       notificationStore.error(`Connection failed: ${errorMessage}`, "Error");
     } finally {
@@ -353,30 +404,35 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       agentTypeStr: newSessionAgent(),
       projectPath: newSessionPath(),
       sessionId: undefined,
-    }).then((sessionId) => {
-      const newSession = {
-        sessionId,
-        agentType: newSessionAgent(),
-        projectPath: newSessionPath(),
-        startedAt: Date.now(),
-        active: true,
-        controlledByRemote: false,
-        hostname: "localhost",
-        os: navigator.userAgent,
-        currentDir: newSessionPath(),
-        machineId: "local",
-        mode: "local" as const,
-      };
+    })
+      .then((sessionId) => {
+        const newSession = {
+          sessionId,
+          agentType: newSessionAgent(),
+          projectPath: newSessionPath(),
+          startedAt: Date.now(),
+          active: true,
+          controlledByRemote: false,
+          hostname: "localhost",
+          os: navigator.userAgent,
+          currentDir: newSessionPath(),
+          machineId: "local",
+          mode: "local" as const,
+        };
 
-      sessionStore.addSession(newSession);
-      sessionStore.setActiveSession(sessionId);
-      setShowNewSessionModal(false);
-      setNewSessionPath("");
-      notificationStore.success("Local agent session started", "System");
-    }).catch((error) => {
-      console.error("[handleCreateSession] Failed to start local agent:", error);
-      notificationStore.error("Failed to start local agent", "Error");
-    });
+        sessionStore.addSession(newSession);
+        sessionStore.setActiveSession(sessionId);
+        setShowNewSessionModal(false);
+        setNewSessionPath("");
+        notificationStore.success("Local agent session started", "System");
+      })
+      .catch((error) => {
+        console.error(
+          "[handleCreateSession] Failed to start local agent:",
+          error,
+        );
+        notificationStore.error("Failed to start local agent", "Error");
+      });
   };
 
   // Handle spawning remote session from local session
@@ -422,7 +478,12 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         {/* Header */}
         <div class="flex items-center justify-between p-4 border-b border-base-300">
           <h3 class="text-sm font-semibold">Sessions</h3>
-          <Button size="icon" variant="ghost" class="h-8 w-8" onClick={props.onToggle}>
+          <Button
+            size="icon"
+            variant="ghost"
+            class="h-8 w-8"
+            onClick={props.onToggle}
+          >
             <CloseIcon />
           </Button>
         </div>
@@ -435,7 +496,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 <SessionItem
                   session={session}
                   isActive={session.sessionId === activeSession()?.sessionId}
-                  onClick={() => sessionStore.setActiveSession(session.sessionId)}
+                  onClick={() =>
+                    sessionStore.setActiveSession(session.sessionId)
+                  }
                   onClose={(e) => handleCloseSession(e, session.sessionId)}
                   onSpawnRemoteSession={handleSpawnRemoteSession}
                 />
@@ -456,7 +519,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         <div class="p-3 border-t border-base-300">
           <div class="flex items-center justify-between">
             <div class="text-xs text-base-content/50">
-              {activeSessions().length} active session{activeSessions().length !== 1 ? "s" : ""}
+              {activeSessions().length} active session
+              {activeSessions().length !== 1 ? "s" : ""}
             </div>
             <Button
               type="button"
@@ -511,9 +575,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             {/* Remote Mode: Ticket Input */}
             <Show when={newSessionMode() === "remote"}>
               <div class="mb-4 space-y-2">
-                <label class="text-sm font-semibold">
-                  Session Ticket
-                </label>
+                <label class="text-sm font-semibold">Session Ticket</label>
                 <Textarea
                   class="h-24 font-mono text-sm"
                   placeholder="Paste the session ticket from CLI host..."
@@ -523,7 +585,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                     setConnectionError(null);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey && sessionTicket().trim()) {
+                    if (
+                      e.key === "Enter" &&
+                      !e.shiftKey &&
+                      sessionTicket().trim()
+                    ) {
                       e.preventDefault();
                       handleRemoteConnect();
                     }
@@ -536,8 +602,17 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
               <Show when={connectionError()}>
                 <Alert variant="error" class="mb-4 py-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4 shrink-0"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                   <span class="text-sm">{connectionError()}</span>
                 </Alert>
@@ -550,9 +625,12 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 <label class="text-sm font-semibold">Agent Type</label>
                 <Select
                   value={newSessionAgent()}
-                  onChange={(e) => setNewSessionAgent(e.currentTarget.value as AgentType)}
+                  onChange={(e) =>
+                    setNewSessionAgent(e.currentTarget.value as AgentType)
+                  }
                 >
                   <option value="claude">Claude Code</option>
+                  <option value="codex">Codex</option>
                   <option value="gemini">Gemini CLI</option>
                   <option value="opencode">OpenCode</option>
                   <option value="copilot">GitHub Copilot</option>
@@ -605,10 +683,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                   disabled={!sessionTicket().trim() || connecting()}
                   loading={connecting()}
                 >
-                  <Show
-                    when={connecting()}
-                    fallback={<span>Connect</span>}
-                  >
+                  <Show when={connecting()} fallback={<span>Connect</span>}>
                     Connecting...
                   </Show>
                 </Button>
