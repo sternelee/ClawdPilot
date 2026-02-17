@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info};
 
@@ -30,7 +30,7 @@ pub struct ZeroClawSession {
     interrupted: Arc<std::sync::atomic::AtomicBool>,
 }
 
-/// Callback that bridges zeroclaw events into riterm's broadcast channel
+/// Callback that bridges zeroclaw events into ClawdChat's broadcast channel
 struct SessionCallback {
     event_tx: broadcast::Sender<AgentTurnEvent>,
     session_id: String,

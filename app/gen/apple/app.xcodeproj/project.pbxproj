@@ -40,7 +40,7 @@
 		D8F57162F5CC7AEDD55F173D /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		D992121D187475F4BA4481D1 /* tcp_forwarding.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = tcp_forwarding.rs; sourceTree = "<group>"; };
 		F3673D372C5ABDD1AD6E7067 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
-		FBC720DFA1D01F55B0A32344 /* RiTerm.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RiTerm.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FBC720DFA1D01F55B0A32344 /* ClawdChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawdChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -138,7 +138,7 @@
 		EE72B6AC647386A11F795E44 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				FBC720DFA1D01F55B0A32344 /* RiTerm.app */,
+				FBC720DFA1D01F55B0A32344 /* ClawdChat.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -172,7 +172,7 @@
 			packageProductDependencies = (
 			);
 			productName = app_iOS;
-			productReference = FBC720DFA1D01F55B0A32344 /* RiTerm.app */;
+			productReference = FBC720DFA1D01F55B0A32344 /* ClawdChat.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -285,8 +285,8 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.riterm;
-				PRODUCT_NAME = RiTerm;
+				PRODUCT_BUNDLE_IDENTIFIER = com.clawdchat.app;
+				PRODUCT_NAME = ClawdChat;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
@@ -383,8 +383,8 @@
 					"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)",
 					"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.riterm;
-				PRODUCT_NAME = RiTerm;
+				PRODUCT_BUNDLE_IDENTIFIER = com.clawdchat.app;
+				PRODUCT_NAME = ClawdChat;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;

@@ -1,17 +1,21 @@
 # Continuity Ledger: ACP Client/Host Implementation
 
 ## Goal
+
 Complete local ACP agent support in the CLI, enabling:
+
 1. **Client mode**: Direct interaction with local ACP agents for conversation
 2. **Host mode**: P2P server that forwards requests to local ACP agents via iroh with data synchronization
 
 ## Constraints
+
 - Must work with existing ACP implementation in `lib/src/agent/acp.rs`
 - Must support permission management (get_pending_permissions, respond_to_permission)
 - Must provide interactive CLI with slash commands
 - Must handle both local (stdio) and remote (P2P) communication
 
 ## Key Decisions
+
 - Use `lib/src/agent/acp.rs` as the core ACP implementation (already has full infrastructure)
 - Create `cli/src/local_client.rs` for local ACP client interactions
 - Use AgentManager as the unified interface for both local and remote sessions
@@ -20,6 +24,7 @@ Complete local ACP agent support in the CLI, enabling:
 ## State
 
 ### Done:
+
 - [x] Analyze current ACP client implementation status
 - [x] Check lib/src/agent/acp.rs ACP implementation (full bidirectional JSON-RPC, permissions, retry logic)
 - [x] Complete CLI client ACP shutdown command support
@@ -27,7 +32,7 @@ Complete local ACP agent support in the CLI, enabling:
 - [x] Create local_client.rs module with slash command support
 - [x] Add `/listperms`, `/approve`, `/deny`, `/interrupt`, `/quit`, `/help` slash commands
 - [x] Fix compilation error with escaped quotes in mod.rs
-- [x] Fix AgentType import issue (use from riterm_shared)
+- [x] Fix AgentType import issue (use from clawdchat_shared)
 - [x] Fix manager clone issue for event task
 - [x] Fix test compilation error in message_adapter.rs
 - [x] Clean up dead code warnings
@@ -38,6 +43,7 @@ Complete local ACP agent support in the CLI, enabling:
 ### Now: [✓] Code implementation complete
 
 ### Next (Manual Testing Required):
+
 - [ ] Phase 9: Manual testing with actual ACP agents installed
 - [ ] Phase 10: Permission workflow end-to-end testing
 - [ ] Phase 11: P2P host/client testing across network
@@ -45,6 +51,7 @@ Complete local ACP agent support in the CLI, enabling:
 ### Code Implementation Status: ✅ COMPLETE
 
 The ACP Client/Host implementation required for the user's request has been **fully completed**:
+
 - ✅ **Client mode**: Implemented via `LocalClientSession` in `cli/src/local_client.rs`
 - ✅ **Host mode**: Already exists via `CliMessageServer` (P2P via iroh)
 - ✅ **Permission management**: Added `get_pending_permissions` and `respond_to_permission` to AgentManager
@@ -53,12 +60,14 @@ The ACP Client/Host implementation required for the user's request has been **fu
 - ✅ **Build verification**: CLI builds successfully (release), library tests pass (14/14)
 
 ## Open Questions
+
 - CONFIRMED: The CLI already has P2P client mode via `Connect` command - no additional implementation needed
 - UNCONFIRMED: Should we add more slash commands for session management?
 
 ## Working Set
 
 ### Files:
+
 - `lib/src/agent/mod.rs` - AgentManager with permission methods
 - `lib/src/agent/acp.rs` - Core ACP implementation (already has all features)
 - `cli/src/local_client.rs` - New local client module
@@ -67,6 +76,7 @@ The ACP Client/Host implementation required for the user's request has been **fu
 - `thoughts/ledgers/CONTINUITY_ACP-CLIENT-HOST.md` - This continuity ledger
 
 ### Test Script Usage:
+
 ```bash
 # Run integration test script
 cargo run --example test_acp_integration 2>/dev/null || \
@@ -78,6 +88,7 @@ rust-script scripts/test_acp_integration.rs
 ```
 
 ### Commands to Test:
+
 ```bash
 # Build CLI
 cargo build -p cli
@@ -100,6 +111,7 @@ cargo build --release -p cli
 ## Technical Implementation Details
 
 ### ACP Architecture (Already Complete in lib/src/agent/acp.rs)
+
 - Bidirectional JSON-RPC 2.0 over stdio
 - Dual-channel architecture:
   - `command_tx/command_rx`: Session commands (send_message, shutdown, interrupt, query)
@@ -109,19 +121,21 @@ cargo build --release -p cli
 - Session lifecycle management
 
 ### Client/Host Dual Mode
-1. **Client Mode** (`riterm run`):
+
+1. **Client Mode** (`clawdchat run`):
    - Direct local ACP agent interaction
    - Uses AgentManager to spawn ACP subprocess
    - Interactive CLI with slash commands
    - Reads from stdin, writes to stdout
 
-2. **Host Mode** (`riterm host`):
+2. **Host Mode** (`clawdchat host`):
    - P2P server via iroh QUIC
    - Forwards requests to local ACP agents
    - Handles connection management
    - Manages session state across network
 
 ### Permission Workflow
+
 ```
 User → CLI → AgentManager → AcpStreamingSession → ACP Runtime
                                                        ↓
@@ -129,6 +143,7 @@ User ← CLI ← AgentManager ← AcpStreamingSession ← PermissionRequest
 ```
 
 ## Test Results
+
 - [x] CLI builds successfully (compilation successful)
 - [x] Library tests pass (14/14 tests)
 - [ ] Local ACP client runs without errors (requires ACP agent installation)
@@ -142,6 +157,7 @@ User ← CLI ← AgentManager ← AcpStreamingSession ← PermissionRequest
 ## Files Modified/Created
 
 ### New Files:
+
 1. `cli/src/local_client.rs` - Local ACP client module
    - `LocalClientConfig` struct for configuration
    - `LocalClientSession` struct with permission management
@@ -149,12 +165,14 @@ User ← CLI ← AgentManager ← AcpStreamingSession ← PermissionRequest
 2. `scripts/test_acp_integration.rs` - Integration test script with compilation checks and manual testing commands
 
 ### Modified Files:
+
 1. `cli/src/main.rs` - Updated `run_agent_session()` and added `handle_slash_command()`
 2. `lib/src/agent/mod.rs` - Added permission management methods
 
 ## Implementation Details
 
 ### LocalClientSession
+
 ```rust
 pub struct LocalClientSession {
     manager: AgentManager,        // Manages the ACP session
@@ -166,6 +184,7 @@ pub struct LocalClientSession {
 ```
 
 ### Key Methods:
+
 - `new(config)` - Start a new ACP session with the specified agent
 - `send_message(message)` - Send a message to the agent
 - `get_pending_permissions()` - List pending permission requests
@@ -174,6 +193,7 @@ pub struct LocalClientSession {
 - `shutdown()` - Gracefully shut down the session
 
 ### Slash Commands Implemented:
+
 - `/listperms` - List all pending permission requests
 - `/approve <request_id> [reason]` - Approve a permission request
 - `/deny <request_id> [reason]` - Deny a permission request (with optional reason)
@@ -186,6 +206,7 @@ pub struct LocalClientSession {
 ### Client Mode: Direct Local ACP Interaction
 
 #### Basic Usage
+
 ```bash
 # Build the CLI
 cd cli && cargo build --release
@@ -210,6 +231,7 @@ cd cli && cargo build --release
 ```
 
 #### Interactive Session Example
+
 ```
 🌐 ACP Agent Session Started (Native Mode)
 
@@ -234,6 +256,7 @@ Commands:
 ### Permission Management
 
 #### Listing Pending Permissions
+
 When the agent requests permission to run a command or access a file:
 
 ```
@@ -246,6 +269,7 @@ When the agent requests permission to run a command or access a file:
 ```
 
 #### Approving a Permission
+
 ```
 > /approve perm_abc123
 
@@ -253,6 +277,7 @@ When the agent requests permission to run a command or access a file:
 ```
 
 #### Denying a Permission (with optional reason)
+
 ```
 > /deny perm_abc123 "Security policy violation"
 
@@ -260,6 +285,7 @@ When the agent requests permission to run a command or access a file:
 ```
 
 ### Interrupting Operations
+
 ```
 > /interrupt
 
@@ -268,6 +294,7 @@ When the agent requests permission to run a command or access a file:
 ```
 
 ### Exiting the Session
+
 ```
 > /quit
 
@@ -278,18 +305,21 @@ When the agent requests permission to run a command or access a file:
 ### Advanced Usage
 
 #### Custom Binary Path
+
 ```bash
 # Specify a custom path to the agent binary
 ./target/release/cli run --agent claude --binary /opt/claude/bin/claude --project .
 ```
 
 #### Extra Arguments
+
 ```bash
 # Pass additional arguments to the agent
 ./target/release/cli run --agent claude --project . --args "--verbose" "--model" "sonnet"
 ```
 
 #### Non-Interactive Mode (Scripting)
+
 ```bash
 # Send a message and exit (for scripting)
 echo "Write a test for the user module" | ./target/release/cli run --agent claude --project .
@@ -298,6 +328,7 @@ echo "Write a test for the user module" | ./target/release/cli run --agent claud
 ### Error Handling Examples
 
 #### Agent Not Found
+
 ```
 > ./target/release/cli run --agent unknown --project .
 
@@ -306,6 +337,7 @@ Supported agents: claude, opencode, gemini, copilot, qwen, codex
 ```
 
 #### Permission Denied
+
 ```
 > /approve perm_xyz
 
@@ -314,6 +346,7 @@ Use /listperms to see pending requests
 ```
 
 #### Session Interruption Failed
+
 ```
 > /interrupt
 
@@ -323,16 +356,19 @@ Use /listperms to see pending requests
 ### Troubleshooting
 
 #### CLI Won't Start
+
 - Ensure the agent (Claude Code, OpenCode, etc.) is installed and in PATH
 - Check working directory exists and is accessible
 - Verify permissions on the CLI binary
 
 #### Permission Requests Not Showing
+
 - Some agents don't use the ACP permission system
 - Check agent logs for permission-related output
 - Verify the agent supports the ACP protocol
 
 #### Session Interruption Not Working
+
 - Interruption only works when an operation is active
 - This is expected behavior when waiting for user input
 
@@ -469,16 +505,19 @@ pub struct PendingPermission {
 ## Build and Deployment
 
 ### Development Build
+
 ```bash
 cd cli && cargo build
 ```
 
 ### Release Build
+
 ```bash
 cd cli && cargo build --release
 ```
 
 ### Running Tests
+
 ```bash
 # Run lib tests
 cd lib && cargo test
@@ -488,8 +527,7 @@ cd cli && cargo test
 ```
 
 ### Cross-Platform Support
+
 - **macOS**: Native support for all agents
 - **Linux**: Native support for all agents
 - **Windows**: Native support for all agents (with native Windows CLI)
-
-

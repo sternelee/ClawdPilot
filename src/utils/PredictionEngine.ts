@@ -10,8 +10,8 @@
  * 4. 预测错误时回滚
  *
  * 与 Mosh 的区别：
- * - Mosh 维护完整的终端状态（Framebuffer），riterm 只做字符级预测
- * - Mosh 使用 epoch 系统处理复杂回滚，riterm 使用简化的队列机制
+ * - Mosh 维护完整的终端状态（Framebuffer），clawdchat 只做字符级预测
+ * - Mosh 使用 epoch 系统处理复杂回滚，clawdchat 使用简化的队列机制
  */
 
 export interface PredictionConfig {

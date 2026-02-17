@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "RiTerm",
+  "productName": "ClawdChat",
   "version": "0.3.1",
-  "identifier": "com.example.riterm",
+  "identifier": "com.clawdchat.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "RiTerm - Remote Terminal",
+        "title": "ClawdChat - Remote Agent Platform",
         "width": 960,
         "height": 640,
         "resizable": true,
@@ -23,10 +23,7 @@
     ],
     "security": {
       "csp": null,
-      "capabilities": [
-        "main",
-        "mobile-capability"
-      ]
+      "capabilities": ["main", "mobile-capability"]
     }
   },
   "bundle": {

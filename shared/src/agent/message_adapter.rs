@@ -1,10 +1,10 @@
 //! Message adapter for converting agent events to P2P messages
 #![allow(dead_code)]
 //!
-//! Provides utilities to convert AgentEvent to RiTerm message protocol types
+//! Provides utilities to convert AgentEvent to ClawdChat message protocol types
 //! for transmission to remote P2P clients.
 
-use riterm_shared::message_protocol::{
+use crate::message_protocol::{
     AgentMessageContent, AgentPermissionRequest, AgentPermissionResponse, Message, MessageBuilder,
     MessageType, NotificationData, NotificationLevel, NotificationPriority, NotificationType,
     PermissionMode, ToolCallStatus,
@@ -202,7 +202,7 @@ pub fn build_agent_message(
     event: &AgentEvent,
     _sequence: Option<u64>,
 ) -> Message {
-    use riterm_shared::message_protocol::{AgentMessageMessage, MessagePayload};
+    use crate::message_protocol::{AgentMessageMessage, MessagePayload};
 
     let content = event_to_agent_message_content(event, None);
 
@@ -216,7 +216,7 @@ pub fn build_agent_message(
         }),
         receiver_id: None,
         session_id: Some(session_id),
-        priority: riterm_shared::message_protocol::MessagePriority::Normal,
+        priority: crate::message_protocol::MessagePriority::Normal,
         timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

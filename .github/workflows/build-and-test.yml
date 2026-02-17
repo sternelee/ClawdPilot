@@ -2,9 +2,9 @@ name: "Development Build and Test"
 
 on:
   push:
-    branches: [ main, app ]
+    branches: [main, app]
   pull_request:
-    branches: [ main, app ]
+    branches: [main, app]
   workflow_dispatch: # Allow manual triggering
 
 env:
@@ -113,14 +113,14 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build CLI
-        run: cargo build -p cli --release
+        run: cargo build -p clawdchat --release
 
       - name: Test CLI functionality
         run: |
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            ./target/release/cli.exe --help
+            ./target/release/clawdchat.exe --help
           else
-            ./target/release/cli --help
+            ./target/release/clawdchat --help
           fi
         shell: bash
 
@@ -211,7 +211,7 @@ jobs:
       - name: Generate build report
         run: |
           cat > build-report.md << 'EOF'
-          # RiTerm Build Report
+          # ClawdChat Build Report
 
           ## Build Information
           - **Commit**: ${{ github.sha }}

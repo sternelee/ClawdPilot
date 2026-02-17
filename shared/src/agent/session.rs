@@ -5,7 +5,7 @@
 //! async process handling and event broadcasting.
 
 use anyhow::Result;
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};

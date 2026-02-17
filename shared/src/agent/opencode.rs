@@ -6,7 +6,7 @@
 
 use anyhow::Result;
 use regex::Regex;
-use riterm_shared::message_protocol::{AgentMessageContent, NotificationLevel, ToolCallStatus};
+use crate::message_protocol::{AgentMessageContent, NotificationLevel, ToolCallStatus};
 
 /// OpenCode 输出解析器
 pub struct OpenCodeOutputParser {

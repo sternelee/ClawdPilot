@@ -140,7 +140,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             {session()?.agentType === "copilot" && "Copilot"}
             {session()?.agentType === "qwen" && "Qwen"}
             {session()?.agentType === "codex" && "Codex"}
-            {session()?.agentType === "zeroclaw" && "ZeroClaw"}
+            {session()?.agentType === "zeroclaw" && "ClawdAI"}
             {session()?.agentType === "custom" && "Custom"}
           </span>
           <span

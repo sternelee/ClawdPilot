@@ -2,7 +2,7 @@
 //!
 //! This module provides the agent turn loop: send messages to the LLM, parse tool calls,
 //! execute tools, and loop until a final text response. Designed to be called by
-//! `ZeroClawSession` in riterm's agent system.
+//! `ZeroClawSession` in clawdchat's agent system.
 
 use crate::memory::Memory;
 use crate::providers::{ChatMessage, Provider};
@@ -19,7 +19,7 @@ pub const MAX_TOOL_ITERATIONS: usize = 10;
 pub const MAX_HISTORY_MESSAGES: usize = 50;
 
 /// Callback trait for agent turn events (tool started, text produced, etc.)
-/// Implement this to bridge zeroclaw events into riterm's AgentTurnEvent system.
+/// Implement this to bridge zeroclaw events into clawdchat's AgentTurnEvent system.
 pub trait TurnCallback: Send + Sync {
     fn on_text(&self, text: &str);
     fn on_tool_started(&self, tool_name: &str, tool_id: &str);

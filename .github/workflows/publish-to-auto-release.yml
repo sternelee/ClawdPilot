@@ -1,4 +1,4 @@
-name: "Release RiTerm CLI and Tauri App"
+name: "Release ClawdChat CLI and Tauri App"
 
 on:
   push:
@@ -17,29 +17,29 @@ jobs:
       matrix:
         include:
           # Focus on stable builds without complex cross-compilation
-          - binary_name: riterm-x86_64-unknown-linux-gnu
-            binary_path: target/x86_64-unknown-linux-gnu/release/cli
+          - binary_name: clawdchat-x86_64-unknown-linux-gnu
+            binary_path: target/x86_64-unknown-linux-gnu/release/clawdchat
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           # Temporarily disable ARM64 Linux builds due to OpenSSL cross-compilation issues
-          # - binary_name: riterm-aarch64-unknown-linux-gnu
-          #   binary_path: target/aarch64-unknown-linux-gnu/release/cli
+          # - binary_name: clawdchat-aarch64-unknown-linux-gnu
+          #   binary_path: target/aarch64-unknown-linux-gnu/release/clawdchat
           #   os: ubuntu-latest
           #   target: aarch64-unknown-linux-gnu
-          - binary_name: riterm-x86_64-apple-darwin
-            binary_path: target/x86_64-apple-darwin/release/cli
+          - binary_name: clawdchat-x86_64-apple-darwin
+            binary_path: target/x86_64-apple-darwin/release/clawdchat
             os: macos-latest
             target: x86_64-apple-darwin
-          - binary_name: riterm-aarch64-apple-darwin
-            binary_path: target/aarch64-apple-darwin/release/cli
+          - binary_name: clawdchat-aarch64-apple-darwin
+            binary_path: target/aarch64-apple-darwin/release/clawdchat
             os: macos-latest
             target: aarch64-apple-darwin
-          - binary_name: riterm-x86_64-pc-windows-msvc.exe
-            binary_path: target/x86_64-pc-windows-msvc/release/cli.exe
+          - binary_name: clawdchat-x86_64-pc-windows-msvc.exe
+            binary_path: target/x86_64-pc-windows-msvc/release/clawdchat.exe
             os: windows-latest
             target: x86_64-pc-windows-msvc
-          - binary_name: riterm-aarch64-pc-windows-msvc.exe
-            binary_path: target/aarch64-pc-windows-msvc/release/cli.exe
+          - binary_name: clawdchat-aarch64-pc-windows-msvc.exe
+            binary_path: target/aarch64-pc-windows-msvc/release/clawdchat.exe
             os: windows-latest
             target: aarch64-pc-windows-msvc
 
@@ -73,15 +73,15 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build CLI
-        run: cargo build -p cli --release --target ${{ matrix.target }}
+        run: cargo build -p clawdchat --release --target ${{ matrix.target }}
 
       - name: Rename CLI binary
         shell: bash
         run: |
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp "${{ matrix.binary_path }}" "riterm.exe"
+            cp "${{ matrix.binary_path }}" "clawdchat.exe"
           else
-            cp "${{ matrix.binary_path }}" "riterm"
+            cp "${{ matrix.binary_path }}" "clawdchat"
           fi
 
       - name: Upload CLI artifact
@@ -89,8 +89,8 @@ jobs:
         with:
           name: cli-${{ matrix.target }}
           path: |
-            riterm
-            riterm.exe
+            clawdchat
+            clawdchat.exe
           retention-days: 30
 
   # Build Tauri App for desktop platforms
@@ -159,9 +159,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "RiTerm ${{ github.ref_name }}"
+          releaseName: "ClawdChat ${{ github.ref_name }}"
           releaseBody: |
-            ## RiTerm ${{ github.ref_name }}
+            ## ClawdChat ${{ github.ref_name }}
 
             ### 🖥️ Desktop Apps
             - **macOS**: Download `.dmg` for Intel or Apple Silicon Macs
@@ -280,7 +280,7 @@ jobs:
 
           # Organize CLI binaries
           cd cli-binaries
-          for binary in riterm*; do
+          for binary in clawdchat*; do
             if [ -f "$binary" ]; then
               chmod +x "$binary"
               mv "$binary" "../release-artifacts/"
@@ -310,9 +310,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: "RiTerm ${{ steps.get_tag_name.outputs.TAG_NAME }}"
+          name: "ClawdChat ${{ steps.get_tag_name.outputs.TAG_NAME }}"
           body: |
-            ## RiTerm ${{ steps.get_tag_name.outputs.TAG_NAME }}
+            ## ClawdChat ${{ steps.get_tag_name.outputs.TAG_NAME }}
 
             ### 🖥️ Desktop Applications
             The desktop apps are automatically attached to this release by Tauri.
@@ -322,11 +322,11 @@ jobs:
 
             ### 💻 CLI Tools
             Pre-compiled CLI binaries are available below:
-            - **Linux x64**: `riterm-x86_64-unknown-linux-gnu`
-            - **macOS Intel**: `riterm-x86_64-apple-darwin`
-            - **macOS Apple Silicon**: `riterm-aarch64-apple-darwin`
-            - **Windows x64**: `riterm-x86_64-pc-windows-msvc.exe`
-            - **Windows ARM64**: `riterm-aarch64-pc-windows-msvc.exe`
+            - **Linux x64**: `clawdchat-x86_64-unknown-linux-gnu`
+            - **macOS Intel**: `clawdchat-x86_64-apple-darwin`
+            - **macOS Apple Silicon**: `clawdchat-aarch64-apple-darwin`
+            - **Windows x64**: `clawdchat-x86_64-pc-windows-msvc.exe`
+            - **Windows ARM64**: `clawdchat-aarch64-pc-windows-msvc.exe`
 
             *Note: Linux ARM64 builds are temporarily disabled due to OpenSSL cross-compilation issues. Use Linux x64 builds or compile from source for ARM64 Linux systems.*
 
@@ -336,7 +336,7 @@ jobs:
             - **iOS**: `.ipa` files (requires TestFlight or App Store)
 
             ### 🚀 Quick Start
-            1. **CLI**: Download the appropriate binary for your system, make it executable (`chmod +x riterm-*`), and run `./riterm host`
+            1. **CLI**: Download the appropriate binary for your system, make it executable (`chmod +x clawdchat-*`), and run `./clawdchat host`
             2. **Desktop**: Install the appropriate app for your platform
             3. **Mobile**: Install the APK or IPA file on your device
 
@@ -353,15 +353,15 @@ jobs:
             - Improved mobile UI with gesture controls and keyboard management
 
             ### 🔗 Links
-            - [Documentation](https://github.com/sternelee/riterm)
-            - [Report Issues](https://github.com/sternelee/riterm/issues)
-            - [Discussions](https://github.com/sternelee/riterm/discussions)
+            - [Documentation](https://github.com/sternelee/clawdchat)
+            - [Report Issues](https://github.com/sternelee/clawdchat/issues)
+            - [Discussions](https://github.com/sternelee/clawdchat/discussions)
 
             ---
             **SHA256 Checksums**: `checksums.txt` contains the checksums for all CLI binaries.
             **Mobile Apps**: Available when built successfully. Check the assets section.
 
-            Thank you for using RiTerm! 🎉
+            Thank you for using ClawdChat! 🎉
           files: release-artifacts/checksums.txt
           draft: false
           prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
@@ -393,20 +393,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gh
 
-      - name: Create GitHub Release in sternelee/riterm-release
+      - name: Create GitHub Release in sternelee/clawdchat-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RELEASE_TAG="${{ steps.get_tag_name.outputs.TAG_NAME }}"
-          echo "Syncing release '$RELEASE_TAG' to sternelee/riterm-release..."
+          echo "Syncing release '$RELEASE_TAG' to sternelee/clawdchat-release..."
 
           gh release create "$RELEASE_TAG" \
-            --repo sternelee/riterm-release \
-            --title "RiTerm $RELEASE_TAG" \
-            --notes "Synced from main repository. See https://github.com/sternelee/riterm/releases/tag/$RELEASE_TAG for details and assets." \
+            --repo sternelee/clawdchat-release \
+            --title "ClawdChat $RELEASE_TAG" \
+            --notes "Synced from main repository. See https://github.com/sternelee/clawdchat/releases/tag/$RELEASE_TAG for details and assets." \
             --prerelease=${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }} \
             --target "${{ github.sha }}" || true
 
           find downloaded-artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" -o -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.apk" -o -name "*.ipa" \) -print0 | xargs -0 -I {} \
-            gh release upload "$RELEASE_TAG" "{}" --repo sternelee/riterm-release \
+            gh release upload "$RELEASE_TAG" "{}" --repo sternelee/clawdchat-release \
             --clobber

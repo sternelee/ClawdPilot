@@ -1,91 +1,10 @@
 # 终端会话管理功能
 
-RiTerm 现在支持全局状态管理来保存多个终端的会话记录，方便切换时能恢复上下文。
+ClawdChat 现在支持全局状态管理来保存多个终端的会话记录，方便切换时能恢复上下文。
+...
 
-## 功能特性
-
-### 🔄 自动会话保存
-- 自动保存终端内容和滚动历史
-- 保存命令历史记录
-- 保存工作目录和最后执行的命令
-- 定时自动保存（可配置间隔）
-
-### 📚 会话管理界面
-- 查看所有保存的会话
-- 显示会话状态（连接/断开/重连）
-- 显示会话大小和统计信息
-- 导出/导入会话数据
-- 清理过期会话
-
-### ⚡ 快速切换
-- 点击会话即可切换
-- 自动恢复终端内容
-- 恢复工作目录和命令历史
-- 保持会话上下文
-
-### ⚙️ 可配置设置
-- 开启/关闭内容保存
-- 配置最大滚动历史行数
-- 调整自动保存间隔
-- 会话数据导出/导入
-
-## 使用方法
-
-### 访问会话管理
-
-1. **移动端**：点击右上角菜单 → "会话管理"
-2. **桌面端**：点击顶部 "📚 会话" 按钮
-
-### 会话管理界面
-
-#### 会话列表标签页
-- 显示所有保存的会话
-- 每个会话显示：
-  - 会话名称和状态图标
-  - Shell类型和当前目录
-  - 最后活动时间
-  - 存储大小统计
-  - 最后执行的命令
-- 点击会话可快速切换
-- 点击垃圾桶图标删除会话
-
-#### 设置与统计标签页
-- **自动保存终端内容**：开启/关闭会话数据保存
-- **最大滚动历史行数**：配置保存的滚动历史行数（100-10000）
-- **自动保存间隔**：设置数据保存频率（1秒-30秒）
-- **统计信息**：显示总会话数、活动会话、运行中会话和存储大小
-- **操作按钮**：
-  - 导出所有会话：将会话数据导出为JSON文件
-  - 导入会话：从JSON文件导入会话数据
-  - 清理过期会话：删除7天以上的会话
-  - 删除所有会话：清空所有会话数据
-
-### 自动恢复功能
-
-当连接到终端时，系统会：
-1. 自动查找对应的会话记录
-2. 恢复保存的终端内容
-3. 恢复滚动历史（如果有）
-4. 恢复工作目录
-5. 恢复命令历史
-
-### 测试功能
-
-在开发环境中，可以在浏览器控制台运行测试：
-
-```javascript
-// 测试会话管理功能
-testSessionManager()
-```
-
-这将创建测试数据并验证所有功能是否正常工作。
-
-## 数据存储
-
-会话数据存储在浏览器的 localStorage 中：
-
-- `riterm-terminal-sessions`：会话数据
-- `riterm-recently-used-sessions`：最近使用的会话列表
+- `clawdchat-terminal-sessions`：会话数据
+- `clawdchat-recently-used-sessions`：最近使用的会话列表
 
 ### 数据结构
 
@@ -93,26 +12,26 @@ testSessionManager()
 
 ```typescript
 interface TerminalSession {
-  id: string;              // 会话唯一ID
-  sessionId: string;       // 远程会话ID
-  name?: string;           // 会话名称
-  terminalId: string;      // 终端ID
-  shellType: string;       // Shell类型
-  currentDir: string;      // 当前目录
-  status: string;          // 会话状态
-  createdAt: number;       // 创建时间
-  lastActivity: number;    // 最后活动时间
-  size: [number, number];  // 终端尺寸
-  processId?: number;      // 进程ID
+  id: string; // 会话唯一ID
+  sessionId: string; // 远程会话ID
+  name?: string; // 会话名称
+  terminalId: string; // 终端ID
+  shellType: string; // Shell类型
+  currentDir: string; // 当前目录
+  status: string; // 会话状态
+  createdAt: number; // 创建时间
+  lastActivity: number; // 最后活动时间
+  size: [number, number]; // 终端尺寸
+  processId?: number; // 进程ID
 
   // 恢复相关数据
-  terminalContent?: string;                    // 终端内容缓存
-  scrollback?: string[];                       // 滚动历史
-  workingDirectory?: string;                   // 工作目录
-  environmentVars?: Record<string, string>;    // 环境变量
-  commandHistory?: string[];                   // 命令历史
-  lastCommand?: string;                        // 最后执行的命令
-  connectionState?: 'connected' | 'disconnected' | 'reconnecting'; // 连接状态
+  terminalContent?: string; // 终端内容缓存
+  scrollback?: string[]; // 滚动历史
+  workingDirectory?: string; // 工作目录
+  environmentVars?: Record<string, string>; // 环境变量
+  commandHistory?: string[]; // 命令历史
+  lastCommand?: string; // 最后执行的命令
+  connectionState?: "connected" | "disconnected" | "reconnecting"; // 连接状态
 }
 ```
 
@@ -126,16 +45,19 @@ interface TerminalSession {
 ## 故障排除
 
 ### 会话数据丢失
+
 - 检查浏览器localStorage是否被清理
 - 确认自动保存功能已开启
 - 检查存储空间是否充足
 
 ### 恢复失败
+
 - 确认会话数据格式正确
 - 检查终端是否支持内容恢复
 - 尝试手动导入备份的会话数据
 
 ### 性能问题
+
 - 减少最大滚动历史行数
 - 增加自动保存间隔
 - 定期清理不需要的会话

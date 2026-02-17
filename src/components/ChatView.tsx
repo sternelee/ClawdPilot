@@ -964,7 +964,7 @@ export function ChatView(props: ChatViewProps) {
                 {props.agentType === "gemini" && "Gemini CLI"}
                 {props.agentType === "copilot" && "GitHub Copilot"}
                 {props.agentType === "qwen" && "Qwen Code"}
-                {props.agentType === "zeroclaw" && "ZeroClaw"}
+                {props.agentType === "zeroclaw" && "ClawdAI"}
                 {props.agentType === "custom" && "Custom Agent"}
               </h2>
               <div
@@ -1171,7 +1171,7 @@ export function ChatView(props: ChatViewProps) {
                 <option value="gemini">Gemini CLI</option>
                 <option value="copilot">GitHub Copilot</option>
                 <option value="qwen">Qwen Code</option>
-                <option value="zeroclaw">ZeroClaw</option>
+                <option value="zeroclaw">ClawdAI</option>
                 <option value="custom">Custom</option>
               </Select>
             </div>

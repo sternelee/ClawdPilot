@@ -1,6 +1,6 @@
 //! 统一的消息事件协议
 //!
-//! 此模块定义了RiTerm中所有组件间的统一消息协议，
+//! 此模块定义了ClawdChat中所有组件间的统一消息协议，
 //! 支持App-CLI、终端管理、TCP转发等各种消息类型。
 
 use anyhow::Result;
@@ -989,14 +989,14 @@ pub enum SlashCommand {
         /// 原始命令字符串（如 "/help", "/sessions", "/plugin install xxx"）
         raw: String,
     },
-    /// RiTerm 内置命令
+    /// ClawdChat 内置命令
     Builtin {
         /// 命令类型
         command_type: BuiltinCommand,
     },
 }
 
-/// RiTerm 内置命令
+/// ClawdChat 内置命令
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BuiltinCommand {
     /// 列出所有会话

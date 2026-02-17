@@ -9,7 +9,7 @@ mod shell;
 mod terminal_logger;
 use local_client::{LocalClientConfig, LocalClientSession};
 use message_server::CliMessageServer;
-use riterm_shared::QuicMessageServerConfig;
+use clawdchat_shared::QuicMessageServerConfig;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
@@ -25,8 +25,8 @@ fn generate_qr_string(ticket: &str) -> String {
 }
 
 #[derive(Parser)]
-#[command(name = "riterm")]
-#[command(about = "RiTerm - P2P AI Agent Remote Management Tool")]
+#[command(name = "clawdchat")]
+#[command(about = "ClawdChat - P2P AI Agent Remote Management Tool")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
     #[command(subcommand)]
@@ -58,14 +58,14 @@ enum Commands {
         /// Bind address for the server
         #[arg(long, default_value = "0.0.0.0:0")]
         bind_addr: String,
-        /// Custom path to secret key file (default: ./riterm_secret_key)
+        /// Custom path to secret key file (default: ./clawdchat_secret_key)
         #[arg(long)]
         secret_key_file: Option<String>,
         /// Use temporary secret key (not persisted to disk)
         #[arg(long)]
         temp_key: bool,
     },
-    /// Connect to a remote RiTerm host server (P2P client mode)
+    /// Connect to a remote ClawdChat host server (P2P client mode)
     Connect {
         /// Connection ticket from remote host
         #[arg(long)]
@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
 fn setup_logging() -> Result<()> {
     std::fs::create_dir_all("logs").ok();
 
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "riterm-cli.log");
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "clawdchat-cli.log");
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(file_appender)
         .with_ansi(false)
@@ -150,7 +150,7 @@ async fn run_host(
     secret_key_file: Option<String>,
     temp_key: bool,
 ) -> Result<()> {
-    info!("Starting RiTerm Host Server");
+    info!("Starting ClawdChat Host Server");
 
     // 处理密钥文件路径
     let secret_key_path = if temp_key {
@@ -163,7 +163,7 @@ async fn run_host(
     } else {
         // 默认使用CLI启动目录
         let current_dir = std::env::current_dir()?;
-        let default_path = current_dir.join("riterm_secret_key");
+        let default_path = current_dir.join("clawdchat_secret_key");
         info!(
             "🔑 Using default secret key in CLI directory: {:?}",
             default_path
@@ -222,7 +222,7 @@ fn print_host_info(node_id: &str, ticket: &str, shell_path: &str) {
     // 在release模式下，只显示标题、shell和ticket
     #[cfg(not(debug_assertions))]
     {
-        println!("🚀 RiTerm Host Server");
+        println!("🚀 ClawdChat Host Server");
         println!("🐚 Shell: {}", shell_path);
         println!();
         println!("🎫 Scan QR code or use ticket below:");
@@ -238,7 +238,7 @@ fn print_host_info(node_id: &str, ticket: &str, shell_path: &str) {
     // 在debug模式下，显示完整信息
     #[cfg(debug_assertions)]
     {
-        println!("🚀 RiTerm Host Server Started");
+        println!("🚀 ClawdChat Host Server Started");
         println!("🔑 Node ID: {}", node_id);
         println!("🐚 Shell: {}", shell_path);
         println!();
@@ -251,7 +251,7 @@ fn print_host_info(node_id: &str, ticket: &str, shell_path: &str) {
         println!();
 
         println!("📱 App Connection Instructions:");
-        println!("   1. Open RiTerm app on your mobile device");
+        println!("   1. Open ClawdChat app on your mobile device");
         println!("   2. Tap the camera button to scan QR code");
         println!("   3. Or copy the ticket above and paste it in the app");
         println!();
@@ -304,17 +304,17 @@ async fn run_server_status_loop(server: &CliMessageServer) {
 }
 
 fn print_general_help() {
-    println!("🤖 RiTerm - P2P AI Agent Remote Management Tool");
+    println!("🤖 ClawdChat - P2P AI Agent Remote Management Tool");
     println!();
     println!("📋 Commands:");
-    println!("   riterm run [options]     Start an AI Agent session (default: claude)");
-    println!("   riterm host [options]    Start P2P host server");
-    println!("   riterm runner [options]  Start background runner service");
-    println!("   riterm --help            Show this help message");
+    println!("   clawdchat run [options]     Start an AI Agent session (default: claude)");
+    println!("   clawdchat host [options]    Start P2P host server");
+    println!("   clawdchat runner [options]  Start background runner service");
+    println!("   clawdchat --help            Show this help message");
     println!();
     println!("💡 Quick Start:");
-    println!("   1. Run: riterm run");
-    println!("   2. In another terminal: riterm host");
+    println!("   1. Run: clawdchat run");
+    println!("   2. In another terminal: clawdchat host");
     println!("   3. Connect your mobile app using the ticket");
     println!();
     println!("🔧 Agent Types:");
@@ -326,7 +326,7 @@ fn print_general_help() {
 
 /// 运行 AI Agent 会话（使用 ACP）
 async fn run_agent_session(agent: String, project: String, args: Vec<String>) -> Result<()> {
-    use riterm_shared::message_protocol::AgentType;
+    use clawdchat_shared::message_protocol::AgentType;
 
     let agent_type = match agent.to_lowercase().as_str() {
         "claude" | "claude-code" => AgentType::ClaudeCode,
@@ -505,10 +505,10 @@ async fn handle_slash_command(session: &LocalClientSession, command: &str) -> Re
 
 /// 运行后台 Runner 服务
 async fn run_runner(bind_addr: String) -> Result<()> {
-    info!("Starting RiTerm Runner on {}", bind_addr);
+    info!("Starting ClawdChat Runner on {}", bind_addr);
 
     println!();
-    println!("🔄 RiTerm Runner");
+    println!("🔄 ClawdChat Runner");
     println!("   Listening on: {}", bind_addr);
     println!();
     println!("   The runner allows remote session spawning.");
@@ -525,12 +525,12 @@ async fn run_runner(bind_addr: String) -> Result<()> {
     Ok(())
 }
 
-/// 连接到远程 RiTerm host（P2P 客户端模式）
+/// 连接到远程 ClawdChat host（P2P 客户端模式）
 async fn run_connect(ticket: String, relay: Option<String>) -> Result<()> {
     use client::InteractiveClient;
 
     println!();
-    println!("🔗 RiTerm P2P Client Mode");
+    println!("🔗 ClawdChat P2P Client Mode");
     println!();
     println!("🎫 Connecting to remote host...");
     println!();

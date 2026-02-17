@@ -30,7 +30,7 @@ fn start() {
         .with_ansi(false)
         .init();
 
-    tracing::info!("RiTerm browser WASM initialized");
+    tracing::info!("ClawdChat browser WASM initialized");
 }
 
 /// Web Terminal Node for remote terminal sessions
@@ -211,7 +211,7 @@ fn start_mock_message_processing(
         let welcome_message = SessionMessage {
             message_type: "terminal_output".to_string(),
             terminal_id: None,
-            data: "Welcome to RiTerm Browser (Mock Mode - Real iroh integration in progress!)"
+            data: "Welcome to ClawdChat Browser (Mock Mode - Real iroh integration in progress!)"
                 .to_string(),
             timestamp: (Date::now() * 1000.0) as u64,
         };

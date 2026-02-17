@@ -1,7 +1,7 @@
 //! ACP-based streaming session implementation.
 //!
 //! This module hosts ACP client connections to external agent processes
-//! and adapts ACP updates into RiTerm AgentEvent messages.
+//! and adapts ACP updates into ClawdChat AgentEvent messages.
 //!
 //! # ACP Protocol Overview
 //!
@@ -19,7 +19,7 @@
 //! # Usage Example
 //!
 //! ```no_run
-//! use riterm_lib::agent::{AgentManager, AgentType};
+//! use crate::agent::{AgentManager, AgentType};
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! let mut manager = AgentManager::new();
@@ -74,7 +74,7 @@ use agent_client_protocol as acp;
 use agent_client_protocol::Agent;
 use anyhow::{Context, Result, anyhow};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command;
@@ -256,7 +256,7 @@ impl AcpStreamingSession {
         let runtime_manager_tx = manager_tx.clone();
         let runtime_command_tx = command_tx.clone();
 
-        let thread_name = format!("riterm-acp-{}", &session_id[..session_id.len().min(8)]);
+        let thread_name = format!("clawdchat-acp-{}", &session_id[..session_id.len().min(8)]);
 
         std::thread::Builder::new()
             .name(thread_name)
@@ -671,8 +671,8 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                                 .terminal(true),
                         )
                         .client_info(
-                            acp::Implementation::new("riterm-cli", env!("CARGO_PKG_VERSION"))
-                                .title("RiTerm CLI"),
+                            acp::Implementation::new("clawdchat-cli", env!("CARGO_PKG_VERSION"))
+                                .title("ClawdChat CLI"),
                         ),
                 )
                 .await

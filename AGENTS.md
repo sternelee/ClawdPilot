@@ -1,6 +1,6 @@
-# AGENTS.md - AI Coding Agent Guide for riterm
+# AGENTS.md - AI Coding Agent Guide for ClawdChat
 
-> **riterm** is a P2P Terminal Session Sharing app built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile).
+> **ClawdChat** is a P2P Terminal Session Sharing app built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile).
 
 ## Quick Start Commands
 
@@ -25,7 +25,7 @@
 # Rust tests
 cargo test --workspace                     # Run all tests
 cargo test -p cli <test_name>              # Single test (CLI)
-cargo test -p riterm-shared <test_name>    # Single test (Shared)
+cargo test -p clawdchat-shared <test_name>    # Single test (Shared)
 cargo test -p app <test_name>              # Single test (App)
 cargo test -- --nocapture                  # Show stdout
 
@@ -71,7 +71,7 @@ pnpm tsc                                   # TypeScript type check
 
 1. `std` / `core`
 2. External crates (`anyhow`, `tokio`, `tracing`)
-3. Workspace crates (`riterm_shared`, `riterm_*`)
+3. Workspace crates (`clawdchat_shared`, `clawdchat_*`)
 4. `crate::` (local modules)
 
 ### Naming

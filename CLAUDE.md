@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**RiTerm** is a P2P AI agent remote management tool with a chat-centric UI. It enables remote control of AI coding agents (Claude Code, OpenCode, Gemini CLI, GitHub Copilot, Qwen Code, Codex) through a Tauri-based multi-platform application. Uses iroh's P2P networking with end-to-end encryption (ChaCha20Poly1305). Supports Chinese and English users.
+**ClawdChat** is a P2P AI agent remote management tool with a chat-centric UI. It enables remote control of AI coding agents (Claude Code, OpenCode, Gemini CLI, GitHub Copilot, Qwen Code, Codex) through a Tauri-based multi-platform application. Uses iroh's P2P networking with end-to-end encryption (ChaCha20Poly1305). Supports Chinese and English users.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ Cargo workspace with five crates plus a SolidJS frontend:
 
 | Crate        | Purpose                                                                                                  |
 | ------------ | -------------------------------------------------------------------------------------------------------- |
-| **cli/**     | CLI binary — `riterm run`, `riterm host`, `riterm connect`, `riterm runner` subcommands                  |
+| **cli/**     | CLI binary — `clawdchat run`, `clawdchat host`, `clawdchat connect`, `clawdchat runner` subcommands      |
 | **lib/**     | Shared Rust library — agent session management (`AgentManager`, `SessionKind`), used by both CLI and App |
 | **shared/**  | P2P networking, message protocol, QUIC server, event manager                                             |
 | **app/**     | Tauri 2 desktop+mobile backend — Tauri commands, P2P client, TCP forwarding                              |
@@ -43,7 +43,7 @@ Central `Message` struct with `MessageType` discriminator (AgentSession, AgentMe
 
 ### Slash Command Routing (`cli/src/command_router.rs`)
 
-**RiTerm builtins:** `/list`, `/spawn`, `/stop`, `/quit`, `/approve`, `/deny`, `/help`
+**ClawdChat builtins:** `/list`, `/spawn`, `/stop`, `/quit`, `/approve`, `/deny`, `/help`
 **Agent passthrough:** All other `/` commands forwarded to the AI agent.
 
 ### Frontend
@@ -89,7 +89,7 @@ cargo clippy
 # Test a single crate
 cargo test -p cli
 cargo test -p lib
-cargo test -p riterm-shared
+cargo test -p clawdchat-shared
 
 # Mobile
 pnpm tauri:android:dev

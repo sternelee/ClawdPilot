@@ -1,5 +1,5 @@
 [package]
-name = "cli"
+name = "clawdchat"
 version = "0.1.0"
 edition = "2024"
 
@@ -29,8 +29,7 @@ regex = "1.10"
 lazy_static = "1.5"
 dirs = "5.0"
 gethostname = "0.5"
-riterm-shared = { path = "../shared" }
-lib = { path = "../lib" }
+clawdchat-shared = { path = "../shared" }
 fast_qr = "0.13"
 iroh-tickets = { workspace = true }
 

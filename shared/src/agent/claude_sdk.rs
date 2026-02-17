@@ -26,8 +26,8 @@
 //! # Usage
 //!
 //! ```no_run
-//! use riterm_lib::agent::claude_sdk::ClaudeSdkSession;
-//! use riterm_shared::message_protocol::AgentType;
+//! use crate::agent::claude_sdk::ClaudeSdkSession;
+//! use crate::message_protocol::AgentType;
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! let session = ClaudeSdkSession::spawn(
@@ -51,7 +51,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
@@ -148,7 +148,7 @@ impl ClaudeSdkSession {
         let runtime_session_id = session_id.clone();
         let runtime_event_sender = event_sender.clone();
 
-        let thread_name = format!("riterm-sdk-{}", &session_id[..session_id.len().min(8)]);
+        let thread_name = format!("clawdchat-sdk-{}", &session_id[..session_id.len().min(8)]);
 
         std::thread::Builder::new()
             .name(thread_name)

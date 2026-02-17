@@ -7,12 +7,12 @@
     
     <!-- Network access permissions for P2P functionality -->
     <key>NSLocalNetworkUsageDescription</key>
-    <string>RiTerm needs local network access to establish P2P connections and share terminal sessions</string>
+    <string>ClawdChat needs local network access to establish P2P connections and share terminal sessions</string>
     
     <key>NSBonjourServices</key>
     <array>
-      <string>_riterm._tcp</string>
-      <string>_riterm._udp</string>
+      <string>_clawdchat._tcp</string>
+      <string>_clawdchat._udp</string>
     </array>
     
     <!-- Allow arbitrary loads for iroh P2P networking -->

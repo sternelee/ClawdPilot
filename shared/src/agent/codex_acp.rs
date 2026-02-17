@@ -17,8 +17,8 @@
 //! # Usage
 //!
 //! ```no_run
-//! use riterm_lib::agent::codex_acp::CodexAcpSession;
-//! use riterm_shared::message_protocol::AgentType;
+//! use crate::agent::codex_acp::CodexAcpSession;
+//! use crate::message_protocol::AgentType;
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! let session = CodexAcpSession::spawn(
@@ -46,7 +46,7 @@ use codex_core::{
     protocol::{EventMsg, Op, ReviewDecision, SessionSource},
 };
 use codex_protocol::user_input::UserInput;
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -134,7 +134,7 @@ impl CodexAcpSession {
         let runtime_session_id = session_id.clone();
         let runtime_event_sender = event_sender.clone();
 
-        let thread_name = format!("riterm-codex-{}", &session_id[..session_id.len().min(8)]);
+        let thread_name = format!("clawdchat-codex-{}", &session_id[..session_id.len().min(8)]);
 
         std::thread::Builder::new()
             .name(thread_name)

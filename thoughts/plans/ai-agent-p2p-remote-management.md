@@ -1,4 +1,4 @@
-# RiTerm 项目方向调整规划
+# ClawdChat 项目方向调整规划
 
 ## 项目愿景转变
 
@@ -8,6 +8,7 @@
 ## 核心理念
 
 参考 tiann/hapi 的设计理念，实现：
+
 - **Seamless Handoff** - 本地工作，随时切换远程，无上下文丢失
 - **Native First** - 包装而非替换 AI 代理，保持原生体验
 - **AFK Without Stopping** - 离开工位？手机一键批准 AI 请求
@@ -15,13 +16,13 @@
 
 ## 与 hapi 的关键差异
 
-| 特性 | hapi | RiTerm |
-|------|------|--------|
+| 特性     | hapi                               | ClawdChat               |
+| -------- | ---------------------------------- | ----------------------- |
 | 网络架构 | 中心化 (Client-Server + Socket.IO) | 去中心化 (P2P via iroh) |
-| 通信协议 | Socket.IO + SSE | iroh QUIC + E2E 加密 |
-| 隧道需求 | Cloudflare Tunnel / Tailscale | 内建 NAT 穿透 |
-| 服务器 | 需要 Node.js Server | 无需中心服务器 |
-| 部署 | 需要公网IP或隧道 | 本地直连，零配置 |
+| 通信协议 | Socket.IO + SSE                    | iroh QUIC + E2E 加密    |
+| 隧道需求 | Cloudflare Tunnel / Tailscale      | 内建 NAT 穿透           |
+| 服务器   | 需要 Node.js Server                | 无需中心服务器          |
+| 部署     | 需要公网IP或隧道                   | 本地直连，零配置        |
 
 ## 新架构设计
 
@@ -33,7 +34,7 @@
 │                                                                              │
 │   ┌──────────────┐         ┌──────────────┐         ┌──────────────┐        │
 │   │              │         │              │         │              │        │
-│   │  RiTerm CLI  │◄───────►│ iroh P2P     │◄───────►│   Tauri      │        │
+│   │  ClawdChat CLI  │◄───────►│ iroh P2P     │◄───────►│   Tauri      │        │
 │   │              │ iroh    │   Network    │ iroh    │   Desktop    │        │
 │   │  + AI Agent  │ QUIC    │              │ QUIC    │   App        │        │
 │   │              │         │  E2E Encrypted│         │              │        │
@@ -64,35 +65,43 @@
 
 ### 组件职责
 
-#### 1. RiTerm CLI
+#### 1. ClawdChat CLI
+
 包装和管理 AI 编码工具：
+
 - 启动和管理 AI 会话 (Claude Code, OpenCode, Gemini CLI)
 - 通过 iroh P2P 注册会话
 - 转发消息和权限请求
 - 提供 MCP (Model Context Protocol) 工具桥接
 
 **命令设计**：
+
 ```bash
-riterm              # 启动 Claude Code 会话
-riterm opencode     # 启动 OpenCode 会话
-riterm gemini       # 启动 Gemini CLI 会话
-riterm runner       # 后台服务模式
+clawdchat              # 启动 Claude Code 会话
+clawdchat opencode     # 启动 OpenCode 会话
+clawdchat gemini       # 启动 Gemini CLI 会话
+clawdchat runner       # 后台服务模式
 ```
 
 #### 2. iroh P2P Network
+
 利用现有的 iroh 基础设施：
+
 - QUIC 协议的可靠消息传递
 - NAT 穿透（无需中心服务器）
 - 端到端加密（ChaCha20Poly1305）
 - 连接复用和事件管理
 
 **复用现有组件**：
+
 - `shared/src/quic_server.rs`
 - `shared/src/communication_manager.rs`
 - `shared/src/message_protocol.rs` (需要扩展)
 
 #### 3. Tauri Desktop / Mobile App
+
 聊天式交互界面：
+
 - 会话列表（活跃和历史）
 - 聊天界面（发送消息、查看响应）
 - 权限管理（批准/拒绝工具访问）
@@ -140,8 +149,9 @@ pub enum AgentType {
 ### 消息流设计
 
 #### 会话启动流程
+
 ```
-1. 用户运行 `riterm`
+1. 用户运行 `clawdchat`
          │
          ▼
 2. CLI 启动 Claude Code 子进程
@@ -157,6 +167,7 @@ pub enum AgentType {
 ```
 
 #### 权限请求流程
+
 ```
 1. AI 请求工具权限 (如文件编辑)
          │
@@ -182,6 +193,7 @@ pub enum AgentType {
 ## 技术栈调整
 
 ### 后端 (Rust)
+
 - **保留**：iroh P2P 网络基础设施
 - **新增**：AI Agent 包装器
   - `cli/src/agent_wrapper/` - 通用 agent 包装层
@@ -191,6 +203,7 @@ pub enum AgentType {
   - `cli/src/mcp_bridge/` - MCP stdio 桥接
 
 ### 前端 (SolidJS + Tauri)
+
 - **保留**：SolidJS, Tauri, TailwindCSS
 - **移除**：ghostty-web (终端不再需要)
 - **新增**：聊天界面组件
@@ -201,18 +214,21 @@ pub enum AgentType {
   - `src/stores/sessionStore.ts` - 会话状态管理
 
 ### Web Client (WASM)
+
 - **保留**：WASM P2P 实现
 - **调整**：从终端界面改为聊天界面
 
 ## 开发阶段
 
 ### Phase 1: 核心基础设施 ✅ 完成
+
 - [x] 扩展 `message_protocol.rs` 支持 AI Agent 消息类型
 - [x] 实现 `AgentManager` in `cli/src/agent_wrapper/mod.rs`
 - [x] 实现 Claude Code 包装器 (`cli/src/agent_wrapper/claude.rs`)
 - [x] 更新 CLI 命令处理
 
 ### Phase 2: 前端聊天界面 ✅ 完成
+
 - [x] 创建 `ChatView` 组件 (DaisyUI 风格)
 - [x] 创建 `SessionListView` 组件
 - [x] 实现 `chatStore` 和 `sessionStore`
@@ -220,16 +236,19 @@ pub enum AgentType {
 - [x] 清理 App.tsx，移除终端代码
 
 ### Phase 3: 权限管理系统 ✅ 完成
+
 - [x] 实现权限请求 UI (DaisyUI alert 组件)
 - [x] 实现权限状态同步
 - [x] 添加推送通知支持 (NotificationDisplay 组件)
 
 ### Phase 4: 多 AI 支持 ✅ 完成
+
 - [x] 实现 OpenCode 包装器 (`cli/src/agent_wrapper/opencode.rs`)
 - [x] 实现 Gemini CLI 包装器 (`cli/src/agent_wrapper/gemini.rs`)
 - [x] 统一消息格式转换 (AgentFactory trait)
 
 ### Phase 5: 高级功能 ✅ 完成
+
 - [x] 文件浏览 (FileBrowserView + FileBrowserMessageHandler)
 - [x] Git diffs (GitDiffView + GitStatusMessageHandler)
 - [x] 远程会话生成 (RemoteSpawn UI + RemoteSpawnMessageHandler)

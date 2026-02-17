@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 

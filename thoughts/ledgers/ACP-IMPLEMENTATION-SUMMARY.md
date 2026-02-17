@@ -5,7 +5,7 @@
 
 ## Overview
 
-This document summarizes the completion of local ACP agent support in the RiTerm CLI, enabling:
+This document summarizes the completion of local ACP agent support in the ClawdChat CLI, enabling:
 
 1. **Client Mode**: Direct interaction with local ACP agents for conversation
 2. **Host Mode**: P2P server that forwards requests to local ACP agents via iroh with data synchronization
@@ -137,7 +137,7 @@ A comprehensive continuity ledger documenting:
 
 ## Architecture
 
-### Client Mode (`riterm run`)
+### Client Mode (`clawdchat run`)
 
 ```
 User (CLI) → LocalClientSession → AgentManager → AcpStreamingSession → ACP Agent
@@ -146,7 +146,7 @@ User (CLI) → LocalClientSession → AgentManager → AcpStreamingSession → A
               commands                 management        routing
 ```
 
-### Host Mode (`riterm host` - Already Existing)
+### Host Mode (`clawdchat host` - Already Existing)
 
 ```
 Mobile App → P2P Network (iroh QUIC) → CliMessageServer → AgentManager → ACP Agent
@@ -241,8 +241,8 @@ Commands:
 ```bash
 # Build CLI (dev)
 $ cargo build -p cli
-   Compiling lib v0.1.0 (/Users/sternelee/www/github/riterm/lib)
-   Compiling cli v0.1.0 (/Users/sternelee/www/github/riterm/cli)
+   Compiling lib v0.1.0 (/Users/sternelee/www/github/clawdchat/lib)
+   Compiling cli v0.1.0 (/Users/sternelee/www/github/clawdchat/cli)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.91s
 
 # Build CLI (release)
@@ -312,7 +312,7 @@ test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; 0.0
 
 ## Conclusion
 
-The implementation of ACP Client/Host support in the RiTerm CLI is **complete** on the code level. The architecture leverages the existing ACP implementation in `lib/src/agent/acp.rs` which provides bidirectional JSON-RPC communication, permission management, and retry logic.
+The implementation of ACP Client/Host support in the ClawdChat CLI is **complete** on the code level. The architecture leverages the existing ACP implementation in `lib/src/agent/acp.rs` which provides bidirectional JSON-RPC communication, permission management, and retry logic.
 
 The remaining work involves:
 

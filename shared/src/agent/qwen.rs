@@ -4,7 +4,7 @@
 //! Handles integration with Qwen Code Agent.
 
 use anyhow::Result;
-use riterm_shared::message_protocol::{AgentMessageContent, NotificationLevel};
+use crate::message_protocol::{AgentMessageContent, NotificationLevel};
 
 /// Qwen Output Parser
 pub struct QwenOutputParser;

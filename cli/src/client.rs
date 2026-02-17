@@ -1,16 +1,16 @@
-//! RiTerm P2P Client
+//! ClawdChat P2P Client
 //!
-//! 此模块实现了连接到远程 RiTerm host 的客户端功能，支持 P2P 通信和交互式对话。
+//! 此模块实现了连接到远程 ClawdChat host 的客户端功能，支持 P2P 通信和交互式对话。
 
 use anyhow::Result;
-use riterm_shared::CommunicationManager;
-use riterm_shared::message_protocol::{
+use clawdchat_shared::CommunicationManager;
+use clawdchat_shared::message_protocol::{
     AgentControlAction, AgentControlMessage, AgentMessageContent, AgentPermissionMessage,
     AgentPermissionMessageInner, AgentPermissionResponse, AgentSessionAction, AgentSessionMessage,
     AgentType, Message, MessagePayload, MessageType, PermissionMode, RemoteSpawnAction,
     RemoteSpawnMessage,
 };
-use riterm_shared::quic_server::{QuicMessageClient, SerializableEndpointAddr};
+use clawdchat_shared::quic_server::{QuicMessageClient, SerializableEndpointAddr};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -46,8 +46,8 @@ impl Default for ClientConfig {
     }
 }
 
-/// RiTerm P2P 客户端
-pub struct RiTermClient {
+/// ClawdChat P2P 客户端
+pub struct ClawdChatClient {
     config: ClientConfig,
     quic_client: Option<Arc<Mutex<QuicMessageClient>>>,
     connection_id: Option<String>,
@@ -70,7 +70,7 @@ pub struct AgentSessionInfo {
     pub active: bool,
 }
 
-impl RiTermClient {
+impl ClawdChatClient {
     /// 创建新的客户端
     pub fn new(config: ClientConfig) -> Self {
         Self {
@@ -86,8 +86,8 @@ impl RiTermClient {
 
     /// 连接到远程 host
     pub async fn connect(&mut self) -> Result<()> {
-        info!("🔄 Connecting to remote RiTerm host...");
-        println!("🔄 Connecting to remote RiTerm host...");
+        info!("🔄 Connecting to remote ClawdChat host...");
+        println!("🔄 Connecting to remote ClawdChat host...");
 
         // 1. 解析 ticket
         let endpoint_addr = SerializableEndpointAddr::from_base64(&self.config.ticket)
@@ -225,16 +225,16 @@ impl RiTermClient {
                     println!("{}", content);
                 }
                 AgentMessageContent::SystemNotification { level, message } => match level {
-                    riterm_shared::message_protocol::NotificationLevel::Info => {
+                    clawdchat_shared::message_protocol::NotificationLevel::Info => {
                         println!("ℹ️  {}", message);
                     }
-                    riterm_shared::message_protocol::NotificationLevel::Warning => {
+                    clawdchat_shared::message_protocol::NotificationLevel::Warning => {
                         println!("⚠️  {}", message);
                     }
-                    riterm_shared::message_protocol::NotificationLevel::Error => {
+                    clawdchat_shared::message_protocol::NotificationLevel::Error => {
                         println!("❌ {}", message);
                     }
-                    riterm_shared::message_protocol::NotificationLevel::Success => {
+                    clawdchat_shared::message_protocol::NotificationLevel::Success => {
                         println!("✅ {}", message);
                     }
                 },
@@ -635,7 +635,7 @@ pub enum SessionControlAction {
 
 /// 交互式客户端会话
 pub struct InteractiveClient {
-    client: RiTermClient,
+    client: ClawdChatClient,
     current_session_id: Option<String>,
 }
 
@@ -645,12 +645,12 @@ impl InteractiveClient {
         let config = ClientConfig {
             ticket,
             relay_url: relay,
-            client_key_path: Some(std::env::current_dir().unwrap().join(".riterm_client_key")),
+            client_key_path: Some(std::env::current_dir().unwrap().join(".clawdchat_client_key")),
             ..Default::default()
         };
 
         Self {
-            client: RiTermClient::new(config),
+            client: ClawdChatClient::new(config),
             current_session_id: None,
         }
     }
@@ -671,7 +671,7 @@ impl InteractiveClient {
         use std::io::{BufRead, Write};
 
         println!();
-        println!("💬 RiTerm P2P Client - Interactive Mode");
+        println!("💬 ClawdChat P2P Client - Interactive Mode");
         println!();
         println!("Commands:");
         println!("  /list      - List available AI Agent sessions");

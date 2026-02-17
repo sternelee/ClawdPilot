@@ -50,7 +50,7 @@ const defaultSettings: UserSettings = {
 };
 
 // Local storage key
-const SETTINGS_KEY = "riterm-settings";
+const SETTINGS_KEY = "clawdchat-settings";
 
 // Load settings from localStorage
 const loadSettings = (): UserSettings => {
@@ -181,7 +181,7 @@ export const settingsStore = {
 export const translations = {
   en: {
     // UI Labels
-    "app.title": "RiTerm - P2P Terminal",
+    "app.title": "ClawdChat - P2P Terminal",
     "connection.title": "Terminal Connection",
     "settings.title": "Settings",
     "hosts.title": "Hosts",
@@ -245,7 +245,7 @@ export const translations = {
   },
   "zh-CN": {
     // UI Labels
-    "app.title": "RiTerm - P2P 终端",
+    "app.title": "ClawdChat - P2P 终端",
     "connection.title": "终端连接",
     "settings.title": "设置",
     "hosts.title": "主机",
@@ -311,7 +311,10 @@ export const translations = {
 // Translation helper
 export const t = (key: string, lang?: LanguageType): string => {
   const currentLang = lang || settings().language;
-  const allTranslations = translations as Record<string, Record<string, string>>;
+  const allTranslations = translations as Record<
+    string,
+    Record<string, string>
+  >;
   return allTranslations[currentLang]?.[key] || allTranslations.en[key] || key;
 };
 

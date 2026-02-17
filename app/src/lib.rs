@@ -24,13 +24,14 @@ pub mod macos_panel {
 
 mod tcp_forwarding;
 
-use lib::AgentManager;
-use riterm_shared::{
+use clawdchat_shared::AgentManager;
+use clawdchat_shared::{
     AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, Event,
-    EventListener, EventType, IODataType, Message as RitermMessage, MessageBuilder, MessagePayload,
+    EventListener, EventType, IODataType, Message as ClawdChatMessage, MessageBuilder, MessagePayload,
     QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType, TcpForwardingAction,
     TcpForwardingType, TerminalAction,
 };
+
 
 use crate::tcp_forwarding::TcpForwardingManager;
 
@@ -404,7 +405,7 @@ async fn initialize_network_with_relay_internal(
     }
 
     // Create communication manager
-    let communication_manager = Arc::new(CommunicationManager::new("riterm_app".to_string()));
+    let communication_manager = Arc::new(CommunicationManager::new("clawdchat_app".to_string()));
     communication_manager
         .initialize()
         .await
@@ -431,7 +432,7 @@ async fn initialize_network_with_relay_internal(
                 std::fs::create_dir_all(&app_data_dir)
                     .map_err(|e| format!("Failed to create app data directory: {}", e))?;
 
-                let path = app_data_dir.join("riterm_app_secret_key");
+                let path = app_data_dir.join("clawdchat_app_secret_key");
                 info!(
                     "🔑 Using persistent secret key in app data directory: {:?}",
                     path
@@ -442,7 +443,7 @@ async fn initialize_network_with_relay_internal(
                 // Fallback for testing or contexts without app_handle
                 let app_data_dir =
                     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-                let path = app_data_dir.join("riterm_app_secret_key");
+                let path = app_data_dir.join("clawdchat_app_secret_key");
                 info!(
                     "🔑 Using persistent secret key in current directory (fallback): {:?}",
                     path
@@ -727,7 +728,7 @@ async fn connect_to_peer(
                                                             // Send get_terminal_logs request
                                                             if let Some(ref quic_client) = quic_client_for_receiver {
                                                                 let logs_message = MessageBuilder::terminal_management(
-                                                                    "riterm_app".to_string(),
+                                                                    "clawdchat_app".to_string(),
                                                                     TerminalAction::GetLogs {
                                                                         terminal_id: terminal_id.to_string(),
                                                                     },
@@ -939,7 +940,7 @@ async fn connect_to_peer(
 
                                     // Transform AgentMessageContent to frontend-expected format
                                     let event_payload = match &agent_msg.content {
-                                        riterm_shared::message_protocol::AgentMessageContent::AgentResponse {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::AgentResponse {
                                             content, thinking, message_id
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -948,7 +949,7 @@ async fn connect_to_peer(
                                             "thinking": thinking,
                                             "messageId": message_id,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::ToolCallUpdate {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::ToolCallUpdate {
                                             tool_name, status, output
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -957,7 +958,7 @@ async fn connect_to_peer(
                                             "status": format!("{:?}", status),
                                             "output": output,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::SystemNotification {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::SystemNotification {
                                             level, message
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -965,7 +966,7 @@ async fn connect_to_peer(
                                             "level": format!("{:?}", level),
                                             "message": message,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::UserMessage {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::UserMessage {
                                             content, attachments
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -973,14 +974,14 @@ async fn connect_to_peer(
                                             "content": content,
                                             "attachments": attachments,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::TurnStarted {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::TurnStarted {
                                             turn_id
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
                                             "type": "turn_started",
                                             "turnId": turn_id,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::TextDelta {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::TextDelta {
                                             text, thinking
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -988,14 +989,14 @@ async fn connect_to_peer(
                                             "content": text,
                                             "thinking": thinking,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::TurnCompleted {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::TurnCompleted {
                                             content
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
                                             "type": "turn_completed",
                                             "content": content,
                                         }),
-                                        riterm_shared::message_protocol::AgentMessageContent::TurnError {
+                                        clawdchat_shared::message_protocol::AgentMessageContent::TurnError {
                                             error
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -1017,7 +1018,7 @@ async fn connect_to_peer(
                                 }
                                 MessagePayload::AgentPermission(perm_msg) => {
                                     // Handle permission request from CLI
-                                    if let riterm_shared::message_protocol::AgentPermissionMessageInner::Request(request) = &perm_msg.inner {
+                                    if let clawdchat_shared::message_protocol::AgentPermissionMessageInner::Request(request) = &perm_msg.inner {
                                         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
                                         tracing::info!(
                                             "Received PermissionRequest for session {}: tool={}",
@@ -1076,7 +1077,7 @@ async fn connect_to_peer(
     let cancellation_token_for_tcp = cancellation_token.clone();
 
     // Create a channel to send messages from the listener task to the sender task
-    let (tcp_msg_tx, mut tcp_msg_rx) = tokio::sync::mpsc::unbounded_channel::<RitermMessage>();
+    let (tcp_msg_tx, mut tcp_msg_rx) = tokio::sync::mpsc::unbounded_channel::<ClawdChatMessage>();
 
     // Get a clone of the quic_client handle for sending messages
     let quic_client_handle_opt = {
@@ -1163,9 +1164,9 @@ async fn connect_to_peer(
                             tracing::debug!("TCP message to forward: session_id={}, connection_id={}, data_type={:?}",
                                 msg.session_id, msg.connection_id, msg.data_type);
 
-                            // Convert TcpMessageRequest to RitermMessage and send to sender task
+                            // Convert TcpMessageRequest to ClawdChatMessage and send to sender task
                             let message = MessageBuilder::tcp_data(
-                                "riterm_app".to_string(),
+                                "clawdchat_app".to_string(),
                                 msg.session_id,
                                 msg.connection_id,
                                 msg.data_type,
@@ -1232,7 +1233,7 @@ async fn connect_to_peer(
         // Send list_terminals request to CLI
         if let Some(quic_client) = quic_client_for_terminal_sync {
             let list_message = MessageBuilder::terminal_management(
-                "riterm_app".to_string(),
+                "clawdchat_app".to_string(),
                 TerminalAction::List,
                 Some(session_id_for_terminal_sync.clone()),
             )
@@ -1272,7 +1273,7 @@ async fn connect_to_peer(
 
         // Send list request to CLI
         let _list_message = MessageBuilder::tcp_forwarding(
-            "riterm_app".to_string(),
+            "clawdchat_app".to_string(),
             TcpForwardingAction::ListSessions,
             Some(session_id_for_sync.clone()),
         )
@@ -1302,7 +1303,7 @@ async fn connect_to_peer(
 async fn send_message_via_client(
     state: &State<'_, AppState>,
     connection_id: &str,
-    message: RitermMessage,
+    message: ClawdChatMessage,
     operation_name: &str,
 ) -> Result<(), String> {
     let client_guard = state.quic_client.read().await;
@@ -1523,7 +1524,7 @@ async fn create_terminal(
     };
 
     let message = MessageBuilder::terminal_management(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         action,
         Some(session_id.clone()),
     )
@@ -1555,7 +1556,7 @@ async fn stop_terminal(
     };
 
     let message = MessageBuilder::terminal_management(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         action,
         Some(session_id.clone()),
     )
@@ -1579,7 +1580,7 @@ async fn list_terminals(session_id: String, state: State<'_, AppState>) -> Resul
 
     // Create terminal management message for listing terminals
     let message = MessageBuilder::terminal_management(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         TerminalAction::List,
         Some(session_id.clone()),
     )
@@ -1608,7 +1609,7 @@ async fn send_terminal_input_to_terminal(
 
     // Create terminal I/O message
     let message = MessageBuilder::terminal_io(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         terminal_id,
         IODataType::Input,
         input.as_bytes().to_vec(),
@@ -1645,7 +1646,7 @@ async fn resize_terminal(
     };
 
     let message = MessageBuilder::terminal_management(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         action,
         Some(session_id.clone()),
     )
@@ -1702,7 +1703,7 @@ async fn get_terminal_logs(
     };
 
     let message = MessageBuilder::terminal_management(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         action,
         Some(session_id.clone()),
     )
@@ -1814,7 +1815,7 @@ async fn create_tcp_forwarding_session(
     };
 
     let message =
-        MessageBuilder::tcp_forwarding("riterm_app".to_string(), action, Some(session_id.clone()))
+        MessageBuilder::tcp_forwarding("clawdchat_app".to_string(), action, Some(session_id.clone()))
             .with_session(session_id.clone());
 
     // 获取正确的 connection_id
@@ -1846,7 +1847,7 @@ async fn list_tcp_forwarding_sessions(
 
     // 创建列出 TCP 转发会话的消息
     let message = MessageBuilder::tcp_forwarding(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         TcpForwardingAction::ListSessions,
         Some(session_id.clone()),
     )
@@ -1880,7 +1881,7 @@ async fn stop_tcp_forwarding_session(
 
     // 创建停止 TCP 转发会话的消息
     let message = MessageBuilder::tcp_forwarding(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         TcpForwardingAction::StopSession {
             session_id: tcp_session_id,
         },
@@ -1916,7 +1917,7 @@ async fn get_tcp_forwarding_session_info(
 
     // 创建获取 TCP 转发会话信息的消息
     let message = MessageBuilder::tcp_forwarding(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         TcpForwardingAction::GetSessionInfo {
             session_id: tcp_session_id,
         },
@@ -1968,7 +1969,7 @@ async fn send_tcp_data(
 
     // 创建 TCP 数据消息
     let message = MessageBuilder::tcp_data(
-        "riterm_app".to_string(),
+        "clawdchat_app".to_string(),
         tcp_session_id,
         connection_id,
         dt_type,
@@ -2006,7 +2007,7 @@ async fn send_slash_command(
         let parts: Vec<&str> = command.trim().split_whitespace().collect();
         let cmd = parts.first().copied().unwrap_or("");
 
-        // Check if it's a RiTerm builtin command
+        // Check if it's a ClawdChat builtin command
         match cmd {
             "/list" => {
                 // This is handled by a different flow - send as passthrough for now
@@ -2033,12 +2034,12 @@ async fn send_slash_command(
                     };
 
                     // Create RemoteSpawn message
-                    let spawn_message = RitermMessage::new(
-                        riterm_shared::MessageType::RemoteSpawn,
+                    let spawn_message = ClawdChatMessage::new(
+                        clawdchat_shared::MessageType::RemoteSpawn,
                         "app".to_string(),
-                        riterm_shared::MessagePayload::RemoteSpawn(
-                            riterm_shared::RemoteSpawnMessage {
-                                action: riterm_shared::RemoteSpawnAction::SpawnSession {
+                        clawdchat_shared::MessagePayload::RemoteSpawn(
+                            clawdchat_shared::RemoteSpawnMessage {
+                                action: clawdchat_shared::RemoteSpawnAction::SpawnSession {
                                     session_id: session_id.clone(),
                                     agent_type,
                                     project_path: project_path.to_string(),
@@ -2079,10 +2080,10 @@ async fn send_slash_command(
     match command_type {
         "passthrough" => {
             // Send as AgentControl::SendInput
-            let control_message = RitermMessage::new(
-                riterm_shared::MessageType::AgentControl,
+            let control_message = ClawdChatMessage::new(
+                clawdchat_shared::MessageType::AgentControl,
                 "app".to_string(),
-                riterm_shared::MessagePayload::AgentControl(riterm_shared::AgentControlMessage {
+                clawdchat_shared::MessagePayload::AgentControl(clawdchat_shared::AgentControlMessage {
                     session_id: session_id.clone(),
                     action: AgentControlAction::SendInput {
                         content: raw_command.to_string(),
@@ -2133,11 +2134,11 @@ async fn remote_spawn_session(
     };
 
     // Create RemoteSpawn message
-    let spawn_message = RitermMessage::new(
-        riterm_shared::MessageType::RemoteSpawn,
+    let spawn_message = ClawdChatMessage::new(
+        clawdchat_shared::MessageType::RemoteSpawn,
         "app".to_string(),
-        riterm_shared::MessagePayload::RemoteSpawn(riterm_shared::RemoteSpawnMessage {
-            action: riterm_shared::RemoteSpawnAction::SpawnSession {
+        clawdchat_shared::MessagePayload::RemoteSpawn(clawdchat_shared::RemoteSpawnMessage {
+            action: clawdchat_shared::RemoteSpawnAction::SpawnSession {
                 session_id: session_id.clone(),
                 agent_type,
                 project_path: project_path,
@@ -2175,7 +2176,7 @@ async fn respond_to_agent_permission(
             .clone()
     };
 
-    use riterm_shared::PermissionMode;
+    use clawdchat_shared::PermissionMode;
 
     let response_mode = if !approved {
         PermissionMode::Deny
@@ -2196,11 +2197,11 @@ async fn respond_to_agent_permission(
         reason: None,
     };
 
-    let permission_message = RitermMessage::new(
-        riterm_shared::MessageType::AgentPermission,
+    let permission_message = ClawdChatMessage::new(
+        clawdchat_shared::MessageType::AgentPermission,
         "app".to_string(),
-        riterm_shared::MessagePayload::AgentPermission(riterm_shared::AgentPermissionMessage {
-            inner: riterm_shared::AgentPermissionMessageInner::Response(permission_response),
+        clawdchat_shared::MessagePayload::AgentPermission(clawdchat_shared::AgentPermissionMessage {
+            inner: clawdchat_shared::AgentPermissionMessageInner::Response(permission_response),
         }),
     )
     .with_session(session_id);
@@ -2237,10 +2238,10 @@ async fn send_agent_message(
     };
 
     // Send as AgentControl::SendInput
-    let control_message = RitermMessage::new(
-        riterm_shared::MessageType::AgentControl,
+    let control_message = ClawdChatMessage::new(
+        clawdchat_shared::MessageType::AgentControl,
         "app".to_string(),
-        riterm_shared::MessagePayload::AgentControl(riterm_shared::AgentControlMessage {
+        clawdchat_shared::MessagePayload::AgentControl(clawdchat_shared::AgentControlMessage {
             session_id: session_id,
             action: AgentControlAction::SendInput { content },
             request_id: None,
@@ -2355,7 +2356,7 @@ async fn local_start_agent(
             while let Ok(event) = event_rx.recv().await {
                 // Convert AgentTurnEvent to frontend-expected JSON
                 let event_payload =
-                    lib::message_adapter::event_to_message_content(&event.event, None);
+                    clawdchat_shared::message_adapter::event_to_message_content(&event.event, None);
                 let session_id_clone = session_id_for_spawn.clone();
                 let frontend_event = serde_json::json!({
                     "sessionId": session_id_clone.clone(),
@@ -2409,7 +2410,7 @@ async fn local_send_agent_message(
 #[tauri::command(rename_all = "camelCase")]
 async fn local_list_agents(
     state: State<'_, AppState>,
-) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
+) -> Result<Vec<clawdchat_shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = match agent_manager_guard.as_ref() {
         Some(m) => m.clone(),
@@ -2423,7 +2424,7 @@ async fn local_list_agents(
             .get_session_agent_type(&sid)
             .await
             .unwrap_or(AgentType::Custom);
-        sessions.push(riterm_shared::message_protocol::AgentSessionMetadata {
+        sessions.push(clawdchat_shared::message_protocol::AgentSessionMetadata {
             session_id: sid,
             agent_type,
             project_path: String::new(),
@@ -2445,7 +2446,7 @@ async fn local_list_agents(
 #[tauri::command(rename_all = "camelCase")]
 async fn local_get_agent_sessions(
     state: State<'_, AppState>,
-) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
+) -> Result<Vec<clawdchat_shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = match agent_manager_guard.as_ref() {
         Some(m) => m.clone(),
@@ -2459,7 +2460,7 @@ async fn local_get_agent_sessions(
             .get_session_agent_type(&sid)
             .await
             .unwrap_or(AgentType::Custom);
-        sessions.push(riterm_shared::message_protocol::AgentSessionMetadata {
+        sessions.push(clawdchat_shared::message_protocol::AgentSessionMetadata {
             session_id: sid,
             agent_type,
             project_path: String::new(),

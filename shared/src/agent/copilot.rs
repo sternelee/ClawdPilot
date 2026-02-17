@@ -4,7 +4,7 @@
 //! Handles integration with GitHub Copilot CLI (gh copilot).
 
 use anyhow::Result;
-use riterm_shared::message_protocol::{AgentMessageContent, NotificationLevel};
+use crate::message_protocol::{AgentMessageContent, NotificationLevel};
 
 /// Copilot Output Parser
 pub struct CopilotOutputParser;

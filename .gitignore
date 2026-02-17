@@ -4,7 +4,7 @@ dist
 logs
 *.jks
 keystore.properties
-riterm_secret_key
+clawdchat_secret_key
 .claude/tsc-cache
 .output
 .vinxi

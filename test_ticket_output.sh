@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Start the CLI server in the background and capture its output
-cargo run --bin cli -- host --temp-key > cli_output.txt 2>&1 &
+cargo run --bin clawdchat -- host --temp-key > cli_output.txt 2>&1 &
 CLI_PID=$!
 
 # Wait for the server to start and generate the ticket

@@ -144,7 +144,7 @@ use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 
 /// ALPN协议标识符
-pub const QUIC_MESSAGE_ALPN: &[u8] = b"com.riterm.messages/1";
+pub const QUIC_MESSAGE_ALPN: &[u8] = b"com.clawdchat.messages/1";
 
 /// TCP转发握手协议魔数
 /// 格式: [魔数(5字节)] [session_id长度(4字节u32BE)] [session_id(UTF-8字符串)]
@@ -185,7 +185,7 @@ impl Default for QuicMessageServerConfig {
         // 默认使用当前启动目录
         let default_path = std::env::current_dir()
             .ok()
-            .map(|cwd| cwd.join("riterm_secret_key"));
+            .map(|cwd| cwd.join("clawdchat_secret_key"));
 
         Self {
             bind_addr: None,

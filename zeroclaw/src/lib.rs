@@ -1,6 +1,6 @@
 //! ZeroClaw — lightweight AI agent with multi-provider LLM support, tool execution, and memory.
 //!
-//! This crate provides the core agent functionality for RiTerm's built-in ZeroClaw agent,
+//! This crate provides the core agent functionality for ClawdChat's built-in ZeroClaw agent,
 //! supporting 22+ LLM providers, shell/file tools, SQLite memory, and security policies.
 
 pub mod agent;

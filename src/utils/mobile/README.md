@@ -1,6 +1,6 @@
 # Mobile Utilities - Enhanced Viewport and Keyboard Management
 
-This directory contains enhanced mobile utilities for managing viewport dimensions, keyboard state, and layout calculations in the RiTerm mobile terminal application.
+This directory contains enhanced mobile utilities for managing viewport dimensions, keyboard state, and layout calculations in the ClawdChat mobile terminal application.
 
 ## Components
 
@@ -9,6 +9,7 @@ This directory contains enhanced mobile utilities for managing viewport dimensio
 Intelligent keyboard occlusion prevention system that ensures input elements remain visible.
 
 **Features:**
+
 - Automatic occlusion detection
 - Smart scroll adjustment with configurable buffer
 - Cursor position tracking
@@ -19,7 +20,7 @@ Intelligent keyboard occlusion prevention system that ensures input elements rem
 **Usage:**
 
 ```typescript
-import { getOcclusionPrevention } from './utils/mobile/OcclusionPrevention';
+import { getOcclusionPrevention } from "./utils/mobile/OcclusionPrevention";
 
 // Get singleton instance
 const occlusionPrevention = getOcclusionPrevention();
@@ -28,16 +29,16 @@ const occlusionPrevention = getOcclusionPrevention();
 occlusionPrevention.setBufferSpace(50);
 
 // Configure scroll behavior (default: 'smooth')
-occlusionPrevention.setScrollBehavior('smooth'); // or 'instant' or 'auto'
+occlusionPrevention.setScrollBehavior("smooth"); // or 'instant' or 'auto'
 
 // Track an element for occlusion
 const untrack = occlusionPrevention.trackElement(inputElement);
 
 // Check if element is occluded
 const status = occlusionPrevention.checkOcclusion(inputElement);
-console.log('Is occluded:', status.isOccluded);
-console.log('Occluded amount:', status.occludedAmount);
-console.log('Recommended scroll:', status.recommendedScroll);
+console.log("Is occluded:", status.isOccluded);
+console.log("Occluded amount:", status.occludedAmount);
+console.log("Recommended scroll:", status.recommendedScroll);
 
 // Prevent occlusion (automatically scrolls if needed)
 occlusionPrevention.preventOcclusion(inputElement);
@@ -49,23 +50,28 @@ occlusionPrevention.updateCursorPosition(terminalElement, cursorY);
 occlusionPrevention.ensureCursorVisible();
 
 // Handle full-screen terminal apps
-const adjustedRows = occlusionPrevention.handleFullScreenApp(terminalElement, currentRows);
+const adjustedRows = occlusionPrevention.handleFullScreenApp(
+  terminalElement,
+  currentRows,
+);
 
 // Subscribe to occlusion events
-const unsubscribeOcclusion = occlusionPrevention.onOcclusionDetected((status) => {
-  console.log('Occlusion detected:', status);
-});
+const unsubscribeOcclusion = occlusionPrevention.onOcclusionDetected(
+  (status) => {
+    console.log("Occlusion detected:", status);
+  },
+);
 
 // Subscribe to scroll adjustments
 const unsubscribeScroll = occlusionPrevention.onScrollAdjusted((adjustment) => {
-  console.log('Scroll adjusted:', adjustment);
+  console.log("Scroll adjusted:", adjustment);
 });
 
 // Manually adjust scroll
 occlusionPrevention.adjustScroll({
   deltaY: 100,
-  behavior: 'smooth',
-  reason: 'manual'
+  behavior: "smooth",
+  reason: "manual",
 });
 
 // Monitor all tracked elements
@@ -85,6 +91,7 @@ unsubscribeScroll();
 Centralized viewport and keyboard state management with safe area support.
 
 **Features:**
+
 - Real-time viewport dimension tracking
 - Keyboard height detection and management
 - Safe area inset detection (notches, dynamic island)
@@ -95,7 +102,7 @@ Centralized viewport and keyboard state management with safe area support.
 **Usage:**
 
 ```typescript
-import { getViewportManager } from './utils/mobile/ViewportManager';
+import { getViewportManager } from "./utils/mobile/ViewportManager";
 
 // Get singleton instance
 const viewportManager = getViewportManager();
@@ -105,7 +112,7 @@ viewportManager.initialize();
 
 // Subscribe to viewport changes
 const unsubscribe = viewportManager.onViewportChange((dimensions) => {
-  console.log('Viewport changed:', dimensions);
+  console.log("Viewport changed:", dimensions);
   // dimensions: { width, height, effectiveHeight, keyboardHeight }
 });
 
@@ -136,6 +143,7 @@ unsubscribe();
 Intelligent terminal layout calculation based on viewport, keyboard, and UI elements.
 
 **Features:**
+
 - Multi-factor layout calculation
 - Safe area and UI chrome accounting
 - Keyboard occlusion prevention
@@ -146,8 +154,8 @@ Intelligent terminal layout calculation based on viewport, keyboard, and UI elem
 **Usage:**
 
 ```typescript
-import { getLayoutCalculator } from './utils/mobile/LayoutCalculator';
-import { getDeviceCapabilities } from './utils/mobile';
+import { getLayoutCalculator } from "./utils/mobile/LayoutCalculator";
+import { getDeviceCapabilities } from "./utils/mobile";
 
 const calculator = getLayoutCalculator();
 const deviceCapabilities = getDeviceCapabilities();
@@ -161,10 +169,10 @@ const context = {
   viewportWidth: window.innerWidth,
   keyboardHeight: 300,
   keyboardVisible: true,
-  orientation: 'portrait',
+  orientation: "portrait",
   safeAreaInsets: { top: 44, right: 0, bottom: 34, left: 0 },
   uiElements,
-  deviceCapabilities
+  deviceCapabilities,
 };
 
 // Define layout options
@@ -172,16 +180,16 @@ const options = {
   includeToolbar: true,
   includeQuickAccess: true,
   includeStatusBar: false,
-  minimumHeight: 200
+  minimumHeight: 200,
 };
 
 // Calculate layout
 const result = calculator.calculate(context, options);
 
-console.log('Terminal height:', result.terminalHeight);
-console.log('Should resize:', result.shouldResize);
-console.log('Transition duration:', result.transitionDuration);
-console.log('Debug info:', result.debugInfo);
+console.log("Terminal height:", result.terminalHeight);
+console.log("Should resize:", result.shouldResize);
+console.log("Transition duration:", result.transitionDuration);
+console.log("Debug info:", result.debugInfo);
 
 // Calculate optimal terminal dimensions
 const rows = calculator.calculateOptimalRows(result.terminalHeight, 14);
@@ -208,12 +216,12 @@ function App() {
   onMount(() => {
     const viewportManager = getViewportManager();
     const calculator = getLayoutCalculator();
-    
+
     // Subscribe to viewport changes
     const unsubscribe = viewportManager.onViewportChange((dimensions) => {
       const deviceCapabilities = getDeviceCapabilities();
       const uiElements = calculator.getDefaultUIElementDimensions(deviceCapabilities);
-      
+
       const context = {
         viewportHeight: dimensions.height,
         viewportWidth: dimensions.width,
@@ -224,16 +232,16 @@ function App() {
         uiElements,
         deviceCapabilities
       };
-      
+
       const options = {
         includeToolbar: true,
         includeQuickAccess: true,
         includeStatusBar: false,
         minimumHeight: 200
       };
-      
+
       const result = calculator.calculate(context, options);
-      
+
       if (result.shouldResize) {
         setTerminalDimensions({
           height: result.terminalHeight,
@@ -241,10 +249,10 @@ function App() {
         });
       }
     });
-    
+
     onCleanup(() => unsubscribe());
   });
-  
+
   return (
     <div style={{ height: `${terminalDimensions().height}px` }}>
       {/* Terminal content */}
@@ -331,21 +339,25 @@ MobileKeyboard (Static Class)
 ## Troubleshooting
 
 ### Keyboard not detected
+
 - Check if Visual Viewport API is supported
 - Verify threshold values (120px for mobile, 150px for desktop)
 - Enable debug logging to see detection method
 
 ### Layout calculations incorrect
+
 - Verify UI element dimensions are accurate
 - Check safe area inset values
 - Review debug info output from calculator
 
 ### Terminal not resizing
+
 - Ensure `shouldResize` flag is checked
 - Verify resize threshold (10% default)
 - Check if minimum height constraint is blocking resize
 
 ### Scroll adjustment not working
+
 - Confirm element is tracked by InputFocusManager
 - Verify buffer space (50px default)
 - Check if keyboard is actually visible

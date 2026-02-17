@@ -8,7 +8,7 @@
 //! 不同 agent 类型只是提供不同的命令和配置参数。
 
 use anyhow::Result;
-use riterm_shared::message_protocol::AgentType;
+use crate::message_protocol::AgentType;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;

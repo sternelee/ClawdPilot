@@ -4,7 +4,7 @@
 //! 为每个终端会话提供日志记录功能，支持输入输出记录和日志轮转。
 
 use anyhow::{Context, Result};
-use riterm_shared::message_protocol::TerminalLogEntry;
+use clawdchat_shared::message_protocol::TerminalLogEntry;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 /// 默认最大日志行数
 const DEFAULT_MAX_LOG_LINES: usize = 1000;
@@ -314,7 +314,7 @@ impl TerminalLogManager {
                 // 创建一个不写入文件的fallback logger
                 TerminalLogger::new(
                     terminal_id.to_string(),
-                    PathBuf::from("/tmp/riterm/logs"),
+                    PathBuf::from("/tmp/clawdchat/logs"),
                     Some(self.max_lines),
                 )
                 .unwrap()

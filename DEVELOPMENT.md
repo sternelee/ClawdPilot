@@ -1,15 +1,15 @@
-# RiTerm Development Guide
+# ClawdChat Development Guide
 
-This document describes the development workflow and CI/CD process for RiTerm.
+This document describes the development workflow and CI/CD process for ClawdChat.
 
 ## 🚀 Overview
 
-RiTerm uses a comprehensive CI/CD pipeline that builds CLI tools, desktop applications, and mobile apps across multiple platforms.
+ClawdChat uses a comprehensive CI/CD pipeline that builds CLI tools, desktop applications, and mobile apps across multiple platforms.
 
 ## 📋 Project Structure
 
 ```
-riterm/
+clawdchat/
 ├── cli/                     # CLI tool (Rust)
 ├── app/                     # Tauri application (Rust + SolidJS)
 ├── shared/                  # Shared networking library (Rust)
@@ -24,16 +24,18 @@ riterm/
 ### Local Development
 
 #### Prerequisites
+
 - **Rust** (latest stable)
 - **Node.js** 20+
 - **pnpm** (version 10+)
 - For mobile development: **Android Studio** (Android) / **Xcode** (iOS)
 
 #### Setup
+
 ```bash
 # Clone repository
-git clone https://github.com/sternelee/riterm.git
-cd riterm
+git clone https://github.com/sternelee/clawdchat.git
+cd clawdchat
 
 # Install frontend dependencies
 pnpm install
@@ -43,6 +45,7 @@ cargo build --workspace
 ```
 
 #### Development Commands
+
 ```bash
 # Frontend development server
 pnpm dev
@@ -61,6 +64,7 @@ pnpm tauri:ios:dev
 ```
 
 #### Building
+
 ```bash
 # Build frontend only
 pnpm build
@@ -81,6 +85,7 @@ pnpm tauri:ios:build  # macOS only
 ### Workflows
 
 #### 1. Development Build and Test (`.github/workflows/build-and-test.yml`)
+
 - **Triggers**: Push to `main`/`app`, Pull Requests, Manual dispatch
 - **Actions**:
   - Code quality checks (rustfmt, clippy)
@@ -91,6 +96,7 @@ pnpm tauri:ios:build  # macOS only
   - Security audit
 
 #### 2. Release Pipeline (`.github/workflows/publish-to-auto-release.yml`)
+
 - **Triggers**: Git tags starting with `v*` (e.g., `v1.0.0`)
 - **Actions**:
   - CLI builds for 8 platforms (Linux, macOS, Windows, ARM64 variants)
@@ -103,6 +109,7 @@ pnpm tauri:ios:build  # macOS only
 ### Build Matrix
 
 #### CLI Targets
+
 - `x86_64-unknown-linux-gnu`
 - `aarch64-unknown-linux-gnu`
 - `x86_64-unknown-linux-musl`
@@ -113,11 +120,13 @@ pnpm tauri:ios:build  # macOS only
 - `aarch64-pc-windows-msvc`
 
 #### Desktop App Targets
+
 - macOS (Intel and Apple Silicon)
 - Windows (x64)
 - Linux (AppImage, deb)
 
 #### Mobile Apps
+
 - Android (APK)
 - iOS (IPA) - requires Apple Developer account
 
@@ -126,6 +135,7 @@ pnpm tauri:ios:build  # macOS only
 ### Creating a Release
 
 1. **Update version numbers**:
+
    ```bash
    # Update package.json
    pnpm version patch|minor|major
@@ -134,6 +144,7 @@ pnpm tauri:ios:build  # macOS only
    ```
 
 2. **Create and push tag**:
+
    ```bash
    git tag v1.0.0
    git push origin v1.0.0
@@ -155,6 +166,7 @@ pnpm tauri:ios:build  # macOS only
 ## 🧪 Testing
 
 ### Running Tests
+
 ```bash
 # Rust tests
 cargo test --workspace
@@ -167,6 +179,7 @@ cargo test --workspace -- --ignored
 ```
 
 ### Code Quality
+
 ```bash
 # Rust formatting
 cargo fmt --all
@@ -181,19 +194,24 @@ pnpm tsc
 ## 🔧 Configuration
 
 ### Environment Variables
+
 - `CARGO_TERM_COLOR`: Set to `always` for colored output
 - `OPENAI_API_KEY`: For AI features (in production)
 - `GITHUB_TOKEN`: For release automation (provided by Actions)
 
 ### Tauri Configuration
+
 See `app/tauri.conf.json` for:
+
 - Bundle targets
 - Permissions and capabilities
 - Build settings
 - Platform-specific options
 
 ### Rust Workspace
+
 See `Cargo.toml` for:
+
 - Workspace members
 - Shared dependencies
 - Build profiles
@@ -202,6 +220,7 @@ See `Cargo.toml` for:
 ## 🐛 Debugging
 
 ### CLI Debugging
+
 ```bash
 # Debug build
 cargo build -p cli
@@ -214,25 +233,28 @@ RUST_LOG=debug ./target/debug/cli host
 ```
 
 ### App Debugging
+
 ```bash
 # Development mode with detailed logs
 RUST_LOG=debug pnpm tauri:dev
 
 # Check app logs
-# Windows: %APPDATA%\RiTerm\logs\
-# macOS: ~/Library/Logs/RiTerm/
-# Linux: ~/.local/share/RiTerm/logs/
+# Windows: %APPDATA%\ClawdChat\logs\
+# macOS: ~/Library/Logs/ClawdChat/
+# Linux: ~/.local/share/ClawdChat/logs/
 ```
 
 ## 📊 Monitoring
 
 ### CI/CD Monitoring
+
 - GitHub Actions dashboard
 - Build artifacts and reports
 - Security audit results
 - Performance metrics
 
 ### Release Analytics
+
 - Download counts from GitHub releases
 - Issue tracking and bug reports
 - User feedback and feature requests
@@ -240,17 +262,20 @@ RUST_LOG=debug pnpm tauri:dev
 ## 🚀 Deployment
 
 ### CLI Distribution
+
 - GitHub releases
 - Package managers (optional: brew, apt, snap)
 - Docker images (optional)
 
 ### App Distribution
+
 - GitHub releases
 - App Store (optional for iOS/macOS)
 - Microsoft Store (optional for Windows)
 - Snap Store/Flatpak (optional for Linux)
 
 ### Mobile Distribution
+
 - GitHub releases (APK files)
 - Google Play Store (optional)
 - Apple App Store (optional)
@@ -265,6 +290,7 @@ RUST_LOG=debug pnpm tauri:dev
 6. CI/CD runs automatically
 
 ### Code Style
+
 - Rust: `cargo fmt` and `cargo clippy`
 - TypeScript: Follow existing patterns
 - SolidJS: Use established patterns
@@ -279,4 +305,4 @@ RUST_LOG=debug pnpm tauri:dev
 
 ---
 
-For questions or issues, please refer to the [GitHub repository](https://github.com/sternelee/riterm).
+For questions or issues, please refer to the [GitHub repository](https://github.com/sternelee/clawdchat).

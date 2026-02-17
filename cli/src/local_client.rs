@@ -5,8 +5,8 @@
 //! and provides a terminal-based user interface.
 
 use anyhow::{Context, Result};
-use lib::agent::{AgentManager, PendingPermission};
-use riterm_shared::message_protocol::AgentType;
+use clawdchat_shared::agent::{AgentManager, PendingPermission};
+use clawdchat_shared::message_protocol::AgentType;
 use std::path::PathBuf;
 use tracing::{debug, info};
 
@@ -76,7 +76,7 @@ impl LocalClientSession {
                 let mut recv = receiver;
                 while let Ok(event) = recv.recv().await {
                     // Handle events - update pending permissions
-                    if matches!(&event.event, lib::agent::AgentEvent::ApprovalRequest { .. }) {
+                    if matches!(&event.event, clawdchat_shared::agent::AgentEvent::ApprovalRequest { .. }) {
                         debug!("Received approval request event: {:?}", event);
                         // The session will handle permission storage internally
                         // We can query permissions when listing

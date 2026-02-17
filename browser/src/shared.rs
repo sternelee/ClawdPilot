@@ -56,7 +56,7 @@ impl TerminalNode {
 
         let endpoint = iroh::Endpoint::builder()
             .secret_key(secret_key.clone())
-            .alpns(vec![b"riterm".to_vec()])
+            .alpns(vec![b"clawdchat".to_vec()])
             .discovery(iroh::discovery::dns::DnsDiscovery::n0_dns())
             .bind()
             .await?;
@@ -78,7 +78,7 @@ impl TerminalNode {
 
         let connection = self
             .endpoint
-            .connect(ticket.node_addr.clone(), b"riterm")
+            .connect(ticket.node_addr.clone(), b"clawdchat")
             .await?;
 
         info!("Connected to terminal host");

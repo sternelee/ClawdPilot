@@ -188,7 +188,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
               onClick={() => setShowStatusPanel(!showStatusPanel())}
             >
               <span class="text-lg hidden sm:inline">⚡</span>
-              <span class="font-bold text-sm sm:text-base">RiTerm</span>
+              <span class="font-bold text-sm sm:text-base">ClawdChat</span>
             </Button>
           </div>
         </div>
@@ -294,6 +294,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
             <For each={navItems}>
               {(item) => (
                 <button
+                  type="button"
                   class={`flex flex-col items-center justify-center p-2 rounded-lg min-w-[60px] transition-all duration-200 ${
                     item.active
                       ? "text-primary bg-primary/10"
@@ -308,7 +309,10 @@ export function MobileNavigation(props: MobileNavigationProps) {
                   <span class="text-lg mb-1">{item.icon}</span>
                   <span class="text-xs font-medium">{item.title}</span>
                   <Show when={item.badge}>
-                    <Badge variant="primary" class="absolute -right-1 -top-1 h-4 px-1 text-[9px]">
+                    <Badge
+                      variant="primary"
+                      class="absolute -right-1 -top-1 h-4 px-1 text-[9px]"
+                    >
                       {item.badge}
                     </Badge>
                   </Show>

@@ -347,7 +347,6 @@ export const createSessionStore = () => {
       setActiveSession(sessionId);
       closeNewSessionModal();
       setNewSessionPath("");
-      notificationStore.success("Local agent session started", "System");
     } catch (error) {
       console.error(
         "[handleCreateSession] Failed to start local agent:",

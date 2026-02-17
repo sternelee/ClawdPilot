@@ -1,9 +1,9 @@
 {
-  "name": "riterm-browser",
+  "name": "clawdchat-browser",
   "version": "0.1.0",
-  "description": "RiTerm browser WASM client",
-  "main": "pkg/riterm_browser.js",
-  "types": "pkg/riterm_browser.d.ts",
+  "description": "ClawdChat browser WASM client",
+  "main": "pkg/clawdchat_browser.js",
+  "types": "pkg/clawdchat_browser.d.ts",
   "scripts": {
     "build": "wasm-pack build --target web --out-dir pkg",
     "dev": "wasm-pack build --target web --out-dir pkg --dev",

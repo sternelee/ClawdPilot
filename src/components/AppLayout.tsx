@@ -120,7 +120,7 @@ export const AppLayout: Component = () => {
             <div class="flex-1 flex items-center justify-center p-8">
               <div class="text-center max-w-md">
                 <div class="text-6xl mb-4">💬</div>
-                <h2 class="text-2xl font-bold mb-2">Welcome to RiTerm</h2>
+                <h2 class="text-2xl font-bold mb-2">Welcome to ClawdChat</h2>
                 <p class="text-base-content/70 mb-6">
                   Manage multiple AI agent sessions in one place. Create a new
                   session to get started.

@@ -2,25 +2,25 @@
 #![allow(dead_code)]
 //!
 //! 此模块负责解析和路由用户的斜杠命令，
-//! 区分 RiTerm 内置命令和需要转发给 AI Agent 的命令。
+//! 区分 ClawdChat 内置命令和需要转发给 AI Agent 的命令。
 
 use anyhow::Result;
-use riterm_shared::message_protocol::{
+use clawdchat_shared::message_protocol::{
     AgentType, BuiltinCommand, SlashCommand, SlashCommandResponseContent,
 };
 
-/// RiTerm 内置命令列表
-const RITERM_BUILTIN_COMMANDS: &[&str] = &[
+/// ClawdChat 内置命令列表
+const CLAWDCHAT_BUILTIN_COMMANDS: &[&str] = &[
     "/list",    // 列出会话
     "/spawn",   // 启动新 Agent
     "/stop",    // 停止会话
     "/quit",    // 退出
     "/approve", // 批准权限请求
     "/deny",    // 拒绝权限请求
-    "/help",    // 显示帮助（RiTerm 版本）
+    "/help",    // 显示帮助（ClawdChat 版本）
 ];
 
-/// 需要透传给 Agent 的通用命令（即使它们也是 RiTerm 内置命令）
+/// 需要透传给 Agent 的通用命令（即使它们也是 ClawdChat 内置命令）
 const PASSTHROUGH_COMMANDS: &[&str] = &[
     "/clear",     // 清屏/清空会话 - Agent 处理
     "/compact",   // 压缩上下文 - Agent 处理
@@ -129,7 +129,7 @@ impl CommandRouter {
 
     /// 解析用户输入的命令
     ///
-    /// 判断是 RiTerm 内置命令还是需要转发给 Agent 的命令
+    /// 判断是 ClawdChat 内置命令还是需要转发给 Agent 的命令
     pub fn parse_command(&self, input: &str) -> Result<SlashCommand> {
         let input = input.trim();
 
@@ -143,8 +143,8 @@ impl CommandRouter {
         // 提取命令名称（第一个空格前的部分）
         let command_name = input.split_whitespace().next().unwrap_or(input);
 
-        // 检查是否是 RiTerm 内置命令
-        if RITERM_BUILTIN_COMMANDS.contains(&command_name) {
+        // 检查是否是 ClawdChat 内置命令
+        if CLAWDCHAT_BUILTIN_COMMANDS.contains(&command_name) {
             return self.parse_builtin_command(input);
         }
 
@@ -154,7 +154,7 @@ impl CommandRouter {
         })
     }
 
-    /// 解析 RiTerm 内置命令
+    /// 解析 ClawdChat 内置命令
     fn parse_builtin_command(&self, input: &str) -> Result<SlashCommand> {
         let parts: Vec<&str> = input.split_whitespace().collect();
         let command = parts.first().unwrap_or(&"");
@@ -385,7 +385,7 @@ impl CommandRouter {
     /// 检查命令是否是内置命令
     pub fn is_builtin_command(&self, command: &str) -> bool {
         let command_name = command.split_whitespace().next().unwrap_or(command);
-        RITERM_BUILTIN_COMMANDS.contains(&command_name)
+        CLAWDCHAT_BUILTIN_COMMANDS.contains(&command_name)
     }
 
     /// 检查命令是否被当前 Agent 支持
@@ -414,10 +414,10 @@ impl CommandRouter {
                 format!("Error: {}", message)
             }
             SlashCommandResponseContent::Structured { format, content } => match format {
-                riterm_shared::message_protocol::OutputFormat::Markdown => content,
-                riterm_shared::message_protocol::OutputFormat::Text => content,
-                riterm_shared::message_protocol::OutputFormat::Json => content,
-                riterm_shared::message_protocol::OutputFormat::Table => content,
+                clawdchat_shared::message_protocol::OutputFormat::Markdown => content,
+                clawdchat_shared::message_protocol::OutputFormat::Text => content,
+                clawdchat_shared::message_protocol::OutputFormat::Json => content,
+                clawdchat_shared::message_protocol::OutputFormat::Table => content,
             },
         }
     }
@@ -443,7 +443,7 @@ pub enum CommandCategory {
     Universal,
     /// Agent 特定命令
     AgentSpecific,
-    /// RiTerm 内置命令
+    /// ClawdChat 内置命令
     Builtin,
 }
 

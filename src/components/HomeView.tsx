@@ -148,7 +148,9 @@ export function HomeView(props: HomeViewProps) {
       >
         <Card class="border-0 shadow-none">
           <CardBody class="p-0">
-            <CardTitle class="mb-4 justify-center text-2xl">Account Login</CardTitle>
+            <CardTitle class="mb-4 justify-center text-2xl">
+              Account Login
+            </CardTitle>
 
             <div class="space-y-4">
               <div class="space-y-2">
@@ -218,7 +220,7 @@ export function HomeView(props: HomeViewProps) {
           <div class="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-primary/10 text-primary text-5xl mb-6 shadow-lg">
             ⚡
           </div>
-          <h1 class="text-4xl font-bold mb-2">RiTerm AI</h1>
+          <h1 class="text-4xl font-bold mb-2">ClawdChat</h1>
           <p class="text-base-content/60">Secure P2P Agent Collaboration</p>
         </div>
 
@@ -246,7 +248,9 @@ export function HomeView(props: HomeViewProps) {
         <Show when={activeTab() === "remote"}>
           <Card class="w-full max-w-lg overflow-hidden shadow-xl">
             <CardBody class="p-8">
-              <CardTitle class="mb-6 text-xl">Connect to Remote Session</CardTitle>
+              <CardTitle class="mb-6 text-xl">
+                Connect to Remote Session
+              </CardTitle>
 
               <div class="w-full space-y-2">
                 <div class="flex w-full gap-2">
@@ -357,9 +361,12 @@ export function HomeView(props: HomeViewProps) {
               <div class="w-16 h-16 rounded-2xl bg-primary/10 text-primary text-3xl flex items-center justify-center mx-auto mb-4">
                 💻
               </div>
-              <CardTitle class="mb-2 justify-center text-xl">Local Agent Mode</CardTitle>
+              <CardTitle class="mb-2 justify-center text-xl">
+                Local Agent Mode
+              </CardTitle>
               <p class="text-base-content/60 mb-6">
-                Manage AI agents directly on your machine without connecting to a remote CLI.
+                Manage AI agents directly on your machine without connecting to
+                a remote CLI.
               </p>
 
               <div class="space-y-3">

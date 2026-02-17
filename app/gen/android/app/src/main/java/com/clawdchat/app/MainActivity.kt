@@ -1,4 +1,4 @@
-package com.example.riterm
+package com.clawdchat.app
 
 import android.os.Bundle
 import androidx.activity.enableEdgeToEdge

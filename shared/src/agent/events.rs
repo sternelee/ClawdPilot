@@ -55,7 +55,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use riterm_shared::message_protocol::{AgentType, NotificationLevel, ToolCallStatus};
+use crate::message_protocol::{AgentType, NotificationLevel, ToolCallStatus};
 
 /// Unified agent event for frontend consumption
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,14 +340,14 @@ pub struct PermissionResponse {
     pub reason: Option<String>,
 }
 
-/// Convert AgentEvent to RiTerm message protocol types
+/// Convert AgentEvent to ClawdChat message protocol types
 impl AgentEvent {
     /// Convert to AgentMessageContent for P2P transmission
     pub fn to_agent_message_content(
         &self,
         message_id: Option<String>,
-    ) -> riterm_shared::message_protocol::AgentMessageContent {
-        use riterm_shared::message_protocol::AgentMessageContent;
+    ) -> crate::message_protocol::AgentMessageContent {
+        use crate::message_protocol::AgentMessageContent;
 
         match self {
             AgentEvent::TextDelta { text, .. } => AgentMessageContent::AgentResponse {
