@@ -57,7 +57,7 @@ enum Commands {
         #[arg(long, default_value = "50")]
         max_connections: usize,
         /// Bind address for the server
-        #[arg(long, default_value = "0.0.0.0:0")]
+        #[arg(long, default_value = "0.0.0.0:61103")]
         bind_addr: String,
         /// Custom path to secret key file (default: ./clawdchat_secret_key)
         #[arg(long)]

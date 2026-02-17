@@ -539,15 +539,25 @@ impl CliMessageServer {
     }
 
     /// 生成连接票据 - 使用 base64 编码的 SerializableEndpointAddr 格式
+    /// 优先包含 direct addresses 和 relay URL 以支持局域网直连
     pub fn generate_connection_ticket(&self) -> Result<String> {
         use clawdchat_shared::quic_server::SerializableEndpointAddr;
 
         let node_id = self.quic_server.get_node_id();
         tracing::info!("Generating ticket for node: {:?}", node_id);
 
+        // 获取 direct addresses 和 relay URL 以支持直连穿透
+        let direct_addresses = self.quic_server.get_direct_addresses();
+        let relay_url = self.quic_server.get_relay_url();
+
+        tracing::info!("Direct addresses: {:?}", direct_addresses);
+        tracing::info!("Relay URL: {:?}", relay_url);
+
         // 创建 SerializableEndpointAddr 并转换为 base64
-        let endpoint_addr = SerializableEndpointAddr::from_endpoint_id(
+        let endpoint_addr = SerializableEndpointAddr::from_endpoint_info(
             node_id,
+            relay_url,
+            direct_addresses,
             clawdchat_shared::quic_server::QUIC_MESSAGE_ALPN,
         )?;
 

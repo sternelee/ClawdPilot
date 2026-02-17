@@ -7,7 +7,8 @@ use crate::event_manager::*;
 use crate::message_protocol::*;
 use anyhow::Result;
 use async_trait::async_trait;
-use iroh::{Endpoint, EndpointId, SecretKey, discovery::dns::DnsDiscovery};
+use iroh::{Endpoint, EndpointId, EndpointAddr, SecretKey, discovery::dns::DnsDiscovery};
+use iroh_base::{RelayUrl, TransportAddr};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -27,12 +28,22 @@ pub struct SerializableEndpointAddr {
 }
 
 impl SerializableEndpointAddr {
-    /// 从 endpoint_id 创建可序列化的端点地址
+    /// 从 endpoint_id 创建可序列化的端点地址（兼容旧版本）
     pub fn from_endpoint_id(endpoint_id: EndpointId, alpn: &[u8]) -> Result<Self> {
+        Self::from_endpoint_info(endpoint_id, None, vec![], alpn)
+    }
+
+    /// 从完整信息创建可序列化的端点地址
+    pub fn from_endpoint_info(
+        endpoint_id: EndpointId,
+        relay_url: Option<String>,
+        direct_addresses: Vec<String>,
+        alpn: &[u8],
+    ) -> Result<Self> {
         Ok(Self {
             node_id: endpoint_id.to_string(),
-            relay_url: None,
-            direct_addresses: vec![],
+            relay_url,
+            direct_addresses,
             alpn: std::str::from_utf8(alpn)?.to_string(),
         })
     }
@@ -113,6 +124,52 @@ impl SerializableEndpointAddr {
             .map_err(|e| anyhow::anyhow!("Failed to parse endpoint_id: {}", e))?;
 
         Ok(endpoint_id)
+    }
+
+    /// 重建 iroh::EndpointAddr，包含 direct addresses 和 relay_url
+    /// 用于支持直连穿透
+    pub fn try_to_node_addr(&self) -> Result<EndpointAddr> {
+        use std::collections::BTreeSet;
+        use std::net::SocketAddr;
+        use std::str::FromStr;
+
+        // 解析 endpoint_id
+        let public_key = iroh_base::PublicKey::from_str(&self.node_id)
+            .map_err(|e| anyhow::anyhow!("Failed to parse endpoint_id: {}", e))?;
+
+        // 创建地址集合
+        let mut addrs = BTreeSet::new();
+
+        // 添加 direct addresses
+        for addr_str in &self.direct_addresses {
+            if let Ok(addr) = SocketAddr::from_str(addr_str) {
+                addrs.insert(TransportAddr::Ip(addr));
+                tracing::info!("Added direct address: {}", addr);
+            } else {
+                tracing::warn!("Invalid direct address: {}", addr_str);
+            }
+        }
+
+        // 添加 relay_url（如果存在）
+        let relay_url = if let Some(ref relay_url_str) = self.relay_url {
+            if let Ok(url) = relay_url_str.parse::<RelayUrl>() {
+                tracing::info!("Added relay URL: {}", relay_url_str);
+                Some(url)
+            } else {
+                tracing::warn!("Invalid relay URL: {}", relay_url_str);
+                None
+            }
+        } else {
+            None
+        };
+
+        // 如果有 relay URL，添加到地址集合
+        if let Some(url) = relay_url {
+            addrs.insert(TransportAddr::Relay(url));
+        }
+
+        // 创建 EndpointAddr
+        Ok(EndpointAddr::from_parts(public_key, addrs))
     }
 }
 
@@ -296,27 +353,46 @@ impl QuicMessageServer {
         let secret_key =
             Self::load_or_generate_secret_key(config.secret_key_path.as_deref()).await?;
 
-        // 创建endpoint with ALPN and persistent secret key
-        let endpoint = if let Some(relay) = &config.relay_url {
+        // 创建endpoint builder
+        let mut builder = Endpoint::builder()
+            .secret_key(secret_key)
+            .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
+            .discovery(DnsDiscovery::n0_dns());
+
+        // 如果指定了 bind_addr，使用它
+        if let Some(ref bind_addr) = config.bind_addr {
+            info!("Binding to address: {}", bind_addr);
+            // 使用 bind_addr_v4 或 bind_addr_v6 方法
+            match bind_addr {
+                std::net::SocketAddr::V4(addr_v4) => {
+                    builder = builder.bind_addr_v4(*addr_v4);
+                }
+                std::net::SocketAddr::V6(addr_v6) => {
+                    builder = builder.bind_addr_v6(*addr_v6);
+                }
+            }
+        }
+
+        // 创建endpoint
+        let endpoint = builder.bind().await?;
+
+        // 如果指定了 relay，也记录一下
+        if let Some(ref relay) = config.relay_url {
             info!("Using custom relay: {}", relay);
-            let _relay_url: url::Url = relay.parse()?;
-            Endpoint::builder()
-                .secret_key(secret_key)
-                .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
-                .discovery(DnsDiscovery::n0_dns())
-                .bind()
-                .await?
         } else {
             info!("Using default relay");
-            Endpoint::builder()
-                .secret_key(secret_key)
-                .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
-                .discovery(DnsDiscovery::n0_dns())
-                .bind()
-                .await?
-        };
+        }
+
         let node_id = endpoint.id();
         info!("QUIC server node ID: {:?}", node_id);
+
+        // 如果使用了固定端口，记录实际绑定的地址
+        if let Some(ref bind_addr) = config.bind_addr {
+            if bind_addr.port() != 0 {
+                // 端口不是 0，说明是固定端口
+                info!("Server bound to fixed port: {}", bind_addr);
+            }
+        }
 
         // 等待endpoint上线 - 这对于NAT穿透至关重要
         info!("Waiting for endpoint to be ready...");
@@ -752,6 +828,41 @@ impl QuicMessageServer {
         self.endpoint.id()
     }
 
+    /// 获取本机 direct addresses 用于 ticket 生成
+    /// 优先返回配置的 bind_addr，如果配置了固定端口则使用它
+    /// 如果使用随机端口，则返回空列表（需要依赖 relay 或 discovery）
+    pub fn get_direct_addresses(&self) -> Vec<String> {
+        let mut addresses = Vec::new();
+
+        // 优先使用配置的 bind_addr
+        if let Some(config_addr) = &self.config.bind_addr {
+            // 只有当端口不是 0（随机端口）时才包含在 ticket 中
+            if config_addr.port() != 0 {
+                addresses.push(config_addr.to_string());
+                tracing::info!("Using configured bind_addr as direct address: {}", config_addr);
+                return addresses;
+            } else {
+                tracing::info!("Using random port (0), not including in direct addresses");
+            }
+        }
+
+        // 如果是随机端口，不返回固定地址
+        // 依赖 relay 或 discovery 来建立连接
+        addresses
+    }
+
+    /// 获取 relay URL
+    pub fn get_relay_url(&self) -> Option<String> {
+        self.config.relay_url.clone()
+    }
+
+    /// 检查是否使用了固定端口
+    pub fn is_using_fixed_port(&self) -> bool {
+        self.config.bind_addr
+            .map(|addr| addr.port() != 0)
+            .unwrap_or(false)
+    }
+
     /// 获取活跃连接数
     pub async fn get_active_connections_count(&self) -> usize {
         let connections = self.connections.read().await;
@@ -999,20 +1110,57 @@ impl QuicMessageClient {
         self.connect_to_server_with_node_addr(node_addr).await
     }
 
-    /// 连接到QUIC消息服务器 - 使用 EndpointId
+    /// 连接到QUIC消息服务器 - 使用完整的 EndpointAddr（支持 direct addresses 和 relay）
     pub async fn connect_to_server_with_node_addr(
         &mut self,
         node_addr: &EndpointId,
     ) -> Result<String> {
-        info!("🔗 Connecting to QUIC message server via NodeAddr");
-        info!("🔗 Node ID: {:?}", node_addr);
+        // 创建一个只有 node_id 的 EndpointAddr（无 direct addresses）
+        use iroh_base::PublicKey;
+        let public_key = PublicKey::from(*node_addr);
+        let addrs = std::collections::BTreeSet::new();
+        let full_node_addr = EndpointAddr::from_parts(public_key, addrs);
+        self.connect_to_server_with_full_node_addr(&full_node_addr).await
+    }
+
+    /// 连接到QUIC消息服务器 - 使用完整的 EndpointAddr（支持 direct addresses 和 relay）
+    /// 这是推荐使用的方法，可以支持直连穿透
+    pub async fn connect_to_server_with_full_node_addr(
+        &mut self,
+        node_addr: &EndpointAddr,
+    ) -> Result<String> {
+        info!("🔗 Connecting to QUIC message server via EndpointAddr");
+        info!("🔗 Node ID: {:?}", node_addr.id);
+
+        // 提取 direct addresses 和 relay URL
+        let direct_addrs: Vec<_> = node_addr.addrs.iter()
+            .filter_map(|a| {
+                if let TransportAddr::Ip(addr) = a {
+                    Some(addr.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let relay_url = node_addr.addrs.iter()
+            .filter_map(|a| {
+                if let TransportAddr::Relay(url) = a {
+                    Some(url.to_string())
+                } else {
+                    None
+                }
+            })
+            .next();
+
+        info!("🔗 Direct addresses: {:?}", direct_addrs);
+        info!("🔗 Relay URL: {:?}", relay_url);
 
         // 使用 iroh 的 connect 方法建立连接
         let connection = self
             .endpoint
-            .connect(*node_addr, QUIC_MESSAGE_ALPN)
+            .connect(node_addr.clone(), QUIC_MESSAGE_ALPN)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to connect to node {:?}: {}", node_addr, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to connect to node {:?}: {}", node_addr.id, e))?;
 
         let server_node_id = connection.remote_id();
         let connection_id = format!("conn_{}", uuid::Uuid::new_v4());
@@ -1299,9 +1447,16 @@ impl QuicMessageClientHandle {
         client.connect_to_server(node_addr).await
     }
 
-    /// 使用 EndpointId 连接到服务器
-    pub async fn connect_to_server_with_node_addr(&self, node_addr: &EndpointId) -> Result<String> {
-        // connect_to_server 现在已经使用 EndpointId，这个方法保留作为别名
+    /// 使用完整的 EndpointAddr 连接到服务器（支持 direct addresses 和 relay）
+    /// 这是推荐使用的方法，可以支持直连穿透
+    pub async fn connect_to_server_with_node_addr(&self, node_addr: &EndpointAddr) -> Result<String> {
+        let mut client = self.client.lock().await;
+        client.connect_to_server_with_full_node_addr(node_addr).await
+    }
+
+    /// 使用 EndpointId 连接到服务器（别名，保持向后兼容）
+    #[deprecated(since = "0.9.0", note = "使用 connect_to_server_with_node_addr 代替")]
+    pub async fn connect_to_server_with_endpoint_id(&self, node_addr: &EndpointId) -> Result<String> {
         self.connect_to_server(node_addr).await
     }
 

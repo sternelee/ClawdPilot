@@ -48,8 +48,82 @@ fn is_valid_session_ticket(ticket: &str) -> bool {
     ticket.len() > 20 && ticket.len() < 500
 }
 
-// Parse ticket and extract EndpointId
-// Supports iroh-tickets format, base64 JSON format, and legacy custom format
+// Parse ticket and extract EndpointAddr (includes direct addresses and relay URL)
+// Supports full address info for direct connection
+fn parse_ticket_to_node_addr(ticket: &str) -> Result<iroh_base::EndpointAddr, Box<dyn std::error::Error>> {
+    use base64::Engine as _;
+    use base64::engine::general_purpose;
+    use data_encoding::BASE32_NOPAD;
+    use iroh_base::{EndpointAddr, PublicKey, RelayUrl, TransportAddr};
+    use iroh_tickets::endpoint::EndpointTicket;
+    use clawdchat_shared::SerializableEndpointAddr;
+    use std::collections::BTreeSet;
+
+    // Handle old format with "ticket:" prefix
+    let ticket_str = if let Some(stripped) = ticket.strip_prefix("ticket:") {
+        stripped
+    } else {
+        ticket
+    };
+
+    // Try new iroh-tickets format first (base64, shorter)
+    if let Ok(endpoint_ticket) = EndpointTicket::from_str(ticket_str) {
+        return Ok(endpoint_ticket.endpoint_addr().clone());
+    }
+
+    // Try base64-encoded JSON format
+    #[derive(Deserialize)]
+    struct JsonTicket {
+        node_id: String,
+        relay_url: Option<String>,
+        direct_addresses: Option<Vec<String>>,
+        alpn: Option<String>,
+    }
+
+    // Try both URL_SAFE and STANDARD base64 encoding
+    for engine in [general_purpose::URL_SAFE, general_purpose::STANDARD] {
+        if let Ok(ticket_json_bytes) = engine.decode(ticket_str) {
+            if let Ok(ticket_json) = String::from_utf8(ticket_json_bytes.clone()) {
+                if let Ok(json_ticket) = serde_json::from_str::<JsonTicket>(&ticket_json) {
+                    // Create EndpointAddr from parsed ticket
+                    if let Ok(public_key) = PublicKey::from_str(&json_ticket.node_id) {
+                        let mut addrs = BTreeSet::new();
+
+                        // Add direct addresses
+                        if let Some(direct_addrs) = json_ticket.direct_addresses {
+                            for addr_str in direct_addrs {
+                                if let Ok(addr) = addr_str.parse() {
+                                    addrs.insert(TransportAddr::Ip(addr));
+                                }
+                            }
+                        }
+
+                        // Add relay URL
+                        if let Some(relay_url_str) = json_ticket.relay_url {
+                            if let Ok(url) = relay_url_str.parse::<RelayUrl>() {
+                                addrs.insert(TransportAddr::Relay(url));
+                            }
+                        }
+
+                        return Ok(EndpointAddr::from_parts(public_key, addrs));
+                    }
+                }
+            }
+        }
+    }
+
+    // Fall back to legacy custom format (base32 + JSON)
+    let ticket_json_bytes = BASE32_NOPAD.decode(ticket_str.to_ascii_uppercase().as_bytes())?;
+    let ticket_json = String::from_utf8(ticket_json_bytes)?;
+
+    // Parse JSON directly as SerializableEndpointAddr
+    let serializable_addr: SerializableEndpointAddr = serde_json::from_str(&ticket_json)?;
+
+    // Use the new method to create EndpointAddr
+    Ok(serializable_addr.try_to_node_addr()?)
+}
+
+// Parse ticket and extract EndpointId (legacy compatibility)
 fn parse_ticket_node_addr(ticket: &str) -> Result<iroh::EndpointId, Box<dyn std::error::Error>> {
     use base64::Engine as _;
     use base64::engine::general_purpose;
@@ -241,6 +315,13 @@ impl EventListener for AppEventListener {
                 let _ = self.app_handle.emit(
                     &format!("peer-disconnected-{}", self.session_id),
                     &event.data,
+                );
+                // Also emit a global event for the session store to handle
+                let _ = self.app_handle.emit(
+                    "peer-disconnected",
+                    &serde_json::json!({
+                        "sessionId": self.session_id,
+                    }),
                 );
             }
             _ => {}
@@ -451,11 +532,11 @@ async fn connect_to_peer(
         }
     };
 
-    // Parse the ticket to extract EndpointId
-    let node_addr = parse_ticket_node_addr(&session_ticket)
+    // Parse the ticket to extract full NodeAddr (includes direct addresses and relay URL for direct connection)
+    let node_addr = parse_ticket_to_node_addr(&session_ticket)
         .map_err(|e| format!("Failed to parse session ticket: {}", e))?;
 
-    let node_id_str = node_addr.to_string();
+    let node_id_str = node_addr.id.to_string();
 
     // Check if there's already a session to the same node - reuse it
     {
@@ -490,20 +571,46 @@ async fn connect_to_peer(
         }
     }
 
-    // Establish QUIC connection to the CLI server using NodeAddr (包含relay信息)
+    // Establish QUIC connection to the CLI server using full NodeAddr (includes relay info and direct addresses)
     let (connection_id, message_receiver) = {
         let client_guard = state.quic_client.read().await;
         if let Some(quic_client) = client_guard.as_ref() {
             #[cfg(debug_assertions)]
             tracing::info!("🔗 Establishing connection to server via NodeAddr");
             #[cfg(debug_assertions)]
-            tracing::info!("🔗 Node ID: {:?}", node_addr);
+            tracing::info!("🔗 Node ID: {:?}", node_addr.id);
+
+            // 提取 direct addresses 和 relay URL
+            #[cfg(debug_assertions)]
+            {
+                use iroh_base::{TransportAddr};
+                let direct_addrs: Vec<_> = node_addr.addrs.iter()
+                    .filter_map(|a| {
+                        if let TransportAddr::Ip(addr) = a {
+                            Some(addr.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                let relay_url = node_addr.addrs.iter()
+                    .filter_map(|a| {
+                        if let TransportAddr::Relay(url) = a {
+                            Some(url.to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .next();
+                tracing::info!("🔗 Direct addresses: {:?}", direct_addrs);
+                tracing::info!("🔗 Relay URL: {:?}", relay_url);
+            }
 
             // Get message receiver
             let receiver = quic_client.get_message_receiver().await;
 
-            // Establish actual QUIC connection using EndpointId
-            let connection_id = match quic_client.connect_to_server(&node_addr).await {
+            // Establish actual QUIC connection using full NodeAddr (supports direct addresses and relay)
+            let connection_id = match quic_client.connect_to_server_with_node_addr(&node_addr).await {
                 Ok(actual_connection_id) => {
                     #[cfg(debug_assertions)]
                     tracing::info!(
@@ -698,6 +805,7 @@ async fn connect_to_peer(
                                                             "session_id": agent_session_id,
                                                             "agent_type": data_json.get("agent_type"),
                                                             "project_path": data_json.get("project_path"),
+                                                            "control_session_id": session_id_clone,
                                                         })
                                                     );
                                                 }
@@ -2017,7 +2125,7 @@ async fn send_slash_command(
 /// Spawn a remote AI agent session
 #[tauri::command(rename_all = "camelCase")]
 async fn remote_spawn_session(
-    session_id: String,
+    connection_session_id: String,
     agent_type: String,
     project_path: String,
     args: Vec<String>,
@@ -2026,10 +2134,13 @@ async fn remote_spawn_session(
     let session = {
         let sessions = state.sessions.read().await;
         sessions
-            .get(&session_id)
-            .ok_or_else(|| format!("Session not found: {}", session_id))?
+            .get(&connection_session_id)
+            .ok_or_else(|| format!("Connection session not found: {}", connection_session_id))?
             .clone()
     };
+
+    // Generate a new unique session ID for the agent
+    let agent_session_id = format!("agent_{}", uuid::Uuid::new_v4());
 
     // Parse agent type
     let agent_type = match agent_type.to_lowercase().as_str() {
@@ -2068,7 +2179,7 @@ async fn remote_spawn_session(
         "app".to_string(),
         clawdchat_shared::MessagePayload::RemoteSpawn(clawdchat_shared::RemoteSpawnMessage {
             action: clawdchat_shared::RemoteSpawnAction::SpawnSession {
-                session_id: session_id.clone(),
+                session_id: agent_session_id.clone(),
                 agent_type,
                 project_path: project_path,
                 args,
@@ -2095,14 +2206,24 @@ async fn respond_to_agent_permission(
     permission_id: String,
     approved: bool,
     approve_for_session: bool,
+    control_session_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let session = {
+    // For AI agent sessions, we need to find the correct connection to the CLI
+    let connection_id = if let Some(cs_id) = control_session_id {
         let sessions = state.sessions.read().await;
         sessions
-            .get(&session_id)
-            .ok_or_else(|| format!("Session not found: {}", session_id))?
-            .clone()
+            .get(&cs_id)
+            .map(|s| s.connection_id.clone())
+            .ok_or_else(|| format!("Control session not found: {}", cs_id))?
+    } else {
+        // Fallback to the first available connection ID
+        let sessions = state.sessions.read().await;
+        if let Some(first_session) = sessions.values().next() {
+            first_session.connection_id.clone()
+        } else {
+            return Err("No active connection available".to_string());
+        }
     };
 
     use clawdchat_shared::PermissionMode;
@@ -2137,14 +2258,30 @@ async fn respond_to_agent_permission(
     )
     .with_session(session_id);
 
-    send_message_via_client(
-        &state,
-        &session.connection_id,
-        permission_message,
-        "permission response",
-    )
-    .await?;
+    send_message_via_client(&state, &connection_id, permission_message, "permission response")
+        .await?;
     Ok(())
+}
+
+/// Respond to a local agent permission request
+#[tauri::command(rename_all = "camelCase")]
+async fn local_respond_to_agent_permission(
+    session_id: String,
+    permission_id: String,
+    approved: bool,
+    _approve_for_session: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    manager
+        .respond_to_permission(&session_id, permission_id, approved, None)
+        .await
+        .map_err(|e| format!("Failed to respond to local agent permission: {}", e))
 }
 
 /// Send a message to an AI agent session
@@ -2152,14 +2289,18 @@ async fn respond_to_agent_permission(
 async fn send_agent_message(
     session_id: String,
     content: String,
+    control_session_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // For AI agent sessions, we don't need to look up the session in state.sessions
-    // Instead, we can use any available connection to the CLI
-    // AI agent sessions are managed by the CLI, not the app's session tracking
-
-    // Get the first available connection ID
-    let connection_id = {
+    // For AI agent sessions, we need to find the correct connection to the CLI
+    let connection_id = if let Some(cs_id) = control_session_id {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&cs_id)
+            .map(|s| s.connection_id.clone())
+            .ok_or_else(|| format!("Control session not found: {}", cs_id))?
+    } else {
+        // Fallback to the first available connection ID
         let sessions = state.sessions.read().await;
         if let Some(first_session) = sessions.values().next() {
             first_session.connection_id.clone()
@@ -2181,6 +2322,46 @@ async fn send_agent_message(
     .requires_response();
 
     send_message_via_client(&state, &connection_id, control_message, "agent message").await?;
+    Ok(())
+}
+
+/// Abort an action in an AI agent session
+#[tauri::command(rename_all = "camelCase")]
+async fn abort_agent_action(
+    session_id: String,
+    control_session_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    // For AI agent sessions, we need to find the correct connection to the CLI
+    let connection_id = if let Some(cs_id) = control_session_id {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&cs_id)
+            .map(|s| s.connection_id.clone())
+            .ok_or_else(|| format!("Control session not found: {}", cs_id))?
+    } else {
+        // Fallback to the first available connection ID
+        let sessions = state.sessions.read().await;
+        if let Some(first_session) = sessions.values().next() {
+            first_session.connection_id.clone()
+        } else {
+            return Err("No active connection available".to_string());
+        }
+    };
+
+    // Send as AgentControl::SendInterrupt
+    let control_message = ClawdChatMessage::new(
+        clawdchat_shared::MessageType::AgentControl,
+        "app".to_string(),
+        clawdchat_shared::MessagePayload::AgentControl(clawdchat_shared::AgentControlMessage {
+            session_id,
+            action: AgentControlAction::SendInterrupt,
+            request_id: None,
+        }),
+    )
+    .requires_response();
+
+    send_message_via_client(&state, &connection_id, control_message, "agent interrupt").await?;
     Ok(())
 }
 
@@ -2240,11 +2421,8 @@ async fn local_start_agent(
             drop(agent_manager_guard);
 
             // Start event broadcasting task
-            tokio::spawn(async move {
-                // Broadcast agent events to frontend
-                // Note: In local mode, we'll handle events differently than P2P mode
-                tracing::info!("Local agent event broadcaster started");
-            });
+            // Events are handled per-session via the subscribe() call below
+            tracing::info!("Local agent manager initialized");
         } else {
             drop(agent_manager_guard);
         }
@@ -2355,6 +2533,24 @@ async fn local_send_agent_message(
         .send_message(&session_id, content)
         .await
         .map_err(|e| format!("Failed to send message to local agent: {}", e))
+}
+
+/// Abort a local agent action
+#[tauri::command(rename_all = "camelCase")]
+async fn local_abort_agent_action(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    manager
+        .interrupt_session(&session_id)
+        .await
+        .map_err(|e| format!("Failed to interrupt local agent: {}", e))
 }
 
 /// List all active local agent sessions
@@ -2507,11 +2703,14 @@ pub fn run() {
             send_slash_command,
             remote_spawn_session,
             send_agent_message,
+            abort_agent_action,
             respond_to_agent_permission,
             // Local Agent Commands
             local_start_agent,
             local_stop_agent,
             local_send_agent_message,
+            local_abort_agent_action,
+            local_respond_to_agent_permission,
             local_list_agents,
             local_get_agent_sessions,
             // macOS Panel Commands
