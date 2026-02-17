@@ -27,11 +27,10 @@ mod tcp_forwarding;
 use clawdchat_shared::AgentManager;
 use clawdchat_shared::{
     AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, Event,
-    EventListener, EventType, IODataType, Message as ClawdChatMessage, MessageBuilder, MessagePayload,
-    QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType, TcpForwardingAction,
-    TcpForwardingType, TerminalAction,
+    EventListener, EventType, IODataType, Message as ClawdChatMessage, MessageBuilder,
+    MessagePayload, QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType,
+    TcpForwardingAction, TcpForwardingType, TerminalAction,
 };
-
 
 use crate::tcp_forwarding::TcpForwardingManager;
 
@@ -106,94 +105,6 @@ fn parse_ticket_node_addr(ticket: &str) -> Result<iroh::EndpointId, Box<dyn std:
 
     // Try to reconstruct EndpointId from SerializableEndpointAddr
     Ok(serializable_addr.try_to_endpoint_id()?)
-}
-
-// Parse structured events from terminal data - DEPRECATED
-// Events are now structured in EventType enum
-#[allow(dead_code)]
-fn parse_structured_event(data: &str) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    // Handle terminal list response
-    if data.starts_with("[Terminal List Response:") {
-        if let Some(start) = data.find('[') {
-            if let Some(json_part) = data.get(start..) {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_part) {
-                    return Ok(serde_json::json!({
-                        "type": "terminal_list_response",
-                        "data": parsed
-                    }));
-                }
-            }
-        }
-    }
-
-    // Handle terminal status updates
-    if data.starts_with("[Terminal Status Update:") {
-        if let Some(start) = data.find('[') {
-            if let Some(end) = data.find(']') {
-                let status_part = &data[start + 1..end];
-                let parts: Vec<&str> = status_part.split(": ").collect();
-                if parts.len() >= 2 {
-                    return Ok(serde_json::json!({
-                        "type": "terminal_status_update",
-                        "terminal_id": parts.get(0).unwrap_or(&"unknown"),
-                        "status": parts.get(1).unwrap_or(&"unknown")
-                    }));
-                }
-            }
-        }
-    }
-
-    // Handle terminal output
-    if data.starts_with("[Terminal Output:") {
-        if let Some(captures) = Regex::new(r"\[Terminal Output: ([^]]+)\] (.*)")
-            .unwrap()
-            .captures(data)
-        {
-            if let (Some(terminal_id), Some(output_data)) = (captures.get(1), captures.get(2)) {
-                return Ok(serde_json::json!({
-                    "type": "terminal_output",
-                    "terminal_id": terminal_id.as_str(),
-                    "data": output_data.as_str()
-                }));
-            }
-        }
-    }
-
-    // Handle terminal input
-    if data.starts_with("[Terminal Input:") {
-        if let Some(start) = data.find('[') {
-            if let Some(end) = data.find(']') {
-                let input_part = &data[start + 1..end];
-                let parts: Vec<&str> = input_part.split("] ").collect();
-                if parts.len() >= 2 {
-                    return Ok(serde_json::json!({
-                        "type": "terminal_input",
-                        "terminal_id": parts.get(0).unwrap_or(&"unknown"),
-                        "data": parts.get(1).unwrap_or(&"")
-                    }));
-                }
-            }
-        }
-    }
-
-    // Handle terminal resize
-    if data.starts_with("[Terminal Resize:") {
-        if let Some(start) = data.find('[') {
-            if let Some(end) = data.find(']') {
-                let resize_part = &data[start + 1..end];
-                let parts: Vec<&str> = resize_part.split("] ").collect();
-                if parts.len() >= 2 {
-                    return Ok(serde_json::json!({
-                        "type": "terminal_resize",
-                        "terminal_id": parts.get(0).unwrap_or(&"unknown"),
-                        "size": parts.get(1).unwrap_or(&"")
-                    }));
-                }
-            }
-        }
-    }
-
-    Err("No structured event found".into())
 }
 
 pub struct AppState {
@@ -1341,12 +1252,6 @@ async fn send_message_via_client(
     }
 }
 
-// DEPRECATED: This command is no longer needed with the new message protocol
-// Use send_terminal_input_to_terminal instead
-
-// DEPRECATED: These commands are no longer needed with the new message protocol
-// Terminal commands are now handled through send_terminal_input_to_terminal
-
 #[tauri::command]
 #[allow(dead_code)]
 async fn send_directed_message(
@@ -1663,9 +1568,6 @@ async fn get_terminal_list(session_id: String, state: State<'_, AppState>) -> Re
     list_terminals(session_id, state).await
 }
 
-// DEPRECATED: Terminal connection is now implicit with the new message protocol
-// No separate connection step is needed
-
 #[tauri::command(rename_all = "camelCase")]
 async fn connect_to_terminal(
     session_id: String,
@@ -1814,9 +1716,12 @@ async fn create_tcp_forwarding_session(
         session_id: Some(session_id_result.clone()), // 发送我们的 session_id 给 CLI
     };
 
-    let message =
-        MessageBuilder::tcp_forwarding("clawdchat_app".to_string(), action, Some(session_id.clone()))
-            .with_session(session_id.clone());
+    let message = MessageBuilder::tcp_forwarding(
+        "clawdchat_app".to_string(),
+        action,
+        Some(session_id.clone()),
+    )
+    .with_session(session_id.clone());
 
     // 获取正确的 connection_id
     let connection_id = session.connection_id;
@@ -2083,13 +1988,15 @@ async fn send_slash_command(
             let control_message = ClawdChatMessage::new(
                 clawdchat_shared::MessageType::AgentControl,
                 "app".to_string(),
-                clawdchat_shared::MessagePayload::AgentControl(clawdchat_shared::AgentControlMessage {
-                    session_id: session_id.clone(),
-                    action: AgentControlAction::SendInput {
-                        content: raw_command.to_string(),
+                clawdchat_shared::MessagePayload::AgentControl(
+                    clawdchat_shared::AgentControlMessage {
+                        session_id: session_id.clone(),
+                        action: AgentControlAction::SendInput {
+                            content: raw_command.to_string(),
+                        },
+                        request_id: None,
                     },
-                    request_id: None,
-                }),
+                ),
             )
             .requires_response();
 
@@ -2130,8 +2037,28 @@ async fn remote_spawn_session(
         "codex" => AgentType::Codex,
         "gemini" | "gemini-cli" => AgentType::Gemini,
         "zeroclaw" => AgentType::ZeroClaw,
-        _ => AgentType::Custom,
+        "custom" => AgentType::Custom,
+        _ => return Err(format!("Unknown agent type: {}", agent_type)),
     };
+
+    // Platform-based agent availability check
+    #[cfg(mobile)]
+    {
+        // On mobile platforms, only ZeroClaw is supported (for remote P2P agent management)
+        match agent_type {
+            AgentType::ZeroClaw | AgentType::Custom => {}
+            _ => {
+                return Err(format!(
+                    "{} is not available on mobile platform. Only ZeroClaw is supported.",
+                    agent_type
+                ));
+            }
+        }
+    }
+    #[cfg(not(mobile))]
+    {
+        // On desktop platforms, all agent types are available
+    }
 
     // Create RemoteSpawn message
     let spawn_message = ClawdChatMessage::new(
@@ -2200,9 +2127,11 @@ async fn respond_to_agent_permission(
     let permission_message = ClawdChatMessage::new(
         clawdchat_shared::MessageType::AgentPermission,
         "app".to_string(),
-        clawdchat_shared::MessagePayload::AgentPermission(clawdchat_shared::AgentPermissionMessage {
-            inner: clawdchat_shared::AgentPermissionMessageInner::Response(permission_response),
-        }),
+        clawdchat_shared::MessagePayload::AgentPermission(
+            clawdchat_shared::AgentPermissionMessage {
+                inner: clawdchat_shared::AgentPermissionMessageInner::Response(permission_response),
+            },
+        ),
     )
     .with_session(session_id);
 
@@ -2279,6 +2208,25 @@ async fn local_start_agent(
         "custom" => AgentType::Custom,
         _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };
+
+    // Platform-based agent availability check
+    #[cfg(mobile)]
+    {
+        // On mobile platforms, only ZeroClaw is supported (for remote P2P agent management)
+        match agent_type {
+            AgentType::ZeroClaw | AgentType::Custom => {}
+            _ => {
+                return Err(format!(
+                    "{} is not available on mobile platform. Only ZeroClaw is supported.",
+                    agent_type_str
+                ));
+            }
+        }
+    }
+    #[cfg(not(mobile))]
+    {
+        // On desktop platforms, all agent types are available
+    }
 
     // Ensure agent manager is initialized
     {

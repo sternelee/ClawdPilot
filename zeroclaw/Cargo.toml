@@ -3,6 +3,12 @@ name = "zeroclaw"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+tauri = []
+desktop = []
+mobile = []
+default = []
+
 [dependencies]
 tokio = { workspace = true }
 anyhow = { workspace = true }

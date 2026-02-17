@@ -4,7 +4,6 @@
 //! 包括终端管理、TCP 转发和系统控制功能。
 
 use anyhow::Result;
-use portable_pty::{CommandBuilder, MasterPty, PtySize};
 use clawdchat_shared::{
     AgentControlAction, AgentSessionAction, AgentSessionMetadata, AgentType, AvailableTools,
     BuiltinCommand, CommunicationManager, FileBrowserAction, GitAction, IODataType, Message,
@@ -15,6 +14,7 @@ use clawdchat_shared::{
     TcpForwardingAction, TcpForwardingType, TcpStreamHandler, TerminalAction, TerminalLogResponse,
     Tool, UserInfo,
 };
+use portable_pty::{CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;

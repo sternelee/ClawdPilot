@@ -21,38 +21,34 @@ use crate::runtime::{NativeRuntime, RuntimeAdapter};
 use crate::security::SecurityPolicy;
 use std::sync::Arc;
 
-/// Create the default tool registry (shell, file_read, file_write)
 pub fn default_tools(security: Arc<SecurityPolicy>) -> Vec<Box<dyn Tool>> {
     default_tools_with_runtime(security, Arc::new(NativeRuntime::new()))
 }
 
-/// Create the default tool registry with explicit runtime adapter.
 pub fn default_tools_with_runtime(
     security: Arc<SecurityPolicy>,
     runtime: Arc<dyn RuntimeAdapter>,
 ) -> Vec<Box<dyn Tool>> {
     vec![
-        Box::new(ShellTool::new(security.clone(), runtime)),
-        Box::new(FileReadTool::new(security.clone())),
-        Box::new(FileWriteTool::new(security)),
+        Box::new(ShellTool::new(security.clone(), runtime.clone())),
+        Box::new(FileReadTool::new(security.clone(), runtime.clone())),
+        Box::new(FileWriteTool::new(security.clone(), runtime.clone())),
     ]
 }
 
-/// Create full tool registry including memory tools
 pub fn all_tools(security: &Arc<SecurityPolicy>, memory: Arc<dyn Memory>) -> Vec<Box<dyn Tool>> {
     all_tools_with_runtime(security, Arc::new(NativeRuntime::new()), memory)
 }
 
-/// Create full tool registry with explicit runtime.
 pub fn all_tools_with_runtime(
     security: &Arc<SecurityPolicy>,
     runtime: Arc<dyn RuntimeAdapter>,
     memory: Arc<dyn Memory>,
 ) -> Vec<Box<dyn Tool>> {
     vec![
-        Box::new(ShellTool::new(security.clone(), runtime)),
-        Box::new(FileReadTool::new(security.clone())),
-        Box::new(FileWriteTool::new(security.clone())),
+        Box::new(ShellTool::new(security.clone(), runtime.clone())),
+        Box::new(FileReadTool::new(security.clone(), runtime.clone())),
+        Box::new(FileWriteTool::new(security.clone(), runtime.clone())),
         Box::new(MemoryStoreTool::new(memory.clone())),
         Box::new(MemoryRecallTool::new(memory.clone())),
         Box::new(MemoryForgetTool::new(memory)),

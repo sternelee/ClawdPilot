@@ -1,17 +1,18 @@
 use super::traits::{Tool, ToolResult};
+use crate::runtime::RuntimeAdapter;
 use crate::security::SecurityPolicy;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
 
-/// Write file contents with path sandboxing
 pub struct FileWriteTool {
     security: Arc<SecurityPolicy>,
+    runtime: Arc<dyn RuntimeAdapter>,
 }
 
 impl FileWriteTool {
-    pub fn new(security: Arc<SecurityPolicy>) -> Self {
-        Self { security }
+    pub fn new(security: Arc<SecurityPolicy>, runtime: Arc<dyn RuntimeAdapter>) -> Self {
+        Self { security, runtime }
     }
 }
 
@@ -53,7 +54,6 @@ impl Tool for FileWriteTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'content' parameter"))?;
 
-        // Security check: validate path is within workspace
         if !self.security.is_path_allowed(path) {
             return Ok(ToolResult {
                 success: false,
@@ -72,20 +72,9 @@ impl Tool for FileWriteTool {
             });
         };
 
-        // Ensure parent directory exists
-        tokio::fs::create_dir_all(parent).await?;
+        self.runtime.create_dir_all_sync(parent)?;
 
-        // Resolve parent AFTER creation to block symlink escapes.
-        let resolved_parent = match tokio::fs::canonicalize(parent).await {
-            Ok(p) => p,
-            Err(e) => {
-                return Ok(ToolResult {
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Failed to resolve file path: {e}")),
-                });
-            }
-        };
+        let resolved_parent = self.runtime.try_canonicalize(parent)?;
 
         if !self.security.is_resolved_path_allowed(&resolved_parent) {
             return Ok(ToolResult {
@@ -108,9 +97,8 @@ impl Tool for FileWriteTool {
 
         let resolved_target = resolved_parent.join(file_name);
 
-        // If the target already exists and is a symlink, refuse to follow it
-        if let Ok(meta) = tokio::fs::symlink_metadata(&resolved_target).await {
-            if meta.file_type().is_symlink() {
+        if let Ok(meta) = self.runtime.metadata_sync(&resolved_target) {
+            if meta.is_symlink() {
                 return Ok(ToolResult {
                     success: false,
                     output: String::new(),
@@ -122,24 +110,20 @@ impl Tool for FileWriteTool {
             }
         }
 
-        match tokio::fs::write(&resolved_target, content).await {
-            Ok(()) => Ok(ToolResult {
-                success: true,
-                output: format!("Written {} bytes to {path}", content.len()),
-                error: None,
-            }),
-            Err(e) => Ok(ToolResult {
-                success: false,
-                output: String::new(),
-                error: Some(format!("Failed to write file: {e}")),
-            }),
-        }
+        self.runtime.write_file_sync(&resolved_target, content)?;
+
+        Ok(ToolResult {
+            success: true,
+            output: format!("Written {} bytes to {path}", content.len()),
+            error: None,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::NativeRuntime;
     use crate::security::{AutonomyLevel, SecurityPolicy};
 
     fn test_security(workspace: std::path::PathBuf) -> Arc<SecurityPolicy> {
@@ -152,13 +136,19 @@ mod tests {
 
     #[test]
     fn file_write_name() {
-        let tool = FileWriteTool::new(test_security(std::env::temp_dir()));
+        let tool = FileWriteTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         assert_eq!(tool.name(), "file_write");
     }
 
     #[test]
     fn file_write_schema_has_path_and_content() {
-        let tool = FileWriteTool::new(test_security(std::env::temp_dir()));
+        let tool = FileWriteTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let schema = tool.parameters_schema();
         assert!(schema["properties"]["path"].is_object());
         assert!(schema["properties"]["content"].is_object());
@@ -173,7 +163,7 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        let tool = FileWriteTool::new(test_security(dir.clone()));
+        let tool = FileWriteTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "out.txt", "content": "written!"}))
             .await
@@ -195,7 +185,7 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        let tool = FileWriteTool::new(test_security(dir.clone()));
+        let tool = FileWriteTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "a/b/c/deep.txt", "content": "deep"}))
             .await
@@ -219,7 +209,7 @@ mod tests {
             .await
             .unwrap();
 
-        let tool = FileWriteTool::new(test_security(dir.clone()));
+        let tool = FileWriteTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "exist.txt", "content": "new"}))
             .await
@@ -240,7 +230,7 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        let tool = FileWriteTool::new(test_security(dir.clone()));
+        let tool = FileWriteTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "../../etc/evil", "content": "bad"}))
             .await
@@ -253,7 +243,10 @@ mod tests {
 
     #[tokio::test]
     async fn file_write_blocks_absolute_path() {
-        let tool = FileWriteTool::new(test_security(std::env::temp_dir()));
+        let tool = FileWriteTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool
             .execute(json!({"path": "/etc/evil", "content": "bad"}))
             .await
@@ -264,14 +257,20 @@ mod tests {
 
     #[tokio::test]
     async fn file_write_missing_path_param() {
-        let tool = FileWriteTool::new(test_security(std::env::temp_dir()));
+        let tool = FileWriteTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool.execute(json!({"content": "data"})).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn file_write_missing_content_param() {
-        let tool = FileWriteTool::new(test_security(std::env::temp_dir()));
+        let tool = FileWriteTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool.execute(json!({"path": "file.txt"})).await;
         assert!(result.is_err());
     }
@@ -282,7 +281,7 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        let tool = FileWriteTool::new(test_security(dir.clone()));
+        let tool = FileWriteTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "empty.txt", "content": ""}))
             .await
@@ -308,7 +307,10 @@ mod tests {
 
         symlink(&outside, workspace.join("escape_dir")).unwrap();
 
-        let tool = FileWriteTool::new(test_security(workspace.clone()));
+        let tool = FileWriteTool::new(
+            test_security(workspace.clone()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool
             .execute(json!({"path": "escape_dir/hijack.txt", "content": "bad"}))
             .await

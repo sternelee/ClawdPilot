@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
 use crate::message_protocol::AgentType;
+use anyhow::{Context, Result, anyhow};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 

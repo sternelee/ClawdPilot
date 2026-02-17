@@ -76,7 +76,10 @@ impl LocalClientSession {
                 let mut recv = receiver;
                 while let Ok(event) = recv.recv().await {
                     // Handle events - update pending permissions
-                    if matches!(&event.event, clawdchat_shared::agent::AgentEvent::ApprovalRequest { .. }) {
+                    if matches!(
+                        &event.event,
+                        clawdchat_shared::agent::AgentEvent::ApprovalRequest { .. }
+                    ) {
                         debug!("Received approval request event: {:?}", event);
                         // The session will handle permission storage internally
                         // We can query permissions when listing

@@ -645,7 +645,11 @@ impl InteractiveClient {
         let config = ClientConfig {
             ticket,
             relay_url: relay,
-            client_key_path: Some(std::env::current_dir().unwrap().join(".clawdchat_client_key")),
+            client_key_path: Some(
+                std::env::current_dir()
+                    .unwrap()
+                    .join(".clawdchat_client_key"),
+            ),
             ..Default::default()
         };
 

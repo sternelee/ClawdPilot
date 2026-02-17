@@ -1,17 +1,18 @@
 use super::traits::{Tool, ToolResult};
+use crate::runtime::RuntimeAdapter;
 use crate::security::SecurityPolicy;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
 
-/// Read file contents with path sandboxing
 pub struct FileReadTool {
     security: Arc<SecurityPolicy>,
+    runtime: Arc<dyn RuntimeAdapter>,
 }
 
 impl FileReadTool {
-    pub fn new(security: Arc<SecurityPolicy>) -> Self {
-        Self { security }
+    pub fn new(security: Arc<SecurityPolicy>, runtime: Arc<dyn RuntimeAdapter>) -> Self {
+        Self { security, runtime }
     }
 }
 
@@ -44,7 +45,6 @@ impl Tool for FileReadTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing 'path' parameter"))?;
 
-        // Security check: validate path is within workspace
         if !self.security.is_path_allowed(path) {
             return Ok(ToolResult {
                 success: false,
@@ -55,17 +55,7 @@ impl Tool for FileReadTool {
 
         let full_path = self.security.workspace_dir.join(path);
 
-        // Resolve path before reading to block symlink escapes.
-        let resolved_path = match tokio::fs::canonicalize(&full_path).await {
-            Ok(p) => p,
-            Err(e) => {
-                return Ok(ToolResult {
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Failed to resolve file path: {e}")),
-                });
-            }
-        };
+        let resolved_path = self.runtime.try_canonicalize(&full_path)?;
 
         if !self.security.is_resolved_path_allowed(&resolved_path) {
             return Ok(ToolResult {
@@ -78,48 +68,34 @@ impl Tool for FileReadTool {
             });
         }
 
-        // Check file size AFTER canonicalization to prevent TOCTOU symlink bypass
         const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
-        match tokio::fs::metadata(&resolved_path).await {
-            Ok(meta) => {
-                if meta.len() > MAX_FILE_SIZE {
-                    return Ok(ToolResult {
-                        success: false,
-                        output: String::new(),
-                        error: Some(format!(
-                            "File too large: {} bytes (limit: {MAX_FILE_SIZE} bytes)",
-                            meta.len()
-                        )),
-                    });
-                }
-            }
-            Err(e) => {
-                return Ok(ToolResult {
-                    success: false,
-                    output: String::new(),
-                    error: Some(format!("Failed to read file metadata: {e}")),
-                });
-            }
-        }
+        let meta = self.runtime.metadata_sync(&resolved_path)?;
 
-        match tokio::fs::read_to_string(&resolved_path).await {
-            Ok(contents) => Ok(ToolResult {
-                success: true,
-                output: contents,
-                error: None,
-            }),
-            Err(e) => Ok(ToolResult {
+        if meta.len() > MAX_FILE_SIZE {
+            return Ok(ToolResult {
                 success: false,
                 output: String::new(),
-                error: Some(format!("Failed to read file: {e}")),
-            }),
+                error: Some(format!(
+                    "File too large: {} bytes (limit: {MAX_FILE_SIZE} bytes)",
+                    meta.len()
+                )),
+            });
         }
+
+        let contents = self.runtime.read_file_sync(&resolved_path)?;
+
+        Ok(ToolResult {
+            success: true,
+            output: contents,
+            error: None,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::NativeRuntime;
     use crate::security::{AutonomyLevel, SecurityPolicy};
 
     fn test_security(workspace: std::path::PathBuf) -> Arc<SecurityPolicy> {
@@ -132,13 +108,19 @@ mod tests {
 
     #[test]
     fn file_read_name() {
-        let tool = FileReadTool::new(test_security(std::env::temp_dir()));
+        let tool = FileReadTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         assert_eq!(tool.name(), "file_read");
     }
 
     #[test]
     fn file_read_schema_has_path() {
-        let tool = FileReadTool::new(test_security(std::env::temp_dir()));
+        let tool = FileReadTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let schema = tool.parameters_schema();
         assert!(schema["properties"]["path"].is_object());
         assert!(
@@ -158,7 +140,7 @@ mod tests {
             .await
             .unwrap();
 
-        let tool = FileReadTool::new(test_security(dir.clone()));
+        let tool = FileReadTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool.execute(json!({"path": "test.txt"})).await.unwrap();
         assert!(result.success);
         assert_eq!(result.output, "hello world");
@@ -173,10 +155,16 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        let tool = FileReadTool::new(test_security(dir.clone()));
+        let tool = FileReadTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool.execute(json!({"path": "nope.txt"})).await.unwrap();
         assert!(!result.success);
-        assert!(result.error.as_ref().unwrap().contains("Failed to resolve"));
+        assert!(
+            result
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("Failed to canonicalize")
+        );
 
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
@@ -187,7 +175,7 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        let tool = FileReadTool::new(test_security(dir.clone()));
+        let tool = FileReadTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "../../../etc/passwd"}))
             .await
@@ -200,7 +188,10 @@ mod tests {
 
     #[tokio::test]
     async fn file_read_blocks_absolute_path() {
-        let tool = FileReadTool::new(test_security(std::env::temp_dir()));
+        let tool = FileReadTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool.execute(json!({"path": "/etc/passwd"})).await.unwrap();
         assert!(!result.success);
         assert!(result.error.as_ref().unwrap().contains("not allowed"));
@@ -208,7 +199,10 @@ mod tests {
 
     #[tokio::test]
     async fn file_read_missing_path_param() {
-        let tool = FileReadTool::new(test_security(std::env::temp_dir()));
+        let tool = FileReadTool::new(
+            test_security(std::env::temp_dir()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool.execute(json!({})).await;
         assert!(result.is_err());
     }
@@ -220,7 +214,7 @@ mod tests {
         tokio::fs::create_dir_all(&dir).await.unwrap();
         tokio::fs::write(dir.join("empty.txt"), "").await.unwrap();
 
-        let tool = FileReadTool::new(test_security(dir.clone()));
+        let tool = FileReadTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool.execute(json!({"path": "empty.txt"})).await.unwrap();
         assert!(result.success);
         assert_eq!(result.output, "");
@@ -239,7 +233,7 @@ mod tests {
             .await
             .unwrap();
 
-        let tool = FileReadTool::new(test_security(dir.clone()));
+        let tool = FileReadTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool
             .execute(json!({"path": "sub/dir/deep.txt"}))
             .await
@@ -269,7 +263,10 @@ mod tests {
 
         symlink(outside.join("secret.txt"), workspace.join("escape.txt")).unwrap();
 
-        let tool = FileReadTool::new(test_security(workspace.clone()));
+        let tool = FileReadTool::new(
+            test_security(workspace.clone()),
+            Arc::new(NativeRuntime::new()),
+        );
         let result = tool.execute(json!({"path": "escape.txt"})).await.unwrap();
 
         assert!(!result.success);
@@ -290,11 +287,10 @@ mod tests {
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
 
-        // Create a file just over 10 MB
         let big = vec![b'x'; 10 * 1024 * 1024 + 1];
         tokio::fs::write(dir.join("huge.bin"), &big).await.unwrap();
 
-        let tool = FileReadTool::new(test_security(dir.clone()));
+        let tool = FileReadTool::new(test_security(dir.clone()), Arc::new(NativeRuntime::new()));
         let result = tool.execute(json!({"path": "huge.bin"})).await.unwrap();
         assert!(!result.success);
         assert!(result.error.as_ref().unwrap().contains("File too large"));

@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::message_protocol::AgentType;
 use anyhow::{Context, Result, anyhow};
 use codex_apply_patch::StdFs;
 use codex_core::{
@@ -46,7 +47,6 @@ use codex_core::{
     protocol::{EventMsg, Op, ReviewDecision, SessionSource},
 };
 use codex_protocol::user_input::UserInput;
-use crate::message_protocol::AgentType;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;

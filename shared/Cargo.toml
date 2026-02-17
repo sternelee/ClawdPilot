@@ -24,6 +24,9 @@ std = [
 ]
 tokio-full = ["tokio"]
 wasm = []
+tauri-runtime = ["zeroclaw/tauri", "zeroclaw"]
+desktop-runtime = ["zeroclaw/desktop", "zeroclaw"]
+mobile-runtime = ["zeroclaw/mobile", "zeroclaw"]
 
 [dependencies]
 anyhow = { workspace = true }

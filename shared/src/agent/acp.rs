@@ -70,11 +70,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use crate::message_protocol::AgentType;
 use agent_client_protocol as acp;
 use agent_client_protocol::Agent;
 use anyhow::{Context, Result, anyhow};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
-use crate::message_protocol::AgentType;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command;

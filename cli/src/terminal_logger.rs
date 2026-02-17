@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tracing::info;
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 
 /// 默认最大日志行数
 const DEFAULT_MAX_LOG_LINES: usize = 1000;

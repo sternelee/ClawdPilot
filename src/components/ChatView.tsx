@@ -34,6 +34,7 @@ import {
 import { SiGoogle, SiGithub } from "solid-icons/si";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { platform } from "@tauri-apps/plugin-os";
 import { chatStore } from "../stores/chatStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -361,6 +362,56 @@ export function ChatView(props: ChatViewProps) {
   const [spawnProjectPath, setSpawnProjectPath] = createSignal("");
   const [spawnArgs, setSpawnArgs] = createSignal("");
   const [isSpawning, setIsSpawning] = createSignal(false);
+
+  // Platform-based agent types filter
+  const [isMobilePlatform, setIsMobilePlatform] = createSignal(false);
+  onMount(async () => {
+    try {
+      const currentPlatform = await platform();
+      setIsMobilePlatform(
+        currentPlatform === "android" || currentPlatform === "ios",
+      );
+    } catch {
+      setIsMobilePlatform(false);
+    }
+  });
+
+  const availableAgentTypes = (): AgentType[] => {
+    if (isMobilePlatform()) {
+      return ["zeroclaw", "custom"];
+    }
+    return [
+      "claude",
+      "codex",
+      "opencode",
+      "gemini",
+      "copilot",
+      "qwen",
+      "zeroclaw",
+      "custom",
+    ];
+  };
+
+  const agentTypeLabel = (type: AgentType): string => {
+    const labels: Record<AgentType, string> = {
+      claude: "Claude Code",
+      codex: "Codex",
+      opencode: "OpenCode",
+      gemini: "Gemini CLI",
+      copilot: "GitHub Copilot",
+      qwen: "Qwen Code",
+      zeroclaw: "ClawdAI",
+      custom: "Custom (P2P)",
+    };
+    return labels[type] || type;
+  };
+
+  // Set default agent type based on platform
+  createEffect(() => {
+    if (isMobilePlatform()) {
+      setSpawnAgentType("zeroclaw");
+    }
+  });
 
   // Auto-scroll to bottom when new messages arrive
   createEffect(() => {
@@ -1165,14 +1216,13 @@ export function ChatView(props: ChatViewProps) {
                   setSpawnAgentType(e.currentTarget.value as AgentType)
                 }
               >
-                <option value="claude">Claude Code</option>
-                <option value="codex">Codex</option>
-                <option value="opencode">OpenCode</option>
-                <option value="gemini">Gemini CLI</option>
-                <option value="copilot">GitHub Copilot</option>
-                <option value="qwen">Qwen Code</option>
-                <option value="zeroclaw">ClawdAI</option>
-                <option value="custom">Custom</option>
+                <For each={availableAgentTypes()}>
+                  {(agentType) => (
+                    <option value={agentType}>
+                      {agentTypeLabel(agentType)}
+                    </option>
+                  )}
+                </For>
               </Select>
             </div>
 

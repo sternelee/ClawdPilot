@@ -6,13 +6,14 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use anyhow::{Context, Result};
 use crate::message_protocol::AgentType;
+use anyhow::{Context, Result};
 use tokio::sync::broadcast;
 use tracing::{debug, error, info};
 
 use super::events::{AgentEvent, AgentTurnEvent, PendingPermission};
 use zeroclaw::agent::TurnCallback;
+use zeroclaw::runtime::RuntimeAdapter;
 
 /// ZeroClaw session — in-process LLM agent
 pub struct ZeroClawSession {
@@ -127,12 +128,28 @@ impl ZeroClawSession {
         let memory: Arc<dyn zeroclaw::memory::Memory> =
             Arc::from(zeroclaw::memory::create_memory("sqlite", &working_dir)?);
 
-        // Create security policy and tools
+        // Create security policy
         let security = Arc::new(zeroclaw::security::SecurityPolicy::from_config(
             &zeroclaw::config::AutonomyConfig::default(),
             &working_dir,
         ));
-        let tools_registry = zeroclaw::tools::all_tools(&security, memory.clone());
+
+        // Create tools with appropriate runtime based on feature flags
+        #[cfg(any(
+            feature = "tauri-runtime",
+            feature = "desktop-runtime",
+            feature = "mobile-runtime"
+        ))]
+        let runtime: Arc<dyn RuntimeAdapter> = Arc::new(zeroclaw::runtime::TauriRuntime::new());
+        #[cfg(not(any(
+            feature = "tauri-runtime",
+            feature = "desktop-runtime",
+            feature = "mobile-runtime"
+        )))]
+        let runtime: Arc<dyn RuntimeAdapter> = Arc::new(zeroclaw::runtime::NativeRuntime::new());
+
+        let tools_registry =
+            zeroclaw::tools::all_tools_with_runtime(&security, runtime, memory.clone());
 
         info!(
             "ZeroClaw session created: id={}, provider={}, model={}",

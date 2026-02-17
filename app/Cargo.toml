@@ -43,7 +43,7 @@ tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-http = "2"
 tauri-plugin-os = "2"
-clawdchat-shared = { path = "../shared" }
+clawdchat-shared = { path = "../shared", features = ["tauri-runtime"] }
 iroh-tickets = { workspace = true }
 
 [features]
