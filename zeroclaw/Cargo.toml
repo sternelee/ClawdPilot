@@ -3,12 +3,6 @@ name = "zeroclaw"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-tauri = []
-desktop = []
-mobile = []
-default = []
-
 [dependencies]
 tokio = { workspace = true }
 anyhow = { workspace = true }
@@ -23,6 +17,42 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 sha2 = "0.10"
 directories = "5.0"
+
+# Skills and SkillForge dependencies
+toml = "1.0"
+console = "0.15"
+
+# Cron dependencies
+cron = "0.12"
+rand = "0.8"
+
+# HTTP request tool
+http-body-util = "0.1"
+
+# Git operations
+git2 = { version = "0.18", default-features = false }
+
+# Browser automation (optional)
+fantoccini = { version = "0.22.0", optional = true, default-features = false, features = ["rustls-tls"] }
+
+# PDF extraction for RAG (optional)
+pdf-extract = { version = "0.10", optional = true }
+
+# Composio integration (uses reqwest directly, no composio crate)
+# composio = { version = "0.6", optional = true }
+
+# Screenshot/image processing
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[features]
+default = []
+tauri = []
+desktop = []
+mobile = []
+# Enable PDF support for RAG
+rag-pdf = ["dep:pdf-extract"]
+# Enable browser automation tools
+browser = ["dep:fantoccini"]
 
 [dev-dependencies]
 tempfile = "3.13"

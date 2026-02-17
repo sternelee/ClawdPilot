@@ -7,6 +7,7 @@
 use crate::memory::Memory;
 use crate::providers::{ChatMessage, Provider};
 use crate::tools::Tool;
+use crate::util::truncate_with_ellipsis;
 use anyhow::Result;
 use std::fmt::Write;
 use std::time::Instant;
@@ -15,8 +16,17 @@ use uuid::Uuid;
 /// Maximum agentic tool-use iterations per user message to prevent runaway loops.
 pub const MAX_TOOL_ITERATIONS: usize = 10;
 
-/// Maximum number of non-system messages to keep in history.
+/// Trigger auto-compaction when non-system message count exceeds this threshold.
 pub const MAX_HISTORY_MESSAGES: usize = 50;
+
+/// Keep this many most-recent non-system messages after compaction.
+const COMPACTION_KEEP_RECENT_MESSAGES: usize = 20;
+
+/// Safety cap for compaction source transcript passed to the summarizer.
+const COMPACTION_MAX_SOURCE_CHARS: usize = 12_000;
+
+/// Max characters retained in stored compaction summary.
+const COMPACTION_MAX_SUMMARY_CHARS: usize = 2_000;
 
 /// Callback trait for agent turn events (tool started, text produced, etc.)
 /// Implement this to bridge zeroclaw events into clawdchat's AgentTurnEvent system.
@@ -194,20 +204,97 @@ pub fn parse_tool_calls(response: &str) -> (String, Vec<(String, serde_json::Val
         }
     }
 
-    if calls.is_empty() {
-        for value in extract_json_values(response) {
-            let parsed = parse_tool_calls_from_json_value(&value);
-            for c in parsed {
-                calls.push((c.name, c.arguments));
-            }
-        }
-    }
+    // SECURITY: We do NOT fall back to extracting arbitrary JSON from the response
+    // here. That would enable prompt injection attacks where malicious content
+    // (e.g., in emails, files, or web pages) could include JSON that mimics a
+    // tool call. Tool calls MUST be explicitly wrapped in either:
+    // 1. OpenAI-style JSON with a "tool_calls" array
+    // 2. ZeroClaw <invoke>...</invoke> tags
+    // This ensures only the LLM's intentional tool calls are executed.
 
     if !remaining.trim().is_empty() {
         text_parts.push(remaining.trim().to_string());
     }
 
     (text_parts.join("\n"), calls)
+}
+
+/// Build a transcript from conversation messages for compaction.
+fn build_compaction_transcript(messages: &[ChatMessage]) -> String {
+    let mut transcript = String::new();
+    for msg in messages {
+        let role = msg.role.to_uppercase();
+        let _ = writeln!(transcript, "{}: {}", role, msg.content.trim());
+    }
+
+    if transcript.chars().count() > COMPACTION_MAX_SOURCE_CHARS {
+        truncate_with_ellipsis(&transcript, COMPACTION_MAX_SOURCE_CHARS)
+    } else {
+        transcript
+    }
+}
+
+/// Apply a compaction summary to the history, replacing old messages with a summary.
+fn apply_compaction_summary(
+    history: &mut Vec<ChatMessage>,
+    start: usize,
+    compact_end: usize,
+    summary: &str,
+) {
+    let summary_msg = ChatMessage::assistant(format!("[Compaction summary]\n{}", summary.trim()));
+    history.splice(start..compact_end, std::iter::once(summary_msg));
+}
+
+/// Auto-compact conversation history when it grows too large.
+///
+/// This function summarizes older messages into a single context message,
+/// preserving key information while reducing token usage.
+pub async fn auto_compact_history(
+    history: &mut Vec<ChatMessage>,
+    provider: &dyn Provider,
+    model: &str,
+) -> anyhow::Result<bool> {
+    let has_system = history.first().map_or(false, |m| m.role == "system");
+    let non_system_count = if has_system {
+        history.len().saturating_sub(1)
+    } else {
+        history.len()
+    };
+
+    if non_system_count <= MAX_HISTORY_MESSAGES {
+        return Ok(false);
+    }
+
+    let start = if has_system { 1 } else { 0 };
+    let keep_recent = COMPACTION_KEEP_RECENT_MESSAGES.min(non_system_count);
+    let compact_count = non_system_count.saturating_sub(keep_recent);
+    if compact_count == 0 {
+        return Ok(false);
+    }
+
+    let compact_end = start + compact_count;
+    let to_compact: Vec<ChatMessage> = history[start..compact_end].to_vec();
+    let transcript = build_compaction_transcript(&to_compact);
+
+    let summarizer_system = "You are a conversation compaction engine. Summarize older chat history into concise context for future turns. Preserve: user preferences, commitments, decisions, unresolved tasks, key facts. Omit: filler, repeated chit-chat, verbose tool logs. Output plain text bullet points only.";
+
+    let summarizer_user = format!(
+        "Summarize the following conversation history for context preservation. Keep it short (max 12 bullet points).\n\n{}",
+        transcript
+    );
+
+    let summary_raw = provider
+        .chat_with_system(Some(summarizer_system), &summarizer_user, model, 0.2)
+        .await
+        .unwrap_or_else(|_| {
+            // Fallback to deterministic local truncation when summarization fails.
+            truncate_with_ellipsis(&transcript, COMPACTION_MAX_SUMMARY_CHARS)
+        });
+
+    let summary = truncate_with_ellipsis(&summary_raw, COMPACTION_MAX_SUMMARY_CHARS);
+    apply_compaction_summary(history, start, compact_end, &summary);
+
+    Ok(true)
 }
 
 /// Trim conversation history to prevent unbounded growth.
@@ -302,6 +389,14 @@ pub async fn agent_turn(
             let final_text = if text.is_empty() { response } else { text };
             callback.on_text(&final_text);
             callback.on_turn_completed();
+
+            // Auto-compaction before returning to preserve long-context signal
+            if let Ok(compacted) = auto_compact_history(history, provider, model).await {
+                if compacted {
+                    // Compaction was successful
+                }
+            }
+
             return Ok(final_text);
         }
 
@@ -407,5 +502,34 @@ mod tests {
         assert!(instructions.contains("file_read"));
         assert!(instructions.contains("file_write"));
         assert!(instructions.contains("<tool_call>"));
+    }
+
+    #[test]
+    fn build_compaction_transcript_formats_roles() {
+        let messages = vec![
+            ChatMessage::user("I like dark mode"),
+            ChatMessage::assistant("Got it"),
+        ];
+        let transcript = build_compaction_transcript(&messages);
+        assert!(transcript.contains("USER: I like dark mode"));
+        assert!(transcript.contains("ASSISTANT: Got it"));
+    }
+
+    #[test]
+    fn apply_compaction_summary_replaces_old_segment() {
+        let mut history = vec![
+            ChatMessage::system("sys"),
+            ChatMessage::user("old 1"),
+            ChatMessage::assistant("old 2"),
+            ChatMessage::user("recent 1"),
+            ChatMessage::assistant("recent 2"),
+        ];
+
+        apply_compaction_summary(&mut history, 1, 3, "- user prefers concise replies");
+
+        assert_eq!(history.len(), 4);
+        assert!(history[1].content.contains("Compaction summary"));
+        assert!(history[2].content.contains("recent 1"));
+        assert!(history[3].content.contains("recent 2"));
     }
 }

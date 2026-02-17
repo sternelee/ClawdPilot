@@ -374,7 +374,7 @@ mod tests {
             text: "Hello".to_string(),
         };
 
-        let content = event_to_message_content(&event, None);
+        let content = event_to_agent_message_content(&event, None);
         match content {
             AgentMessageContent::TextDelta { text, thinking, .. } => {
                 assert_eq!(text, "Hello");
@@ -391,7 +391,7 @@ mod tests {
             text: "Thinking...".to_string(),
         };
 
-        let content = event_to_message_content(&event, None);
+        let content = event_to_agent_message_content(&event, None);
         match content {
             AgentMessageContent::TextDelta { text, thinking, .. } => {
                 assert_eq!(text, "Thinking...");
@@ -410,7 +410,7 @@ mod tests {
             input: Some(serde_json::json!({"command": "ls"})),
         };
 
-        let content = event_to_message_content(&event, None);
+        let content = event_to_agent_message_content(&event, None);
         match content {
             AgentMessageContent::ToolCallUpdate {
                 tool_name, status, ..
@@ -431,7 +431,7 @@ mod tests {
             code: Some("E001".to_string()),
         };
 
-        let content = event_to_message_content(&event, None);
+        let content = event_to_agent_message_content(&event, None);
         match content {
             AgentMessageContent::TurnError { error } => {
                 assert_eq!(error, "Something went wrong");

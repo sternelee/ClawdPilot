@@ -11,3 +11,30 @@ pub mod runtime;
 pub mod security;
 pub mod tools;
 pub mod util;
+
+// Core functionality modules
+pub mod skills;
+pub mod skillforge;
+pub mod rag;
+pub mod cron;
+
+// Re-export common types
+pub use tools::Tool;
+pub use tools::{ToolResult, ToolSpec};
+
+// Skill commands enum (for CLI integration)
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum SkillCommands {
+    /// List all installed skills
+    List,
+    /// Install a new skill from a URL or local path
+    Install {
+        /// Source URL or local path
+        source: String,
+    },
+    /// Remove an installed skill
+    Remove {
+        /// Skill name to remove
+        name: String,
+    },
+}
