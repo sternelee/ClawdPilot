@@ -4,7 +4,7 @@
  * Sidebar for managing AI agent sessions in a unified list.
  */
 
-import { createSignal, onMount, Show, For, type Component } from "solid-js";
+import { onMount, Show, For, type Component } from "solid-js";
 import {
   FiPlus,
   FiX,
@@ -20,15 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { AgentType } from "../stores/sessionStore";
-import {
-  Alert,
-  Button,
-  Dialog,
-  Input,
-  Select,
-  Textarea,
-  Label,
-} from "./ui/primitives";
+import { Button } from "./ui/primitives";
 
 // ============================================================================
 // Agent Icons
@@ -216,27 +208,6 @@ interface SessionSidebarProps {
 }
 
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
-  const [showNewSessionModal, setShowNewSessionModal] = createSignal(false);
-  const [newSessionAgent, setNewSessionAgent] =
-    createSignal<AgentType>("claude");
-  const [newSessionPath, setNewSessionPath] = createSignal("");
-  const [newSessionMode, setNewSessionMode] = createSignal<"remote" | "local">(
-    "remote",
-  );
-
-  // ZeroClaw provider config
-  const [zeroClawProvider, setZeroClawProvider] = createSignal("ollama");
-  const [zeroClawModel, setZeroClawModel] = createSignal("qwen3:8b");
-  const [zeroClawApiKey, setZeroClawApiKey] = createSignal("");
-  const [zeroClawTemperature, setZeroClawTemperature] = createSignal("0.7");
-
-  // Remote connection state
-  const [sessionTicket, setSessionTicket] = createSignal("");
-  const [connecting, setConnecting] = createSignal(false);
-  const [connectionError, setConnectionError] = createSignal<string | null>(
-    null,
-  );
-
   const sessions = () => sessionStore.getSessions();
   const activeSession = () => sessionStore.getActiveSession();
   const activeSessions = () => sessionStore.getActiveSessions();
@@ -299,112 +270,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       });
     }
     sessionStore.removeSession(sessionId);
-  };
-
-  // Handle remote ticket connection
-  const handleRemoteConnect = async () => {
-    const ticket = sessionTicket().trim();
-    if (!ticket) {
-      setConnectionError("Please enter a session ticket");
-      return;
-    }
-
-    setConnecting(true);
-    setConnectionError(null);
-
-    try {
-      const sessionId = await invoke<string>("connect_to_host", {
-        sessionTicket: ticket,
-      });
-
-      // Add remote session to store
-      sessionStore.addSession({
-        sessionId,
-        agentType: newSessionAgent(),
-        projectPath: "",
-        startedAt: Date.now(),
-        active: true,
-        controlledByRemote: false,
-        hostname: "remote",
-        os: "remote",
-        currentDir: "",
-        machineId: "remote",
-        mode: "remote",
-      });
-
-      sessionStore.setActiveSession(sessionId);
-      setShowNewSessionModal(false);
-      setSessionTicket("");
-      notificationStore.success("Connected to remote host", "System");
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      setConnectionError(errorMessage);
-      notificationStore.error(`Connection failed: ${errorMessage}`, "Error");
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const handleCreateSession = () => {
-    if (newSessionMode() === "remote") {
-      handleRemoteConnect();
-      return;
-    }
-
-    if (!newSessionPath().trim()) {
-      notificationStore.error("Please enter a project path", "Error");
-      return;
-    }
-
-    // Create local agent session
-    // Build extra args for ZeroClaw provider config
-    const extraArgs: string[] = [];
-    if (newSessionAgent() === "zeroclaw") {
-      extraArgs.push(zeroClawProvider());
-      extraArgs.push(zeroClawModel());
-      if (zeroClawApiKey().trim()) {
-        extraArgs.push(zeroClawApiKey().trim());
-      } else {
-        extraArgs.push(""); // placeholder for api_key
-      }
-      extraArgs.push(zeroClawTemperature());
-    }
-
-    invoke<string>("local_start_agent", {
-      agentTypeStr: newSessionAgent(),
-      projectPath: newSessionPath(),
-      sessionId: undefined,
-      extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
-    })
-      .then((sessionId) => {
-        const newSession = {
-          sessionId,
-          agentType: newSessionAgent(),
-          projectPath: newSessionPath(),
-          startedAt: Date.now(),
-          active: true,
-          controlledByRemote: false,
-          hostname: "localhost",
-          os: navigator.userAgent,
-          currentDir: newSessionPath(),
-          machineId: "local",
-          mode: "local" as const,
-        };
-
-        sessionStore.addSession(newSession);
-        sessionStore.setActiveSession(sessionId);
-        setShowNewSessionModal(false);
-        setNewSessionPath("");
-        notificationStore.success("Local agent session started", "System");
-      })
-      .catch((error) => {
-        console.error(
-          "[handleCreateSession] Failed to start local agent:",
-          error,
-        );
-        notificationStore.error("Failed to start local agent", "Error");
-      });
   };
 
   // Handle spawning remote session from local session
@@ -500,7 +365,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               type="button"
               size="sm"
               variant="primary"
-              onClick={() => setShowNewSessionModal(true)}
+              onClick={() => sessionStore.openNewSessionModal("local")}
               title="New Session"
             >
               <FiPlus size={18} />
@@ -508,256 +373,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           </div>
         </div>
       </aside>
-
-      {/* New Session Modal */}
-      <Show when={showNewSessionModal()}>
-        <Dialog
-          open={showNewSessionModal()}
-          onClose={() => setShowNewSessionModal(false)}
-          contentClass="max-w-md max-h-[90%] overflow-auto"
-        >
-          <div>
-            <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
-              <FiPlus size={20} />
-              New Session
-            </h3>
-
-            {/* Mode Toggle */}
-            <div class="flex gap-2 mb-4">
-              <Button
-                type="button"
-                variant={newSessionMode() === "remote" ? "primary" : "ghost"}
-                onClick={() => {
-                  setNewSessionMode("remote");
-                  setConnectionError(null);
-                }}
-              >
-                <FiCloud class="mr-1" /> Remote
-              </Button>
-              <Button
-                type="button"
-                variant={newSessionMode() === "local" ? "primary" : "ghost"}
-                onClick={() => {
-                  setNewSessionMode("local");
-                  setConnectionError(null);
-                }}
-              >
-                <FiHome class="mr-1" /> Local
-              </Button>
-            </div>
-
-            {/* Remote Mode: Ticket Input */}
-            <Show when={newSessionMode() === "remote"}>
-              <div class="mb-4 space-y-2">
-                <Label for="session-ticket">Session Ticket</Label>
-                <Textarea
-                  id="session-ticket"
-                  class="h-24 font-mono text-sm"
-                  placeholder="Paste the session ticket from CLI host..."
-                  value={sessionTicket()}
-                  onInput={(e) => {
-                    setSessionTicket(e.currentTarget.value);
-                    setConnectionError(null);
-                  }}
-                  onKeyDown={(e) => {
-                    if (
-                      e.key === "Enter" &&
-                      !e.shiftKey &&
-                      sessionTicket().trim()
-                    ) {
-                      e.preventDefault();
-                      handleRemoteConnect();
-                    }
-                  }}
-                />
-                <p class="text-xs text-base-content/50">
-                  Run `cli host` to get a session ticket
-                </p>
-              </div>
-
-              <Show when={connectionError()}>
-                <Alert variant="error" class="mb-4 py-2">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-4 w-4 shrink-0"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <title>Error</title>
-                    <path
-                      fill-rule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                  <span class="text-sm">{connectionError()}</span>
-                </Alert>
-              </Show>
-            </Show>
-
-            {/* Local Mode: Agent Config */}
-            <Show when={newSessionMode() === "local"}>
-              <div class="mb-4 space-y-2">
-                <Label for="agent-type">Agent Type</Label>
-                <Select
-                  id="agent-type"
-                  value={newSessionAgent()}
-                  onChange={(e) =>
-                    setNewSessionAgent(e.currentTarget.value as AgentType)
-                  }
-                >
-                  <option value="claude">Claude Code</option>
-                  <option value="codex">Codex</option>
-                  <option value="zeroclaw">ZeroClaw</option>
-                  <option value="gemini">Gemini CLI</option>
-                  <option value="opencode">OpenCode</option>
-                  <option value="copilot">GitHub Copilot</option>
-                  <option value="qwen">Qwen Code</option>
-                  <option value="custom">Custom</option>
-                </Select>
-              </div>
-
-              {/* ZeroClaw Provider Config */}
-              <Show when={newSessionAgent() === "zeroclaw"}>
-                <div class="mb-4 space-y-2">
-                  <Label for="provider">Provider</Label>
-                  <Select
-                    id="provider"
-                    value={zeroClawProvider()}
-                    onChange={(e) => {
-                      setZeroClawProvider(e.currentTarget.value);
-                      // Set sensible default model per provider
-                      const defaults: Record<string, string> = {
-                        ollama: "qwen3:8b",
-                        anthropic: "claude-sonnet-4-20250514",
-                        openai: "gpt-4o",
-                        gemini: "gemini-2.0-flash",
-                        deepseek: "deepseek-chat",
-                        openrouter: "anthropic/claude-sonnet-4",
-                        groq: "llama-3.3-70b-versatile",
-                        mistral: "mistral-large-latest",
-                        glm: "glm-4-plus",
-                      };
-                      const model = defaults[e.currentTarget.value];
-                      if (model) setZeroClawModel(model);
-                    }}
-                  >
-                    <option value="ollama">Ollama (Local)</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="groq">Groq</option>
-                    <option value="mistral">Mistral</option>
-                    <option value="glm">GLM / Zhipu</option>
-                    <option value="opencode">OpenCode</option>
-                    <option value="zai">Z.AI</option>
-                  </Select>
-                </div>
-
-                <div class="mb-4 space-y-2">
-                  <Label for="model">Model</Label>
-                  <Input
-                    id="model"
-                    type="text"
-                    value={zeroClawModel()}
-                    onInput={(e) => setZeroClawModel(e.currentTarget.value)}
-                    placeholder="e.g. qwen3:8b"
-                    class="font-mono text-sm"
-                  />
-                </div>
-
-                <Show when={zeroClawProvider() !== "ollama"}>
-                  <div class="mb-4 space-y-2">
-                    <Label for="api-key">API Key</Label>
-                    <Input
-                      id="api-key"
-                      type="password"
-                      value={zeroClawApiKey()}
-                      onInput={(e) => setZeroClawApiKey(e.currentTarget.value)}
-                      placeholder="sk-... (or leave empty to use env var)"
-                      class="font-mono text-sm"
-                    />
-                    <p class="text-xs text-base-content/50">
-                      Leave empty to use environment variable
-                    </p>
-                  </div>
-                </Show>
-
-                <div class="mb-4 space-y-2">
-                  <Label for="temperature">Temperature</Label>
-                  <Input
-                    id="temperature"
-                    type="number"
-                    value={zeroClawTemperature()}
-                    onInput={(e) =>
-                      setZeroClawTemperature(e.currentTarget.value)
-                    }
-                    placeholder="0.7"
-                    class="font-mono text-sm w-24"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                  />
-                </div>
-              </Show>
-
-              <div class="mb-4 space-y-2">
-                <Label for="project-path">Project Path</Label>
-                <Input
-                  id="project-path"
-                  type="text"
-                  value={newSessionPath()}
-                  onInput={(e) => setNewSessionPath(e.currentTarget.value)}
-                  placeholder="/path/to/project"
-                  class="font-mono text-sm"
-                />
-              </div>
-            </Show>
-
-            <div class="mt-6 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setShowNewSessionModal(false);
-                  setConnectionError(null);
-                  setSessionTicket("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Show
-                when={newSessionMode() === "remote"}
-                fallback={
-                  <Button
-                    type="button"
-                    variant="primary"
-                    onClick={handleCreateSession}
-                    disabled={!newSessionPath().trim()}
-                  >
-                    Create Session
-                  </Button>
-                }
-              >
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={handleRemoteConnect}
-                  disabled={!sessionTicket().trim() || connecting()}
-                  loading={connecting()}
-                >
-                  <Show when={connecting()} fallback={<span>Connect</span>}>
-                    Connecting...
-                  </Show>
-                </Button>
-              </Show>
-            </div>
-          </div>
-        </Dialog>
-      </Show>
     </>
   );
 };

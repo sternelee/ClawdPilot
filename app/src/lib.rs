@@ -2411,10 +2411,10 @@ async fn local_list_agents(
     state: State<'_, AppState>,
 ) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
-    let manager = agent_manager_guard
-        .as_ref()
-        .ok_or("Agent manager not initialized")?
-        .clone();
+    let manager = match agent_manager_guard.as_ref() {
+        Some(m) => m.clone(),
+        None => return Ok(Vec::new()),
+    };
 
     let session_ids = manager.list_sessions().await;
     let mut sessions = Vec::new();
@@ -2447,10 +2447,10 @@ async fn local_get_agent_sessions(
     state: State<'_, AppState>,
 ) -> Result<Vec<riterm_shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
-    let manager = agent_manager_guard
-        .as_ref()
-        .ok_or("Agent manager not initialized")?
-        .clone();
+    let manager = match agent_manager_guard.as_ref() {
+        Some(m) => m.clone(),
+        None => return Ok(Vec::new()),
+    };
 
     let session_ids = manager.list_sessions().await;
     let mut sessions = Vec::new();

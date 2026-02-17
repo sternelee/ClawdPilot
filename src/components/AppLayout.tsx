@@ -125,7 +125,10 @@ export const AppLayout: Component = () => {
                   Manage multiple AI agent sessions in one place. Create a new
                   session to get started.
                 </p>
-                <Button variant="primary" onClick={() => setSidebarOpen(true)}>
+                <Button
+                  variant="primary"
+                  onClick={() => sessionStore.openNewSessionModal("local")}
+                >
                   Create Session
                 </Button>
               </div>

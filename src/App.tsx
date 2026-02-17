@@ -6,13 +6,13 @@
  */
 
 import { createSignal, onMount, onCleanup } from "solid-js";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Toaster } from "solid-sonner";
 
 // Components
 import { AppLayout } from "./components/AppLayout";
 import { SettingsModal } from "./components/SettingsModal";
+import { NewSessionModal } from "./components/NewSessionModal";
 import { NotificationDisplay } from "./components/NotificationDisplay";
 
 // Stores
@@ -28,22 +28,9 @@ export default function App() {
 
   // Initialize app on mount
   onMount(() => {
-    initializeApp();
+    // Listen for agent session creation events
+    setupEventListeners();
   });
-
-  const initializeApp = async () => {
-    try {
-      // Initialize P2P network
-      const nodeId = await invoke<string>("initialize_network");
-      console.log("Network initialized:", nodeId);
-
-      // Listen for agent session creation events
-      setupEventListeners();
-    } catch (error) {
-      console.error("Failed to initialize app:", error);
-      notificationStore.error("Failed to initialize app", "Error");
-    }
-  };
 
   const setupEventListeners = async () => {
     // Listen for agent session creation responses from CLI
@@ -107,6 +94,9 @@ export default function App() {
         isOpen={isSettingsOpen()}
         onClose={() => setIsSettingsOpen(false)}
       />
+
+      {/* New Session Modal */}
+      <NewSessionModal />
 
       {/* Notification Display */}
       <NotificationDisplay position="top-right" />
