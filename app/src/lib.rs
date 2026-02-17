@@ -12,12 +12,22 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
+#[cfg(target_os = "macos")]
+use tauri_nspanel::{ManagerExt, PanelBuilder, PanelLevel, StyleMask};
+
+#[cfg(target_os = "macos")]
+pub mod macos_panel {
+    use tauri::Manager;
+    use tauri_nspanel::tauri_panel;
+    tauri_panel!(FloatingPanel {});
+}
+
 mod tcp_forwarding;
 
 use lib::AgentManager;
 use riterm_shared::{
     AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, Event,
-    EventListener, EventType, IODataType, Message, MessageBuilder, MessagePayload,
+    EventListener, EventType, IODataType, Message as RitermMessage, MessageBuilder, MessagePayload,
     QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType, TcpForwardingAction,
     TcpForwardingType, TerminalAction,
 };
@@ -1066,7 +1076,7 @@ async fn connect_to_peer(
     let cancellation_token_for_tcp = cancellation_token.clone();
 
     // Create a channel to send messages from the listener task to the sender task
-    let (tcp_msg_tx, mut tcp_msg_rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
+    let (tcp_msg_tx, mut tcp_msg_rx) = tokio::sync::mpsc::unbounded_channel::<RitermMessage>();
 
     // Get a clone of the quic_client handle for sending messages
     let quic_client_handle_opt = {
@@ -1153,7 +1163,7 @@ async fn connect_to_peer(
                             tracing::debug!("TCP message to forward: session_id={}, connection_id={}, data_type={:?}",
                                 msg.session_id, msg.connection_id, msg.data_type);
 
-                            // Convert TcpMessageRequest to Message and send to sender task
+                            // Convert TcpMessageRequest to RitermMessage and send to sender task
                             let message = MessageBuilder::tcp_data(
                                 "riterm_app".to_string(),
                                 msg.session_id,
@@ -1292,7 +1302,7 @@ async fn connect_to_peer(
 async fn send_message_via_client(
     state: &State<'_, AppState>,
     connection_id: &str,
-    message: Message,
+    message: RitermMessage,
     operation_name: &str,
 ) -> Result<(), String> {
     let client_guard = state.quic_client.read().await;
@@ -1710,6 +1720,41 @@ async fn get_terminal_logs(
     Ok(())
 }
 
+#[tauri::command]
+#[cfg(target_os = "macos")]
+async fn show_panel(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // Create panel if it doesn't exist
+    if app_handle.get_webview_panel("main").is_err() {
+        let _panel = PanelBuilder::<_, macos_panel::FloatingPanel<_>>::new(&app_handle, "main")
+            .style_mask(
+                StyleMask::default()
+                    .titled()
+                    .closable()
+                    .resizable()
+                    .full_size_content_view()
+                    .nonactivating_panel(),
+            )
+            .level(PanelLevel::Floating)
+            .build();
+    }
+
+    let panel = app_handle
+        .get_webview_panel("main")
+        .map_err(|e| format!("Panel error: {:?}", e))?;
+    panel.show();
+
+    Ok(())
+}
+
+#[tauri::command]
+#[cfg(target_os = "macos")]
+async fn hide_panel(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Ok(panel) = app_handle.get_webview_panel("main") {
+        panel.hide();
+    }
+    Ok(())
+}
+
 // === TCP Forwarding Management Commands ===
 
 #[tauri::command(rename_all = "camelCase")]
@@ -1988,7 +2033,7 @@ async fn send_slash_command(
                     };
 
                     // Create RemoteSpawn message
-                    let spawn_message = Message::new(
+                    let spawn_message = RitermMessage::new(
                         riterm_shared::MessageType::RemoteSpawn,
                         "app".to_string(),
                         riterm_shared::MessagePayload::RemoteSpawn(
@@ -2034,7 +2079,7 @@ async fn send_slash_command(
     match command_type {
         "passthrough" => {
             // Send as AgentControl::SendInput
-            let control_message = Message::new(
+            let control_message = RitermMessage::new(
                 riterm_shared::MessageType::AgentControl,
                 "app".to_string(),
                 riterm_shared::MessagePayload::AgentControl(riterm_shared::AgentControlMessage {
@@ -2088,7 +2133,7 @@ async fn remote_spawn_session(
     };
 
     // Create RemoteSpawn message
-    let spawn_message = Message::new(
+    let spawn_message = RitermMessage::new(
         riterm_shared::MessageType::RemoteSpawn,
         "app".to_string(),
         riterm_shared::MessagePayload::RemoteSpawn(riterm_shared::RemoteSpawnMessage {
@@ -2151,7 +2196,7 @@ async fn respond_to_agent_permission(
         reason: None,
     };
 
-    let permission_message = Message::new(
+    let permission_message = RitermMessage::new(
         riterm_shared::MessageType::AgentPermission,
         "app".to_string(),
         riterm_shared::MessagePayload::AgentPermission(riterm_shared::AgentPermissionMessage {
@@ -2192,7 +2237,7 @@ async fn send_agent_message(
     };
 
     // Send as AgentControl::SendInput
-    let control_message = Message::new(
+    let control_message = RitermMessage::new(
         riterm_shared::MessageType::AgentControl,
         "app".to_string(),
         riterm_shared::MessagePayload::AgentControl(riterm_shared::AgentControlMessage {
@@ -2457,6 +2502,11 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init());
 
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.plugin(tauri_nspanel::init());
+    }
+
     #[cfg(desktop)]
     {
         builder = builder
@@ -2512,6 +2562,11 @@ pub fn run() {
             local_send_agent_message,
             local_list_agents,
             local_get_agent_sessions,
+            // macOS Panel Commands
+            #[cfg(target_os = "macos")]
+            show_panel,
+            #[cfg(target_os = "macos")]
+            hide_panel,
         ])
         .setup(|_app| {
             // No additional setup needed - ensure_quic_client_initialized handles auto-initialization
