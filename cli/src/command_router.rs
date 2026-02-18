@@ -217,7 +217,6 @@ impl CommandRouter {
     fn parse_agent_type(&self, s: &str) -> Result<AgentType> {
         match s.to_lowercase().as_str() {
             "claude" | "claudecode" | "claude-code" => Ok(AgentType::ClaudeCode),
-            "claude_acp" | "claudeacp" => Ok(AgentType::ClaudeAcp),
             "opencode" | "open" | "openai" => Ok(AgentType::OpenCode),
             "codex" | "openai-codex" | "openai-codex-cli" => Ok(AgentType::Codex),
             "gemini" | "gemini-cli" => Ok(AgentType::Gemini),
@@ -254,7 +253,7 @@ impl CommandRouter {
             AgentType::Copilot => COPILOT_SPECIFIC_COMMANDS,
             AgentType::Qwen => QWEN_SPECIFIC_COMMANDS,
             AgentType::CodeBuddy | AgentType::Goose | AgentType::OpenClaw => &[],
-            AgentType::ClaudeAcp | AgentType::AcpAgent | AgentType::Custom | AgentType::ZeroClaw => &[],
+            AgentType::AcpAgent | AgentType::Custom | AgentType::ZeroClaw => &[],
         };
 
         for cmd in agent_commands {
@@ -406,7 +405,7 @@ impl CommandRouter {
                 AgentType::Copilot => COPILOT_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::Qwen => QWEN_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::CodeBuddy | AgentType::Goose | AgentType::OpenClaw => false,
-                AgentType::ClaudeAcp | AgentType::AcpAgent | AgentType::Custom | AgentType::ZeroClaw => false,
+                AgentType::AcpAgent | AgentType::Custom | AgentType::ZeroClaw => false,
             }
     }
 

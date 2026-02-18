@@ -982,7 +982,6 @@ export function ChatView(props: ChatViewProps) {
       case "zeroclaw":
         return <FiActivity size={24} />;
       case "claude":
-      case "claude_acp":
         return <FiTerminal size={24} />;
       default:
         return <FiTerminal size={24} />;
@@ -999,7 +998,6 @@ export function ChatView(props: ChatViewProps) {
             <div>
               <h2 class="text-lg font-semibold">
                 {props.agentType === "claude" && "Claude Code"}
-                {props.agentType === "claude_acp" && "Claude (ACP)"}
                 {props.agentType === "codex" && "Codex"}
                 {props.agentType === "opencode" && "OpenCode"}
                 {props.agentType === "gemini" && "Gemini CLI"}

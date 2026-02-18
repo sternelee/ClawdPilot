@@ -5,8 +5,22 @@
  * Managed by sessionStore for global accessibility.
  */
 
-import { Show, createMemo, For, type Component, createSignal, onCleanup, onMount } from "solid-js";
-import { FiPlus, FiHome, FiCloud, FiFolder, FiChevronRight } from "solid-icons/fi";
+import {
+  Show,
+  createMemo,
+  For,
+  type Component,
+  createSignal,
+  onCleanup,
+  onMount,
+} from "solid-js";
+import {
+  FiPlus,
+  FiHome,
+  FiCloud,
+  FiFolder,
+  FiChevronRight,
+} from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { sessionStore, AgentType } from "../stores/sessionStore";
@@ -36,7 +50,9 @@ export const NewSessionModal: Component = () => {
   const [dirEntries, setDirEntries] = createSignal<DirEntry[]>([]);
   const [isLoadingDirs, setIsLoadingDirs] = createSignal(false);
   const [showDirPicker, setShowDirPicker] = createSignal(false);
-  const [currentRequestId, setCurrentRequestId] = createSignal<string | null>(null);
+  const [currentRequestId, setCurrentRequestId] = createSignal<string | null>(
+    null,
+  );
 
   let unlistenDirListing: UnlistenFn | null = null;
 
@@ -77,7 +93,8 @@ export const NewSessionModal: Component = () => {
 
     // Check if we have an active remote session
     const remoteSession = remoteConnections()[0];
-    const isRemote = sessionStore.state.newSessionMode === "remote" && remoteSession;
+    const isRemote =
+      sessionStore.state.newSessionMode === "remote" && remoteSession;
 
     if (isRemote) {
       // Use P2P to list remote directory
@@ -118,7 +135,9 @@ export const NewSessionModal: Component = () => {
 
   const selectDirectory = (entry: DirEntry) => {
     const currentPath = sessionStore.state.newSessionPath;
-    const basePath = currentPath.endsWith("/") ? currentPath : currentPath + "/";
+    const basePath = currentPath.endsWith("/")
+      ? currentPath
+      : currentPath + "/";
     const newPath = basePath + entry.name + "/";
     sessionStore.setNewSessionPath(newPath);
     loadDirectory(newPath);
@@ -287,14 +306,14 @@ export const NewSessionModal: Component = () => {
                   )
                 }
               >
+                <option value="zeroclaw">ClawdAI</option>
                 <option value="claude">Claude Code</option>
-                <option value="claude_acp">Claude (ACP)</option>
                 <option value="codex">Codex</option>
+                <option value="openclaw">OpenClaw</option>
                 <option value="opencode">OpenCode</option>
                 <option value="gemini">Gemini CLI</option>
                 <option value="copilot">GitHub Copilot</option>
                 <option value="qwen">Qwen Code</option>
-                <option value="zeroclaw">ClawdAI</option>
                 <option value="custom">Custom</option>
               </Select>
             </div>
@@ -416,7 +435,9 @@ export const NewSessionModal: Component = () => {
                   <button
                     type="button"
                     class="absolute right-2 top-1/2 -translate-y-1/2 btn btn-ghost btn-xs btn-square"
-                    onClick={() => loadDirectory(sessionStore.state.newSessionPath)}
+                    onClick={() =>
+                      loadDirectory(sessionStore.state.newSessionPath)
+                    }
                   >
                     <FiChevronRight
                       class={`transition-transform ${showDirPicker() && dirEntries().length > 0 ? "rotate-90" : ""}`}
@@ -430,13 +451,17 @@ export const NewSessionModal: Component = () => {
                     <Show
                       when={!isLoadingDirs()}
                       fallback={
-                        <div class="p-2 text-sm text-base-content/50">Loading...</div>
+                        <div class="p-2 text-sm text-base-content/50">
+                          Loading...
+                        </div>
                       }
                     >
                       <Show
                         when={dirEntries().length > 0}
                         fallback={
-                          <div class="p-2 text-sm text-base-content/50">Empty directory</div>
+                          <div class="p-2 text-sm text-base-content/50">
+                            Empty directory
+                          </div>
                         }
                       >
                         <For each={dirEntries()}>

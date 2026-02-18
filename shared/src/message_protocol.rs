@@ -559,8 +559,6 @@ pub struct UserInfo {
 pub enum AgentType {
     /// Claude Code (Anthropic) — SDK Control Protocol
     ClaudeCode,
-    /// Claude via ACP (Zed-style: @zed-industries/claude-agent-acp)
-    ClaudeAcp,
     /// OpenCode (OpenAI)
     OpenCode,
     /// OpenAI Codex (OpenAI)
@@ -571,6 +569,12 @@ pub enum AgentType {
     Copilot,
     /// Qwen Code (Alibaba Cloud)
     Qwen,
+    /// CodeBuddy (Tencent) — uses npx @tencent-ai/codebuddy-code --acp
+    CodeBuddy,
+    /// Goose (Block) — uses "goose acp" subcommand
+    Goose,
+    /// OpenClaw (OpenClaw) — uses WebSocket Gateway
+    OpenClaw,
     /// Agent Client Protocol (ACP) compatible agent
     AcpAgent,
     /// ZeroClaw built-in agent (multi-provider LLM, tool use, memory)
