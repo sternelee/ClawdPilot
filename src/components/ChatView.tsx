@@ -34,22 +34,12 @@ import {
 import { SiGoogle, SiGithub } from "solid-icons/si";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { platform } from "@tauri-apps/plugin-os";
 import { chatStore } from "../stores/chatStore";
+import { sessionStore } from "../stores/sessionStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { ChatMessage, PermissionRequest } from "../stores/chatStore";
-import {
-  Alert,
-  Badge,
-  Button,
-  Dialog,
-  Input,
-  Kbd,
-  Select,
-  Spinner,
-  Label,
-} from "./ui/primitives";
+import { Alert, Badge, Button, Spinner, Kbd } from "./ui/primitives";
 import { MarkdownRenderer } from "solid-markdown-wasm";
 
 // ============================================================================
@@ -251,7 +241,7 @@ function MessageBubble(props: { message: ChatMessage }) {
         </Show>
       </div>
       <div
-        class={`max-w-[min(38rem,92vw)] rounded-xl border px-4 py-3 shadow-sm ${bubbleClass()}`}
+        class={`max-w-[92vw] rounded-xl border px-4 py-3 shadow-sm ${bubbleClass()}`}
       >
         <div class="prose prose-sm wrap-break-words text-sm max-w-none">
           <MarkdownRenderer markdown={props.message.content} />
@@ -331,6 +321,9 @@ function PermissionRequestCard(props: {
 // ============================================================================
 
 export function ChatView(props: ChatViewProps) {
+  const session = () => sessionStore.getSession(props.sessionId);
+  const isActive = () => session()?.active !== false;
+
   const messages = () => chatStore.getMessages(props.sessionId);
   const pendingPermissions = () =>
     chatStore.getPendingPermissions(props.sessionId);
@@ -353,65 +346,6 @@ export function ChatView(props: ChatViewProps) {
       if (isAtBottom !== isScrolledToBottom()) {
         setIsScrolledToBottom(isAtBottom);
       }
-    }
-  });
-
-  // Remote spawn state
-  const [showSpawnModal, setShowSpawnModal] = createSignal(false);
-  const [spawnAgentType, setSpawnAgentType] = createSignal<AgentType>("claude");
-  const [spawnProjectPath, setSpawnProjectPath] = createSignal("");
-  const [spawnArgs, setSpawnArgs] = createSignal("");
-  const [isSpawning, setIsSpawning] = createSignal(false);
-
-  // Platform-based agent types filter
-  const [isMobilePlatform, setIsMobilePlatform] = createSignal(false);
-  onMount(async () => {
-    try {
-      const currentPlatform = await platform();
-      setIsMobilePlatform(
-        currentPlatform === "android" || currentPlatform === "ios",
-      );
-    } catch {
-      setIsMobilePlatform(false);
-    }
-  });
-
-  const availableAgentTypes = (): AgentType[] => {
-    if (isMobilePlatform()) {
-      return ["zeroclaw", "custom"];
-    }
-    return [
-      "claude",
-      "claude_acp",
-      "codex",
-      "opencode",
-      "gemini",
-      "copilot",
-      "qwen",
-      "zeroclaw",
-      "custom",
-    ];
-  };
-
-  const agentTypeLabel = (type: AgentType): string => {
-    const labels: Record<AgentType, string> = {
-      claude: "Claude Code",
-      claude_acp: "Claude (ACP)",
-      codex: "Codex",
-      opencode: "OpenCode",
-      gemini: "Gemini CLI",
-      copilot: "GitHub Copilot",
-      qwen: "Qwen Code",
-      zeroclaw: "ClawdAI",
-      custom: "Custom (P2P)",
-    };
-    return labels[type] || type;
-  };
-
-  // Set default agent type based on platform
-  createEffect(() => {
-    if (isMobilePlatform()) {
-      setSpawnAgentType("zeroclaw");
     }
   });
 
@@ -912,10 +846,37 @@ export function ChatView(props: ChatViewProps) {
         }
       } else {
         // Remote agent - add user message to store
+        console.log(
+          "[ChatView] Sending to remote agent:",
+          sessionId,
+          content.substring(0, 50),
+        );
         chatStore.addMessage(sessionId, {
           role: "user",
           content,
         });
+        try {
+          const controlSessionId =
+            sessionStore.getSession(sessionId)?.controlSessionId;
+          await invoke("send_agent_message", {
+            sessionId,
+            content,
+            controlSessionId,
+          });
+          console.log("[ChatView] Remote message sent successfully");
+        } catch (error) {
+          console.error("[ChatView] Failed to send remote message:", error);
+          const errorMsg =
+            error instanceof Error
+              ? error.message
+              : "Failed to send message to remote agent";
+          notificationStore.error(errorMsg, "Remote Agent Error");
+          chatStore.addMessage(sessionId, {
+            role: "system",
+            content: `Error: ${errorMsg}`,
+          });
+          setIsStreaming(false);
+        }
       }
       props.onSendMessage?.(content);
     }
@@ -923,7 +884,19 @@ export function ChatView(props: ChatViewProps) {
 
   const handleAbort = async () => {
     try {
-      await invoke("abort_agent_action", { sessionId: props.sessionId });
+      if (props.sessionMode === "local") {
+        await invoke("local_abort_agent_action", {
+          sessionId: props.sessionId,
+        });
+      } else {
+        const controlSessionId = sessionStore.getSession(
+          props.sessionId,
+        )?.controlSessionId;
+        await invoke("abort_agent_action", {
+          sessionId: props.sessionId,
+          controlSessionId,
+        });
+      }
       setIsStreaming(false);
       notificationStore.success("Action aborted", "System");
       chatStore.addMessage(props.sessionId, {
@@ -943,12 +916,38 @@ export function ChatView(props: ChatViewProps) {
     }
   };
 
-  const handlePermissionResponse = (
+  const handlePermissionResponse = async (
     permissionId: string,
     response: "approved" | "denied" | "approved_for_session",
   ) => {
     chatStore.respondToPermission(props.sessionId, permissionId, response);
     chatStore.clearPermission(props.sessionId, permissionId);
+
+    try {
+      if (props.sessionMode === "local") {
+        await invoke("local_respond_to_agent_permission", {
+          sessionId: props.sessionId,
+          permissionId,
+          approved: response !== "denied",
+          approveForSession: response === "approved_for_session",
+        });
+      } else {
+        const controlSessionId = sessionStore.getSession(
+          props.sessionId,
+        )?.controlSessionId;
+        await invoke("respond_to_agent_permission", {
+          sessionId: props.sessionId,
+          permissionId,
+          approved: response !== "denied",
+          approveForSession: response === "approved_for_session",
+          controlSessionId,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to respond to permission:", error);
+      notificationStore.error("Failed to send permission response", "Error");
+    }
+
     props.onPermissionResponse?.(permissionId, response);
 
     // Resume streaming if approved?
@@ -958,30 +957,15 @@ export function ChatView(props: ChatViewProps) {
     }
   };
 
-  const handleSpawnSession = async () => {
-    const projectPath = spawnProjectPath().trim();
-    if (!projectPath) {
-      notificationStore.error("Please enter a project path", "Spawn Session");
-      return;
-    }
-
-    setIsSpawning(true);
-    try {
-      const args = spawnArgs().trim().split(/\s+/).filter(Boolean);
-      props.onSpawnRemoteSession?.(spawnAgentType(), projectPath, args);
-      notificationStore.success(
-        `New ${spawnAgentType()} session created`,
-        "Spawn Session",
-      );
-      setShowSpawnModal(false);
-      setSpawnProjectPath("");
-      setSpawnArgs("");
-    } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to spawn session";
-      notificationStore.error(errorMsg, "Spawn Session Error");
-    } finally {
-      setIsSpawning(false);
+  const handleOpenSpawnModal = () => {
+    const s = session();
+    if (s?.mode === "remote") {
+      // Open modal in remote mode with current connection selected
+      const controlId = s.controlSessionId || s.sessionId;
+      sessionStore.openNewSessionModal("remote", controlId);
+    } else {
+      // Open modal in local mode
+      sessionStore.openNewSessionModal("local");
     }
   };
 
@@ -1034,21 +1018,9 @@ export function ChatView(props: ChatViewProps) {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <Show when={isStreaming()}>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              class="animate-pulse"
-              onClick={handleAbort}
-            >
-              <FiSquare size={20} />
-              <span class="hidden sm:inline">Stop</span>
-            </Button>
-          </Show>
           <Button
             type="button"
-            onClick={() => setShowSpawnModal(true)}
+            onClick={handleOpenSpawnModal}
             variant="ghost"
             size="icon"
             class="h-8 w-8"
@@ -1163,121 +1135,56 @@ export function ChatView(props: ChatViewProps) {
 
       {/* Input Area */}
       <div class="p-4 bg-base-100 border-t border-base-300">
-        <div class="flex w-full gap-2 shadow-sm items-end">
-          <textarea
-            value={inputValue()}
-            onInput={(e) => {
-              setInputValue(e.currentTarget.value);
-              // Auto-resize
-              e.currentTarget.style.height = "auto";
-              e.currentTarget.style.height =
-                Math.min(e.currentTarget.scrollHeight, 200) + "px";
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your message..."
-            class="textarea textarea-bordered flex-1 min-h-10 max-h-50 resize-none leading-normal"
-            aria-label="Chat input"
-            autofocus
-            rows={1}
-          />
-          <Button
-            type="button"
-            onClick={handleSend}
-            disabled={!inputValue().trim() || isStreaming()}
-            class="shrink-0"
-            aria-label="Send message"
-          >
-            <Show when={!isStreaming()} fallback={<Spinner size="xs" />}>
-              <FiSend size={20} />
-            </Show>
-          </Button>
-        </div>
-        <div class="mt-2 flex justify-between px-1">
-          <span class="text-xs text-base-content/40">Markdown supported</span>
-          <span class="text-xs text-base-content/40">
-            <Kbd>Shift+Enter</Kbd> new line, <Kbd>Enter</Kbd> to send
-          </span>
-        </div>
-      </div>
-
-      {/* Remote Spawn Modal */}
-      <Show when={showSpawnModal()}>
-        <Dialog
-          open={showSpawnModal()}
-          onClose={() => !isSpawning() && setShowSpawnModal(false)}
-          contentClass="max-w-md"
+        <Show
+          when={isActive()}
+          fallback={
+            <div class="flex items-center justify-center p-4 bg-base-200/50 rounded-lg border border-dashed border-base-300">
+              <span class="text-sm text-base-content/50 flex items-center gap-2">
+                <FiAlertTriangle size={16} />
+                This session is inactive. Connection might be lost.
+              </span>
+            </div>
+          }
         >
-          <div>
-            <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
-              <FiPlus size={20} />
-              Spawn New Remote Session
-            </h3>
-
-            <div class="mb-4 space-y-2">
-              <Label for="agent-type">Agent Type</Label>
-              <Select
-                id="agent-type"
-                value={spawnAgentType()}
-                onInput={(e) =>
-                  setSpawnAgentType(e.currentTarget.value as AgentType)
-                }
-              >
-                <For each={availableAgentTypes()}>
-                  {(agentType) => (
-                    <option value={agentType}>
-                      {agentTypeLabel(agentType)}
-                    </option>
-                  )}
-                </For>
-              </Select>
-            </div>
-
-            <div class="mb-4 space-y-2">
-              <Label for="project-path">Project Path</Label>
-              <Input
-                id="project-path"
-                type="text"
-                placeholder="/path/to/project"
-                class="font-mono text-sm"
-                value={spawnProjectPath()}
-                onInput={(e) => setSpawnProjectPath(e.currentTarget.value)}
-              />
-            </div>
-
-            <div class="mb-6 space-y-2">
-              <Label for="spawn-args">Additional Arguments</Label>
-              <Input
-                id="spawn-args"
-                type="text"
-                placeholder="--arg1 value1"
-                class="font-mono text-sm"
-                value={spawnArgs()}
-                onInput={(e) => setSpawnArgs(e.currentTarget.value)}
-              />
-            </div>
-
-            <div class="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setShowSpawnModal(false)}
-                disabled={isSpawning()}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={handleSpawnSession}
-                disabled={!spawnProjectPath().trim()}
-                loading={isSpawning()}
-              >
-                Spawn Session
-              </Button>
-            </div>
+          <div class="flex w-full gap-2 shadow-sm items-end">
+            <textarea
+              value={inputValue()}
+              onInput={(e) => {
+                setInputValue(e.currentTarget.value);
+                // Auto-resize
+                e.currentTarget.style.height = "auto";
+                e.currentTarget.style.height =
+                  Math.min(e.currentTarget.scrollHeight, 200) + "px";
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message..."
+              class="textarea textarea-bordered flex-1 min-h-10 max-h-50 resize-none leading-normal"
+              aria-label="Chat input"
+              autofocus
+              disabled={!isActive()}
+              rows={1}
+            />
+            <Button
+              type="button"
+              onClick={isStreaming() ? handleAbort : handleSend}
+              disabled={!isStreaming() && (!inputValue().trim() || !isActive())}
+              class="shrink-0 chat-send-btn"
+              variant={isStreaming() ? "destructive" : "default"}
+              aria-label={isStreaming() ? "Stop generation" : "Send message"}
+            >
+              <Show when={!isStreaming()} fallback={<FiSquare size={20} />}>
+                <FiSend size={20} />
+              </Show>
+            </Button>
           </div>
-        </Dialog>
-      </Show>
+          <div class="mt-2 flex justify-between px-1">
+            <span class="text-xs text-base-content/40">Markdown supported</span>
+            <span class="text-xs text-base-content/40">
+              <Kbd>Shift+Enter</Kbd> new line, <Kbd>Enter</Kbd> to send
+            </span>
+          </div>
+        </Show>
+      </div>
     </div>
   );
 }
