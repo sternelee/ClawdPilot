@@ -1,5 +1,6 @@
 // Platform-independent tools (available on all platforms)
 pub mod composio;
+pub mod enhanced_screenshot;
 pub mod file_read;
 pub mod file_write;
 pub mod http_request;
@@ -29,6 +30,7 @@ pub mod shell;
 
 // Re-exports
 pub use composio::ComposioTool;
+pub use enhanced_screenshot::EnhancedScreenshotTool;
 pub use file_read::FileReadTool;
 pub use file_write::FileWriteTool;
 pub use http_request::HttpRequestTool;
@@ -109,7 +111,8 @@ pub fn desktop_tools_with_runtime(
     vec![
         Box::new(ShellTool::new(security.clone(), runtime.clone())),
         Box::new(FileReadTool::new(security.clone(), runtime.clone())),
-        Box::new(FileWriteTool::new(security.clone(), runtime)),
+        Box::new(FileWriteTool::new(security.clone(), runtime.clone())),
+        Box::new(EnhancedScreenshotTool::new(security.clone(), runtime.clone())),
         Box::new(GitOperationsTool::with_security(security.clone())),
         Box::new(HttpRequestTool::with_security(security.clone())),
         Box::new(ImageInfoTool::new(security.clone())),
