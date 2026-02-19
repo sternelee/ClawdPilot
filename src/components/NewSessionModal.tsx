@@ -18,12 +18,12 @@ import { FiPlus, FiHome, FiCloud, FiChevronRight } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { sessionStore, AgentType } from "../stores/sessionStore";
-import { Alert } from "./ui/alert";
-import { Button } from "./ui/button";
+import { Alert } from "./ui/primitives";
+import { Button } from "./ui/primitives";
 import { Combobox } from "./ui/combobox";
-import { Dialog } from "./ui/dialog";
-import { Label } from "./ui/label";
-import { Select } from "./ui/select";
+import { Dialog } from "./ui/primitives";
+import { Label } from "./ui/primitives";
+import { Select } from "./ui/primitives";
 import { Input, Textarea } from "./ui/primitives";
 
 interface DirEntry {

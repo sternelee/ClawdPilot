@@ -152,14 +152,14 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
       />
 
+      {/* New Session Modal */}
+      <NewSessionModal />
+
       {/* ClawdAI Config Modal */}
       <ZeroclawConfigModal
         isOpen={sessionStore.state.isZeroClawConfigOpen}
         onClose={() => sessionStore.setZeroClawConfigOpen(false)}
       />
-
-      {/* New Session Modal */}
-      <NewSessionModal />
 
       {/* Notification Display */}
       <NotificationDisplay position="top-right" />

@@ -39,9 +39,9 @@ import { sessionStore } from "../stores/sessionStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { ChatMessage, PermissionRequest } from "../stores/chatStore";
-import { Alert } from "./ui/alert";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
+import { Alert } from "./ui/primitives";
+import { Badge } from "./ui/primitives";
+import { Button } from "./ui/primitives";
 import { Spinner, Kbd } from "./ui/primitives";
 import { MarkdownRenderer } from "solid-markdown-wasm";
 
@@ -196,9 +196,9 @@ function MessageBubble(props: { message: ChatMessage }) {
   const isUser = () => props.message.role === "user";
   const isSystem = () => props.message.role === "system";
   const bubbleClass = () => {
-    if (isUser()) return "bg-primary text-primary-foreground border-primary";
-    if (isSystem()) return "bg-foreground text-background border-foreground";
-    return "bg-secondary text-secondary-foreground border-secondary";
+    if (isUser()) return "bg-base-300 text-primary-foreground border-primary";
+    if (isSystem()) return "bg-base-300 text-background border-foreground";
+    return "bg-base-300 text-secondary-foreground border-secondary";
   };
 
   const handleCopy = () => {
@@ -1179,7 +1179,9 @@ export function ChatView(props: ChatViewProps) {
             </Button>
           </div>
           <div class="mt-2 flex justify-between px-1">
-            <span class="text-xs text-muted-foreground/40">Markdown supported</span>
+            <span class="text-xs text-muted-foreground/40">
+              Markdown supported
+            </span>
             <span class="text-xs text-muted-foreground/40">
               <Kbd>Shift+Enter</Kbd> new line, <Kbd>Enter</Kbd> to send
             </span>

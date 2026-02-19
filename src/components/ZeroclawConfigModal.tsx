@@ -1,8 +1,8 @@
 import { For, Show } from "solid-js";
 import { sessionStore } from "../stores/sessionStore";
-import { Button } from "./ui/button";
-import { Dialog } from "./ui/dialog";
-import { Label } from "./ui/label";
+import { Button } from "./ui/primitives";
+import { Dialog } from "./ui/primitives";
+import { Label } from "./ui/primitives";
 import { Input, Textarea } from "./ui/primitives";
 
 interface ZeroclawConfigModalProps {
@@ -127,9 +127,7 @@ export function ZeroclawConfigModal(props: ZeroclawConfigModalProps) {
             </div>
 
             <Show when={state().zeroClawEnabledTools.length === 0}>
-              <p class="text-warning text-sm">
-                请至少选择一个工具
-              </p>
+              <p class="text-warning text-sm">请至少选择一个工具</p>
             </Show>
           </div>
         </div>

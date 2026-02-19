@@ -1,154 +1,27 @@
 @import "tailwindcss";
+@plugin "daisyui" {
+  themes:
+    sunset --default,
+    dark --prefersdark;
+}
+
 @tailwind utilities;
-
-@theme {
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-info: var(--info);
-  --color-info-foreground: var(--info-foreground);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
-  --color-error: var(--error);
-  --color-error-foreground: var(--error-foreground);
-
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
-}
-
-@custom-variant dark (&:is(.dark *));
-
-@layer base {
-  :root {
-    --radius: 0.625rem;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-
-    --destructive: oklch(0.577 0.245 27.325);
-    --destructive-foreground: oklch(0.985 0 0);
-
-    --info: oklch(0.55 0.15 220);
-    --info-foreground: oklch(0.985 0 0);
-
-    --success: oklch(0.45 0.15 150);
-    --success-foreground: oklch(0.985 0 0);
-
-    --warning: oklch(0.55 0.18 45);
-    --warning-foreground: oklch(0.985 0 0);
-
-    --error: oklch(0.577 0.245 27.325);
-    --error-foreground: oklch(0.985 0 0);
-
-    --ring: oklch(0.708 0 0);
-
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-  }
-
-  .dark,
-  [data-kb-theme="dark"] {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-
-    --border: oklch(1 0 0 / 15%);
-    --input: oklch(1 0 0 / 15%);
-
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-
-    --destructive: oklch(0.704 0.191 22.216);
-    --destructive-foreground: oklch(0.985 0 0);
-
-    --info: oklch(0.6 0.15 230);
-    --info-foreground: oklch(0.985 0 0);
-
-    --success: oklch(0.55 0.18 150);
-    --success-foreground: oklch(0.985 0 0);
-
-    --warning: oklch(0.6 0.18 55);
-    --warning-foreground: oklch(0.985 0 0);
-
-    --error: oklch(0.65 0.22 30);
-    --error-foreground: oklch(0.985 0 0);
-
-    --ring: oklch(0.556 0 0);
-
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-  }
-}
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-base-content/20;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-base-100 text-base-content;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
   }
+}
+
+input:focus,
+textarea:focus {
+  outline: none !important;
 }
 
 @layer utilities {
@@ -157,7 +30,7 @@
   }
 
   .step:before {
-    @apply absolute w-9 h-9 bg-muted rounded-full font-mono font-medium text-center text-base inline-flex items-center justify-center -indent-px border-4 border-background;
+    @apply absolute w-9 h-9 bg-base-300 rounded-full font-mono font-medium text-center text-base inline-flex items-center justify-center -indent-px border-4 border-base-100;
     @apply ml-[-50px] mt-[-4px];
     content: counter(step);
   }
@@ -382,7 +255,9 @@
 
   .chat-input:focus {
     border-color: oklch(var(--primary));
-    box-shadow: 0 0 0 3px oklch(var(--primary) / 0.15), 0 0 0 1px oklch(var(--primary) / 0.1);
+    box-shadow:
+      0 0 0 3px oklch(var(--primary) / 0.15),
+      0 0 0 1px oklch(var(--primary) / 0.1);
     outline: none;
   }
 
@@ -450,219 +325,6 @@
     50% {
       opacity: 0.7;
     }
-  }
-
-  /* DaisyUI-style button classes */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 0.625rem 1.25rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border-radius: var(--radius);
-    border: none;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    background: var(--primary);
-    color: var(--primary-foreground);
-  }
-
-  .btn:hover {
-    filter: brightness(1.1);
-  }
-
-  .btn:active {
-    transform: scale(0.98);
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* Semantic colors - Superset high-contrast style */
-  :root {
-    --color-success: oklch(0.45 0.15 150);
-    --color-warning: oklch(0.55 0.18 45);
-    --color-error: oklch(0.577 0.245 27.325);
-    --color-info: oklch(0.55 0.15 220);
-  }
-
-  .dark {
-    --color-success: oklch(0.55 0.18 150);
-    --color-warning: oklch(0.6 0.18 55);
-    --color-error: oklch(0.65 0.22 30);
-    --color-info: oklch(0.6 0.15 230);
-  }
-
-  .text-success {
-    color: var(--color-success);
-  }
-  .text-warning {
-    color: var(--color-warning);
-  }
-  .text-error {
-    color: var(--color-error);
-  }
-  .text-info {
-    color: var(--color-info);
-  }
-
-  .bg-success {
-    background-color: var(--color-success);
-  }
-  .bg-warning {
-    background-color: var(--color-warning);
-  }
-  .bg-error {
-    background-color: var(--color-error);
-  }
-  .bg-info {
-    background-color: var(--color-info);
-  }
-
-  .border-success {
-    border-color: var(--color-success);
-  }
-  .border-warning {
-    border-color: var(--color-warning);
-  }
-  .border-error {
-    border-color: var(--color-error);
-  }
-  .border-info {
-    border-color: var(--color-info);
-  }
-
-  /* Button variants */
-  .btn-ghost {
-    background: transparent;
-    color: var(--foreground);
-  }
-
-  .btn-ghost:hover {
-    background: var(--muted);
-  }
-
-  .btn-primary {
-    background: var(--primary);
-    color: var(--primary-foreground);
-  }
-
-  .btn-secondary {
-    background: var(--secondary);
-    color: var(--secondary-foreground);
-  }
-
-  .btn-accent {
-    background: var(--accent);
-    color: var(--accent-foreground);
-  }
-
-  .btn-error {
-    background: var(--destructive);
-    color: white;
-  }
-
-  .btn-success {
-    background: oklch(0.45 0.15 150);
-    color: white;
-  }
-
-  .btn-warning {
-    background: oklch(0.55 0.18 45);
-    color: white;
-  }
-
-  /* Button sizes */
-  .btn-xs {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.75rem;
-  }
-
-  .btn-sm {
-    padding: 0.375rem 0.75rem;
-    font-size: 0.8125rem;
-  }
-
-  .btn-md {
-    padding: 0.625rem 1.25rem;
-    font-size: 0.875rem;
-  }
-
-  .btn-lg {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-  }
-
-  .btn-square {
-    padding: 0.625rem;
-    aspect-ratio: 1;
-  }
-
-  .btn-square.btn-xs {
-    padding: 0.25rem;
-    aspect-ratio: 1;
-  }
-
-  .btn-square.btn-sm {
-    padding: 0.375rem;
-    aspect-ratio: 1;
-  }
-
-  .btn-square.btn-lg {
-    padding: 0.75rem;
-    aspect-ratio: 1;
-  }
-
-  .btn-circle {
-    border-radius: 9999px;
-    aspect-ratio: 1;
-  }
-
-  /* Enhanced button interactions */
-  .btn:active:not(:disabled) {
-    transform: scale(0.98);
-  }
-
-  .btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px oklch(var(--background)), 0 0 0 4px oklch(var(--primary));
-  }
-
-  /* Input hint text */
-  .chat-input-hint {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.25rem 0.75rem;
-    font-size: 0.75rem;
-    color: oklch(var(--muted-foreground));
-  }
-
-  .chat-input-hint kbd {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.125rem 0.375rem;
-    margin: 0 0.125rem;
-    background: oklch(var(--muted));
-    border: 1px solid oklch(var(--border));
-    border-radius: 0.25rem;
-    font-size: 0.6875rem;
-    font-family: inherit;
-  }
-
-  /* Legacy textarea-bordered override for DaisyUI */
-  .textarea-bordered {
-    background: var(--background) !important;
-    border-color: var(--border) !important;
-    color: var(--foreground) !important;
-  }
-
-  .textarea-bordered:focus {
-    border-color: var(--primary) !important;
-    box-shadow: 0 0 0 3px oklch(var(--primary) / 0.15) !important;
   }
 
   /* Smart keyboard-aware height calculation */
@@ -970,11 +632,11 @@
 
   /* Focus ring improvements */
   .focus-ring {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-base-100;
   }
 
   .focus-ring-inset {
-    @apply outline-none ring-2 ring-ring ring-inset;
+    @apply outline-none ring-2 ring-primary ring-inset;
   }
 
   /* Interactive states */
@@ -992,12 +654,16 @@
 
   /* Glass effect */
   .glass {
-    @apply bg-background/80 backdrop-blur-md border border-border/50;
+    @apply bg-base-100/80 backdrop-blur-md border border-base-content/20;
   }
 
   /* Gradient backgrounds */
   .gradient-primary {
-    background: linear-gradient(135deg, oklch(var(--primary)) 0%, oklch(var(--primary) / 0.8) 100%);
+    background: linear-gradient(
+      135deg,
+      oklch(var(--primary)) 0%,
+      oklch(var(--primary) / 0.8) 100%
+    );
   }
 
   /* Subtle shadows */
@@ -1006,7 +672,9 @@
   }
 
   .shadow-card {
-    box-shadow: 0 4px 6px -1px oklch(0 0 0 / 0.1), 0 2px 4px -2px oklch(0 0 0 / 0.1);
+    box-shadow:
+      0 4px 6px -1px oklch(0 0 0 / 0.1),
+      0 2px 4px -2px oklch(0 0 0 / 0.1);
   }
 
   /* Reduce animations for performance */

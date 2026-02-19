@@ -6,11 +6,11 @@ import {
   LanguageType,
   FontSizeType,
 } from "../stores/settingsStore";
-import { Button } from "./ui/button";
-import { Dialog } from "./ui/dialog";
-import { Label } from "./ui/label";
-import { Select } from "./ui/select";
-import { Switch } from "./ui/switch";
+import { Button } from "./ui/primitives";
+import { Dialog } from "./ui/primitives";
+import { Label } from "./ui/primitives";
+import { Select } from "./ui/primitives";
+import { Switch } from "./ui/primitives";
 
 interface SettingsModalProps {
   isOpen: boolean;

@@ -1,6 +1,7 @@
 import { createSignal, createEffect } from "solid-js";
 
 export type ThemeType =
+  | "sunset"
   | "dark"
   | "light"
   | "corporate"
@@ -32,7 +33,7 @@ export interface UserSettings {
 }
 
 const defaultSettings: UserSettings = {
-  theme: "dark",
+  theme: "sunset",
   language: "en",
   fontSize: "medium",
   enableAnimations: true,
@@ -95,12 +96,6 @@ createEffect(() => {
     "extra-large": "text-xl",
   }[currentSettings.fontSize];
   document.body.classList.add(fontSizeClass);
-
-  // Apply terminal opacity
-  document.body.style.setProperty(
-    "--terminal-opacity",
-    currentSettings.terminalOpacity.toString(),
-  );
 
   // Toggle animations
   document.body.classList.toggle(

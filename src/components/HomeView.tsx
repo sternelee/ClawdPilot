@@ -15,10 +15,10 @@ import {
   getTicketHistory,
 } from "../utils/localStorage";
 import { getTicketDisplayId } from "../utils/ticketParser";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Card, CardTitle } from "./ui/card";
-import { Dialog } from "./ui/dialog";
+import { Badge } from "./ui/primitives";
+import { Button } from "./ui/primitives";
+import { Card, CardTitle } from "./ui/primitives";
+import { Dialog } from "./ui/primitives";
 import { CardActions, CardBody, Input, Spinner } from "./ui/primitives";
 
 /**

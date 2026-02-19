@@ -7,10 +7,10 @@
 import { Component, For, Show, onMount } from 'solid-js'
 import { fileBrowserStore } from '../stores/fileBrowserStore'
 import { notificationStore } from '../stores/notificationStore'
-import { Alert } from './ui/alert';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { Dialog } from './ui/dialog';
+import { Alert } from './ui/primitives';
+import { Badge } from './ui/primitives';
+import { Button } from './ui/primitives';
+import { Dialog } from './ui/primitives';
 import { Spinner } from './ui/primitives';
 
 // ============================================================================

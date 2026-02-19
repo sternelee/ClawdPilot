@@ -20,7 +20,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { AgentType } from "../stores/sessionStore";
-import { Button } from "./ui/button";
+import { Button } from "./ui/primitives";
 
 // ============================================================================
 // Agent Icons
@@ -113,18 +113,8 @@ const SessionItem: Component<SessionItemProps> = (props) => {
         }
       }}
     >
-      {/* Mode Indicator */}
-      <div class="flex-shrink-0">
-        <Show
-          when={session()?.mode === "local"}
-          fallback={<FiCloud size={18} class="text-muted-foreground/60" />}
-        >
-          <FiHome size={18} class="text-muted-foreground/60" />
-        </Show>
-      </div>
-
       {/* Agent Icon */}
-      <div class={`flex-shrink-0 ${props.isActive ? "text-primary" : ""}`}>
+      <div class={`shrink-0 ${props.isActive ? "text-primary" : ""}`}>
         {getAgentIcon(session()?.agentType || "claude")}
       </div>
 
@@ -285,7 +275,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
       {/* Sidebar */}
       <aside
-        class={`fixed lg:static inset-y-0 left-0 z-50 w-80 bg-background border-r border-border
+        class={`fixed lg:static inset-y-0 bg-base-300 left-0 z-50 w-80 bg-background border-r border-border
           transform transition-transform duration-300 ease-in-out
           ${props.isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}

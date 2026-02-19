@@ -1,29 +1,29 @@
 import { createSignal, createEffect, onMount, For } from "solid-js";
-import { Button } from "./primitives";
 
 interface ThemeSwitcherProps {
   class?: string;
 }
 
-// Supported themes in the local token system
+// DaisyUI sunset theme-based themes
 const themes = [
-  "corporate",
-  "business",
-  "dark",
-  "dracula",
-  "forest",
-  "light",
-  "luxury",
-  "night",
-  "synthwave",
+  { id: "sunset", name: "Sunset", color: "#fb923c" },
+  { id: "dark", name: "Dark", color: "#1d283a" },
+  { id: "sunset", name: "Light", color: "#ffffff" },
+  { id: "dracula", name: "Dracula", color: "#7b2cbf" },
+  { id: "night", name: "Night", color: "#0f1729" },
+  { id: "business", name: "Business", color: "#1e293b" },
+  { id: "synthwave", name: "Synthwave", color: "#d946ef" },
+  { id: "forest", name: "Forest", color: "#22c55e" },
+  { id: "luxury", name: "Luxury", color: "#78716c" },
+  { id: "corporate", name: "Corporate", color: "#3b82f6" },
 ];
 
 export function ThemeSwitcher(props: ThemeSwitcherProps) {
-  const [currentTheme, setCurrentTheme] = createSignal("clawdchat-mobile");
+  const [currentTheme, setCurrentTheme] = createSignal("sunset");
 
   // Load theme from localStorage on mount
   onMount(() => {
-    const savedTheme = localStorage.getItem("theme") || "clawdchat-mobile";
+    const savedTheme = localStorage.getItem("theme") || "sunset";
     setCurrentTheme(savedTheme);
     document.documentElement.setAttribute("data-theme", savedTheme);
   });
@@ -39,74 +39,43 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
     setCurrentTheme(theme);
   };
 
-  const getThemeDisplayName = (theme: string) => {
-    return theme === "clawdchat-mobile"
-      ? "ClawdChat"
-      : theme.charAt(0).toUpperCase() + theme.slice(1);
-  };
-
   return (
-    <details class={`relative ${props.class || ""}`}>
-      <summary title="切换主题">
-        <Button variant="ghost" size="icon">
-          <svg
-            width="20"
-            height="20"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="inline-block h-5 w-5 stroke-current"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v6a2 2 0 002 2h4a2 2 0 002-2V5z"
-            ></path>
-          </svg>
-        </Button>
+    <details class={`relative dropdown ${props.class || ""}`}>
+      <summary title="切换主题" class="btn btn-ghost btn-circle">
+        <svg
+          width="20"
+          height="20"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          class="inline-block h-5 w-5 stroke-current"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v6a2 2 0 002 2h4a2 2 0 002-2V5z"
+          ></path>
+        </svg>
       </summary>
-      <ul class="absolute right-0 z-[80] mt-2 flex max-h-80 w-52 flex-col overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-2xl">
-        <li class="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          选择主题
+      <ul class="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-52 mt-2">
+        <li class="menu-title px-2 py-1">
+          <span class="text-xs font-semibold uppercase tracking-wide">选择主题</span>
         </li>
-        {/* Current ClawdChat theme */}
-        <li>
-          <button
-            type="button"
-            class={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${currentTheme() === "clawdchat-mobile" ? "bg-primary text-primary-foreground" : ""}`}
-            onClick={() => handleThemeChange("clawdchat-mobile")}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              class="w-4 h-4"
-            >
-              <path d="M13 3L4 14h7v7l9-11h-7V3z" />
-            </svg>
-            ClawdChat
-          </button>
-        </li>
-        {/* Additional themes */}
+        {/* DaisyUI theme options */}
         <For each={themes}>
           {(theme) => (
             <li>
               <button
                 type="button"
-                class={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground ${currentTheme() === theme ? "bg-primary text-primary-foreground" : ""}`}
-                onClick={() => handleThemeChange(theme)}
+                class={currentTheme() === theme.id ? "active" : ""}
+                onClick={() => handleThemeChange(theme.id)}
               >
-                <div class="flex items-center gap-2">
-                  <div
-                    class="w-3 h-3 rounded-full"
-                    style={`background-color: hsl(var(--p))`}
-                    data-theme={theme}
-                  ></div>
-                  {getThemeDisplayName(theme)}
-                </div>
+                <div
+                  class="w-4 h-4 rounded-full"
+                  style={`background-color: ${theme.color}`}
+                ></div>
+                {theme.name}
               </button>
             </li>
           )}

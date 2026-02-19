@@ -1,55 +1,103 @@
 /**
- * Primitives - Basic UI components
+ * Primitives - DaisyUI-based UI components
  *
- * These are simple components that don't have separate files yet.
- * Components that have been migrated to separate files should be imported directly:
- * - Button from "./ui/button"
- * - Card from "./ui/card"
- * - Dialog from "./ui/dialog"
- * - Select from "./ui/select"
- * - Switch from "./ui/switch"
- * - Alert from "./ui/alert"
- * - Badge from "./ui/badge"
- * - Label from "./ui/label"
- * - Combobox from "./ui/combobox"
+ * All components use DaisyUI classes for styling.
  */
 
-import { splitProps, type ParentComponent } from "solid-js";
-import type { JSX } from "solid-js";
+import { type ParentComponent, type JSX, Show, splitProps } from "solid-js";
 import { cn } from "~/lib/utils";
+
+// ============================================================================
+// Button
+// ============================================================================
+
+type ButtonVariant = "primary" | "secondary" | "accent" | "ghost" | "link" | "outline" | "error" | "success" | "warning" | "info" | "default" | "destructive";
+type ButtonSize = "xs" | "sm" | "md" | "lg" | "icon";
+
+interface ButtonProps {
+  type?: "button" | "submit" | "reset";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  class?: string;
+  disabled?: boolean;
+  loading?: boolean;
+  children?: JSX.Element;
+  onClick?: (e: MouseEvent) => void;
+  title?: string;
+}
+
+const variantClasses: Record<ButtonVariant, string> = {
+  default: "btn-primary",
+  primary: "btn-primary",
+  secondary: "btn-secondary",
+  accent: "btn-accent",
+  ghost: "btn-ghost",
+  link: "btn-link",
+  outline: "btn-outline",
+  error: "btn-error",
+  success: "btn-success",
+  warning: "btn-warning",
+  info: "btn-info",
+  destructive: "btn-error",
+};
+
+const sizeClasses: Record<ButtonSize, string> = {
+  xs: "btn-xs",
+  sm: "btn-sm",
+  md: "btn-md",
+  lg: "btn-lg",
+  icon: "btn-square",
+};
+
+export const Button = (props: ButtonProps) => {
+  const variant = () => props.variant || "default";
+  const size = () => props.size || "md";
+
+  return (
+    <button
+      type={props.type || "button"}
+      class={cn(
+        "btn",
+        variantClasses[variant()],
+        sizeClasses[size()],
+        props.class
+      )}
+      disabled={props.disabled || props.loading}
+      onClick={props.onClick}
+      title={props.title}
+    >
+      <Show when={props.loading}>
+        <span class="loading loading-spinner loading-sm mr-2" />
+      </Show>
+      {props.children}
+    </button>
+  );
+};
+
+export const buttonVariants = (variant?: ButtonVariant, size?: ButtonSize) => {
+  return cn(
+    "btn",
+    variant ? variantClasses[variant] : "btn-primary",
+    size ? sizeClasses[size] : ""
+  );
+};
+
+export type { ButtonProps };
 
 // ============================================================================
 // Input
 // ============================================================================
 
-type InputBaseProps = {
+export type InputProps = JSX.InputHTMLAttributes<HTMLInputElement> & {
   class?: string;
-  variant?: "default" | "ghost";
-};
-
-export type InputProps = JSX.InputHTMLAttributes<HTMLInputElement> & InputBaseProps;
-
-const inputVariants = {
-  default: [
-    "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground",
-    "border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none",
-    "file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium",
-    "disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-    "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-    "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
-  ],
-  ghost: "bg-transparent outline-none text-sm",
 };
 
 export function Input(props: InputProps) {
-  const [local, rest] = splitProps(props, ["class", "variant"]);
+  const [local, rest] = splitProps(props, ["class"]);
   return (
     <input
       {...rest}
-      class={cn(
-        ...inputVariants[local.variant ?? "default"],
-        local.class,
-      )}
+      class={cn("input input-bordered w-full", local.class)}
     />
   );
 }
@@ -58,25 +106,246 @@ export function Input(props: InputProps) {
 // Textarea
 // ============================================================================
 
-export type TextareaProps = JSX.TextareaHTMLAttributes<HTMLTextAreaElement> &
-  InputBaseProps;
+export type TextareaProps = JSX.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  class?: string;
+};
 
 export function Textarea(props: TextareaProps) {
-  const [local, rest] = splitProps(props, ["class", "variant"]);
+  const [local, rest] = splitProps(props, ["class"]);
   return (
     <textarea
       {...rest}
-      class={cn(
-        "min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground",
-        "placeholder:text-muted-foreground",
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        "transition-[color,box-shadow] outline-none",
-        local.class,
-      )}
+      class={cn("textarea textarea-bordered w-full", local.class)}
     />
   );
 }
+
+// ============================================================================
+// Label
+// ============================================================================
+
+export const Label: ParentComponent<{ class?: string; for?: string }> = (props) => {
+  return (
+    <label
+      for={props.for}
+      class={cn("label", props.class)}
+    >
+      <span class="label-text">{props.children}</span>
+    </label>
+  );
+};
+
+// ============================================================================
+// Badge
+// ============================================================================
+
+type BadgeVariant = "primary" | "secondary" | "accent" | "ghost" | "info" | "success" | "warning" | "error" | "default" | "neutral" | "outline";
+
+const badgeClasses: Record<BadgeVariant, string> = {
+  default: "badge-primary",
+  neutral: "badge-neutral",
+  primary: "badge-primary",
+  secondary: "badge-secondary",
+  accent: "badge-accent",
+  ghost: "badge-ghost",
+  info: "badge-info",
+  success: "badge-success",
+  warning: "badge-warning",
+  error: "badge-error",
+  outline: "badge-outline",
+};
+
+export const Badge: ParentComponent<{ variant?: BadgeVariant; class?: string }> = (props) => {
+  const variant = () => props.variant || "primary";
+  return (
+    <div class={cn("badge", badgeClasses[variant()], props.class)}>
+      {props.children}
+    </div>
+  );
+};
+
+export const badgeVariants = (variant?: BadgeVariant) => {
+  return cn("badge", variant ? badgeClasses[variant] : "badge-primary");
+};
+
+// ============================================================================
+// Alert
+// ============================================================================
+
+type AlertVariant = "info" | "success" | "warning" | "error" | "destructive";
+
+const alertClasses: Record<AlertVariant, string> = {
+  info: "alert-info",
+  success: "alert-success",
+  warning: "alert-warning",
+  error: "alert-error",
+  destructive: "alert-error",
+};
+
+export const Alert: ParentComponent<{ variant?: AlertVariant; class?: string; classList?: Record<string, boolean>; style?: Record<string, string> }> = (props) => {
+  const variant = () => props.variant || "info";
+  return (
+    <div class={cn("alert", alertClasses[variant()], props.class, props.classList)} style={props.style}>
+      {props.children}
+    </div>
+  );
+};
+
+export const AlertTitle: ParentComponent<{ class?: string }> = (props) => (
+  <span class={cn("font-bold", props.class)}>{props.children}</span>
+);
+
+export const AlertDescription: ParentComponent<{ class?: string }> = (props) => (
+  <span class={cn("text-sm", props.class)}>{props.children}</span>
+);
+
+// ============================================================================
+// Card
+// ============================================================================
+
+export const Card: ParentComponent<{ class?: string; onClick?: () => void }> = (props) => (
+  <div class={cn("card bg-base-100 shadow-xl", props.class)} onClick={props.onClick}>
+    {props.children}
+  </div>
+);
+
+export const CardHeader: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("card-body", props.class)}>
+    {props.children}
+  </div>
+);
+
+export const CardTitle: ParentComponent<{ class?: string }> = (props) => (
+  <h3 class={cn("card-title", props.class)}>{props.children}</h3>
+);
+
+export const CardDescription: ParentComponent<{ class?: string }> = (props) => (
+  <p class={cn("text-sm opacity-60", props.class)}>{props.children}</p>
+);
+
+export const CardContent: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("px-6 py-2", props.class)}>{props.children}</div>
+);
+
+export const CardFooter: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("card-actions justify-end px-6 py-4", props.class)}>
+    {props.children}
+  </div>
+);
+
+export const CardBody: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("px-6", props.class)}>{props.children}</div>
+);
+
+export const CardActions: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("flex flex-wrap items-center gap-2 mt-auto pt-4", props.class)}>
+    {props.children}
+  </div>
+);
+
+// ============================================================================
+// Dialog (Modal) - DaisyUI Pattern
+// ============================================================================
+
+// Import from dialog.tsx which uses native DaisyUI pattern
+export { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "./dialog";
+
+export type DialogProps = {
+  open: boolean;
+  onClose?: () => void;
+  class?: string;
+  contentClass?: string;
+  children: JSX.Element;
+};
+
+// ============================================================================
+// Select
+// ============================================================================
+
+interface SelectProps {
+  id?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  class?: string;
+  children?: JSX.Element;
+  disabled?: boolean;
+}
+
+export function Select(props: SelectProps) {
+  return (
+    <select
+      id={props.id}
+      class={cn("select select-bordered w-full", props.class)}
+      value={props.value}
+      disabled={props.disabled}
+      onChange={(e) => props.onChange?.(e.currentTarget.value)}
+    >
+      {props.children}
+    </select>
+  );
+}
+
+export const SelectValue: ParentComponent<{ class?: string }> = (props) => (
+  <span class={props.class}>{props.children}</span>
+);
+export const SelectTrigger: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("select select-bordered w-full", props.class)}>{props.children}</div>
+);
+export const SelectContent: ParentComponent<{ class?: string }> = (props) => (
+  <div class={props.class}>{props.children}</div>
+);
+export const SelectItem: ParentComponent<{ value: string; class?: string }> = (props) => (
+  <option value={props.value} class={props.class}>{props.children}</option>
+);
+export const SelectLabel: ParentComponent<{ class?: string }> = (props) => (
+  <option disabled class={props.class}>{props.children}</option>
+);
+export const SelectDescription: ParentComponent<{ class?: string }> = (props) => (
+  <span class={props.class}>{props.children}</span>
+);
+export const SelectErrorMessage: ParentComponent<{ class?: string }> = (props) => (
+  <span class={cn("text-error text-xs", props.class)}>{props.children}</span>
+);
+
+// ============================================================================
+// Switch (Toggle)
+// ============================================================================
+
+interface SwitchProps {
+  checked?: boolean;
+  onChange?: (checked: boolean) => void;
+  class?: string;
+  disabled?: boolean;
+  label?: string;
+}
+
+export function Switch(props: SwitchProps) {
+  return (
+    <input
+      type="checkbox"
+      class={cn("toggle", props.class)}
+      checked={props.checked}
+      disabled={props.disabled}
+      onChange={(e) => props.onChange?.(e.currentTarget.checked)}
+    />
+  );
+}
+
+export const SwitchControl: ParentComponent<{ class?: string }> = (props) => (
+  <div class={cn("toggle", props.class)}>{props.children}</div>
+);
+export const SwitchThumb: ParentComponent<{ class?: string }> = (props) => (
+  <span class={props.class}>{props.children}</span>
+);
+export const SwitchLabel: ParentComponent<{ class?: string }> = (props) => (
+  <span class={cn("label", props.class)}>{props.children}</span>
+);
+export const SwitchDescription: ParentComponent<{ class?: string }> = (props) => (
+  <span class={props.class}>{props.children}</span>
+);
+export const SwitchErrorMessage: ParentComponent<{ class?: string }> = (props) => (
+  <span class={cn("text-error text-xs", props.class)}>{props.children}</span>
+);
 
 // ============================================================================
 // Spinner
@@ -84,20 +353,16 @@ export function Textarea(props: TextareaProps) {
 
 type SpinnerSize = "xs" | "sm" | "md" | "lg";
 const spinnerSizeClasses: Record<SpinnerSize, string> = {
-  xs: "h-3 w-3 border",
-  sm: "h-4 w-4 border-2",
-  md: "h-5 w-5 border-2",
-  lg: "h-7 w-7 border-[3px]",
+  xs: "loading-xs",
+  sm: "loading-sm",
+  md: "loading-md",
+  lg: "loading-lg",
 };
 
 export function Spinner(props: { class?: string; size?: SpinnerSize }) {
   return (
     <span
-      class={cn(
-        "inline-block animate-spin rounded-full border-current border-t-transparent",
-        spinnerSizeClasses[props.size ?? "md"],
-        props.class,
-      )}
+      class={cn("loading loading-spinner", spinnerSizeClasses[props.size ?? "md"], props.class)}
     />
   );
 }
@@ -108,64 +373,14 @@ export function Spinner(props: { class?: string; size?: SpinnerSize }) {
 
 export const Kbd: ParentComponent<{ class?: string }> = (props) => (
   <kbd
-    class={cn(
-      "inline-flex min-h-5 min-w-5 items-center justify-center rounded border border-border bg-muted px-1 text-[10px] font-semibold",
-      props.class,
-    )}
+    class={cn("kbd", props.class)}
   >
     {props.children}
   </kbd>
 );
 
 // ============================================================================
-// Card Components - re-export from card module
+// Combobox (keep shadcnUI style)
 // ============================================================================
 
-export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from "./card"
-export const CardBody: ParentComponent<{ class?: string }> = (props) => (
-  <div class={cn("px-6", props.class)}>{props.children}</div>
-);
-export const CardActions: ParentComponent<{ class?: string }> = (props) => (
-  <div class={cn("flex flex-wrap items-center gap-2 mt-auto pt-4", props.class)}>
-    {props.children}
-  </div>
-);
-
-// ============================================================================
-// Dialog Components - re-export from dialog module
-// ============================================================================
-
-export { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from "./dialog"
-export type DialogProps = {
-  open: boolean;
-  onClose?: () => void;
-  class?: string;
-  contentClass?: string;
-  showCloseButton?: boolean;
-  children: JSX.Element;
-};
-
-// ============================================================================
-// Label
-// ============================================================================
-
-export const Label: ParentComponent<{ class?: string; for?: string }> = (
-  props,
-) => (
-  <label for={props.for} class={cn("text-sm font-medium text-foreground", props.class)}>
-    {props.children}
-  </label>
-);
-
-// ============================================================================
-// Re-export from other UI modules for backward compatibility
-// ============================================================================
-
-export { Button, buttonVariants } from "./button"
-export { Alert, AlertTitle, AlertDescription } from "./alert"
-export { Badge, badgeVariants } from "./badge"
-// Card already exported above
-export { Select, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectLabel, SelectDescription, SelectErrorMessage } from "./select"
-export { Switch, SwitchControl, SwitchThumb, SwitchLabel, SwitchDescription, SwitchErrorMessage } from "./switch"
-export { Label as LabelComponent } from "./label"
 export { Combobox, ComboboxItem, ComboboxItemLabel, ComboboxItemIndicator, ComboboxSection, ComboboxControl, ComboboxInput, ComboboxContent, ComboboxTrigger } from "./combobox"
