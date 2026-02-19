@@ -1,4 +1,5 @@
-#[cfg(any(feature = "std", feature = "mobile"))]
+// Agent module only for desktop (std feature)
+#[cfg(feature = "std")]
 pub mod agent;
 pub mod event_manager;
 pub mod message_protocol;

@@ -1,13 +1,8 @@
 {
   "$schema": "../gen/schemas/capabilities.json",
   "identifier": "mobile-capability",
-  "windows": [
-    "main"
-  ],
-  "platforms": [
-    "iOS",
-    "android"
-  ],
+  "windows": ["main"],
+  "platforms": ["iOS", "android"],
   "permissions": [
     "barcode-scanner:allow-scan",
     "barcode-scanner:allow-cancel",
@@ -15,7 +10,12 @@
     "notification:default",
     "clipboard-manager:default",
     "http:default",
+    "fs:default",
     "os:default",
-    "core:default"
+    "core:default",
+    "dialog:default",
+    "shell:default",
+    "sql:default"
   ]
 }
+

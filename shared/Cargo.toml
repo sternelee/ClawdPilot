@@ -23,20 +23,21 @@ std = [
   "codex-mcp-server",
   "tokio-tungstenite",
 ]
-# Mobile runtime: excludes agent-specific dependencies (Claude SDK, Codex, ACP agents)
-# and disables git operations to reduce binary size
+# Mobile runtime: only zeroclaw, no codex/agent-client-protocol
 mobile = [
   "tokio/full",
   "tracing-subscriber/env-filter",
   "dirs",
   "zeroclaw/tauri",
   "zeroclaw/mobile",
+  "libc",
+  "gethostname",
 ]
-tokio-full = ["tokio"]
-wasm = []
+# Tauri runtime (desktop): zeroclaw + desktop features
 tauri-runtime = ["zeroclaw/tauri", "zeroclaw"]
 desktop-runtime = ["zeroclaw/desktop", "zeroclaw"]
-mobile-runtime = ["zeroclaw/mobile", "zeroclaw"]
+# Mobile runtime for Tauri: uses mobile feature instead of std
+mobile-runtime = ["mobile"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -65,7 +66,7 @@ async-trait = "0.1"
 iroh-base = { workspace = true }
 tracing-subscriber = { version = "0.3", optional = true }
 
-# Agent related dependencies
+# Agent related dependencies - only included in std feature
 agent-client-protocol = { version = "0.9.4", optional = true }
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 gethostname = { version = "0.5", optional = true }
@@ -75,10 +76,10 @@ portable-pty = { workspace = true, optional = true }
 bytes = { workspace = true }
 zeroclaw = { path = "../zeroclaw", optional = true }
 
-# WebSocket support for OpenClaw Gateway
+# WebSocket support - only in std
 tokio-tungstenite = { workspace = true, optional = true }
 
-# Codex ACP dependencies (git)
+# Codex ACP dependencies - only in std
 [dependencies.codex-core]
 git = "https://github.com/zed-industries/codex"
 branch = "acp"
@@ -108,3 +109,9 @@ optional = true
 git = "https://github.com/zed-industries/codex"
 branch = "acp"
 optional = true
+
+# Mobile build: use rustls instead of native-tls to avoid OpenSSL linking issues
+# and exclude heavy agent dependencies
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+zeroclaw = { path = "../zeroclaw", default-features = false, features = ["tauri", "mobile"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }

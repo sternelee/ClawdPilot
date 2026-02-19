@@ -1,14 +1,17 @@
 {
   "identifier": "desktop-capability",
-  "platforms": [
-    "macOS",
-    "windows",
-    "linux"
-  ],
-  "windows": [
-    "main"
-  ],
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main"],
   "permissions": [
-    "updater:default"
+    "updater:default",
+    "fs:default",
+    "http:default",
+    "dialog:default",
+    "clipboard-manager:default",
+    "notification:default",
+    "os:default",
+    "shell:default",
+    "sql:default"
   ]
 }
+
