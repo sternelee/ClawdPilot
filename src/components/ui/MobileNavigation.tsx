@@ -70,7 +70,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
   };
 
   const getStatusColor = () => {
-    if (!props.isConnected) return "text-base-content";
+    if (!props.isConnected) return "text-foreground";
     switch (props.networkStrength) {
       case 0:
         return "text-error";
@@ -83,7 +83,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
       case 4:
         return "text-success";
       default:
-        return "text-base-content";
+        return "text-foreground";
     }
   };
 
@@ -178,7 +178,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
   return (
     <>
       {/* Top Status Bar - Mobile First with Safe Area */}
-      <div class="sticky top-0 z-40 flex min-h-10 items-center justify-between border-b border-base-300 bg-base-100 px-4 mobile-safe-top">
+      <div class="sticky top-0 z-40 flex min-h-10 items-center justify-between border-b border-border bg-background px-4 mobile-safe-top">
         <div class="flex items-center">
           <div class="flex items-center space-x-2">
             <Button
@@ -206,7 +206,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
             {/* Quick actions for mobile */}
             <Show when={isMobile && !showBottomNav()}>
               <Button
-                variant="primary"
+                variant="default"
                 size="sm"
                 class="px-2 py-1"
                 onClick={handleQuickConnect}
@@ -256,7 +256,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
 
       {/* Status Panel Dropdown */}
       <Show when={showStatusPanel()}>
-        <div class="bg-base-100 border-b border-base-300 px-4 py-3 animate-slide-down">
+        <div class="bg-background border-b border-border px-4 py-3 animate-slide-down">
           <div class="flex items-center justify-between">
             <div class="text-sm">
               <div class="font-medium">Network Status</div>
@@ -276,7 +276,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
                       class={`w-1 h-3 mx-px rounded-sm ${
                         level <= props.networkStrength
                           ? "bg-success"
-                          : "bg-base-300"
+                          : "bg-muted"
                       }`}
                     />
                   )}
@@ -289,7 +289,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
 
       {/* Bottom Navigation for Mobile Portrait */}
       <Show when={showBottomNav()}>
-        <div class="fixed bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 z-50 safe-area-bottom">
+        <div class="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 safe-area-bottom">
           <div class="flex items-center justify-around py-2">
             <For each={navItems}>
               {(item) => (
@@ -299,8 +299,8 @@ export function MobileNavigation(props: MobileNavigationProps) {
                     item.active
                       ? "text-primary bg-primary/10"
                       : item.disabled
-                        ? "text-base-300 cursor-not-allowed"
-                        : "text-base-content hover:bg-base-200"
+                        ? "text-muted cursor-not-allowed"
+                        : "text-foreground hover:bg-muted"
                   }`}
                   onClick={() => handleNavItemClick(item)}
                   disabled={item.disabled}
@@ -310,7 +310,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
                   <span class="text-xs font-medium">{item.title}</span>
                   <Show when={item.badge}>
                     <Badge
-                      variant="primary"
+                      variant="default"
                       class="absolute -right-1 -top-1 h-4 px-1 text-[9px]"
                     >
                       {item.badge}

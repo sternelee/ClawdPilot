@@ -193,7 +193,7 @@ export function HomeView(props: HomeViewProps) {
               </Button>
               <Button
                 type="button"
-                variant="primary"
+                variant="default"
                 onClick={handleLogin}
                 disabled={!username().trim() || !password().trim()}
               >
@@ -207,7 +207,7 @@ export function HomeView(props: HomeViewProps) {
   );
 
   return (
-    <div class="min-h-screen bg-base-200 flex flex-col items-center justify-center p-4">
+    <div class="min-h-screen bg-muted flex flex-col items-center justify-center p-4">
       <div class="max-w-3xl w-full flex flex-col items-center">
         {/* Logo/Header */}
         <div class="text-center mb-12">
@@ -215,7 +215,7 @@ export function HomeView(props: HomeViewProps) {
             ⚡
           </div>
           <h1 class="text-4xl font-bold mb-2">ClawdChat</h1>
-          <p class="text-base-content/60">Secure P2P Agent Collaboration</p>
+          <p class="text-muted-foreground/60">Secure P2P Agent Collaboration</p>
         </div>
 
         {/* Tab Navigation */}
@@ -318,8 +318,8 @@ export function HomeView(props: HomeViewProps) {
 
             {/* History Section */}
             <Show when={ticketHistory().length > 0}>
-              <div class="bg-base-200/50 p-6 border-t border-base-200">
-                <h3 class="text-xs font-bold text-base-content/50 uppercase tracking-wider mb-3">
+              <div class="bg-muted/50 p-6 border-t border-muted">
+                <h3 class="text-xs font-bold text-muted-foreground/50 uppercase tracking-wider mb-3">
                   Recent Sessions
                 </h3>
                 <div class="space-y-2">
@@ -327,7 +327,7 @@ export function HomeView(props: HomeViewProps) {
                     {(ticket) => (
                       <button
                         type="button"
-                        class="w-full text-left p-3 rounded-lg bg-base-100 hover:bg-base-200 border border-base-200 transition-colors flex items-center justify-between group"
+                        class="w-full text-left p-3 rounded-lg bg-background hover:bg-muted border border-muted transition-colors flex items-center justify-between group"
                         onClick={() => handleQuickConnect(ticket)}
                       >
                         <div class="flex items-center gap-3 overflow-hidden">
@@ -336,7 +336,7 @@ export function HomeView(props: HomeViewProps) {
                             {getTicketDisplayId(ticket)}
                           </span>
                         </div>
-                        <span class="text-base-content/30 group-hover:text-primary transition-colors">
+                        <span class="text-muted-foreground/30 group-hover:text-primary transition-colors">
                           →
                         </span>
                       </button>
@@ -358,7 +358,7 @@ export function HomeView(props: HomeViewProps) {
               <CardTitle class="mb-2 justify-center text-xl">
                 Local Agent Mode
               </CardTitle>
-              <p class="text-base-content/60 mb-6">
+              <p class="text-muted-foreground/60 mb-6">
                 Manage AI agents directly on your machine without connecting to
                 a remote CLI.
               </p>
@@ -373,7 +373,7 @@ export function HomeView(props: HomeViewProps) {
                   Enter Session Manager
                 </Button>
 
-                <div class="relative py-1 text-center text-base-content/40">
+                <div class="relative py-1 text-center text-muted-foreground/40">
                   <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
                   <span class="relative bg-card px-2 text-sm">or</span>
                 </div>
@@ -389,13 +389,13 @@ export function HomeView(props: HomeViewProps) {
                 </Button>
               </div>
 
-              <div class="mt-6 p-4 bg-base-200 rounded-lg text-left">
+              <div class="mt-6 p-4 bg-muted rounded-lg text-left">
                 <h4 class="font-semibold text-sm mb-2">Supported Agents:</h4>
                 <div class="flex flex-wrap gap-2">
-                  <Badge variant="primary">Claude Code</Badge>
+                  <Badge variant="default">Claude Code</Badge>
                   <Badge variant="secondary">Gemini CLI</Badge>
                   <Badge>OpenCode</Badge>
-                  <Badge variant="neutral">GitHub Copilot</Badge>
+                  <Badge variant="outline">GitHub Copilot</Badge>
                 </div>
               </div>
             </CardBody>
@@ -403,7 +403,7 @@ export function HomeView(props: HomeViewProps) {
         </Show>
 
         {/* Footer */}
-        <div class="mt-12 text-center text-sm text-base-content/40">
+        <div class="mt-12 text-center text-sm text-muted-foreground/40">
           <p>Powered by Tauri v2 & SolidJS</p>
         </div>
       </div>

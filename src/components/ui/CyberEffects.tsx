@@ -34,7 +34,7 @@ export function NetworkIndicator(props: {
             class="network-bar"
             classList={{
               "text-primary": bar.active,
-              "text-base-300 opacity-40": !bar.active,
+              "text-muted opacity-40": !bar.active,
             }}
             style={{ height: bar.height }}
           />
@@ -189,7 +189,7 @@ export function ModernToggle(props: {
 }
 
 export function SubtleBackground() {
-  return <div class="fixed inset-0 pointer-events-none z-0 bg-base-100" />;
+  return <div class="fixed inset-0 pointer-events-none z-0 bg-background" />;
 }
 
 export function ModernBackground() {

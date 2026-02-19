@@ -234,7 +234,7 @@ function MessageBubble(props: { message: ChatMessage }) {
           <button
             type="button"
             onClick={handleCopy}
-            class="ml-1 p-1 rounded-md hover:bg-base-300 opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center"
+            class="ml-1 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center"
             title="Copy message"
           >
             <Show when={copied()} fallback={<FiCopy size={14} />}>
@@ -280,7 +280,7 @@ function PermissionRequestCard(props: {
   onApproveForSession: () => void;
 }) {
   return (
-    <Alert variant="warning" class="mx-4 max-w-2xl shadow-lg">
+    <Alert variant="destructive" class="mx-4 max-w-2xl shadow-lg">
       <FiAlertTriangle size={24} />
       <div class="flex-1">
         <h3 class="font-bold">Permission Request</h3>
@@ -290,7 +290,7 @@ function PermissionRequestCard(props: {
         <Button
           type="button"
           onClick={props.onApprove}
-          variant="success"
+          variant="default"
           size="sm"
         >
           <FiCheck size={20} />
@@ -299,7 +299,7 @@ function PermissionRequestCard(props: {
         <Button
           type="button"
           onClick={props.onApproveForSession}
-          variant="primary"
+          variant="default"
           size="sm"
         >
           <FiCheck size={20} />
@@ -992,9 +992,9 @@ export function ChatView(props: ChatViewProps) {
   };
 
   return (
-    <div class="flex flex-col h-full bg-base-200 relative">
+    <div class="flex flex-col h-full bg-muted relative">
       {/* Header */}
-      <div class="z-20 flex items-center justify-between border-b border-base-300 bg-base-100 pr-4 pl-16 lg:pl-6 py-4 shadow-sm">
+      <div class="z-20 flex items-center justify-between border-b border-border bg-background pr-4 pl-16 lg:pl-6 py-4 shadow-sm">
         <div class="flex-1">
           <div class="flex items-center gap-3">
             <div class="text-primary">{getAgentIcon()}</div>
@@ -1010,7 +1010,7 @@ export function ChatView(props: ChatViewProps) {
                 {props.agentType === "custom" && "Custom Agent"}
               </h2>
               <div
-                class="text-xs text-base-content/50 truncate max-w-[24rem]"
+                class="text-xs text-muted-foreground/50 truncate max-w-[24rem]"
                 title={props.projectPath}
               >
                 {props.projectPath || "No project path"}
@@ -1111,7 +1111,7 @@ export function ChatView(props: ChatViewProps) {
         <Button
           type="button"
           onClick={scrollToBottom}
-          class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-base-100 shadow-lg"
+          class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-background shadow-lg"
           size="icon"
           variant="ghost"
           aria-label="Scroll to bottom"
@@ -1135,12 +1135,12 @@ export function ChatView(props: ChatViewProps) {
       </Show>
 
       {/* Input Area */}
-      <div class="p-4 bg-base-100 border-t border-base-300">
+      <div class="p-4 bg-background border-t border-border">
         <Show
           when={isActive()}
           fallback={
-            <div class="flex items-center justify-center p-4 bg-base-200/50 rounded-lg border border-dashed border-base-300">
-              <span class="text-sm text-base-content/50 flex items-center gap-2">
+            <div class="flex items-center justify-center p-4 bg-muted/50 rounded-lg border border-dashed border-border">
+              <span class="text-sm text-muted-foreground/50 flex items-center gap-2">
                 <FiAlertTriangle size={16} />
                 This session is inactive. Connection might be lost.
               </span>
@@ -1179,8 +1179,8 @@ export function ChatView(props: ChatViewProps) {
             </Button>
           </div>
           <div class="mt-2 flex justify-between px-1">
-            <span class="text-xs text-base-content/40">Markdown supported</span>
-            <span class="text-xs text-base-content/40">
+            <span class="text-xs text-muted-foreground/40">Markdown supported</span>
+            <span class="text-xs text-muted-foreground/40">
               <Kbd>Shift+Enter</Kbd> new line, <Kbd>Enter</Kbd> to send
             </span>
           </div>

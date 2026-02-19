@@ -2,8 +2,8 @@
 
 .quick-access-toolbar {
   position: relative;
-  background: var(--base-100, #ffffff);
-  border-top: 1px solid var(--base-300, #e5e7eb);
+  background: var(--background, #ffffff);
+  border-top: 1px solid var(--border, #e5e7eb);
   z-index: 40;
   user-select: none;
   -webkit-user-select: none;
@@ -13,7 +13,7 @@
 /* Position variants */
 .toolbar-top {
   border-top: none;
-  border-bottom: 1px solid var(--base-300, #e5e7eb);
+  border-bottom: 1px solid var(--border, #e5e7eb);
 }
 
 .toolbar-bottom {
@@ -80,12 +80,12 @@
   min-width: 44px;
   min-height: 44px;
   padding: 8px 12px;
-  background: var(--base-200, #f3f4f6);
-  border: 1px solid var(--base-300, #e5e7eb);
+  background: var(--muted, #f3f4f6);
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--base-content, #1f2937);
+  color: var(--foreground, #1f2937);
   cursor: pointer;
   transition: all 0.15s ease-out;
   touch-action: manipulation;
@@ -94,7 +94,7 @@
 }
 
 .toolbar-key:hover {
-  background: var(--base-300, #e5e7eb);
+  background: var(--border, #e5e7eb);
   transform: translateY(-1px);
 }
 
@@ -143,12 +143,12 @@
   min-width: 36px;
   min-height: 44px;
   padding: 8px;
-  background: var(--base-200, #f3f4f6);
-  border: 1px solid var(--base-300, #e5e7eb);
+  background: var(--muted, #f3f4f6);
+  border: 1px solid var(--border, #e5e7eb);
   border-radius: 8px;
   font-size: 20px;
   font-weight: bold;
-  color: var(--base-content, #1f2937);
+  color: var(--foreground, #1f2937);
   cursor: pointer;
   transition: all 0.15s ease-out;
   touch-action: manipulation;
@@ -157,7 +157,7 @@
 }
 
 .toolbar-scroll-btn:hover {
-  background: var(--base-300, #e5e7eb);
+  background: var(--border, #e5e7eb);
 }
 
 .toolbar-scroll-btn:active {
@@ -222,7 +222,7 @@
 .toolbar-expanded-content {
   width: 100%;
   max-height: 60vh;
-  background: var(--base-100, #ffffff);
+  background: var(--background, #ffffff);
   border-radius: 16px 16px 0 0;
   padding: 16px;
   padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
@@ -246,13 +246,13 @@
   justify-content: space-between;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--base-300, #e5e7eb);
+  border-bottom: 1px solid var(--border, #e5e7eb);
 }
 
 .toolbar-expanded-title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--base-content, #1f2937);
+  color: var(--foreground, #1f2937);
   margin: 0;
 }
 
@@ -262,17 +262,17 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: var(--base-200, #f3f4f6);
+  background: var(--muted, #f3f4f6);
   border: none;
   border-radius: 8px;
   font-size: 18px;
-  color: var(--base-content, #1f2937);
+  color: var(--foreground, #1f2937);
   cursor: pointer;
   transition: all 0.15s ease-out;
 }
 
 .toolbar-expanded-close:hover {
-  background: var(--base-300, #e5e7eb);
+  background: var(--border, #e5e7eb);
 }
 
 .toolbar-expanded-close:active {
@@ -291,7 +291,7 @@
 .toolbar-section-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--base-content, #1f2937);
+  color: var(--foreground, #1f2937);
   opacity: 0.7;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -405,18 +405,18 @@
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
   .quick-access-toolbar {
-    background: var(--base-100, #1f2937);
-    border-color: var(--base-300, #374151);
+    background: var(--background, #1f2937);
+    border-color: var(--border, #374151);
   }
 
   .toolbar-key {
-    background: var(--base-200, #374151);
-    border-color: var(--base-300, #4b5563);
-    color: var(--base-content, #f9fafb);
+    background: var(--muted, #374151);
+    border-color: var(--border, #4b5563);
+    color: var(--foreground, #f9fafb);
   }
 
   .toolbar-key:hover {
-    background: var(--base-300, #4b5563);
+    background: var(--border, #4b5563);
   }
 
   .toolbar-key-vim {
@@ -430,34 +430,34 @@
   }
 
   .toolbar-scroll-btn {
-    background: var(--base-200, #374151);
-    border-color: var(--base-300, #4b5563);
-    color: var(--base-content, #f9fafb);
+    background: var(--muted, #374151);
+    border-color: var(--border, #4b5563);
+    color: var(--foreground, #f9fafb);
   }
 
   .toolbar-scroll-btn:hover {
-    background: var(--base-300, #4b5563);
+    background: var(--border, #4b5563);
   }
 
   .toolbar-expanded-content {
-    background: var(--base-100, #1f2937);
+    background: var(--background, #1f2937);
   }
 
   .toolbar-expanded-header {
-    border-color: var(--base-300, #374151);
+    border-color: var(--border, #374151);
   }
 
   .toolbar-section-title {
-    color: var(--base-content, #f9fafb);
+    color: var(--foreground, #f9fafb);
   }
 
   .toolbar-expanded-close {
-    background: var(--base-200, #374151);
-    color: var(--base-content, #f9fafb);
+    background: var(--muted, #374151);
+    color: var(--foreground, #f9fafb);
   }
 
   .toolbar-expanded-close:hover {
-    background: var(--base-300, #4b5563);
+    background: var(--border, #4b5563);
   }
 }
 

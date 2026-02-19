@@ -187,7 +187,7 @@ export function ZeroclawConfigModal(props: ZeroclawConfigModalProps) {
               <For each={availableTools}>
                 {(tool) => (
                   <div
-                    class="flex items-center gap-2 p-2 rounded border border-border hover:bg-base-200 transition-colors cursor-pointer"
+                    class="flex items-center gap-2 p-2 rounded border border-border hover:bg-muted transition-colors cursor-pointer"
                     onClick={() => sessionStore.toggleZeroClawTool(tool.id)}
                   >
                     <input

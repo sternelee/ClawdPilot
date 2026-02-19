@@ -95,7 +95,7 @@ export const AppLayout: Component = () => {
   };
 
   return (
-    <div class="flex h-screen bg-base-200 overflow-hidden">
+    <div class="flex h-screen bg-muted overflow-hidden">
       {/* Mobile Menu Button */}
       <Button
         class="fixed left-4 top-4 z-50 flex bg-card shadow-md lg:hidden"
@@ -121,12 +121,12 @@ export const AppLayout: Component = () => {
               <div class="text-center max-w-md">
                 <div class="text-6xl mb-4">💬</div>
                 <h2 class="text-2xl font-bold mb-2">Welcome to ClawdChat</h2>
-                <p class="text-base-content/70 mb-6">
+                <p class="text-muted-foreground/70 mb-6">
                   Manage multiple AI agent sessions in one place. Create a new
                   session to get started.
                 </p>
                 <Button
-                  variant="primary"
+                  variant="default"
                   onClick={() => sessionStore.openNewSessionModal("local")}
                 >
                   Create Session

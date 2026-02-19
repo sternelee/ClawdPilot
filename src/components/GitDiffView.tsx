@@ -33,9 +33,9 @@ const getStatusColor = (status: GitStatusChar): string => {
     case 'A': return 'text-success'
     case 'D': return 'text-error'
     case 'R': return 'text-info'
-    case '?': return 'text-base-content/50'
+    case '?': return 'text-foreground/50'
     case ' ': return 'text-success'
-    default: return 'text-base-content'
+    default: return 'text-foreground'
   }
 }
 
@@ -163,19 +163,19 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
     return (
       <div class={`flex ${line().type === 'add' ? 'bg-success/10' : line().type === 'remove' ? 'bg-error/10' : ''}`}>
         <Show when={line().oldLineNum !== undefined}>
-          <span class="w-12 text-right pr-2 text-base-content/30 select-none text-xs font-mono">
+          <span class="w-12 text-right pr-2 text-foreground/30 select-none text-xs font-mono">
             {line().oldLineNum}
           </span>
         </Show>
         <Show when={line().newLineNum !== undefined}>
-          <span class="w-12 text-right pr-2 text-base-content/30 select-none text-xs font-mono">
+          <span class="w-12 text-right pr-2 text-foreground/30 select-none text-xs font-mono">
             {line().newLineNum}
           </span>
         </Show>
         <span class={`flex-1 font-mono text-sm whitespace-pre ${
           line().type === 'add' ? 'text-success' :
           line().type === 'remove' ? 'text-error' :
-          'text-base-content'
+          'text-foreground'
         }`}>
           {line().type === 'add' && '+'}
           {line().type === 'remove' && '-'}
@@ -188,7 +188,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
   return (
     <div class={`git-diff-view ${props.class || ''}`}>
       {/* Header */}
-      <div class="git-diff-header p-4 border-b border-base-300">
+      <div class="git-diff-header p-4 border-b border-border">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <GitBranchIcon />
@@ -220,12 +220,12 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
           <div class="flex gap-4 mt-3 text-sm">
             <span class="text-success">Staged: {summary().staged}</span>
             <span class="text-warning">Modified: {summary().modified}</span>
-            <span class="text-base-content/50">Untracked: {summary().untracked}</span>
+            <span class="text-foreground/50">Untracked: {summary().untracked}</span>
           </div>
         </Show>
 
         <Show when={!hasChanges() && !state.isLoadingStatus}>
-          <div class="mt-3 text-sm text-base-content/50">
+          <div class="mt-3 text-sm text-foreground/50">
             No changes detected
           </div>
         </Show>
@@ -235,7 +235,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
       <div class="git-diff-content">
         {/* Status View */}
         <Show when={state.viewMode === 'status'}>
-          <div class="divide-y divide-base-300">
+          <div class="divide-y divide-border">
             {/* Staged Files */}
             <Show when={getStagedFiles().length > 0}>
               <div class="p-3">
@@ -243,7 +243,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                 <For each={getStagedFiles()}>
                   {(entry) => (
                     <div
-                      class="flex items-center gap-2 p-2 rounded hover:bg-base-200 cursor-pointer"
+                      class="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
                       onClick={() => loadDiff(entry.from)}
                     >
                       <span class={`text-lg ${getStatusColor(entry.x as GitStatusChar)}`}>
@@ -252,7 +252,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
                       <Show when={entry.to}>
-                        <span class="text-base-content/50">→ {entry.to}</span>
+                        <span class="text-foreground/50">→ {entry.to}</span>
                       </Show>
                     </div>
                   )}
@@ -267,7 +267,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                 <For each={getModifiedFiles()}>
                   {(entry) => (
                     <div
-                      class="flex items-center gap-2 p-2 rounded hover:bg-base-200 cursor-pointer"
+                      class="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
                       onClick={() => loadDiff(entry.from)}
                     >
                       <span class={`text-lg ${getStatusColor(entry.y as GitStatusChar)}`}>
@@ -275,7 +275,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                       </span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
-                      <span class="text-xs text-base-content/50">
+                      <span class="text-xs text-foreground/50">
                         {getStatusLabel(entry.x as GitStatusChar, entry.y as GitStatusChar)}
                       </span>
                     </div>
@@ -287,11 +287,11 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
             {/* Untracked Files */}
             <Show when={getUntrackedFiles().length > 0}>
               <div class="p-3">
-                <h3 class="text-sm font-semibold mb-2 text-base-content/50">Untracked</h3>
+                <h3 class="text-sm font-semibold mb-2 text-foreground/50">Untracked</h3>
                 <For each={getUntrackedFiles()}>
                   {(entry) => (
-                    <div class="flex items-center gap-2 p-2 rounded hover:bg-base-200">
-                      <span class="text-lg text-base-content/30">?</span>
+                    <div class="flex items-center gap-2 p-2 rounded hover:bg-muted">
+                      <span class="text-lg text-foreground/30">?</span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
                     </div>
@@ -332,12 +332,12 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
             {/* Diff Content */}
             <Show when={!state.isLoadingDiff && state.currentDiff?.hunks}>
-              <div class="bg-base-200 rounded-lg overflow-hidden text-sm">
+              <div class="bg-muted rounded-lg overflow-hidden text-sm">
                 <For each={state.currentDiff?.hunks}>
                   {(hunk) => (
-                    <div class="border-b border-base-300 last:border-0">
+                    <div class="border-b border-border last:border-0">
                       {/* Hunk Header */}
-                      <div class="bg-base-300 px-3 py-1 font-mono text-xs text-base-content/70">
+                      <div class="bg-muted/50 px-3 py-1 font-mono text-xs text-foreground/70">
                         {hunk.header}
                       </div>
                       {/* Hunk Lines */}
@@ -352,7 +352,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
             {/* Raw Diff */}
             <Show when={!state.isLoadingDiff && !state.currentDiff?.hunks}>
-              <pre class="bg-base-200 rounded-lg p-3 text-sm overflow-x-auto whitespace-pre-wrap">
+              <pre class="bg-muted rounded-lg p-3 text-sm overflow-x-auto whitespace-pre-wrap">
                 {state.currentDiff?.diff}
               </pre>
             </Show>
@@ -362,7 +362,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
       {/* Error Display */}
       <Show when={state.error}>
-        <Alert variant="error" class="m-4">
+        <Alert variant="destructive" class="m-4">
           <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>

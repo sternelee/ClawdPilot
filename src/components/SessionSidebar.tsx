@@ -73,7 +73,7 @@ const getAgentIcon = (agentType: AgentType) => {
       );
     default:
       return (
-        <div class={`${iconClass} text-base-content/50`}>
+        <div class={`${iconClass} text-muted-foreground`}>
           <FiTerminal size={16} />
         </div>
       );
@@ -103,7 +103,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
         ${
           props.isActive
             ? "bg-primary/10 border-r-2 border-primary"
-            : "hover:bg-base-200/50 border-r-2 border-transparent"
+            : "hover:bg-muted/50 border-r-2 border-transparent"
         }`}
       onClick={props.onClick}
       onKeyDown={(e) => {
@@ -117,9 +117,9 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       <div class="flex-shrink-0">
         <Show
           when={session()?.mode === "local"}
-          fallback={<FiCloud size={18} class="text-base-content/60" />}
+          fallback={<FiCloud size={18} class="text-muted-foreground/60" />}
         >
-          <FiHome size={18} class="text-base-content/60" />
+          <FiHome size={18} class="text-muted-foreground/60" />
         </Show>
       </div>
 
@@ -144,16 +144,16 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             {session()?.agentType === "custom" && "Custom"}
           </span>
           <span
-            class={`text-xs text-base-content/50 ${
+            class={`text-xs text-muted-foreground ${
               session()?.mode === "local"
                 ? "bg-primary/20 px-2 py-0.5 rounded-full"
-                : "bg-base-200 px-2 py-0.5 rounded-full"
+                : "bg-muted px-2 py-0.5 rounded-full"
             }`}
           >
             {session()?.mode === "local" ? "Local" : "Remote"}
           </span>
         </div>
-        <div class="text-xs text-base-content/60 truncate">
+        <div class="text-xs text-muted-foreground/60 truncate">
           {session()?.projectPath?.split("/").pop() || "No project"}
         </div>
       </div>
@@ -188,7 +188,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
         variant="ghost"
         size="xs"
         class={`p-1 rounded opacity-0 inline-flex items-center justify-center group-hover:opacity-100 transition-opacity
-          ${props.isActive ? "hover:bg-primary/20" : "hover:bg-base-300"}`}
+          ${props.isActive ? "hover:bg-primary/20" : "hover:bg-muted"}`}
         onClick={props.onClose}
         title="Close session"
       >
@@ -309,13 +309,13 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
       {/* Sidebar */}
       <aside
-        class={`fixed lg:static inset-y-0 left-0 z-50 w-80 bg-base-100 border-r border-base-300
+        class={`fixed lg:static inset-y-0 left-0 z-50 w-80 bg-background border-r border-border
           transform transition-transform duration-300 ease-in-out
           ${props.isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
         {/* Header */}
-        <div class="flex items-center justify-between p-4 border-b border-base-300">
+        <div class="flex items-center justify-between p-4 border-b border-border">
           <h3 class="text-sm font-semibold">Sessions</h3>
           <Button
             size="icon"
@@ -345,7 +345,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             </For>
           </Show>
           <Show when={sessions().length === 0}>
-            <div class="text-center py-8 text-base-content/50">
+            <div class="text-center py-8 text-muted-foreground">
               <p class="text-sm">No active sessions</p>
               <p class="text-xs mt-1">
                 Create a local session or connect to a remote CLI
@@ -355,16 +355,16 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         </div>
 
         {/* Footer */}
-        <div class="p-3 border-t border-base-300">
+        <div class="p-3 border-t border-border">
           <div class="flex items-center justify-between">
-            <div class="text-xs text-base-content/50">
+            <div class="text-xs text-muted-foreground">
               {activeSessions().length} active session
               {activeSessions().length !== 1 ? "s" : ""}
             </div>
             <Button
               type="button"
               size="sm"
-              variant="primary"
+              variant="default"
               onClick={() => sessionStore.openNewSessionModal("local")}
               title="New Session"
             >

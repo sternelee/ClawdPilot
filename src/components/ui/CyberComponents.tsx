@@ -94,13 +94,13 @@ export interface SimpleCardProps {
 
 export function SimpleCard(props: SimpleCardProps) {
   return (
-    <Card class={cn("bg-base-100 shadow-md", props.class)}>
+    <Card class={cn("bg-background shadow-md", props.class)}>
       <CardBody>
         <Show when={props.title}>
           <CardTitle>{props.title}</CardTitle>
         </Show>
         <Show when={props.subtitle}>
-          <p class="text-sm text-base-content opacity-70">{props.subtitle}</p>
+          <p class="text-sm text-foreground opacity-70">{props.subtitle}</p>
         </Show>
         <div class="mt-4">{props.children}</div>
         <Show when={props.actions}>

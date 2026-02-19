@@ -7,7 +7,7 @@ const Card: Component<ComponentProps<"div">> = (props) => {
   const [local, others] = splitProps(props, ["class"])
   return (
     <div
-      class={cn("rounded-lg border bg-card text-card-foreground shadow-sm", local.class)}
+      class={cn("rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-shadow hover:shadow-md", local.class)}
       {...others}
     />
   )
