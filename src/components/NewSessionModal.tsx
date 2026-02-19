@@ -422,7 +422,9 @@ export const NewSessionModal: Component = () => {
                 }}
                 onInputChange={(value) => {
                   sessionStore.setNewSessionPath(value);
-                  loadDirectory(value);
+                  if (value.endsWith("/")) {
+                    loadDirectory(value);
+                  }
                 }}
                 items={dirEntries().map((e) => {
                   // Build the path: if current input ends with /, add to it; otherwise handle partial paths

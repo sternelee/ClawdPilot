@@ -14,8 +14,6 @@
     "os:default",
     "core:default",
     "dialog:default",
-    "shell:default",
-    "sql:default"
+    "shell:default"
   ]
 }
-

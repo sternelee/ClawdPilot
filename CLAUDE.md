@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ClawdChat** is a P2P terminal session sharing tool built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile). It enables real-time collaboration on terminal sessions with automatic history logging and secure P2P networking using iroh.
+**ClawdChat** (directory: `riterm`) is a P2P terminal session sharing tool built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile). It enables real-time collaboration on terminal sessions with automatic history logging and secure P2P networking using iroh.
 
 ## Architecture
 
@@ -313,6 +313,9 @@ RUST_LOG=debug pnpm tauri:dev
 # Windows: %APPDATA%\ClawdChat\logs\
 # macOS: ~/Library/Logs/ClawdChat/
 # Linux: ~/.local/share/ClawdChat/logs/
+
+# iOS debugging (macOS only)
+idevicesyslog | grep ClawdChat
 ```
 
 ## Session Lifecycle

@@ -2767,8 +2767,24 @@ impl FileBrowserMessageHandler {
 
     async fn handle_list_directory(&self, path: String) -> Result<Option<Message>> {
         use std::fs;
+
+        // Expand ~ to home directory
+        let expanded_path = if path.starts_with("~/") {
+            if let Some(home) = dirs::home_dir() {
+                home.join(&path[2..]).to_string_lossy().to_string()
+            } else {
+                path.clone()
+            }
+        } else if path == "~" {
+            dirs::home_dir()
+                .map(|h| h.to_string_lossy().to_string())
+                .unwrap_or(path.clone())
+        } else {
+            path.clone()
+        };
+
         let mut entries = vec![];
-        let read_result = fs::read_dir(&path);
+        let read_result = fs::read_dir(&expanded_path);
         let dir_iter = match read_result {
             Ok(d) => d,
             Err(_) => fs::read_dir(".")?,
@@ -3125,6 +3141,27 @@ impl RemoteSpawnMessageHandler {
             args
         );
 
+        // Expand ~ to home directory and canonicalize the path
+        let working_dir = {
+            let expanded = if project_path.starts_with("~/") {
+                if let Some(home) = dirs::home_dir() {
+                    home.join(&project_path[2..])
+                } else {
+                    PathBuf::from(&project_path)
+                }
+            } else if project_path == "~" {
+                dirs::home_dir().unwrap_or_else(|| PathBuf::from(&project_path))
+            } else {
+                PathBuf::from(&project_path)
+            };
+            // Ensure absolute path
+            if expanded.is_relative() {
+                std::env::current_dir().unwrap_or_default().join(expanded)
+            } else {
+                expanded
+            }
+        };
+
         // 使用 AgentManager 启动新的 agent 会话（使用指定的 session_id）
         self.agent_manager
             .start_session_with_id(
@@ -3132,7 +3169,7 @@ impl RemoteSpawnMessageHandler {
                 agent_type,
                 None,
                 args.clone(),
-                PathBuf::from(project_path.clone()),
+                working_dir,
                 None,
                 "remote".to_string(),
             )

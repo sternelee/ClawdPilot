@@ -262,11 +262,11 @@ impl AgentManager {
 
         let session: Arc<SessionKind> = if agent_type == AgentType::ClaudeCode {
             // Claude Code uses SDK Control Protocol
-            let (command, default_args) = AgentFactory::get_sdk_command(agent_type)
+            let (command, _default_args) = AgentFactory::get_sdk_command(agent_type)
                 .ok_or_else(|| anyhow!("No SDK command available for ClaudeCode"))?;
 
-            let mut args = default_args;
-            args.extend(extra_args);
+            // Only pass extra_args; run_sdk_runtime adds the SDK flags itself
+            let args = extra_args;
 
             let sdk_session = ClaudeSdkSession::spawn(
                 session_id.clone(),

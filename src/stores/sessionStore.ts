@@ -355,6 +355,30 @@ export const createSessionStore = () => {
     }
   };
 
+  const buildExtraArgs = (): string[] => {
+    const extraArgs: string[] = [];
+    if (state.newSessionAgent === "zeroclaw") {
+      extraArgs.push(state.zeroClawProvider);
+      extraArgs.push(state.zeroClawModel);
+      if (state.zeroClawApiKey.trim()) {
+        extraArgs.push(state.zeroClawApiKey.trim());
+      } else {
+        extraArgs.push(""); // placeholder for api_key
+      }
+      extraArgs.push(state.zeroClawTemperature);
+      extraArgs.push(state.zeroClawMaxIterations.toString());
+      // Add system prompt (base64 encoded to handle special chars)
+      const promptEncoded = btoa(
+        unescape(encodeURIComponent(state.zeroClawSystemPrompt || "")),
+      );
+      extraArgs.push(promptEncoded);
+      // Add enabled tools (comma-separated)
+      const toolsStr = state.zeroClawEnabledTools.join(",");
+      extraArgs.push(toolsStr);
+    }
+    return extraArgs;
+  };
+
   const handleRemoteSpawn = async () => {
     const controlSessionId = state.targetControlSessionId;
     if (!controlSessionId) {
@@ -371,10 +395,10 @@ export const createSessionStore = () => {
 
     try {
       await invoke("remote_spawn_session", {
-        sessionId: controlSessionId,
+        connectionSessionId: controlSessionId,
         agentType: state.newSessionAgent,
         projectPath: state.newSessionPath,
-        args: [], // Add args if needed
+        args: buildExtraArgs(),
       });
 
       notificationStore.success(
@@ -410,28 +434,7 @@ export const createSessionStore = () => {
     setStartingAgent(true);
 
     try {
-      // Build extra args for ZeroClaw provider config
-      const extraArgs: string[] = [];
-      if (state.newSessionAgent === "zeroclaw") {
-        extraArgs.push(state.zeroClawProvider);
-        extraArgs.push(state.zeroClawModel);
-        if (state.zeroClawApiKey.trim()) {
-          extraArgs.push(state.zeroClawApiKey.trim());
-        } else {
-          extraArgs.push(""); // placeholder for api_key
-        }
-        extraArgs.push(state.zeroClawTemperature);
-        // Add new parameters
-        extraArgs.push(state.zeroClawMaxIterations.toString());
-        // Add system prompt (base64 encoded to handle special chars)
-        const promptEncoded = btoa(
-          unescape(encodeURIComponent(state.zeroClawSystemPrompt || "")),
-        );
-        extraArgs.push(promptEncoded);
-        // Add enabled tools (comma-separated)
-        const toolsStr = state.zeroClawEnabledTools.join(",");
-        extraArgs.push(toolsStr);
-      }
+      const extraArgs = buildExtraArgs();
 
       const sessionId = await invoke<string>("local_start_agent", {
         agentTypeStr: state.newSessionAgent,

@@ -10,8 +10,6 @@
     "clipboard-manager:default",
     "notification:default",
     "os:default",
-    "shell:default",
-    "sql:default"
+    "shell:default"
   ]
 }
-

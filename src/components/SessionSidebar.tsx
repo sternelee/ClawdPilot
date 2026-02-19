@@ -247,7 +247,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
     // Trigger remote session spawn via CLI
     invoke("remote_spawn_session", {
-      sessionId: session.sessionId,
+      connectionSessionId: session.sessionId,
       agentType: session.agentType,
       projectPath: session.projectPath,
       args: [],
