@@ -8,8 +8,8 @@
 //! - Interactive window selection
 
 use super::traits::{Tool, ToolResult};
-use crate::security::SecurityPolicy;
 use crate::runtime::RuntimeAdapter;
+use crate::security::SecurityPolicy;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -101,10 +101,9 @@ impl EnhancedScreenshotTool {
 
     /// Build and run a command, returning output
     async fn run_command(&self, program: &str, args: &[&str]) -> anyhow::Result<Command> {
-        let mut cmd = self.runtime.build_shell_command(
-            program,
-            &self.security.workspace_dir,
-        )?;
+        let mut cmd = self
+            .runtime
+            .build_shell_command(program, &self.security.workspace_dir)?;
         cmd.args(args);
         Ok(cmd)
     }
@@ -131,7 +130,8 @@ impl EnhancedScreenshotTool {
             end tell
         "#;
 
-        let output = self.run_command("osascript", &["-e", script])
+        let output = self
+            .run_command("osascript", &["-e", script])
             .await?
             .output()
             .await?;
@@ -172,7 +172,9 @@ impl EnhancedScreenshotTool {
 
                     match key {
                         "name" => title = value.trim_matches(|c| c == '"' || c == '}').to_string(),
-                        "app" => app_name = value.trim_matches(|c| c == '"' || c == '}').to_string(),
+                        "app" => {
+                            app_name = value.trim_matches(|c| c == '"' || c == '}').to_string()
+                        }
                         "x" => x = value.parse().unwrap_or(0),
                         "y" => y = value.parse().unwrap_or(0),
                         "width" => width = value.parse().unwrap_or(0),
@@ -188,7 +190,12 @@ impl EnhancedScreenshotTool {
                     title,
                     app_name,
                     process_id: 0,
-                    bounds: Some(WindowBounds { x, y, width, height }),
+                    bounds: Some(WindowBounds {
+                        x,
+                        y,
+                        width,
+                        height,
+                    }),
                 });
             }
         }
@@ -199,7 +206,8 @@ impl EnhancedScreenshotTool {
     /// Linux window enumeration using wmctrl and xdotool
     async fn list_windows_linux(&self) -> anyhow::Result<Vec<WindowInfo>> {
         // Try wmctrl first
-        let output = self.run_command("wmctrl", &["-l", "-p", "-G"])
+        let output = self
+            .run_command("wmctrl", &["-l", "-p", "-G"])
             .await?
             .output()
             .await?;
@@ -210,7 +218,8 @@ impl EnhancedScreenshotTool {
         }
 
         // Fallback to xdotool
-        let output = self.run_command("xdotool", &["search", "--onlyvisible", "--name", ".*"])
+        let output = self
+            .run_command("xdotool", &["search", "--onlyvisible", "--name", ".*"])
             .await?
             .output()
             .await?;
@@ -249,7 +258,12 @@ impl EnhancedScreenshotTool {
                     title: title.clone(),
                     app_name: title.split('-').last().unwrap_or(&title).trim().to_string(),
                     process_id,
-                    bounds: Some(WindowBounds { x, y, width, height }),
+                    bounds: Some(WindowBounds {
+                        x,
+                        y,
+                        width,
+                        height,
+                    }),
                 });
             }
         }
@@ -268,18 +282,22 @@ impl EnhancedScreenshotTool {
             }
 
             // Get window name
-            let name_output = self.run_command("xdotool", &["getwindowname", window_id])
+            let name_output = self
+                .run_command("xdotool", &["getwindowname", window_id])
                 .await?
                 .output()
                 .await?;
 
-            let title = String::from_utf8_lossy(&name_output.stdout).trim().to_string();
+            let title = String::from_utf8_lossy(&name_output.stdout)
+                .trim()
+                .to_string();
             if title.is_empty() || title == "N/A" {
                 continue;
             }
 
             // Get window geometry
-            let geom_output = self.run_command("xdotool", &["getwindowgeometry", "--shell", window_id])
+            let geom_output = self
+                .run_command("xdotool", &["getwindowgeometry", "--shell", window_id])
                 .await?
                 .output()
                 .await?;
@@ -308,7 +326,12 @@ impl EnhancedScreenshotTool {
                 title,
                 app_name: String::new(),
                 process_id: 0,
-                bounds: Some(WindowBounds { x, y, width, height }),
+                bounds: Some(WindowBounds {
+                    x,
+                    y,
+                    width,
+                    height,
+                }),
             });
         }
 
@@ -364,7 +387,8 @@ impl EnhancedScreenshotTool {
             $windows | ConvertTo-Json -Depth 3
         "#;
 
-        let output = self.run_command("powershell", &["-NoProfile", "-Command", script])
+        let output = self
+            .run_command("powershell", &["-NoProfile", "-Command", script])
             .await?
             .output()
             .await?;
@@ -431,9 +455,10 @@ impl EnhancedScreenshotTool {
             .and_then(|v| v.as_str())
             .map_or_else(|| format!("screenshot_{timestamp}.png"), String::from);
 
-        let safe_name = PathBuf::from(&filename)
-            .file_name()
-            .map_or_else(|| format!("screenshot_{timestamp}.png"), |n| n.to_string_lossy().to_string());
+        let safe_name = PathBuf::from(&filename).file_name().map_or_else(
+            || format!("screenshot_{timestamp}.png"),
+            |n| n.to_string_lossy().to_string(),
+        );
 
         let output_path = self.security.workspace_dir.join(&safe_name);
         let output_str = output_path.to_string_lossy().to_string();
@@ -495,7 +520,10 @@ impl EnhancedScreenshotTool {
                     Err(_) => Ok(ToolResult {
                         success: false,
                         output: String::new(),
-                        error: Some(format!("Screenshot timed out after {}s", SCREENSHOT_TIMEOUT_SECS)),
+                        error: Some(format!(
+                            "Screenshot timed out after {}s",
+                            SCREENSHOT_TIMEOUT_SECS
+                        )),
                     }),
                 }
             }
@@ -508,16 +536,24 @@ impl EnhancedScreenshotTool {
     }
 
     /// Capture full screen
-    async fn capture_screen(&self, output_path: &str, include_cursor: bool) -> anyhow::Result<Command> {
+    async fn capture_screen(
+        &self,
+        output_path: &str,
+        include_cursor: bool,
+    ) -> anyhow::Result<Command> {
         if cfg!(target_os = "macos") {
-            let mut cmd = self.runtime.build_shell_command("screencapture", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("screencapture", &self.security.workspace_dir)?;
             if !include_cursor {
                 cmd.arg("-x");
             }
             cmd.arg(output_path);
             Ok(cmd)
         } else if cfg!(target_os = "linux") {
-            let mut cmd = self.runtime.build_shell_command("scrot", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("scrot", &self.security.workspace_dir)?;
             cmd.arg(output_path);
             Ok(cmd)
         } else if cfg!(target_os = "windows") {
@@ -525,7 +561,9 @@ impl EnhancedScreenshotTool {
                 "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::PrimaryScreen.Bitmap.Save('{}')",
                 output_path.replace('\\', "\\\\")
             );
-            let mut cmd = self.runtime.build_shell_command("powershell", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("powershell", &self.security.workspace_dir)?;
             cmd.args(["-NoProfile", "-Command", &ps_cmd]);
             Ok(cmd)
         } else {
@@ -543,12 +581,16 @@ screencapture -w {} "{}""#,
                 if target == "frontmost" { "-w" } else { "" },
                 output_path
             );
-            let mut cmd = self.runtime.build_shell_command("osascript", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("osascript", &self.security.workspace_dir)?;
             cmd.args(["-e", &script]);
             Ok(cmd)
         } else if cfg!(target_os = "linux") {
             // Use xdotool to find and capture window
-            let mut cmd = self.runtime.build_shell_command("xdotool", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("xdotool", &self.security.workspace_dir)?;
             cmd.args(["selectwindow", "--sync", "exec", "--", "scrot", output_path]);
             Ok(cmd)
         } else if cfg!(target_os = "windows") {
@@ -558,7 +600,9 @@ screencapture -w {} "{}""#,
                 target,
                 output_path.replace('\\', "\\\\")
             );
-            let mut cmd = self.runtime.build_shell_command("powershell", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("powershell", &self.security.workspace_dir)?;
             cmd.args(["-NoProfile", "-Command", &ps_cmd]);
             Ok(cmd)
         } else {
@@ -576,21 +620,43 @@ screencapture -w {} "{}""#,
         height: i32,
     ) -> anyhow::Result<Command> {
         if cfg!(target_os = "macos") {
-            let mut cmd = self.runtime.build_shell_command("screencapture", &self.security.workspace_dir)?;
-            cmd.args(["-x", "-R", &format!("{},{},{},{}", x, y, width, height), output_path]);
+            let mut cmd = self
+                .runtime
+                .build_shell_command("screencapture", &self.security.workspace_dir)?;
+            cmd.args([
+                "-x",
+                "-R",
+                &format!("{},{},{},{}", x, y, width, height),
+                output_path,
+            ]);
             Ok(cmd)
         } else if cfg!(target_os = "linux") {
             // Use import from ImageMagick
-            let mut cmd = self.runtime.build_shell_command("import", &self.security.workspace_dir)?;
-            cmd.args(["-window", "root", "-crop", &format!("{}x{}+{}+{}", width, height, x, y), output_path]);
+            let mut cmd = self
+                .runtime
+                .build_shell_command("import", &self.security.workspace_dir)?;
+            cmd.args([
+                "-window",
+                "root",
+                "-crop",
+                &format!("{}x{}+{}+{}", width, height, x, y),
+                output_path,
+            ]);
             Ok(cmd)
         } else if cfg!(target_os = "windows") {
             let ps_cmd = format!(
                 r#"Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $bmp = New-Object System.Drawing.Bitmap({},{}); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen({},{},0,0,New-Object System.Drawing.Size({},{})); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()"#,
-                width, height, x, y, width, height,
+                width,
+                height,
+                x,
+                y,
+                width,
+                height,
                 output_path.replace('\\', "\\\\")
             );
-            let mut cmd = self.runtime.build_shell_command("powershell", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("powershell", &self.security.workspace_dir)?;
             cmd.args(["-NoProfile", "-Command", &ps_cmd]);
             Ok(cmd)
         } else {
@@ -605,12 +671,16 @@ screencapture -w {} "{}""#,
                 "main" | "0" => "",
                 _ => display,
             };
-            let mut cmd = self.runtime.build_shell_command("screencapture", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("screencapture", &self.security.workspace_dir)?;
             cmd.args(["-x", "-D", display_flag, output_path]);
             Ok(cmd)
         } else if cfg!(target_os = "linux") {
             // Use display number with scrot
-            let mut cmd = self.runtime.build_shell_command("scrot", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("scrot", &self.security.workspace_dir)?;
             cmd.args(["-d", display, output_path]);
             Ok(cmd)
         } else {
@@ -622,15 +692,22 @@ screencapture -w {} "{}""#,
     /// Interactive window selection
     async fn capture_interactive(&self) -> anyhow::Result<ToolResult> {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let output_path = self.security.workspace_dir.join(format!("screenshot_{timestamp}.png"));
+        let output_path = self
+            .security
+            .workspace_dir
+            .join(format!("screenshot_{timestamp}.png"));
         let output_str = output_path.to_string_lossy().to_string();
 
         let cmd_result: anyhow::Result<Command> = if cfg!(target_os = "macos") {
-            let mut cmd = self.runtime.build_shell_command("screencapture", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("screencapture", &self.security.workspace_dir)?;
             cmd.args(["-i", "-s", "-x", &output_str]);
             Ok(cmd)
         } else if cfg!(target_os = "linux") {
-            let mut cmd = self.runtime.build_shell_command("scrot", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("scrot", &self.security.workspace_dir)?;
             cmd.args(["-s", &output_str]);
             Ok(cmd)
         } else if cfg!(target_os = "windows") {
@@ -638,7 +715,9 @@ screencapture -w {} "{}""#,
                 r#"Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; [System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::Empty; Start-Sleep -Milliseconds 500; $x = [System.Windows.Forms.Control]::MousePosition.X; $y = [System.Windows.Forms.Control]::MousePosition.Y; $bmp = New-Object System.Drawing.Bitmap(100,100); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($x,$y,0,0,New-Object System.Drawing.Size(100,100)); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()"#,
                 output_str.replace('\\', "\\\\")
             );
-            let mut cmd = self.runtime.build_shell_command("powershell", &self.security.workspace_dir)?;
+            let mut cmd = self
+                .runtime
+                .build_shell_command("powershell", &self.security.workspace_dir)?;
             cmd.args(["-NoProfile", "-Command", &ps_cmd]);
             Ok(cmd)
         } else {
@@ -660,7 +739,10 @@ screencapture -w {} "{}""#,
                             return Ok(ToolResult {
                                 success: false,
                                 output: String::new(),
-                                error: Some(format!("Interactive capture cancelled or failed: {}", stderr)),
+                                error: Some(format!(
+                                    "Interactive capture cancelled or failed: {}",
+                                    stderr
+                                )),
                             });
                         }
                         self.read_and_encode(&output_path).await
@@ -811,8 +893,8 @@ impl Tool for EnhancedScreenshotTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::security::{AutonomyLevel, SecurityPolicy};
     use crate::runtime::NativeRuntime;
+    use crate::security::{AutonomyLevel, SecurityPolicy};
 
     fn test_security() -> Arc<SecurityPolicy> {
         Arc::new(SecurityPolicy {

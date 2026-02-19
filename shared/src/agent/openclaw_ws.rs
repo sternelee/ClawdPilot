@@ -16,13 +16,13 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
 use futures_util::{SinkExt, StreamExt};
-use tokio::sync::{broadcast, mpsc, oneshot, RwLock};
+use tokio::sync::{RwLock, broadcast, mpsc, oneshot};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::message_protocol::AgentType;
 use super::events::{AgentEvent, AgentTurnEvent, PendingPermission};
+use crate::message_protocol::AgentType;
 
 /// Default port for OpenClaw Gateway
 pub const DEFAULT_OPENCLAW_PORT: u16 = 18789;
@@ -104,7 +104,10 @@ impl OpenClawWsSession {
 
         // Spawn the runtime in a separate thread (OpenClaw Gateway needs to bind to a port)
         std::thread::Builder::new()
-            .name(format!("clawdchat-openclaw-{}", &session_id[..session_id.len().min(8)]))
+            .name(format!(
+                "clawdchat-openclaw-{}",
+                &session_id[..session_id.len().min(8)]
+            ))
             .spawn(move || {
                 let runtime = match tokio::runtime::Builder::new_current_thread()
                     .enable_all()
@@ -177,13 +180,12 @@ impl OpenClawWsSession {
         let (response_tx, response_rx) = oneshot::channel::<std::result::Result<(), String>>();
 
         self.command_tx
-            .send(OpenClawCommand::Prompt {
-                text,
-                response_tx,
-            })
+            .send(OpenClawCommand::Prompt { text, response_tx })
             .map_err(|e| format!("Failed to send command: {}", e))?;
 
-        response_rx.await.map_err(|e| format!("Command channel closed: {}", e))?
+        response_rx
+            .await
+            .map_err(|e| format!("Command channel closed: {}", e))?
     }
 
     /// Interrupt current operation
@@ -194,18 +196,24 @@ impl OpenClawWsSession {
             .send(ManagerCommand::Interrupt { response_tx })
             .map_err(|e| format!("Failed to send interrupt: {}", e))?;
 
-        response_rx.await.map_err(|e| format!("Interrupt channel closed: {}", e))?
+        response_rx
+            .await
+            .map_err(|e| format!("Interrupt channel closed: {}", e))?
     }
 
     /// Get pending permission requests
-    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<PendingPermission>, String> {
+    pub async fn get_pending_permissions(
+        &self,
+    ) -> std::result::Result<Vec<PendingPermission>, String> {
         let (response_tx, response_rx) = oneshot::channel::<Vec<PendingPermission>>();
 
         self.manager_tx
             .send(ManagerCommand::GetPendingPermissions { response_tx })
             .map_err(|e| format!("Failed to get permissions: {}", e))?;
 
-        response_rx.await.map_err(|e| format!("Permission channel closed: {}", e))
+        response_rx
+            .await
+            .map_err(|e| format!("Permission channel closed: {}", e))
     }
 
     /// Respond to a permission request
@@ -226,7 +234,9 @@ impl OpenClawWsSession {
             })
             .map_err(|e| format!("Failed to respond to permission: {}", e))?;
 
-        response_rx.await.map_err(|e| format!("Permission response channel closed: {}", e))?
+        response_rx
+            .await
+            .map_err(|e| format!("Permission response channel closed: {}", e))?
     }
 
     /// Gracefully shut down the session
@@ -323,10 +333,15 @@ async fn run_openclaw_runtime(params: OpenClawRuntimeParams) -> Result<()> {
     })?;
 
     // Get stdout to parse the port
-    let stdout = child.stdout.take().ok_or_else(|| anyhow!("Failed to capture stdout"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("Failed to capture stdout"))?;
 
     // Wait for the gateway to be ready by reading stdout
-    let port = wait_for_gateway_ready(stdout).await.unwrap_or(DEFAULT_OPENCLAW_PORT);
+    let port = wait_for_gateway_ready(stdout)
+        .await
+        .unwrap_or(DEFAULT_OPENCLAW_PORT);
 
     info!("OpenClaw Gateway ready on port {}", port);
 
@@ -642,7 +657,10 @@ async fn handle_ws_message(
                 });
             } else {
                 // Error response
-                let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                let error = msg
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error");
                 let _ = event_sender.send(AgentTurnEvent {
                     turn_id: id.to_string(),
                     event: AgentEvent::TurnError {
@@ -683,9 +701,7 @@ async fn handle_ws_message(
                         .and_then(|v| v.as_str())
                         .unwrap_or("unknown")
                         .to_string();
-                    let output = payload
-                        .and_then(|p| p.get("output"))
-                        .cloned();
+                    let output = payload.and_then(|p| p.get("output")).cloned();
 
                     let _ = event_sender.send(AgentTurnEvent {
                         turn_id: Uuid::new_v4().to_string(),

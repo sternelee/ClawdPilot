@@ -135,7 +135,9 @@ impl SessionKind {
             SessionKind::Sdk(s) => s.respond_to_permission(request_id, approved, reason).await,
             SessionKind::CodexAcp(s) => s.respond_to_permission(request_id, approved, reason).await,
             SessionKind::ZeroClaw(s) => s.respond_to_permission(request_id, approved, reason).await,
-            SessionKind::OpenClawWs(s) => s.respond_to_permission(request_id, approved, reason).await,
+            SessionKind::OpenClawWs(s) => {
+                s.respond_to_permission(request_id, approved, reason).await
+            }
         }
     }
 

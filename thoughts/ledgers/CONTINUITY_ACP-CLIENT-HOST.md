@@ -32,7 +32,7 @@ Complete local ACP agent support in the CLI, enabling:
 - [x] Create local_client.rs module with slash command support
 - [x] Add `/listperms`, `/approve`, `/deny`, `/interrupt`, `/quit`, `/help` slash commands
 - [x] Fix compilation error with escaped quotes in mod.rs
-- [x] Fix AgentType import issue (use from clawdchat_shared)
+- [x] Fix AgentType import issue (use from shared)
 - [x] Fix manager clone issue for event task
 - [x] Fix test compilation error in message_adapter.rs
 - [x] Clean up dead code warnings

@@ -121,10 +121,7 @@ impl ZeroClawSession {
             .get(3)
             .and_then(|s| s.parse().ok())
             .unwrap_or(0.7);
-        let max_iterations: usize = extra_args
-            .get(4)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(20);
+        let max_iterations: usize = extra_args.get(4).and_then(|s| s.parse().ok()).unwrap_or(20);
 
         // Parse system prompt (base64 encoded)
         let custom_system_prompt = extra_args.get(5).and_then(|s| {
@@ -169,20 +166,20 @@ impl ZeroClawSession {
         let _runtime: Arc<dyn RuntimeAdapter> = Arc::new(zeroclaw::runtime::NativeRuntime::new());
 
         #[cfg(feature = "desktop-runtime")]
-        let all_tools =
-            zeroclaw::tools::all_tools_with_runtime(&security, runtime, memory.clone());
+        let all_tools = zeroclaw::tools::all_tools_with_runtime(&security, runtime, memory.clone());
         #[cfg(not(feature = "desktop-runtime"))]
         let all_tools = zeroclaw::tools::all_tools(&security, memory.clone());
 
         // Filter tools based on enabled_tools if provided
-        let tools_registry: Vec<Box<dyn zeroclaw::tools::Tool>> = if let Some(ref enabled) = enabled_tools {
-            all_tools
-                .into_iter()
-                .filter(|t| enabled.contains(&t.name().to_string()))
-                .collect()
-        } else {
-            all_tools
-        };
+        let tools_registry: Vec<Box<dyn zeroclaw::tools::Tool>> =
+            if let Some(ref enabled) = enabled_tools {
+                all_tools
+                    .into_iter()
+                    .filter(|t| enabled.contains(&t.name().to_string()))
+                    .collect()
+            } else {
+                all_tools
+            };
 
         info!(
             "ZeroClaw session created: id={}, provider={}, model={}, tools={}, max_iterations={}",

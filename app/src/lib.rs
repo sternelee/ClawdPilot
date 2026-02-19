@@ -25,11 +25,11 @@ pub mod macos_panel {
 mod tcp_forwarding;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use clawdchat_shared::AgentManager;
-use clawdchat_shared::{
-    AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, DirEntry,
-    Event, EventListener, EventType, FileBrowserAction, IODataType, Message as ClawdChatMessage, MessageBuilder,
-    MessagePayload, QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType,
+use shared::AgentManager;
+use shared::{
+    AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, DirEntry, Event,
+    EventListener, EventType, FileBrowserAction, IODataType, Message as ClawdChatMessage,
+    MessageBuilder, MessagePayload, QuicMessageClientHandle, SerializableEndpointAddr, TcpDataType,
     TcpForwardingAction, TcpForwardingType, TerminalAction,
 };
 
@@ -51,13 +51,15 @@ fn is_valid_session_ticket(ticket: &str) -> bool {
 
 // Parse ticket and extract EndpointAddr (includes direct addresses and relay URL)
 // Supports full address info for direct connection
-fn parse_ticket_to_node_addr(ticket: &str) -> Result<iroh_base::EndpointAddr, Box<dyn std::error::Error>> {
+fn parse_ticket_to_node_addr(
+    ticket: &str,
+) -> Result<iroh_base::EndpointAddr, Box<dyn std::error::Error>> {
     use base64::Engine as _;
     use base64::engine::general_purpose;
     use data_encoding::BASE32_NOPAD;
     use iroh_base::{EndpointAddr, PublicKey, RelayUrl, TransportAddr};
     use iroh_tickets::endpoint::EndpointTicket;
-    use clawdchat_shared::SerializableEndpointAddr;
+    use shared::SerializableEndpointAddr;
     use std::collections::BTreeSet;
 
     // Handle old format with "ticket:" prefix
@@ -586,8 +588,10 @@ async fn connect_to_peer(
             // 提取 direct addresses 和 relay URL
             #[cfg(debug_assertions)]
             {
-                use iroh_base::{TransportAddr};
-                let direct_addrs: Vec<_> = node_addr.addrs.iter()
+                use iroh_base::TransportAddr;
+                let direct_addrs: Vec<_> = node_addr
+                    .addrs
+                    .iter()
                     .filter_map(|a| {
                         if let TransportAddr::Ip(addr) = a {
                             Some(addr.to_string())
@@ -596,7 +600,9 @@ async fn connect_to_peer(
                         }
                     })
                     .collect();
-                let relay_url = node_addr.addrs.iter()
+                let relay_url = node_addr
+                    .addrs
+                    .iter()
                     .filter_map(|a| {
                         if let TransportAddr::Relay(url) = a {
                             Some(url.to_string())
@@ -613,7 +619,10 @@ async fn connect_to_peer(
             let receiver = quic_client.get_message_receiver().await;
 
             // Establish actual QUIC connection using full NodeAddr (supports direct addresses and relay)
-            let connection_id = match quic_client.connect_to_server_with_node_addr(&node_addr).await {
+            let connection_id = match quic_client
+                .connect_to_server_with_node_addr(&node_addr)
+                .await
+            {
                 Ok(actual_connection_id) => {
                     #[cfg(debug_assertions)]
                     tracing::info!(
@@ -973,7 +982,7 @@ async fn connect_to_peer(
 
                                     // Transform AgentMessageContent to frontend-expected format
                                     let event_payload = match &agent_msg.content {
-                                        clawdchat_shared::message_protocol::AgentMessageContent::AgentResponse {
+                                        shared::message_protocol::AgentMessageContent::AgentResponse {
                                             content, thinking, message_id
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -982,7 +991,7 @@ async fn connect_to_peer(
                                             "thinking": thinking,
                                             "messageId": message_id,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::ToolCallUpdate {
+                                        shared::message_protocol::AgentMessageContent::ToolCallUpdate {
                                             tool_name, status, output
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -991,7 +1000,7 @@ async fn connect_to_peer(
                                             "status": format!("{:?}", status),
                                             "output": output,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::SystemNotification {
+                                        shared::message_protocol::AgentMessageContent::SystemNotification {
                                             level, message
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -999,7 +1008,7 @@ async fn connect_to_peer(
                                             "level": format!("{:?}", level),
                                             "message": message,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::UserMessage {
+                                        shared::message_protocol::AgentMessageContent::UserMessage {
                                             content, attachments
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -1007,14 +1016,14 @@ async fn connect_to_peer(
                                             "content": content,
                                             "attachments": attachments,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::TurnStarted {
+                                        shared::message_protocol::AgentMessageContent::TurnStarted {
                                             turn_id
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
                                             "type": "turn_started",
                                             "turnId": turn_id,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::TextDelta {
+                                        shared::message_protocol::AgentMessageContent::TextDelta {
                                             text, thinking
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -1022,14 +1031,14 @@ async fn connect_to_peer(
                                             "content": text,
                                             "thinking": thinking,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::TurnCompleted {
+                                        shared::message_protocol::AgentMessageContent::TurnCompleted {
                                             content
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
                                             "type": "turn_completed",
                                             "content": content,
                                         }),
-                                        clawdchat_shared::message_protocol::AgentMessageContent::TurnError {
+                                        shared::message_protocol::AgentMessageContent::TurnError {
                                             error
                                         } => serde_json::json!({
                                             "sessionId": agent_msg.session_id,
@@ -1051,7 +1060,7 @@ async fn connect_to_peer(
                                 }
                                 MessagePayload::AgentPermission(perm_msg) => {
                                     // Handle permission request from CLI
-                                    if let clawdchat_shared::message_protocol::AgentPermissionMessageInner::Request(request) = &perm_msg.inner {
+                                    if let shared::message_protocol::AgentPermissionMessageInner::Request(request) = &perm_msg.inner {
                                         #[cfg(any(debug_assertions, not(feature = "release-logging")))]
                                         tracing::info!(
                                             "Received PermissionRequest for session {}: tool={}",
@@ -1470,7 +1479,7 @@ async fn parse_session_ticket(ticket: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
-    clawdchat_shared::list_directory(&path)
+    shared::list_directory(&path)
 }
 
 /// Helper function to check and initialize QUIC client if needed
@@ -1768,9 +1777,7 @@ async fn list_remote_directory(
     let request_id = uuid::Uuid::new_v4().to_string();
 
     // Create file browser message for listing directory
-    let action = FileBrowserAction::ListDirectory {
-        path: path.clone(),
-    };
+    let action = FileBrowserAction::ListDirectory { path: path.clone() };
 
     let message = MessageBuilder::file_browser(
         "clawdchat_app".to_string(),
@@ -2109,19 +2116,17 @@ async fn send_slash_command(
 
                     // Create RemoteSpawn message
                     let spawn_message = ClawdChatMessage::new(
-                        clawdchat_shared::MessageType::RemoteSpawn,
+                        shared::MessageType::RemoteSpawn,
                         "app".to_string(),
-                        clawdchat_shared::MessagePayload::RemoteSpawn(
-                            clawdchat_shared::RemoteSpawnMessage {
-                                action: clawdchat_shared::RemoteSpawnAction::SpawnSession {
-                                    session_id: session_id.clone(),
-                                    agent_type,
-                                    project_path: project_path.to_string(),
-                                    args,
-                                },
-                                request_id: None,
+                        shared::MessagePayload::RemoteSpawn(shared::RemoteSpawnMessage {
+                            action: shared::RemoteSpawnAction::SpawnSession {
+                                session_id: session_id.clone(),
+                                agent_type,
+                                project_path: project_path.to_string(),
+                                args,
                             },
-                        ),
+                            request_id: None,
+                        }),
                     )
                     .requires_response();
 
@@ -2155,17 +2160,15 @@ async fn send_slash_command(
         "passthrough" => {
             // Send as AgentControl::SendInput
             let control_message = ClawdChatMessage::new(
-                clawdchat_shared::MessageType::AgentControl,
+                shared::MessageType::AgentControl,
                 "app".to_string(),
-                clawdchat_shared::MessagePayload::AgentControl(
-                    clawdchat_shared::AgentControlMessage {
-                        session_id: session_id.clone(),
-                        action: AgentControlAction::SendInput {
-                            content: raw_command.to_string(),
-                        },
-                        request_id: None,
+                shared::MessagePayload::AgentControl(shared::AgentControlMessage {
+                    session_id: session_id.clone(),
+                    action: AgentControlAction::SendInput {
+                        content: raw_command.to_string(),
                     },
-                ),
+                    request_id: None,
+                }),
             )
             .requires_response();
 
@@ -2238,10 +2241,10 @@ async fn remote_spawn_session(
 
     // Create RemoteSpawn message
     let spawn_message = ClawdChatMessage::new(
-        clawdchat_shared::MessageType::RemoteSpawn,
+        shared::MessageType::RemoteSpawn,
         "app".to_string(),
-        clawdchat_shared::MessagePayload::RemoteSpawn(clawdchat_shared::RemoteSpawnMessage {
-            action: clawdchat_shared::RemoteSpawnAction::SpawnSession {
+        shared::MessagePayload::RemoteSpawn(shared::RemoteSpawnMessage {
+            action: shared::RemoteSpawnAction::SpawnSession {
                 session_id: agent_session_id.clone(),
                 agent_type,
                 project_path: project_path,
@@ -2289,7 +2292,7 @@ async fn respond_to_agent_permission(
         }
     };
 
-    use clawdchat_shared::PermissionMode;
+    use shared::PermissionMode;
 
     let response_mode = if !approved {
         PermissionMode::Deny
@@ -2311,18 +2314,21 @@ async fn respond_to_agent_permission(
     };
 
     let permission_message = ClawdChatMessage::new(
-        clawdchat_shared::MessageType::AgentPermission,
+        shared::MessageType::AgentPermission,
         "app".to_string(),
-        clawdchat_shared::MessagePayload::AgentPermission(
-            clawdchat_shared::AgentPermissionMessage {
-                inner: clawdchat_shared::AgentPermissionMessageInner::Response(permission_response),
-            },
-        ),
+        shared::MessagePayload::AgentPermission(shared::AgentPermissionMessage {
+            inner: shared::AgentPermissionMessageInner::Response(permission_response),
+        }),
     )
     .with_session(session_id);
 
-    send_message_via_client(&state, &connection_id, permission_message, "permission response")
-        .await?;
+    send_message_via_client(
+        &state,
+        &connection_id,
+        permission_message,
+        "permission response",
+    )
+    .await?;
     Ok(())
 }
 
@@ -2375,9 +2381,9 @@ async fn send_agent_message(
 
     // Send as AgentControl::SendInput
     let control_message = ClawdChatMessage::new(
-        clawdchat_shared::MessageType::AgentControl,
+        shared::MessageType::AgentControl,
         "app".to_string(),
-        clawdchat_shared::MessagePayload::AgentControl(clawdchat_shared::AgentControlMessage {
+        shared::MessagePayload::AgentControl(shared::AgentControlMessage {
             session_id: session_id,
             action: AgentControlAction::SendInput { content },
             request_id: None,
@@ -2415,9 +2421,9 @@ async fn abort_agent_action(
 
     // Send as AgentControl::SendInterrupt
     let control_message = ClawdChatMessage::new(
-        clawdchat_shared::MessageType::AgentControl,
+        shared::MessageType::AgentControl,
         "app".to_string(),
-        clawdchat_shared::MessagePayload::AgentControl(clawdchat_shared::AgentControlMessage {
+        shared::MessagePayload::AgentControl(shared::AgentControlMessage {
             session_id,
             action: AgentControlAction::SendInterrupt,
             request_id: None,
@@ -2444,6 +2450,13 @@ async fn local_start_agent(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    // Log the received parameters
+    tracing::info!(
+        "[local_start_agent] agent_type_str: {}, project_path: {}",
+        agent_type_str,
+        project_path
+    );
+
     // Parse agent type
     let agent_type = match agent_type_str.as_str() {
         "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
@@ -2551,7 +2564,7 @@ async fn local_start_agent(
             while let Ok(event) = event_rx.recv().await {
                 // Convert AgentTurnEvent to frontend-expected JSON
                 let event_payload =
-                    clawdchat_shared::message_adapter::event_to_message_content(&event.event, None);
+                    shared::message_adapter::event_to_message_content(&event.event, None);
                 let session_id_clone = session_id_for_spawn.clone();
                 let frontend_event = serde_json::json!({
                     "sessionId": session_id_clone.clone(),
@@ -2627,7 +2640,7 @@ async fn local_abort_agent_action(
 #[tauri::command(rename_all = "camelCase")]
 async fn local_list_agents(
     state: State<'_, AppState>,
-) -> Result<Vec<clawdchat_shared::message_protocol::AgentSessionMetadata>, String> {
+) -> Result<Vec<shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = match agent_manager_guard.as_ref() {
         Some(m) => m.clone(),
@@ -2641,7 +2654,7 @@ async fn local_list_agents(
             .get_session_agent_type(&sid)
             .await
             .unwrap_or(AgentType::Custom);
-        sessions.push(clawdchat_shared::message_protocol::AgentSessionMetadata {
+        sessions.push(shared::message_protocol::AgentSessionMetadata {
             session_id: sid,
             agent_type,
             project_path: String::new(),
@@ -2664,7 +2677,7 @@ async fn local_list_agents(
 #[tauri::command(rename_all = "camelCase")]
 async fn local_get_agent_sessions(
     state: State<'_, AppState>,
-) -> Result<Vec<clawdchat_shared::message_protocol::AgentSessionMetadata>, String> {
+) -> Result<Vec<shared::message_protocol::AgentSessionMetadata>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
     let manager = match agent_manager_guard.as_ref() {
         Some(m) => m.clone(),
@@ -2678,7 +2691,7 @@ async fn local_get_agent_sessions(
             .get_session_agent_type(&sid)
             .await
             .unwrap_or(AgentType::Custom);
-        sessions.push(clawdchat_shared::message_protocol::AgentSessionMetadata {
+        sessions.push(shared::message_protocol::AgentSessionMetadata {
             session_id: sid,
             agent_type,
             project_path: String::new(),
@@ -2763,8 +2776,8 @@ pub fn run() {
             get_terminal_list,
             send_terminal_input_to_terminal,
             resize_terminal,
-            connect_to_terminal, // Kept as no-op for compatibility
-            get_terminal_logs,   // Get terminal logs from CLI
+            connect_to_terminal,   // Kept as no-op for compatibility
+            get_terminal_logs,     // Get terminal logs from CLI
             list_remote_directory, // List remote directory via P2P
             // TCP Forwarding Management
             create_tcp_forwarding_session,

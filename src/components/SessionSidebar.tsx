@@ -158,30 +158,6 @@ const SessionItem: Component<SessionItemProps> = (props) => {
         </div>
       </div>
 
-      {/* Status Indicator */}
-      <div class="flex items-center gap-2">
-        {session()?.active && (
-          <span class="w-2 h-2 rounded-full bg-success animate-pulse" />
-        )}
-        <Show when={session()?.mode === "local" && props.onSpawnRemoteSession}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            class="h-6 px-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (props.onSpawnRemoteSession) {
-                props.onSpawnRemoteSession();
-              }
-            }}
-            title="Spawn remote session"
-          >
-            <FiPlus size={16} />
-          </Button>
-        </Show>
-      </div>
-
       {/* Close Button */}
       <Button
         type="button"

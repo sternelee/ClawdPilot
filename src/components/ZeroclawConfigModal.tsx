@@ -1,33 +1,14 @@
-import { For, Show, createMemo } from "solid-js";
+import { For, Show } from "solid-js";
 import { sessionStore } from "../stores/sessionStore";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Label } from "./ui/label";
-import { Select } from "./ui/select";
 import { Input, Textarea } from "./ui/primitives";
 
 interface ZeroclawConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-// Available providers
-const providers = [
-  { value: "ollama", label: "Ollama" },
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "google", label: "Google Gemini" },
-  { value: "openrouter", label: "OpenRouter" },
-];
-
-// Default models for each provider
-const defaultModels: Record<string, string[]> = {
-  ollama: ["qwen3:8b", "qwen3:14b", "llama3:8b", "llama3:14b", "mistral:7b"],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-  anthropic: ["claude-sonnet-4-20250514", "claude-sonnet-3-5-20250514", "claude-3-5-sonnet-20241022"],
-  google: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
-  openrouter: ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"],
-};
 
 // Available tools (desktop only)
 const availableTools = [
@@ -50,18 +31,6 @@ export function ZeroclawConfigModal(props: ZeroclawConfigModalProps) {
   // Get current state
   const state = () => sessionStore.state;
 
-  // Get models for current provider
-  const models = createMemo(() => {
-    const provider = state().zeroClawProvider;
-    return defaultModels[provider] || [];
-  });
-
-  // Check if provider requires API key
-  const requiresApiKey = createMemo(() => {
-    const provider = state().zeroClawProvider;
-    return ["openai", "anthropic", "google", "openrouter"].includes(provider);
-  });
-
   return (
     <Show when={props.isOpen}>
       <Dialog
@@ -72,54 +41,22 @@ export function ZeroclawConfigModal(props: ZeroclawConfigModalProps) {
         <h3 class="text-lg font-bold">ClawdAI 配置</h3>
 
         <div class="space-y-6 py-4">
-          {/* Provider Section */}
+          {/* System Prompt Section */}
           <div class="rounded-lg border border-border p-4 space-y-4">
-            <h4 class="font-semibold">Provider</h4>
+            <h4 class="font-semibold">System Prompt</h4>
+            <Textarea
+              value={state().zeroClawSystemPrompt}
+              onInput={(e) =>
+                sessionStore.setZeroClawSystemPrompt(e.currentTarget.value)
+              }
+              placeholder="Enter custom system prompt..."
+              rows={4}
+            />
+          </div>
 
-            <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-2">
-                <Label>Provider</Label>
-                <Select
-                  value={state().zeroClawProvider}
-                  onChange={(val) =>
-                    sessionStore.setZeroClawProvider(val)
-                  }
-                >
-                  <For each={providers}>
-                    {(p) => <option value={p.value}>{p.label}</option>}
-                  </For>
-                </Select>
-              </div>
-
-              <div class="space-y-2">
-                <Label>Model</Label>
-                <Select
-                  value={state().zeroClawModel}
-                  onChange={(val) =>
-                    sessionStore.setZeroClawModel(val)
-                  }
-                >
-                  <For each={models()}>
-                    {(m) => <option value={m}>{m}</option>}
-                  </For>
-                </Select>
-              </div>
-            </div>
-
-            <Show when={requiresApiKey()}>
-              <div class="space-y-2">
-                <Label>API Key</Label>
-                <Input
-                  type="password"
-                  value={state().zeroClawApiKey}
-                  onInput={(e) =>
-                    sessionStore.setZeroClawApiKey(e.currentTarget.value)
-                  }
-                  placeholder="Enter API key"
-                />
-              </div>
-            </Show>
-
+          {/* Model Settings Section */}
+          <div class="rounded-lg border border-border p-4 space-y-4">
+            <h4 class="font-semibold">Model Settings</h4>
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-2">
                 <Label>Temperature</Label>
@@ -150,19 +87,6 @@ export function ZeroclawConfigModal(props: ZeroclawConfigModalProps) {
                 />
               </div>
             </div>
-          </div>
-
-          {/* System Prompt Section */}
-          <div class="rounded-lg border border-border p-4 space-y-4">
-            <h4 class="font-semibold">System Prompt</h4>
-            <Textarea
-              value={state().zeroClawSystemPrompt}
-              onInput={(e) =>
-                sessionStore.setZeroClawSystemPrompt(e.currentTarget.value)
-              }
-              placeholder="Enter custom system prompt..."
-              rows={4}
-            />
           </div>
 
           {/* Tools Section */}
@@ -215,11 +139,6 @@ export function ZeroclawConfigModal(props: ZeroclawConfigModalProps) {
             variant="ghost"
             onClick={() => {
               // Reset to defaults
-              sessionStore.setZeroClawProvider("ollama");
-              sessionStore.setZeroClawModel("qwen3:8b");
-              sessionStore.setZeroClawApiKey("");
-              sessionStore.setZeroClawTemperature("0.7");
-              sessionStore.setZeroClawMaxIterations(20);
               sessionStore.setZeroClawSystemPrompt("");
               sessionStore.setZeroClawEnabledTools([
                 "shell",

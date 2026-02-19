@@ -14,12 +14,7 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
-import {
-  FiPlus,
-  FiHome,
-  FiCloud,
-  FiChevronRight,
-} from "solid-icons/fi";
+import { FiPlus, FiHome, FiCloud, FiChevronRight } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { sessionStore, AgentType } from "../stores/sessionStore";
@@ -120,9 +115,16 @@ export const NewSessionModal: Component = () => {
     } else {
       // Use local file system
       try {
-        const entries = await invoke<DirEntry[]>("list_directory", { path: dirToList });
+        const entries = await invoke<DirEntry[]>("list_directory", {
+          path: dirToList,
+        });
         // Filter directories by partial name if provided
-        const filtered = entries.filter((e) => e.is_dir && (!partialName || e.name.toLowerCase().includes(partialName.toLowerCase())));
+        const filtered = entries.filter(
+          (e) =>
+            e.is_dir &&
+            (!partialName ||
+              e.name.toLowerCase().includes(partialName.toLowerCase())),
+        );
         setDirEntries(filtered);
       } catch (err) {
         console.error("Failed to list directory:", err);
@@ -289,13 +291,11 @@ export const NewSessionModal: Component = () => {
                 id="agent-type"
                 value={sessionStore.state.newSessionAgent}
                 onChange={(val) =>
-                  sessionStore.setNewSessionAgent(
-                    val as AgentType,
-                  )
+                  sessionStore.setNewSessionAgent(val as AgentType)
                 }
               >
-                <option value="zeroclaw">ClawdAI</option>
                 <option value="claude">Claude Code</option>
+                <option value="zeroclaw">ClawdAI</option>
                 <option value="codex">Codex</option>
                 <option value="openclaw">OpenClaw</option>
                 <option value="opencode">OpenCode</option>
@@ -414,7 +414,9 @@ export const NewSessionModal: Component = () => {
                 value={sessionStore.state.newSessionPath}
                 onChange={(value) => {
                   // Remove trailing slash if present
-                  const cleanPath = value.endsWith("/") ? value.slice(0, -1) : value;
+                  const cleanPath = value.endsWith("/")
+                    ? value.slice(0, -1)
+                    : value;
                   sessionStore.setNewSessionPath(cleanPath);
                 }}
                 onInputChange={(value) => {
@@ -423,10 +425,16 @@ export const NewSessionModal: Component = () => {
                 }}
                 items={dirEntries().map((e) => {
                   // Build the path: if current input ends with /, add to it; otherwise handle partial paths
-                  const basePath = sessionStore.state.newSessionPath.endsWith("/")
+                  const basePath = sessionStore.state.newSessionPath.endsWith(
+                    "/",
+                  )
                     ? sessionStore.state.newSessionPath
                     : sessionStore.state.newSessionPath.includes("/")
-                      ? sessionStore.state.newSessionPath.slice(0, sessionStore.state.newSessionPath.lastIndexOf("/") + 1)
+                      ? sessionStore.state.newSessionPath.slice(
+                          0,
+                          sessionStore.state.newSessionPath.lastIndexOf("/") +
+                            1,
+                        )
                       : "";
                   return {
                     value: basePath + e.name,

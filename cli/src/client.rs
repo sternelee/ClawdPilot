@@ -3,14 +3,14 @@
 //! 此模块实现了连接到远程 ClawdChat host 的客户端功能，支持 P2P 通信和交互式对话。
 
 use anyhow::Result;
-use clawdchat_shared::CommunicationManager;
-use clawdchat_shared::message_protocol::{
+use shared::CommunicationManager;
+use shared::message_protocol::{
     AgentControlAction, AgentControlMessage, AgentMessageContent, AgentPermissionMessage,
     AgentPermissionMessageInner, AgentPermissionResponse, AgentSessionAction, AgentSessionMessage,
     AgentType, Message, MessagePayload, MessageType, PermissionMode, RemoteSpawnAction,
     RemoteSpawnMessage,
 };
-use clawdchat_shared::quic_server::{QuicMessageClient, SerializableEndpointAddr};
+use shared::quic_server::{QuicMessageClient, SerializableEndpointAddr};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -225,16 +225,16 @@ impl ClawdChatClient {
                     println!("{}", content);
                 }
                 AgentMessageContent::SystemNotification { level, message } => match level {
-                    clawdchat_shared::message_protocol::NotificationLevel::Info => {
+                    shared::message_protocol::NotificationLevel::Info => {
                         println!("ℹ️  {}", message);
                     }
-                    clawdchat_shared::message_protocol::NotificationLevel::Warning => {
+                    shared::message_protocol::NotificationLevel::Warning => {
                         println!("⚠️  {}", message);
                     }
-                    clawdchat_shared::message_protocol::NotificationLevel::Error => {
+                    shared::message_protocol::NotificationLevel::Error => {
                         println!("❌ {}", message);
                     }
-                    clawdchat_shared::message_protocol::NotificationLevel::Success => {
+                    shared::message_protocol::NotificationLevel::Success => {
                         println!("✅ {}", message);
                     }
                 },

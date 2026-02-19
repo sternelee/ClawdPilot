@@ -5,12 +5,12 @@
 //! and provides a terminal-based user interface.
 
 use anyhow::{Context, Result};
-use clawdchat_shared::agent::{AgentManager, PendingPermission};
-use clawdchat_shared::message_protocol::AgentType;
+use shared::agent::{AgentManager, PendingPermission};
+use shared::message_protocol::AgentType;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{debug, info};
 
 /// Local ACP client configuration
@@ -84,18 +84,20 @@ impl LocalClientSession {
                 while let Ok(event) = recv.recv().await {
                     // Print agent events to stdout
                     match &event.event {
-                        clawdchat_shared::agent::AgentEvent::TextDelta { text, .. } => {
+                        shared::agent::AgentEvent::TextDelta { text, .. } => {
                             print!("{}", text);
                             std::io::stdout().flush().ok();
                         }
-                        clawdchat_shared::agent::AgentEvent::ReasoningDelta { text, .. } => {
+                        shared::agent::AgentEvent::ReasoningDelta { text, .. } => {
                             // Print thinking/thoughts
                             println!("[Thinking] {}", text);
                         }
-                        clawdchat_shared::agent::AgentEvent::ToolStarted { tool_name, .. } => {
+                        shared::agent::AgentEvent::ToolStarted { tool_name, .. } => {
                             println!("\n🔧 Tool: {}", tool_name);
                         }
-                        clawdchat_shared::agent::AgentEvent::ToolCompleted { tool_name, output, .. } => {
+                        shared::agent::AgentEvent::ToolCompleted {
+                            tool_name, output, ..
+                        } => {
                             let name = tool_name.as_deref().unwrap_or("unknown");
                             if let Some(output) = output {
                                 println!("\n✅ Tool {} completed: {}", name, output);
@@ -103,19 +105,25 @@ impl LocalClientSession {
                                 println!("\n✅ Tool {} completed", name);
                             }
                         }
-                        clawdchat_shared::agent::AgentEvent::ApprovalRequest { tool_name, message, .. } => {
-                            println!("\n⚠️ Permission request: {} - {}", tool_name, message.as_deref().unwrap_or(""));
+                        shared::agent::AgentEvent::ApprovalRequest {
+                            tool_name, message, ..
+                        } => {
+                            println!(
+                                "\n⚠️ Permission request: {} - {}",
+                                tool_name,
+                                message.as_deref().unwrap_or("")
+                            );
                         }
-                        clawdchat_shared::agent::AgentEvent::TurnCompleted { .. } => {
+                        shared::agent::AgentEvent::TurnCompleted { .. } => {
                             println!("\n--- Turn completed ---");
                         }
-                        clawdchat_shared::agent::AgentEvent::SessionStarted { .. } => {
+                        shared::agent::AgentEvent::SessionStarted { .. } => {
                             println!("✅ Session started");
                         }
-                        clawdchat_shared::agent::AgentEvent::SessionEnded { .. } => {
+                        shared::agent::AgentEvent::SessionEnded { .. } => {
                             println!("\n👋 Session ended");
                         }
-                        clawdchat_shared::agent::AgentEvent::TurnError { error, .. } => {
+                        shared::agent::AgentEvent::TurnError { error, .. } => {
                             eprintln!("\n❌ Error: {}", error);
                         }
                         _ => {

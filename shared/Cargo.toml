@@ -1,36 +1,36 @@
 [package]
-name = "clawdchat-shared"
+name = "shared"
 version = "0.1.0"
 edition = "2024"
 
 [features]
 default = ["std"]
 std = [
-    "tokio/full",
-    "tracing-subscriber/env-filter",
-    "dirs",
-    "agent-client-protocol",
-    "tokio-util",
-    "gethostname",
-    "libc",
-    "portable-pty",
-    "zeroclaw",
-    "codex-core",
-    "codex-protocol",
-    "codex-apply-patch",
-    "codex-login",
-    "codex-arg0",
-    "codex-mcp-server",
-    "tokio-tungstenite",
+  "tokio/full",
+  "tracing-subscriber/env-filter",
+  "dirs",
+  "agent-client-protocol",
+  "tokio-util",
+  "gethostname",
+  "libc",
+  "portable-pty",
+  "zeroclaw",
+  "codex-core",
+  "codex-protocol",
+  "codex-apply-patch",
+  "codex-login",
+  "codex-arg0",
+  "codex-mcp-server",
+  "tokio-tungstenite",
 ]
 # Mobile runtime: excludes agent-specific dependencies (Claude SDK, Codex, ACP agents)
 # and disables git operations to reduce binary size
 mobile = [
-    "tokio/full",
-    "tracing-subscriber/env-filter",
-    "dirs",
-    "zeroclaw/tauri",
-    "zeroclaw/mobile",
+  "tokio/full",
+  "tracing-subscriber/env-filter",
+  "dirs",
+  "zeroclaw/tauri",
+  "zeroclaw/mobile",
 ]
 tokio-full = ["tokio"]
 wasm = []

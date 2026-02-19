@@ -112,7 +112,10 @@ pub fn desktop_tools_with_runtime(
         Box::new(ShellTool::new(security.clone(), runtime.clone())),
         Box::new(FileReadTool::new(security.clone(), runtime.clone())),
         Box::new(FileWriteTool::new(security.clone(), runtime.clone())),
-        Box::new(EnhancedScreenshotTool::new(security.clone(), runtime.clone())),
+        Box::new(EnhancedScreenshotTool::new(
+            security.clone(),
+            runtime.clone(),
+        )),
         Box::new(GitOperationsTool::with_security(security.clone())),
         Box::new(HttpRequestTool::with_security(security.clone())),
         Box::new(ImageInfoTool::new(security.clone())),

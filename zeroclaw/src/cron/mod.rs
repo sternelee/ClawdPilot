@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use cron::Schedule;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -221,12 +221,7 @@ impl CronScheduler {
     }
 
     /// Reschedule a job after it has been run.
-    pub fn reschedule_after_run(
-        &self,
-        job: &CronJob,
-        success: bool,
-        output: &str,
-    ) -> Result<()> {
+    pub fn reschedule_after_run(&self, job: &CronJob, success: bool, output: &str) -> Result<()> {
         if job.one_shot {
             self.with_connection(|conn| {
                 conn.execute("DELETE FROM cron_jobs WHERE id = ?1", params![job.id])
@@ -287,8 +282,9 @@ impl CronScheduler {
 
     fn with_connection<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
         if let Some(parent) = self.db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create cron directory: {}", parent.display()))?;
+            std::fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create cron directory: {}", parent.display())
+            })?;
         }
 
         let conn = Connection::open(&self.db_path)
@@ -322,7 +318,8 @@ impl CronScheduler {
         .context("Failed to initialize cron schema")?;
 
         for column in ["paused", "one_shot"] {
-            let alter = format!("ALTER TABLE cron_jobs ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0");
+            let alter =
+                format!("ALTER TABLE cron_jobs ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0");
             let _ = conn.execute_batch(&alter);
         }
 
@@ -531,7 +528,9 @@ mod tests {
         let scheduler = test_scheduler(&tmp);
 
         let job = scheduler.add_job("*/15 * * * *", "echo run").unwrap();
-        scheduler.reschedule_after_run(&job, false, "failed output").unwrap();
+        scheduler
+            .reschedule_after_run(&job, false, "failed output")
+            .unwrap();
 
         let listed = scheduler.list_jobs().unwrap();
         let stored = listed.iter().find(|j| j.id == job.id).unwrap();
@@ -594,9 +593,12 @@ mod tests {
         let scheduler = CronScheduler::new(tmp.path().join("cron").join("jobs.db"), 1);
 
         let _first = scheduler.add_job("*/10 * * * *", "echo first").unwrap();
-        let err = scheduler.add_job("*/11 * * * *", "echo second").unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Maximum number of scheduled tasks"));
+        let err = scheduler
+            .add_job("*/11 * * * *", "echo second")
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Maximum number of scheduled tasks")
+        );
     }
 }

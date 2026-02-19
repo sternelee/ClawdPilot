@@ -4,7 +4,9 @@
 //! 包括终端管理、TCP 转发和系统控制功能。
 
 use anyhow::Result;
-use clawdchat_shared::{
+use portable_pty::{CommandBuilder, MasterPty, PtySize};
+use serde::{Deserialize, Serialize};
+use shared::{
     AgentControlAction, AgentSessionAction, AgentSessionMetadata, AgentType, AvailableTools,
     BuiltinCommand, CommunicationManager, FileBrowserAction, GitAction, IODataType, Message,
     MessageBuilder, MessageHandler, MessagePayload, MessageType, NotificationData,
@@ -14,8 +16,6 @@ use clawdchat_shared::{
     TcpForwardingAction, TcpForwardingType, TcpStreamHandler, TerminalAction, TerminalLogResponse,
     Tool, UserInfo,
 };
-use portable_pty::{CommandBuilder, MasterPty, PtySize};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -31,7 +31,7 @@ use uuid::Uuid;
 use crate::command_router::CommandRouter;
 use crate::shell::ShellDetector;
 use crate::terminal_logger::TerminalLogManager;
-use clawdchat_shared::{AgentFactory, AgentManager};
+use shared::{AgentFactory, AgentManager};
 
 /// Connection information for status display
 #[derive(Debug, Clone)]
@@ -541,7 +541,7 @@ impl CliMessageServer {
     /// 生成连接票据 - 使用 base64 编码的 SerializableEndpointAddr 格式
     /// 优先包含 direct addresses 和 relay URL 以支持局域网直连
     pub fn generate_connection_ticket(&self) -> Result<String> {
-        use clawdchat_shared::quic_server::SerializableEndpointAddr;
+        use shared::quic_server::SerializableEndpointAddr;
 
         let node_id = self.quic_server.get_node_id();
         tracing::info!("Generating ticket for node: {:?}", node_id);
@@ -558,7 +558,7 @@ impl CliMessageServer {
             node_id,
             relay_url,
             direct_addresses,
-            clawdchat_shared::quic_server::QUIC_MESSAGE_ALPN,
+            shared::quic_server::QUIC_MESSAGE_ALPN,
         )?;
 
         let ticket_str = endpoint_addr.to_base64()?;
@@ -576,7 +576,7 @@ impl CliMessageServer {
     }
 
     /// 获取连接信息用于状态显示
-    pub async fn get_connection_info(&self) -> Result<Vec<clawdchat_shared::ConnectionInfo>> {
+    pub async fn get_connection_info(&self) -> Result<Vec<shared::ConnectionInfo>> {
         Ok(self.quic_server.get_connection_info().await)
     }
 
@@ -741,7 +741,7 @@ impl TerminalMessageHandler {
         let log_manager_for_io = self.log_manager.clone();
 
         tokio::spawn(async move {
-            use clawdchat_shared::message_protocol::{IODataType, MessageBuilder};
+            use shared::message_protocol::{IODataType, MessageBuilder};
             use std::io::{Read, Write};
 
             info!("🔄 Terminal I/O loop started for: {}", terminal_id_clone);
@@ -2410,7 +2410,7 @@ impl MessageHandler for SystemInfoMessageHandler {
                         match self.collect_system_info().await {
                             Ok(system_info) => {
                                 let response_payload = MessagePayload::SystemInfo(Box::new(
-                                    clawdchat_shared::message_protocol::SystemInfoMessage {
+                                    shared::message_protocol::SystemInfoMessage {
                                         action: SystemInfoAction::SystemInfoResponse(Box::new(
                                             system_info,
                                         )),
@@ -2475,12 +2475,12 @@ impl TcpDataMessageHandler {
         session_id: &str,
         connection_id: &str,
         data: &[u8],
-        data_type: &clawdchat_shared::message_protocol::TcpDataType,
+        data_type: &shared::message_protocol::TcpDataType,
     ) -> Result<()> {
         let sessions = self.tcp_sessions.read().await;
         if let Some(internal_session) = sessions.get(session_id) {
             match data_type {
-                clawdchat_shared::message_protocol::TcpDataType::Data => {
+                shared::message_protocol::TcpDataType::Data => {
                     // 转发数据到对应的 TCP 连接
                     let mut connections = internal_session.connections.write().await;
                     if let Some(conn_info) = connections.get_mut(connection_id) {
@@ -2510,7 +2510,7 @@ impl TcpDataMessageHandler {
                         warn!("TCP connection not found: {}", connection_id);
                     }
                 }
-                clawdchat_shared::message_protocol::TcpDataType::ConnectionOpen => {
+                shared::message_protocol::TcpDataType::ConnectionOpen => {
                     info!(
                         "TCP connection open requested for session {} connection {}",
                         session_id, connection_id
@@ -2676,7 +2676,7 @@ impl TcpDataMessageHandler {
                         }
                     }
                 }
-                clawdchat_shared::message_protocol::TcpDataType::ConnectionClose => {
+                shared::message_protocol::TcpDataType::ConnectionClose => {
                     info!(
                         "TCP connection close requested for session {} connection {}",
                         session_id, connection_id
@@ -2689,7 +2689,7 @@ impl TcpDataMessageHandler {
                         }
                     }
                 }
-                clawdchat_shared::message_protocol::TcpDataType::Error => {
+                shared::message_protocol::TcpDataType::Error => {
                     error!(
                         "TCP error for session {} connection {}: {:?}",
                         session_id,
@@ -3033,7 +3033,7 @@ impl RemoteSpawnMessageHandler {
     fn start_event_forwarder(
         &self,
         session_id: String,
-        mut event_receiver: tokio::sync::broadcast::Receiver<clawdchat_shared::AgentTurnEvent>,
+        mut event_receiver: tokio::sync::broadcast::Receiver<shared::AgentTurnEvent>,
     ) {
         let quic_server = self.quic_server.clone();
         let forwarders_for_task = self.event_forwarders.clone();
@@ -3053,7 +3053,7 @@ impl RemoteSpawnMessageHandler {
                         );
 
                         // Convert event to P2P message
-                        let message = clawdchat_shared::message_adapter::build_agent_message(
+                        let message = shared::message_adapter::build_agent_message(
                             "cli".to_string(),
                             sid.clone(),
                             &turn_event.event,
@@ -3652,7 +3652,7 @@ impl MessageHandler for AgentControlMessageHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clawdchat_shared::QuicMessageServerConfig;
+    use shared::QuicMessageServerConfig;
 
     #[tokio::test]
     async fn test_ticket_generation_without_prefix() {
@@ -3711,7 +3711,7 @@ mod tests {
     /// RED: This test should fail because event forwarding is not implemented yet
     #[tokio::test]
     async fn test_agent_event_forwarding_on_spawn() {
-        use clawdchat_shared::agent::events::{AgentEvent, AgentTurnEvent};
+        use shared::agent::events::{AgentEvent, AgentTurnEvent};
         use tokio::sync::broadcast;
 
         // Setup: Create a mock scenario where we have:
@@ -3758,8 +3758,8 @@ mod tests {
 
         // For now, we test the EventForwarder struct directly
         use crate::agent_wrapper::events::{AgentEvent, AgentTurnEvent};
-        use clawdchat_shared::message_adapter::event_to_message_content;
-        use clawdchat_shared::message_protocol::AgentMessageContent;
+        use shared::message_adapter::event_to_message_content;
+        use shared::message_protocol::AgentMessageContent;
         use tokio::sync::broadcast;
 
         let (event_tx, mut event_rx) = broadcast::channel::<AgentTurnEvent>(16);

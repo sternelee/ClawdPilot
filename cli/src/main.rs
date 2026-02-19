@@ -7,9 +7,9 @@ mod local_client;
 mod message_server;
 mod shell;
 mod terminal_logger;
-use clawdchat_shared::QuicMessageServerConfig;
 use local_client::{LocalClientConfig, LocalClientSession};
 use message_server::CliMessageServer;
+use shared::QuicMessageServerConfig;
 use tracing::info;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
@@ -329,8 +329,13 @@ fn print_general_help() {
 }
 
 /// 运行 AI Agent 会话（使用 ACP）
-async fn run_agent_session(agent: String, project: String, message: Option<String>, args: Vec<String>) -> Result<()> {
-    use clawdchat_shared::message_protocol::AgentType;
+async fn run_agent_session(
+    agent: String,
+    project: String,
+    message: Option<String>,
+    args: Vec<String>,
+) -> Result<()> {
+    use shared::message_protocol::AgentType;
 
     let agent_type = match agent.to_lowercase().as_str() {
         "claude" | "claude-code" => AgentType::ClaudeCode,

@@ -11,7 +11,7 @@ use tokio::sync::{RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use clawdchat_shared::{TcpDataType, quic_server::QuicMessageClientHandle};
+use shared::{TcpDataType, quic_server::QuicMessageClientHandle};
 use std::sync::Arc as StdArc;
 
 /// TCP 转发会话信息

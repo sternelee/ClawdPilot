@@ -5,7 +5,7 @@
 //! 区分 ClawdChat 内置命令和需要转发给 AI Agent 的命令。
 
 use anyhow::Result;
-use clawdchat_shared::message_protocol::{
+use shared::message_protocol::{
     AgentType, BuiltinCommand, SlashCommand, SlashCommandResponseContent,
 };
 
@@ -418,10 +418,10 @@ impl CommandRouter {
                 format!("Error: {}", message)
             }
             SlashCommandResponseContent::Structured { format, content } => match format {
-                clawdchat_shared::message_protocol::OutputFormat::Markdown => content,
-                clawdchat_shared::message_protocol::OutputFormat::Text => content,
-                clawdchat_shared::message_protocol::OutputFormat::Json => content,
-                clawdchat_shared::message_protocol::OutputFormat::Table => content,
+                shared::message_protocol::OutputFormat::Markdown => content,
+                shared::message_protocol::OutputFormat::Text => content,
+                shared::message_protocol::OutputFormat::Json => content,
+                shared::message_protocol::OutputFormat::Table => content,
             },
         }
     }

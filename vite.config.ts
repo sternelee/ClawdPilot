@@ -1,4 +1,4 @@
-import path from "node:path";
+import path from "path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";

@@ -34,8 +34,7 @@ pub fn list_directory(path: &str) -> Result<Vec<DirEntry>, String> {
         return Err(format!("Path is not a directory: {}", path.display()));
     }
 
-    let entries = fs::read_dir(path)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries = fs::read_dir(path).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     let mut result: Vec<DirEntry> = entries
         .filter_map(|entry| {
@@ -44,7 +43,11 @@ pub fn list_directory(path: &str) -> Result<Vec<DirEntry>, String> {
             let name = path.file_name()?.to_string_lossy().to_string();
 
             // Skip hidden files and common non-relevant entries
-            if name.starts_with('.') || name == "node_modules" || name == "target" || name == "__pycache__" {
+            if name.starts_with('.')
+                || name == "node_modules"
+                || name == "target"
+                || name == "__pycache__"
+            {
                 return None;
             }
 
@@ -57,12 +60,10 @@ pub fn list_directory(path: &str) -> Result<Vec<DirEntry>, String> {
         .collect();
 
     // Sort: directories first, then by name
-    result.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        }
+    result.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
 
     Ok(result)

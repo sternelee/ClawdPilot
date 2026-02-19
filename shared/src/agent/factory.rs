@@ -305,7 +305,10 @@ impl CopilotAgent {
             .map(|o| o.status.success())
             .unwrap_or(false)
         {
-            let config = ("copilot".to_string(), vec!["--acp".to_string(), "--stdio".to_string()]);
+            let config = (
+                "copilot".to_string(),
+                vec!["--acp".to_string(), "--stdio".to_string()],
+            );
             let _ = COPILOT_CONFIG.set(config.clone());
             return config;
         }
@@ -320,7 +323,11 @@ impl CopilotAgent {
         {
             let config = (
                 "gh".to_string(),
-                vec!["copilot".to_string(), "--acp".to_string(), "--stdio".to_string()],
+                vec![
+                    "copilot".to_string(),
+                    "--acp".to_string(),
+                    "--stdio".to_string(),
+                ],
             );
             let _ = COPILOT_CONFIG.set(config.clone());
             return config;
@@ -329,7 +336,11 @@ impl CopilotAgent {
         // Fallback to default (gh)
         (
             "gh".to_string(),
-            vec!["copilot".to_string(), "--acp".to_string(), "--stdio".to_string()],
+            vec![
+                "copilot".to_string(),
+                "--acp".to_string(),
+                "--stdio".to_string(),
+            ],
         )
     }
 }

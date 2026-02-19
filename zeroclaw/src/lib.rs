@@ -13,10 +13,10 @@ pub mod tools;
 pub mod util;
 
 // Core functionality modules
-pub mod skills;
-pub mod skillforge;
-pub mod rag;
 pub mod cron;
+pub mod rag;
+pub mod skillforge;
+pub mod skills;
 
 // Re-export common types
 pub use tools::Tool;

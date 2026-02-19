@@ -221,7 +221,7 @@ export function MyComponent(props: Props) {
 
 1. `std` / `core`
 2. External crates (`anyhow`, `tokio`, `tracing`)
-3. Workspace crates (`clawdchat_shared`, `clawdchat_*`)
+3. Workspace crates (`shared`, `clawdchat_*`)
 4. `crate::` (local modules)
 
 ### Naming
@@ -262,7 +262,7 @@ cargo test --workspace
 cargo test -p cli <test_name>
 
 # Single test (Shared)
-cargo test -p clawdchat-shared <test_name>
+cargo test -p shared <test_name>
 
 # Single test (App)
 cargo test -p app <test_name>

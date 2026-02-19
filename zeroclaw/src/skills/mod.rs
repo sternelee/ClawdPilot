@@ -467,7 +467,9 @@ pub fn handle_command(command: crate::SkillCommands, workspace_dir: &Path) -> Re
                 println!("No skills installed.");
                 println!();
                 println!("  Create one: mkdir -p ~/.zeroclaw/workspace/skills/my-skill");
-                println!("              echo '# My Skill' > ~/.zeroclaw/workspace/skills/my-skill/SKILL.md");
+                println!(
+                    "              echo '# My Skill' > ~/.zeroclaw/workspace/skills/my-skill/SKILL.md"
+                );
                 println!();
                 println!("  Or install: zeroclaw skills install <github-url>");
             } else {

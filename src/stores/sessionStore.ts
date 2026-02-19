@@ -107,7 +107,21 @@ const initialState: SessionState = {
   zeroClawTemperature: "0.7",
   zeroClawMaxIterations: 20,
   zeroClawSystemPrompt: "",
-  zeroClawEnabledTools: [],
+  zeroClawEnabledTools: [
+    "shell",
+    "file_read",
+    "file_write",
+    "enhanced_screenshot",
+    "git_operations",
+    "http_request",
+    "image_info",
+    "memory_store",
+    "memory_recall",
+    "memory_forget",
+    "browser",
+    "browser_open",
+    "composio",
+  ],
   isZeroClawConfigOpen: false,
 
   isNetworkInitialized: false,
@@ -359,10 +373,6 @@ export const createSessionStore = () => {
     setStartingAgent(true);
 
     try {
-      console.log(
-        "[handleRemoteSpawn] Spawning remote session via connection:",
-        controlSessionId,
-      );
       await invoke("remote_spawn_session", {
         sessionId: controlSessionId,
         agentType: state.newSessionAgent,
@@ -417,7 +427,9 @@ export const createSessionStore = () => {
         // Add new parameters
         extraArgs.push(state.zeroClawMaxIterations.toString());
         // Add system prompt (base64 encoded to handle special chars)
-        const promptEncoded = btoa(unescape(encodeURIComponent(state.zeroClawSystemPrompt || "")));
+        const promptEncoded = btoa(
+          unescape(encodeURIComponent(state.zeroClawSystemPrompt || "")),
+        );
         extraArgs.push(promptEncoded);
         // Add enabled tools (comma-separated)
         const toolsStr = state.zeroClawEnabledTools.join(",");

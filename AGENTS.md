@@ -25,7 +25,7 @@
 # Rust tests
 cargo test --workspace                     # Run all tests
 cargo test -p cli <test_name>              # Single test (CLI)
-cargo test -p clawdchat-shared <test_name>    # Single test (Shared)
+cargo test -p shared <test_name>    # Single test (Shared)
 cargo test -p app <test_name>              # Single test (App)
 cargo test -- --nocapture                  # Show stdout
 
@@ -71,7 +71,7 @@ pnpm tsc                                   # TypeScript type check
 
 1. `std` / `core`
 2. External crates (`anyhow`, `tokio`, `tracing`)
-3. Workspace crates (`clawdchat_shared`, `clawdchat_*`)
+3. Workspace crates (`shared`, `clawdchat_*`)
 4. `crate::` (local modules)
 
 ### Naming

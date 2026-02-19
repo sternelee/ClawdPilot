@@ -4,8 +4,8 @@
 //! 为每个终端会话提供日志记录功能，支持输入输出记录和日志轮转。
 
 use anyhow::{Context, Result};
-use clawdchat_shared::message_protocol::TerminalLogEntry;
 use serde::{Deserialize, Serialize};
+use shared::message_protocol::TerminalLogEntry;
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};

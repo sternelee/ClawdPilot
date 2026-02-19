@@ -7,7 +7,7 @@ use crate::event_manager::*;
 use crate::message_protocol::*;
 use anyhow::Result;
 use async_trait::async_trait;
-use iroh::{Endpoint, EndpointId, EndpointAddr, SecretKey, discovery::dns::DnsDiscovery};
+use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey, discovery::dns::DnsDiscovery};
 use iroh_base::{RelayUrl, TransportAddr};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -839,7 +839,10 @@ impl QuicMessageServer {
             // 只有当端口不是 0（随机端口）时才包含在 ticket 中
             if config_addr.port() != 0 {
                 addresses.push(config_addr.to_string());
-                tracing::info!("Using configured bind_addr as direct address: {}", config_addr);
+                tracing::info!(
+                    "Using configured bind_addr as direct address: {}",
+                    config_addr
+                );
                 return addresses;
             } else {
                 tracing::info!("Using random port (0), not including in direct addresses");
@@ -858,7 +861,8 @@ impl QuicMessageServer {
 
     /// 检查是否使用了固定端口
     pub fn is_using_fixed_port(&self) -> bool {
-        self.config.bind_addr
+        self.config
+            .bind_addr
             .map(|addr| addr.port() != 0)
             .unwrap_or(false)
     }
@@ -1120,7 +1124,8 @@ impl QuicMessageClient {
         let public_key = PublicKey::from(*node_addr);
         let addrs = std::collections::BTreeSet::new();
         let full_node_addr = EndpointAddr::from_parts(public_key, addrs);
-        self.connect_to_server_with_full_node_addr(&full_node_addr).await
+        self.connect_to_server_with_full_node_addr(&full_node_addr)
+            .await
     }
 
     /// 连接到QUIC消息服务器 - 使用完整的 EndpointAddr（支持 direct addresses 和 relay）
@@ -1133,7 +1138,9 @@ impl QuicMessageClient {
         info!("🔗 Node ID: {:?}", node_addr.id);
 
         // 提取 direct addresses 和 relay URL
-        let direct_addrs: Vec<_> = node_addr.addrs.iter()
+        let direct_addrs: Vec<_> = node_addr
+            .addrs
+            .iter()
             .filter_map(|a| {
                 if let TransportAddr::Ip(addr) = a {
                     Some(addr.to_string())
@@ -1142,7 +1149,9 @@ impl QuicMessageClient {
                 }
             })
             .collect();
-        let relay_url = node_addr.addrs.iter()
+        let relay_url = node_addr
+            .addrs
+            .iter()
             .filter_map(|a| {
                 if let TransportAddr::Relay(url) = a {
                     Some(url.to_string())
@@ -1449,14 +1458,22 @@ impl QuicMessageClientHandle {
 
     /// 使用完整的 EndpointAddr 连接到服务器（支持 direct addresses 和 relay）
     /// 这是推荐使用的方法，可以支持直连穿透
-    pub async fn connect_to_server_with_node_addr(&self, node_addr: &EndpointAddr) -> Result<String> {
+    pub async fn connect_to_server_with_node_addr(
+        &self,
+        node_addr: &EndpointAddr,
+    ) -> Result<String> {
         let mut client = self.client.lock().await;
-        client.connect_to_server_with_full_node_addr(node_addr).await
+        client
+            .connect_to_server_with_full_node_addr(node_addr)
+            .await
     }
 
     /// 使用 EndpointId 连接到服务器（别名，保持向后兼容）
     #[deprecated(since = "0.9.0", note = "使用 connect_to_server_with_node_addr 代替")]
-    pub async fn connect_to_server_with_endpoint_id(&self, node_addr: &EndpointId) -> Result<String> {
+    pub async fn connect_to_server_with_endpoint_id(
+        &self,
+        node_addr: &EndpointId,
+    ) -> Result<String> {
         self.connect_to_server(node_addr).await
     }
 
