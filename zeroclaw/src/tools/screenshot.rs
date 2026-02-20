@@ -139,8 +139,8 @@ impl ScreenshotTool {
 
     /// Read the screenshot file and return base64-encoded result.
     async fn read_and_encode(output_path: &std::path::Path) -> anyhow::Result<ToolResult> {
-        // Check file size before reading to prevent OOM on large screenshots
-        const MAX_RAW_BYTES: u64 = 1_572_864; // ~1.5 MB (base64 expands ~33%)
+        // Increased limit: 10MB raw image (~13MB base64) - most screenshots will fit
+        const MAX_RAW_BYTES: u64 = 10_485_760;
         if let Ok(meta) = tokio::fs::metadata(output_path).await {
             if meta.len() > MAX_RAW_BYTES {
                 return Ok(ToolResult {

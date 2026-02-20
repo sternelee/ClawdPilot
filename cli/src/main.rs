@@ -70,7 +70,17 @@ async fn main() -> Result<()> {
             secret_key_file,
             temp_key,
             daemon,
-        }) => run_host(relay, max_connections, bind_addr, secret_key_file, temp_key, daemon).await,
+        }) => {
+            run_host(
+                relay,
+                max_connections,
+                bind_addr,
+                secret_key_file,
+                temp_key,
+                daemon,
+            )
+            .await
+        }
         None => {
             // 默认启动 host
             run_host(None, 50, "0.0.0.0:61103".to_string(), None, false, false).await
@@ -281,7 +291,10 @@ fn daemonize() -> Result<()> {
     // 调用 fork 创建子进程
     match unsafe { libc::fork() } {
         -1 => {
-            return Err(anyhow::anyhow!("Failed to fork: {}", std::io::Error::last_os_error()));
+            return Err(anyhow::anyhow!(
+                "Failed to fork: {}",
+                std::io::Error::last_os_error()
+            ));
         }
         0 => {
             // 子进程：创建新会话
@@ -332,9 +345,7 @@ fn setup_daemon_logging() -> Result<()> {
         .with_ansi(false)
         .with_filter(EnvFilter::new("info"));
 
-    tracing_subscriber::registry()
-        .with(file_layer)
-        .init();
+    tracing_subscriber::registry().with(file_layer).init();
 
     Ok(())
 }

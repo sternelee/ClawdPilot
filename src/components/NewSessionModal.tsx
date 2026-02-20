@@ -262,7 +262,7 @@ export const NewSessionModal: Component = () => {
             </div>
 
             <Show when={sessionStore.state.connectionError}>
-              <Alert variant="destructive" class="mb-4 py-2">
+              <Alert variant="destructive" class="mb-auto mt-0.5 py-2">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   class="h-4 w-4 shrink-0"
@@ -277,7 +277,7 @@ export const NewSessionModal: Component = () => {
                     clip-rule="evenodd"
                   />
                 </svg>
-                <span class="text-sm">
+                <span class="text-sm break-all">
                   {sessionStore.state.connectionError}
                 </span>
               </Alert>

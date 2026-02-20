@@ -165,9 +165,10 @@ impl ZeroClawSession {
         )))]
         let _runtime: Arc<dyn RuntimeAdapter> = Arc::new(zeroclaw::runtime::NativeRuntime::new());
 
-        #[cfg(feature = "desktop-runtime")]
+        // Use all_tools_with_runtime for desktop/tauri builds to include screenshot tools
+        #[cfg(any(feature = "desktop-runtime", feature = "tauri-runtime"))]
         let all_tools = zeroclaw::tools::all_tools_with_runtime(&security, runtime, memory.clone());
-        #[cfg(not(feature = "desktop-runtime"))]
+        #[cfg(not(any(feature = "desktop-runtime", feature = "tauri-runtime")))]
         let all_tools = zeroclaw::tools::all_tools(&security, memory.clone());
 
         // Filter tools based on enabled_tools if provided

@@ -55,8 +55,6 @@ pub use hardware_memory_map::HardwareMemoryMapTool;
 #[cfg(feature = "desktop")]
 pub use hardware_memory_read::HardwareMemoryReadTool;
 #[cfg(feature = "desktop")]
-pub use screenshot::ScreenshotTool;
-#[cfg(feature = "desktop")]
 pub use shell::ShellTool;
 
 use crate::memory::Memory;
@@ -119,7 +117,6 @@ pub fn desktop_tools_with_runtime(
         Box::new(GitOperationsTool::with_security(security.clone())),
         Box::new(HttpRequestTool::with_security(security.clone())),
         Box::new(ImageInfoTool::new(security.clone())),
-        Box::new(ScreenshotTool::new(security.clone())),
     ]
 }
 
@@ -171,6 +168,13 @@ pub fn all_tools_with_runtime(
         Box::new(ShellTool::new(security.clone(), runtime.clone())),
         Box::new(FileReadTool::new(security.clone(), runtime.clone())),
         Box::new(FileWriteTool::new(security.clone(), runtime.clone())),
+        Box::new(EnhancedScreenshotTool::new(
+            security.clone(),
+            runtime.clone(),
+        )),
+        Box::new(GitOperationsTool::with_security(security.clone())),
+        Box::new(HttpRequestTool::with_security(security.clone())),
+        Box::new(ImageInfoTool::new(security.clone())),
         Box::new(MemoryStoreTool::new(memory.clone())),
         Box::new(MemoryRecallTool::new(memory.clone())),
         Box::new(MemoryForgetTool::new(memory)),

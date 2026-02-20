@@ -67,7 +67,12 @@
       "Bash(git reset:*)",
       "Bash(bash .claude/scripts/generate-reasoning.sh 52db3ea \"feat\\(zeroclaw\\): integrate zeroclaw as built-in agent with full features\")",
       "Bash(bash .claude/scripts/generate-reasoning.sh d110bec \"feat\\(ui\\): add zeroclaw provider configuration UI\")",
-      "Bash(bash ~/.claude/scripts/generate-reasoning.sh 4ed57ed \"feat\\(zeroclaw\\): migrate git, http, and vision tools from clawapp\")"
+      "Bash(bash ~/.claude/scripts/generate-reasoning.sh 4ed57ed \"feat\\(zeroclaw\\): migrate git, http, and vision tools from clawapp\")",
+      "mcp__zread__search_doc",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "mcp__web-search-prime__webSearchPrime",
+      "WebFetch(domain:v2.tauri.app)"
     ],
     "deny": []
   },

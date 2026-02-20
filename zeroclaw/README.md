@@ -1,1 +1,1 @@
-## https://github.com/zeroclaw-labs/zeroclaw/commit/0ec46ac3d1379553ddb735b99ed11ab198e81e8f
+## https://github.com/zeroclaw-labs/zeroclaw/commit/a03ddc3acec8f067cda3ea9145b1832ea500dacb

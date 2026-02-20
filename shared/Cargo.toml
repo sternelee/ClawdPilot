@@ -34,7 +34,7 @@ mobile = [
   "gethostname",
 ]
 # Tauri runtime (desktop): zeroclaw + desktop features
-tauri-runtime = ["zeroclaw/tauri", "zeroclaw"]
+tauri-runtime = ["zeroclaw/tauri", "zeroclaw/desktop", "zeroclaw"]
 desktop-runtime = ["zeroclaw/desktop", "zeroclaw"]
 # Mobile runtime for Tauri: uses mobile feature instead of std
 mobile-runtime = ["mobile"]
