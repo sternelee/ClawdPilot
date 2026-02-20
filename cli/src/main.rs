@@ -48,6 +48,9 @@ enum Commands {
         /// Use temporary secret key (not persisted to disk)
         #[arg(long)]
         temp_key: bool,
+        /// Run in background after printing QR code and ticket (daemon mode)
+        #[arg(long)]
+        daemon: bool,
     },
 }
 
@@ -66,10 +69,11 @@ async fn main() -> Result<()> {
             bind_addr,
             secret_key_file,
             temp_key,
-        }) => run_host(relay, max_connections, bind_addr, secret_key_file, temp_key).await,
+            daemon,
+        }) => run_host(relay, max_connections, bind_addr, secret_key_file, temp_key, daemon).await,
         None => {
             // 默认启动 host
-            run_host(None, 50, "0.0.0.0:61103".to_string(), None, false).await
+            run_host(None, 50, "0.0.0.0:61103".to_string(), None, false, false).await
         }
     }
 }
@@ -111,6 +115,7 @@ async fn run_host(
     bind_addr: String,
     secret_key_file: Option<String>,
     temp_key: bool,
+    daemon: bool,
 ) -> Result<()> {
     info!("Starting ClawdChat Host Server");
 
@@ -152,6 +157,15 @@ async fn run_host(
 
     // 显示票据信息
     print_host_info(&node_id, &ticket);
+
+    // 如果是守护进程模式，在打印完信息后后台运行
+    if daemon {
+        info!("Daemon mode enabled, detaching to background...");
+        daemonize()?;
+        // 后台进程需要重新初始化日志到文件
+        setup_daemon_logging()?;
+        info!("Daemon process started");
+    }
 
     // 设置 Ctrl+C 处理
     let server_ref = &server;
@@ -260,4 +274,67 @@ async fn run_server_status_loop(server: &CliMessageServer) {
             last_connection_count = connections;
         }
     }
+}
+
+/// Daemonize the current process by forking
+fn daemonize() -> Result<()> {
+    // 调用 fork 创建子进程
+    match unsafe { libc::fork() } {
+        -1 => {
+            return Err(anyhow::anyhow!("Failed to fork: {}", std::io::Error::last_os_error()));
+        }
+        0 => {
+            // 子进程：创建新会话
+            if unsafe { libc::setsid() } == -1 {
+                std::process::exit(1);
+            }
+            // 忽略 SIGHUP 信号，防止守护进程被杀死
+            #[cfg(not(debug_assertions))]
+            {
+                unsafe { libc::signal(libc::SIGHUP, libc::SIG_IGN) };
+            }
+            // 第二次 fork，确保进程不会重新获得控制终端
+            match unsafe { libc::fork() } {
+                -1 => {
+                    std::process::exit(1);
+                }
+                0 => {
+                    // 最终的守护进程子进程
+                    // 关闭标准输入、输出、错误
+                    unsafe {
+                        libc::close(libc::STDIN_FILENO);
+                        libc::close(libc::STDOUT_FILENO);
+                        libc::close(libc::STDERR_FILENO);
+                    }
+                }
+                _ => {
+                    // 第一个子进程退出，让孙子进程成为真正的守护进程
+                    std::process::exit(0);
+                }
+            }
+        }
+        _ => {
+            // 父进程退出
+            std::process::exit(0);
+        }
+    }
+    Ok(())
+}
+
+/// Setup logging for daemon process (reconfigure after fork)
+fn setup_daemon_logging() -> Result<()> {
+    // 重新创建日志目录和文件
+    std::fs::create_dir_all("logs").ok();
+
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "clawdchat-cli.log");
+    let file_layer = tracing_subscriber::fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .with_filter(EnvFilter::new("info"));
+
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .init();
+
+    Ok(())
 }

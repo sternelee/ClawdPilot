@@ -29,6 +29,7 @@ lazy_static = "1.5"
 dirs = "5.0"
 gethostname = "0.5"
 fast_qr = "0.13"
+libc = "0.2"
 iroh-tickets = { workspace = true }
 
 
