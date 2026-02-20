@@ -10,6 +10,8 @@ import {
   createEffect,
   createMemo,
   Show,
+  onMount,
+  onCleanup,
   type Component,
 } from "solid-js";
 import { SessionSidebar } from "./SessionSidebar";
@@ -17,6 +19,17 @@ import { ChatView } from "./ChatView";
 import { sessionStore } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import { Button } from "./ui/primitives";
+import { CommandPalette, type CommandItem } from "./ui/ChatInput";
+import { KeyboardShortcutsDialog } from "./ui/KeyboardShortcuts";
+import { ThemeSwitcher } from "./ui/ThemeSwitcher";
+import {
+  FiPlus,
+  FiSettings,
+  FiMoon,
+  FiSidebar,
+  FiHome,
+  FiHelpCircle,
+} from "solid-icons/fi";
 
 // ============================================================================
 // Icons
@@ -46,6 +59,97 @@ const MenuIcon: Component = () => (
 
 export const AppLayout: Component = () => {
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = createSignal(false);
+  const [shortcutsDialogOpen, setShortcutsDialogOpen] = createSignal(false);
+
+  // Define command palette commands
+  const commands: CommandItem[] = [
+    {
+      id: "new-session",
+      label: "New Session",
+      description: "Start a new AI agent session",
+      icon: FiPlus,
+      action: () => {
+        // TODO: Open new session modal
+        notificationStore.info("New session", "Coming soon");
+      },
+    },
+    {
+      id: "toggle-sidebar",
+      label: "Toggle Sidebar",
+      description: "Show or hide the session sidebar",
+      icon: FiSidebar,
+      action: () => setSidebarOpen((prev) => !prev),
+    },
+    {
+      id: "go-home",
+      label: "Go to Home",
+      description: "Return to home screen",
+      icon: FiHome,
+      action: () => {
+        // TODO: Navigate to home
+      },
+    },
+    {
+      id: "toggle-theme",
+      label: "Toggle Theme",
+      description: "Switch between light and dark mode",
+      icon: FiMoon,
+      action: () => {
+        // TODO: Toggle theme
+      },
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      description: "Open application settings",
+      icon: FiSettings,
+      action: () => {
+        // TODO: Open settings
+      },
+    },
+    {
+      id: "keyboard-shortcuts",
+      label: "Keyboard Shortcuts",
+      description: "View all keyboard shortcuts",
+      icon: FiHelpCircle,
+      action: () => {
+        setShortcutsDialogOpen(true);
+      },
+    },
+  ];
+
+  // Keyboard shortcuts
+  onMount(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      // Press 'b' to toggle sidebar
+      if (e.key === "b" || e.key === "B") {
+        setSidebarOpen((prev) => !prev);
+      }
+
+      // Press Ctrl/Cmd + K to open command palette
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+
+      // Press ? to show keyboard shortcuts
+      if (e.key === "?") {
+        setShortcutsDialogOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+  });
 
   // Use createMemo to make activeSession reactive
   const activeSession = createMemo(() => sessionStore.getActiveSession());
@@ -96,6 +200,20 @@ export const AppLayout: Component = () => {
 
   return (
     <div class="flex h-screen bg-muted overflow-hidden">
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen()}
+        onClose={() => setCommandPaletteOpen(false)}
+        items={commands}
+        placeholder="Type a command..."
+      />
+
+      {/* Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog
+        open={shortcutsDialogOpen()}
+        onClose={() => setShortcutsDialogOpen(false)}
+      />
+
       {/* Mobile Menu Button */}
       <Button
         class="fixed left-4 top-4 z-50 flex bg-card shadow-md lg:hidden"
@@ -118,6 +236,11 @@ export const AppLayout: Component = () => {
           when={activeSession()}
           fallback={
             <div class="flex-1 flex items-center justify-center p-8">
+              {/* Theme Switcher - Top Right */}
+              <div class="fixed top-4 right-4">
+                <ThemeSwitcher />
+              </div>
+
               <div class="text-center max-w-md">
                 <div class="text-6xl mb-4">💬</div>
                 <h2 class="text-2xl font-bold mb-2">Welcome to ClawdChat</h2>

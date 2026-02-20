@@ -19,19 +19,21 @@ import { createScrollPosition } from "@solid-primitives/scroll";
 import {
   FiUser,
   FiTerminal,
-  FiSend,
-  FiSquare,
   FiPlus,
   FiCheck,
   FiX,
   FiAlertTriangle,
-  FiTool,
   FiCopy,
-  FiCode,
-  FiMessageSquare,
-  FiActivity,
 } from "solid-icons/fi";
-import { SiGoogle, SiGithub } from "solid-icons/si";
+import {
+  Claude,
+  OpenAI,
+  Gemini,
+  GithubCopilot,
+  Qwen,
+  OpenClaw,
+  Ai2,
+} from "@lobehub/icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { chatStore } from "../stores/chatStore";
@@ -40,10 +42,10 @@ import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { ChatMessage, PermissionRequest } from "../stores/chatStore";
 import { Alert } from "./ui/primitives";
-import { Badge } from "./ui/primitives";
 import { Button } from "./ui/primitives";
-import { Spinner, Kbd } from "./ui/primitives";
 import { MarkdownRenderer } from "solid-markdown-wasm";
+import { ToolCallList, ReasoningBlock } from "./ui/EnhancedMessageComponents";
+import { ChatInput } from "./ui/ChatInput";
 
 // ============================================================================
 // Helper Functions
@@ -209,7 +211,7 @@ function MessageBubble(props: { message: ChatMessage }) {
 
   return (
     <div
-      class={`flex flex-col gap-1 ${isUser() ? "items-end" : "items-start"} group/bubble transition-all duration-300`}
+      class={`flex flex-col gap-1 animate-fade-in ${isUser() ? "items-end" : "items-start"} group/bubble transition-all duration-300`}
     >
       <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <Show when={isUser()}>
@@ -252,21 +254,10 @@ function MessageBubble(props: { message: ChatMessage }) {
         <Show
           when={props.message.toolCalls && props.message.toolCalls.length > 0}
         >
-          <div class="mt-2 flex flex-wrap gap-1">
-            <For each={props.message.toolCalls}>
-              {(tool) => (
-                <Badge class="h-5 px-2 text-[10px]" variant="default">
-                  <FiTool class="mr-1" size={12} />
-                  {tool.toolName}
-                </Badge>
-              )}
-            </For>
-          </div>
+          <ToolCallList toolCalls={props.message.toolCalls!} />
         </Show>
         <Show when={props.message.thinking}>
-          <span class="mt-2 inline-flex">
-            <Spinner size="sm" />
-          </span>
+          <ReasoningBlock thinking="Thinking..." isStreaming={true} />
         </Show>
       </div>
     </div>
@@ -948,13 +939,6 @@ export function ChatView(props: ChatViewProps) {
     }
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   const handlePermissionResponse = async (
     permissionId: string,
     response: "approved" | "denied" | "approved_for_session",
@@ -1009,22 +993,18 @@ export function ChatView(props: ChatViewProps) {
   };
 
   const getAgentIcon = () => {
-    switch (props.agentType) {
-      case "opencode":
-        return <FiCode size={24} />;
-      case "gemini":
-        return <SiGoogle size={24} />;
-      case "copilot":
-        return <SiGithub size={24} />;
-      case "qwen":
-        return <FiMessageSquare size={24} />;
-      case "zeroclaw":
-        return <FiActivity size={24} />;
-      case "claude":
-        return <FiTerminal size={24} />;
-      default:
-        return <FiTerminal size={24} />;
-    }
+    const iconMap: Record<string, any> = {
+      claude: Claude,
+      codex: OpenAI,
+      opencode: OpenAI,
+      gemini: Gemini,
+      copilot: GithubCopilot,
+      qwen: Qwen,
+      openclaw: OpenClaw,
+      zeroClaw: Ai2,
+    };
+    const Icon = iconMap[props.agentType?.toLowerCase() || ""] || OpenAI;
+    return <Icon size={24} />;
   };
 
   return (
@@ -1043,7 +1023,7 @@ export function ChatView(props: ChatViewProps) {
                 {props.agentType === "copilot" && "GitHub Copilot"}
                 {props.agentType === "qwen" && "Qwen Code"}
                 {props.agentType === "zeroclaw" && "ClawdAI"}
-                {props.agentType === "custom" && "Custom Agent"}
+                {props.agentType === "openclaw" && "OpenClaw"}
               </h2>
               <div
                 class="text-xs text-muted-foreground/50 truncate max-w-[24rem]"
@@ -1171,59 +1151,26 @@ export function ChatView(props: ChatViewProps) {
       </Show>
 
       {/* Input Area */}
-      <div class="p-4 bg-background border-t border-border">
-        <Show
-          when={isActive()}
-          fallback={
-            <div class="flex items-center justify-center p-4 bg-muted/50 rounded-lg border border-dashed border-border">
-              <span class="text-sm text-muted-foreground/50 flex items-center gap-2">
-                <FiAlertTriangle size={16} />
-                This session is inactive. Connection might be lost.
-              </span>
-            </div>
-          }
-        >
-          <div class="flex w-full gap-2 shadow-sm items-end">
-            <textarea
-              value={inputValue()}
-              onInput={(e) => {
-                setInputValue(e.currentTarget.value);
-                // Auto-resize
-                e.currentTarget.style.height = "auto";
-                e.currentTarget.style.height =
-                  Math.min(e.currentTarget.scrollHeight, 200) + "px";
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              class="textarea textarea-bordered flex-1 min-h-10 max-h-50 resize-none leading-normal"
-              aria-label="Chat input"
-              autofocus
-              disabled={!isActive()}
-              rows={1}
-            />
-            <Button
-              type="button"
-              onClick={isStreaming() ? handleAbort : handleSend}
-              disabled={!isStreaming() && (!inputValue().trim() || !isActive())}
-              class="shrink-0 chat-send-btn"
-              variant={isStreaming() ? "destructive" : "default"}
-              aria-label={isStreaming() ? "Stop generation" : "Send message"}
-            >
-              <Show when={!isStreaming()} fallback={<FiSquare size={20} />}>
-                <FiSend size={20} />
-              </Show>
-            </Button>
-          </div>
-          <div class="mt-2 flex justify-between px-1">
-            <span class="text-xs text-muted-foreground/40">
-              Markdown supported
-            </span>
-            <span class="text-xs text-muted-foreground/40">
-              <Kbd>Shift+Enter</Kbd> new line, <Kbd>Enter</Kbd> to send
+      <Show
+        when={isActive()}
+        fallback={
+          <div class="flex items-center justify-center p-4 bg-muted/50 rounded-lg border border-dashed border-border">
+            <span class="text-sm text-muted-foreground/50 flex items-center gap-2">
+              <FiAlertTriangle size={16} />
+              This session is inactive. Connection might be lost.
             </span>
           </div>
-        </Show>
-      </div>
+        }
+      >
+        <ChatInput
+          value={inputValue()}
+          onInput={setInputValue}
+          onSubmit={handleSend}
+          onInterrupt={handleAbort}
+          isStreaming={isStreaming()}
+          disabled={!isActive()}
+        />
+      </Show>
     </div>
   );
 }

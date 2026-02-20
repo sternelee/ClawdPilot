@@ -1,25 +1,32 @@
-import { createSignal, createEffect, onMount, For } from "solid-js";
+import { createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { cn } from "~/lib/utils";
+import { FiSun, FiMoon, FiMonitor, FiChevronDown } from "solid-icons/fi";
 
 interface ThemeSwitcherProps {
   class?: string;
 }
 
-// DaisyUI sunset theme-based themes
+// Theme definitions with icons
 const themes = [
-  { id: "sunset", name: "Sunset", color: "#fb923c" },
-  { id: "dark", name: "Dark", color: "#1d283a" },
-  { id: "sunset", name: "Light", color: "#ffffff" },
-  { id: "dracula", name: "Dracula", color: "#7b2cbf" },
-  { id: "night", name: "Night", color: "#0f1729" },
-  { id: "business", name: "Business", color: "#1e293b" },
-  { id: "synthwave", name: "Synthwave", color: "#d946ef" },
-  { id: "forest", name: "Forest", color: "#22c55e" },
-  { id: "luxury", name: "Luxury", color: "#78716c" },
-  { id: "corporate", name: "Corporate", color: "#3b82f6" },
+  { id: "sunset", name: "Sunset", icon: FiSun, color: "#fb923c" },
+  { id: "dark", name: "Dark", icon: FiMoon, color: "#1d283a" },
+  { id: "dracula", name: "Dracula", icon: FiMoon, color: "#7b2cbf" },
+  { id: "night", name: "Night", icon: FiMoon, color: "#0f1729" },
+  { id: "business", name: "Business", icon: FiMonitor, color: "#1e293b" },
+  { id: "synthwave", name: "Synthwave", icon: FiMonitor, color: "#d946ef" },
+  { id: "forest", name: "Forest", icon: FiSun, color: "#22c55e" },
+  { id: "luxury", name: "Luxury", icon: FiMoon, color: "#78716c" },
+  { id: "corporate", name: "Corporate", icon: FiMonitor, color: "#3b82f6" },
 ];
 
 export function ThemeSwitcher(props: ThemeSwitcherProps) {
   const [currentTheme, setCurrentTheme] = createSignal("sunset");
+  const [isOpen, setIsOpen] = createSignal(false);
+
+  // Get current theme info
+  const currentThemeInfo = () =>
+    themes.find((t) => t.id === currentTheme()) || themes[0];
+  const CurrentIcon = currentThemeInfo().icon;
 
   // Load theme from localStorage on mount
   onMount(() => {
@@ -37,50 +44,97 @@ export function ThemeSwitcher(props: ThemeSwitcherProps) {
 
   const handleThemeChange = (theme: string) => {
     setCurrentTheme(theme);
+    setIsOpen(false);
   };
 
+  // Close dropdown when clicking outside
+  onMount(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".theme-switcher")) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  });
+
   return (
-    <details class={`relative dropdown ${props.class || ""}`}>
-      <summary title="切换主题" class="btn btn-ghost btn-circle">
-        <svg
-          width="20"
-          height="20"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          class="inline-block h-5 w-5 stroke-current"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v6a2 2 0 002 2h4a2 2 0 002-2V5z"
-          ></path>
-        </svg>
-      </summary>
-      <ul class="dropdown-content z-[1] menu p-2 shadow bg-base-200 rounded-box w-52 mt-2">
-        <li class="menu-title px-2 py-1">
-          <span class="text-xs font-semibold uppercase tracking-wide">选择主题</span>
-        </li>
-        {/* DaisyUI theme options */}
-        <For each={themes}>
-          {(theme) => (
-            <li>
-              <button
-                type="button"
-                class={currentTheme() === theme.id ? "active" : ""}
-                onClick={() => handleThemeChange(theme.id)}
-              >
-                <div
-                  class="w-4 h-4 rounded-full"
-                  style={`background-color: ${theme.color}`}
-                ></div>
-                {theme.name}
-              </button>
-            </li>
+    <div class={cn("relative theme-switcher", props.class)}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen())}
+        class={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-lg transition-colors",
+          "hover:bg-muted text-sm font-medium",
+        )}
+      >
+        <CurrentIcon size={16} />
+        <span class="hidden sm:inline">{currentThemeInfo().name}</span>
+        <FiChevronDown
+          size={14}
+          class={cn(
+            "transition-transform duration-200",
+            isOpen() && "rotate-180",
           )}
-        </For>
-      </ul>
-    </details>
+        />
+      </button>
+
+      {/* Dropdown */}
+      <Show when={isOpen()}>
+        <div
+          class={cn(
+            "absolute right-0 mt-2 w-48 bg-base-100 rounded-xl border border-border shadow-xl overflow-hidden z-50",
+            "animate-fade-in origin-top-right",
+          )}
+        >
+          <div class="p-2">
+            <div class="text-xs font-semibold text-muted-foreground px-3 py-2 uppercase tracking-wide">
+              Choose Theme
+            </div>
+            <div class="space-y-1">
+              <For each={themes}>
+                {(theme) => (
+                  <button
+                    type="button"
+                    onClick={() => handleThemeChange(theme.id)}
+                    class={cn(
+                      "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors",
+                      currentTheme() === theme.id
+                        ? "bg-primary/10 text-primary"
+                        : "hover:bg-muted",
+                    )}
+                  >
+                    <div
+                      class="w-5 h-5 rounded-full flex items-center justify-center"
+                      style={`background-color: ${theme.color}`}
+                    >
+                      <Show when={currentTheme() === theme.id}>
+                        <FiSun size={10} class="text-white" />
+                      </Show>
+                    </div>
+                    <span class="text-sm">{theme.name}</span>
+                    <Show when={currentTheme() === theme.id}>
+                      <div class="ml-auto">
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    </Show>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        </div>
+      </Show>
+    </div>
   );
 }

@@ -24,6 +24,7 @@ export type AgentType =
   | "qwen"
   | "codex"
   | "zeroclaw"
+  | "openclaw"
   | "custom";
 
 export type SessionMode = "remote" | "local";
@@ -540,7 +541,7 @@ export const createSessionStore = () => {
   const loadSavedSessions = async (filter?: SessionFilter) => {
     setState("isLoadingSavedSessions", true);
     try {
-      const sessions = await invoke<SessionRecord[]>("listSessions", {
+      const sessions = await invoke<SessionRecord[]>("list_sessions", {
         agentType: filter?.agentType,
         status: filter?.status,
         projectPath: filter?.projectPath,

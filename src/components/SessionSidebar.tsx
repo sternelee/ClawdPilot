@@ -5,18 +5,7 @@
  */
 
 import { onMount, Show, For, createSignal, type Component } from "solid-js";
-import {
-  FiPlus,
-  FiX,
-  FiTerminal,
-  FiMessageSquare,
-  FiCode,
-  FiActivity,
-  FiRefreshCw,
-  FiTrash2,
-  FiClock,
-} from "solid-icons/fi";
-import { SiGoogle, SiGithub } from "solid-icons/si";
+import { FiPlus, FiX, FiRefreshCw, FiTrash2, FiClock } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { chatStore } from "../stores/chatStore";
@@ -25,61 +14,68 @@ import type { AgentType, SessionRecord } from "../stores/sessionStore";
 import { Button } from "./ui/primitives";
 
 // ============================================================================
-// Agent Icons
+// Agent Icons - Using @lobehub/icons
 // ============================================================================
 
+// Import agent icons from lobehub
+import {
+  Claude,
+  OpenAI,
+  Gemini,
+  GithubCopilot,
+  Qwen,
+  OpenClaw,
+  Ai2,
+} from "@lobehub/icons";
+
+// Icon mapping with brand colors
+const agentIconMap: Record<
+  string,
+  { Icon: any; color: string; bgColor: string }
+> = {
+  claude: { Icon: Claude, color: "#A855F7", bgColor: "bg-purple-500/20" },
+  codex: { Icon: OpenAI, color: "#10B981", bgColor: "bg-emerald-500/20" },
+  opencode: {
+    Icon: OpenAI,
+    color: "hsl(var(--primary))",
+    bgColor: "bg-primary/20",
+  },
+  gemini: { Icon: Gemini, color: "#4285F4", bgColor: "bg-blue-500/20" },
+  copilot: { Icon: GithubCopilot, color: "#6E7681", bgColor: "bg-gray-500/20" },
+  qwen: { Icon: Qwen, color: "#6366F1", bgColor: "bg-indigo-500/20" },
+  openclaw: { Icon: OpenClaw, color: "#F97316", bgColor: "bg-orange-500/20" },
+  zeroClaw: { Icon: Ai2, color: "#F97316", bgColor: "bg-orange-500/20" },
+};
+
 const getAgentIcon = (agentType: AgentType) => {
-  const iconClass = "w-4 h-4";
-  switch (agentType) {
-    case "claude":
-      return (
-        <div class={`${iconClass} text-purple-500`}>
-          <FiTerminal size={16} />
-        </div>
-      );
-    case "codex":
-      return (
-        <div class={`${iconClass} text-emerald-500`}>
-          <FiCode size={16} />
-        </div>
-      );
-    case "opencode":
-      return (
-        <div class={`${iconClass} text-primary`}>
-          <FiCode size={16} />
-        </div>
-      );
-    case "gemini":
-      return (
-        <div class={`${iconClass} text-blue-500`}>
-          <SiGoogle size={16} />
-        </div>
-      );
-    case "copilot":
-      return (
-        <div class={`${iconClass} text-gray-500`}>
-          <SiGithub size={16} />
-        </div>
-      );
-    case "qwen":
-      return (
-        <div class={`${iconClass} text-indigo-500`}>
-          <FiMessageSquare size={16} />
-        </div>
-      );
-    case "zeroclaw":
-      return (
-        <div class={`${iconClass} text-orange-500`}>
-          <FiActivity size={16} />
-        </div>
-      );
-    default:
-      return (
-        <div class={`${iconClass} text-muted-foreground`}>
-          <FiTerminal size={16} />
-        </div>
-      );
+  const iconClass = "w-9 h-9 rounded-xl flex items-center justify-center";
+  const normalizedType = agentType?.toLowerCase() || "custom";
+  const iconConfig = agentIconMap[normalizedType];
+
+  if (iconConfig) {
+    const { Icon, color, bgColor } = iconConfig;
+    return (
+      <div class={`${iconClass} ${bgColor}`} style={{ color }}>
+        <Icon size={22} />
+      </div>
+    );
   }
+
+  // Default fallback icon
+  return (
+    <div class={`${iconClass} bg-muted`}>
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+      </svg>
+    </div>
+  );
 };
 
 // ============================================================================
@@ -206,7 +202,10 @@ const SavedSessionItem: Component<SavedSessionItemProps> = (props) => {
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) {
-      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } else if (diffDays === 1) {
       return "Yesterday";
     } else if (diffDays < 7) {
@@ -439,7 +438,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       // Clear chat messages for this session
       chatStore.clearMessages(sessionId);
       // Update local state
-      setSavedSessions(savedSessions().filter((s) => s.sessionId !== sessionId));
+      setSavedSessions(
+        savedSessions().filter((s) => s.sessionId !== sessionId),
+      );
       notificationStore.success("Session deleted", "Delete");
     } catch (error) {
       console.error("Failed to delete session:", error);
@@ -476,11 +477,16 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               variant="ghost"
               class="text-xs h-7"
               onClick={handleToggleSaved}
-              title={showSaved() ? "Hide saved sessions" : "Show saved sessions"}
+              title={
+                showSaved() ? "Hide saved sessions" : "Show saved sessions"
+              }
             >
               <FiClock size={14} class="mr-1" />
               {showSaved() ? "Saved" : "History"}
             </Button>
+            <span class="text-[10px] text-muted-foreground/50 hidden sm:inline">
+              Press <kbd class="kbd kbd-xs">B</kbd> to toggle
+            </span>
           </div>
           <Button
             size="icon"
@@ -497,28 +503,28 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           {/* Active Sessions */}
           <Show when={!showSaved()}>
             <Show when={sessions().length > 0}>
-            <For each={sessions()}>
-              {(session) => (
-                <SessionItem
-                  session={session}
-                  isActive={session.sessionId === activeSession()?.sessionId}
-                  onClick={() =>
-                    sessionStore.setActiveSession(session.sessionId)
-                  }
-                  onClose={(e) => handleCloseSession(e, session.sessionId)}
-                  onSpawnRemoteSession={handleSpawnRemoteSession}
-                />
-              )}
-            </For>
-          </Show>
-          <Show when={sessions().length === 0}>
-            <div class="text-center py-8 text-muted-foreground">
-              <p class="text-sm">No active sessions</p>
-              <p class="text-xs mt-1">
-                Create a local session or connect to a remote CLI
-              </p>
-            </div>
-          </Show>
+              <For each={sessions()}>
+                {(session) => (
+                  <SessionItem
+                    session={session}
+                    isActive={session.sessionId === activeSession()?.sessionId}
+                    onClick={() =>
+                      sessionStore.setActiveSession(session.sessionId)
+                    }
+                    onClose={(e) => handleCloseSession(e, session.sessionId)}
+                    onSpawnRemoteSession={handleSpawnRemoteSession}
+                  />
+                )}
+              </For>
+            </Show>
+            <Show when={sessions().length === 0}>
+              <div class="text-center py-8 text-muted-foreground">
+                <p class="text-sm">No active sessions</p>
+                <p class="text-xs mt-1">
+                  Create a local session or connect to a remote CLI
+                </p>
+              </div>
+            </Show>
           </Show>
 
           {/* Saved Sessions */}
@@ -547,9 +553,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             <Show when={!isLoadingSaved() && savedSessions().length === 0}>
               <div class="text-center py-8 text-muted-foreground">
                 <p class="text-sm">No saved sessions</p>
-                <p class="text-xs mt-1">
-                  Sessions will be saved automatically
-                </p>
+                <p class="text-xs mt-1">Sessions will be saved automatically</p>
               </div>
             </Show>
           </Show>
