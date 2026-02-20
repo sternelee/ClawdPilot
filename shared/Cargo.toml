@@ -65,6 +65,7 @@ uuid = { workspace = true }
 async-trait = "0.1"
 iroh-base = { workspace = true }
 tracing-subscriber = { version = "0.3", optional = true }
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 # Agent related dependencies - only included in std feature
 agent-client-protocol = { version = "0.9.4", optional = true }

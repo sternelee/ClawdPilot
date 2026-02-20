@@ -362,6 +362,29 @@ export function ChatView(props: ChatViewProps) {
     }
   });
 
+  // Auto-save session when messages change (debounced)
+  let saveTimeout: number | undefined;
+  createEffect(() => {
+    const msgs = messages();
+    const sessionId = props.sessionId;
+    const sessionMode = props.sessionMode;
+
+    // Only auto-save for local sessions
+    if (sessionMode !== "local" || !sessionId || msgs.length === 0) {
+      return;
+    }
+
+    // Debounce saves to avoid saving on every keystroke
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+
+    saveTimeout = window.setTimeout(() => {
+      console.log("[ChatView] Auto-saving session:", sessionId);
+      sessionStore.autoSaveSession(sessionId, msgs);
+    }, 2000); // Save after 2 seconds of inactivity
+  });
+
   // Listen for incoming agent messages from backend
   onMount(() => {
     // Listen for local agent events
@@ -762,6 +785,19 @@ export function ChatView(props: ChatViewProps) {
       unlistenLocalPromise.then((fn) => fn());
       // Cleanup remote agent event listener
       unlistenPromise.then((fn) => fn());
+      // Save session on cleanup
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+      const sessionId = props.sessionId;
+      const sessionMode = props.sessionMode;
+      if (sessionMode === "local" && sessionId) {
+        const msgs = messages();
+        if (msgs.length > 0) {
+          console.log("[ChatView] Saving session on cleanup:", sessionId);
+          sessionStore.autoSaveSession(sessionId, msgs);
+        }
+      }
     });
   });
 

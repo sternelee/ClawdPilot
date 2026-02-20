@@ -4,22 +4,24 @@
  * Sidebar for managing AI agent sessions in a unified list.
  */
 
-import { onMount, Show, For, type Component } from "solid-js";
+import { onMount, Show, For, createSignal, type Component } from "solid-js";
 import {
   FiPlus,
   FiX,
-  FiHome,
-  FiCloud,
   FiTerminal,
   FiMessageSquare,
   FiCode,
   FiActivity,
+  FiRefreshCw,
+  FiTrash2,
+  FiClock,
 } from "solid-icons/fi";
 import { SiGoogle, SiGithub } from "solid-icons/si";
 import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
+import { chatStore } from "../stores/chatStore";
 import { notificationStore } from "../stores/notificationStore";
-import type { AgentType } from "../stores/sessionStore";
+import type { AgentType, SessionRecord } from "../stores/sessionStore";
 import { Button } from "./ui/primitives";
 
 // ============================================================================
@@ -165,6 +167,131 @@ const SessionItem: Component<SessionItemProps> = (props) => {
 };
 
 // ============================================================================
+// Saved Session Item Component
+// ============================================================================
+
+interface SavedSessionItemProps {
+  session: SessionRecord;
+  onRestore: (sessionId: string) => void;
+  onDelete: (sessionId: string) => void;
+}
+
+const SavedSessionItem: Component<SavedSessionItemProps> = (props) => {
+  const [isDeleting, setIsDeleting] = createSignal(false);
+
+  const handleRestore = async () => {
+    setIsDeleting(true);
+    try {
+      await props.onRestore(props.session.sessionId);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (confirm("Are you sure you want to delete this saved session?")) {
+      setIsDeleting(true);
+      try {
+        await props.onDelete(props.session.sessionId);
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  const formatDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } else if (diffDays === 1) {
+      return "Yesterday";
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
+  return (
+    <div
+      class="group relative flex items-center gap-3 px-4 py-3 cursor-pointer transition-all duration-200
+        hover:bg-muted/50 border-r-2 border-transparent"
+      onClick={handleRestore}
+    >
+      {/* Agent Icon */}
+      <div class="shrink-0 text-muted-foreground">
+        <FiClock size={16} />
+      </div>
+
+      {/* Session Info */}
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-sm truncate">
+            {props.session.agentType === "claudeCode" && "Claude"}
+            {props.session.agentType === "gemini" && "Gemini"}
+            {props.session.agentType === "openCode" && "OpenCode"}
+            {props.session.agentType === "copilot" && "Copilot"}
+            {props.session.agentType === "qwen" && "Qwen"}
+            {props.session.agentType === "codex" && "Codex"}
+            {props.session.agentType === "zeroClaw" && "ClawdAI"}
+            {props.session.agentType === "custom" && "Custom"}
+            {/* Also handle lowercase versions from frontend */}
+            {props.session.agentType === "claude" && "Claude"}
+            {props.session.agentType === "opencode" && "OpenCode"}
+            {props.session.agentType === "zeroclaw" && "ClawdAI"}
+          </span>
+          <span class="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+            {props.session.messages?.length || 0} msgs
+          </span>
+        </div>
+        <div class="text-xs text-muted-foreground/60 truncate">
+          {props.session.projectPath?.split("/").pop() || "No project"}
+        </div>
+        <div class="text-xs text-muted-foreground/40">
+          {formatDate(props.session.lastActiveAt)}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          class="p-1 rounded hover:bg-primary/20"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRestore();
+          }}
+          title="Restore session"
+          disabled={isDeleting()}
+        >
+          <FiRefreshCw size={14} />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          class="p-1 rounded hover:bg-destructive/20 text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDelete();
+          }}
+          title="Delete session"
+          disabled={isDeleting()}
+        >
+          <FiTrash2 size={14} />
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // Session Sidebar Component
 // ============================================================================
 
@@ -177,6 +304,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const sessions = () => sessionStore.getSessions();
   const activeSession = () => sessionStore.getActiveSession();
   const activeSessions = () => sessionStore.getActiveSessions();
+
+  // Saved sessions state
+  const [savedSessions, setSavedSessions] = createSignal<SessionRecord[]>([]);
+  const [isLoadingSaved, setIsLoadingSaved] = createSignal(false);
+  const [showSaved, setShowSaved] = createSignal(false);
 
   // Load local sessions on mount
   const handleLoadLocalSessions = async () => {
@@ -235,6 +367,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         notificationStore.error("Failed to stop local agent", "Error");
       });
     }
+    // Clear chat messages for this session
+    chatStore.clearMessages(sessionId);
     sessionStore.removeSession(sessionId);
   };
 
@@ -261,6 +395,58 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     void handleLoadLocalSessions();
   });
 
+  // Load saved sessions
+  const loadSavedSessions = async () => {
+    setIsLoadingSaved(true);
+    try {
+      const sessions = await sessionStore.loadSavedSessions({ limit: 20 });
+      setSavedSessions(sessions);
+    } catch (error) {
+      console.error("Failed to load saved sessions:", error);
+    } finally {
+      setIsLoadingSaved(false);
+    }
+  };
+
+  // Toggle saved sessions panel
+  const handleToggleSaved = async () => {
+    const newShow = !showSaved();
+    setShowSaved(newShow);
+    if (newShow && savedSessions().length === 0) {
+      await loadSavedSessions();
+    }
+  };
+
+  // Restore a saved session
+  const handleRestoreSession = async (sessionId: string) => {
+    try {
+      const newSessionId = await sessionStore.restoreSession(sessionId);
+      if (newSessionId) {
+        notificationStore.success("Session restored successfully", "Restore");
+        // Reload saved sessions
+        await loadSavedSessions();
+      }
+    } catch (error) {
+      console.error("Failed to restore session:", error);
+      notificationStore.error("Failed to restore session", "Error");
+    }
+  };
+
+  // Delete a saved session
+  const handleDeleteSavedSession = async (sessionId: string) => {
+    try {
+      await sessionStore.deleteSavedSession(sessionId);
+      // Clear chat messages for this session
+      chatStore.clearMessages(sessionId);
+      // Update local state
+      setSavedSessions(savedSessions().filter((s) => s.sessionId !== sessionId));
+      notificationStore.success("Session deleted", "Delete");
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      notificationStore.error("Failed to delete session", "Error");
+    }
+  };
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -282,7 +468,20 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       >
         {/* Header */}
         <div class="flex items-center justify-between p-4 border-b border-border">
-          <h3 class="text-sm font-semibold">Sessions</h3>
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-semibold">Sessions</h3>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              class="text-xs h-7"
+              onClick={handleToggleSaved}
+              title={showSaved() ? "Hide saved sessions" : "Show saved sessions"}
+            >
+              <FiClock size={14} class="mr-1" />
+              {showSaved() ? "Saved" : "History"}
+            </Button>
+          </div>
           <Button
             size="icon"
             variant="ghost"
@@ -295,7 +494,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
         {/* Session List */}
         <div class="overflow-y-auto flex-1 p-2">
-          <Show when={sessions().length > 0}>
+          {/* Active Sessions */}
+          <Show when={!showSaved()}>
+            <Show when={sessions().length > 0}>
             <For each={sessions()}>
               {(session) => (
                 <SessionItem
@@ -317,6 +518,40 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 Create a local session or connect to a remote CLI
               </p>
             </div>
+          </Show>
+          </Show>
+
+          {/* Saved Sessions */}
+          <Show when={showSaved()}>
+            <div class="mt-2 pt-2 border-t border-border">
+              <div class="px-2 py-1 text-xs font-medium text-muted-foreground">
+                Saved Sessions ({savedSessions().length})
+              </div>
+            </div>
+            <Show when={isLoadingSaved()}>
+              <div class="text-center py-4 text-muted-foreground">
+                <p class="text-sm">Loading...</p>
+              </div>
+            </Show>
+            <Show when={!isLoadingSaved() && savedSessions().length > 0}>
+              <For each={savedSessions()}>
+                {(session) => (
+                  <SavedSessionItem
+                    session={session}
+                    onRestore={handleRestoreSession}
+                    onDelete={handleDeleteSavedSession}
+                  />
+                )}
+              </For>
+            </Show>
+            <Show when={!isLoadingSaved() && savedSessions().length === 0}>
+              <div class="text-center py-8 text-muted-foreground">
+                <p class="text-sm">No saved sessions</p>
+                <p class="text-xs mt-1">
+                  Sessions will be saved automatically
+                </p>
+              </div>
+            </Show>
           </Show>
         </div>
 
