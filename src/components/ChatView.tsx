@@ -25,15 +25,6 @@ import {
   FiAlertTriangle,
   FiCopy,
 } from "solid-icons/fi";
-import {
-  Claude,
-  OpenAI,
-  Gemini,
-  GithubCopilot,
-  Qwen,
-  OpenClaw,
-  Ai2,
-} from "@lobehub/icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { chatStore } from "../stores/chatStore";
@@ -993,18 +984,45 @@ export function ChatView(props: ChatViewProps) {
   };
 
   const getAgentIcon = () => {
-    const iconMap: Record<string, any> = {
-      claude: Claude,
-      codex: OpenAI,
-      opencode: OpenAI,
-      gemini: Gemini,
-      copilot: GithubCopilot,
-      qwen: Qwen,
-      openclaw: OpenClaw,
-      zeroClaw: Ai2,
+    const normalizedType = props.agentType?.toLowerCase() || "";
+
+    // Map agent types to lobehub icon slugs
+    const iconSlugs: Record<string, string> = {
+      claude: "claude",
+      claudecode: "claude",
+      "claude-code": "claude",
+      codex: "openai",
+      opencode: "openai",
+      open: "openai",
+      openai: "openai",
+      gemini: "gemini",
+      "gemini-cli": "gemini",
+      copilot: "github-copilot",
+      "gh-copilot": "github-copilot",
+      qwen: "qwen",
+      openclaw: "open-claw",
+      "open-claw": "open-claw",
+      zeroclaw: "ai-two",
+      "ai-two": "ai-two",
     };
-    const Icon = iconMap[props.agentType?.toLowerCase() || ""] || OpenAI;
-    return <Icon size={24} />;
+
+    const slug = iconSlugs[normalizedType];
+    const iconUrl = slug
+      ? `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${slug}.svg`
+      : null;
+
+    if (iconUrl) {
+      return (
+        <img
+          src={iconUrl}
+          alt={normalizedType}
+          class="w-6 h-6"
+        />
+      );
+    }
+
+    // Fallback
+    return <span class="text-2xl">🤖</span>;
   };
 
   return (

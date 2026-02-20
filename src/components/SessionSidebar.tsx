@@ -14,66 +14,53 @@ import type { AgentType, SessionRecord } from "../stores/sessionStore";
 import { Button } from "./ui/primitives";
 
 // ============================================================================
-// Agent Icons - Using @lobehub/icons
+// Agent Icons - Using @lobehub/icons CDN
 // ============================================================================
 
-// Import agent icons from lobehub
-import {
-  Claude,
-  OpenAI,
-  Gemini,
-  GithubCopilot,
-  Qwen,
-  OpenClaw,
-  Ai2,
-} from "@lobehub/icons";
-
-// Icon mapping with brand colors
-const agentIconMap: Record<
-  string,
-  { Icon: any; color: string; bgColor: string }
-> = {
-  claude: { Icon: Claude, color: "#A855F7", bgColor: "bg-purple-500/20" },
-  codex: { Icon: OpenAI, color: "#10B981", bgColor: "bg-emerald-500/20" },
-  opencode: {
-    Icon: OpenAI,
-    color: "hsl(var(--primary))",
-    bgColor: "bg-primary/20",
-  },
-  gemini: { Icon: Gemini, color: "#4285F4", bgColor: "bg-blue-500/20" },
-  copilot: { Icon: GithubCopilot, color: "#6E7681", bgColor: "bg-gray-500/20" },
-  qwen: { Icon: Qwen, color: "#6366F1", bgColor: "bg-indigo-500/20" },
-  openclaw: { Icon: OpenClaw, color: "#F97316", bgColor: "bg-orange-500/20" },
-  zeroClaw: { Icon: Ai2, color: "#F97316", bgColor: "bg-orange-500/20" },
-};
+const ICON_BASE_URL = "https://unpkg.com/@lobehub/icons-static-svg@latest/icons";
 
 const getAgentIcon = (agentType: AgentType) => {
+  const normalizedType = agentType?.toLowerCase() || "";
   const iconClass = "w-9 h-9 rounded-xl flex items-center justify-center";
-  const normalizedType = agentType?.toLowerCase() || "custom";
-  const iconConfig = agentIconMap[normalizedType];
 
-  if (iconConfig) {
-    const { Icon, color, bgColor } = iconConfig;
+  // Map agent types to lobehub icon slugs
+  const iconSlugs: Record<string, string> = {
+    claude: "claude",
+    claudecode: "claude",
+    "claude-code": "claude",
+    codex: "openai",
+    opencode: "openai",
+    open: "openai",
+    openai: "openai",
+    gemini: "gemini",
+    "gemini-cli": "gemini",
+    copilot: "github-copilot",
+    "gh-copilot": "github-copilot",
+    qwen: "qwen",
+    openclaw: "open-claw",
+    "open-claw": "open-claw",
+    zeroclaw: "ai-two",
+    "ai-two": "ai-two",
+  };
+
+  const slug = iconSlugs[normalizedType];
+
+  if (slug) {
     return (
-      <div class={`${iconClass} ${bgColor}`} style={{ color }}>
-        <Icon size={22} />
+      <div class={iconClass}>
+        <img
+          src={`${ICON_BASE_URL}/${slug}.svg`}
+          alt={normalizedType}
+          class="w-6 h-6"
+        />
       </div>
     );
   }
 
-  // Default fallback icon
+  // Default fallback
   return (
     <div class={`${iconClass} bg-muted`}>
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-      </svg>
+      <span class="text-lg">🤖</span>
     </div>
   );
 };
