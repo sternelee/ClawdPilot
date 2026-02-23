@@ -132,39 +132,45 @@ pub struct AppState {
     quic_client: RwLock<Option<QuicMessageClientHandle>>,
     cleanup_token: RwLock<Option<CancellationToken>>,
     tcp_forwarding_manager: Arc<tokio::sync::Mutex<TcpForwardingManager>>,
-    // Session store for persistent session data
-    session_store: Arc<Option<shared::session_store::SqliteSessionStore>>,
+    // Session store for persistent session data (initialized in setup for mobile support)
+    session_store: Arc<RwLock<Option<shared::session_store::SqliteSessionStore>>>,
     // Local agent manager for in-app agent sessions (desktop only)
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     agent_manager: Arc<RwLock<Option<Arc<AgentManager>>>>,
+    // Mobile ZeroClaw agent sessions (stored as Arc for sharing)
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    mobile_agent_sessions: Arc<RwLock<HashMap<String, Arc<MobileAgentSession>>>>,
+}
+
+// Mobile agent session data
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub struct MobileAgentSession {
+    pub session_id: String,
+    pub provider: Arc<tokio::sync::Mutex<Box<dyn zeroclaw::providers::Provider>>>,
+    pub memory: Arc<dyn zeroclaw::memory::Memory>,
+    pub tools: Vec<Box<dyn zeroclaw::tools::Tool>>,
+    pub runtime: Arc<dyn zeroclaw::runtime::RuntimeAdapter>,
+    pub security: Arc<zeroclaw::security::SecurityPolicy>,
+    pub history: Arc<tokio::sync::Mutex<Vec<zeroclaw::providers::ChatMessage>>>,
+    pub model: String,
+    pub temperature: f64,
+    pub max_iterations: usize,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        // Try to initialize session store
-        let session_store = if let Some(data_dir) = dirs::data_dir() {
-            let app_data_dir = data_dir.join("riterm");
-            match shared::session_store::create_session_store(&app_data_dir) {
-                Ok(store) => Arc::new(Some(store)),
-                Err(e) => {
-                    tracing::warn!("Failed to initialize session store: {}", e);
-                    Arc::new(None)
-                }
-            }
-        } else {
-            tracing::warn!("Could not determine data directory for session store");
-            Arc::new(None)
-        };
-
         Self {
             sessions: RwLock::new(HashMap::new()),
             communication_manager: RwLock::new(None),
             quic_client: RwLock::new(None),
             cleanup_token: RwLock::new(None),
             tcp_forwarding_manager: Arc::new(tokio::sync::Mutex::new(TcpForwardingManager::new())),
-            session_store,
+            // Session store will be initialized in setup()
+            session_store: Arc::new(RwLock::new(None)),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             agent_manager: Arc::new(RwLock::new(None)),
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            mobile_agent_sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -1275,6 +1281,36 @@ async fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
     shared::list_directory(&path)
 }
 
+#[tauri::command]
+async fn get_app_dir(app_handle: tauri::AppHandle) -> Result<String, String> {
+    // Get the app's resource directory (where the app is installed)
+    // On mobile, this is the app's private directory
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        // On mobile, use the app data directory
+        let path = app_handle
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        // On desktop, use the current working directory as fallback
+        // or the resource directory if available
+        match app_handle.path().resource_dir() {
+            Ok(path) => Ok(path.to_string_lossy().to_string()),
+            Err(_) => {
+                // Fallback to current directory
+                Ok(std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| ".".to_string()))
+            }
+        }
+    }
+}
+
 /// Helper function to check and initialize QUIC client if needed
 async fn ensure_quic_client_initialized(
     state: &State<'_, AppState>,
@@ -1997,6 +2033,7 @@ async fn abort_agent_action(
 // ============================================================================
 
 /// Start a local AI agent session (in-app, no P2P)
+/// Desktop only
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(rename_all = "camelCase")]
 async fn local_start_agent(
@@ -2135,6 +2172,314 @@ async fn local_start_agent(
     }
 
     Ok(session_id)
+}
+
+/// Start a ZeroClaw agent session on mobile platforms
+/// Uses zeroclaw crate directly without AgentManager
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command(rename_all = "camelCase")]
+async fn mobile_start_zeroclaw(
+    session_id: Option<String>,
+    project_path: String,
+    provider: String,
+    model: String,
+    api_key: Option<String>,
+    temperature: Option<f64>,
+    max_iterations: Option<i32>,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    use zeroclaw::providers::create_provider;
+    use zeroclaw::memory::create_memory;
+    use zeroclaw::security::SecurityPolicy;
+    use zeroclaw::config::AutonomyConfig;
+    use zeroclaw::tools::default_tools;
+    use zeroclaw::runtime::TauriRuntime;
+    use zeroclaw::providers::traits::ChatMessage;
+    use std::sync::Arc;
+
+    tracing::info!(
+        "[mobile_start_zeroclaw] project_path: {}, provider: {}, model: {}",
+        project_path, provider, model
+    );
+
+    // Generate session ID if not provided
+    let session_id = session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+
+    // Expand ~ in project path
+    let expanded_project_path = if project_path.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            format!("{}{}", home, &project_path[1..])
+        } else {
+            project_path.clone()
+        }
+    } else if project_path == "~" {
+        std::env::var("HOME").unwrap_or(project_path.clone())
+    } else {
+        project_path.clone()
+    };
+
+    // Verify project path exists
+    let working_dir = std::path::PathBuf::from(&expanded_project_path);
+    if !working_dir.exists() {
+        return Err(format!("Project path does not exist: {}", expanded_project_path));
+    }
+
+    // Create provider
+    let provider_box = create_provider(&provider, api_key.as_deref())
+        .map_err(|e| format!("Failed to create provider: {}", e))?;
+
+    // Create memory (returns Box<dyn Memory>, wrap in Arc)
+    let memory: Arc<dyn zeroclaw::memory::Memory> = Arc::from(
+        create_memory("sqlite", &working_dir)
+            .map_err(|e| format!("Failed to create memory: {}", e))?
+    );
+
+    // Create security policy
+    let security = Arc::new(SecurityPolicy::from_config(
+        &AutonomyConfig::default(),
+        &working_dir,
+    ));
+
+    // Create runtime
+    let runtime: Arc<dyn zeroclaw::runtime::RuntimeAdapter> = Arc::new(TauriRuntime::new());
+
+    // Create tools
+    let tools = default_tools(security.clone());
+
+    // Create history
+    let history = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+
+    // Build system prompt
+    let tool_instructions = zeroclaw::agent::build_tool_instructions(&tools);
+    let system_prompt = format!(
+        "You are ZeroClaw, a helpful AI coding assistant.\n\
+        You have access to various tools to help you complete tasks.\n\
+        {}\n\
+        Always think step by step and use the appropriate tools to accomplish the user's request.",
+        tool_instructions
+    );
+
+    // Initialize history with system message
+    {
+        let mut history_lock = history.lock().await;
+        history_lock.push(ChatMessage::system(&system_prompt));
+    }
+
+    // Get temperature and max_iterations with defaults
+    let temperature = temperature.unwrap_or(0.7);
+    let max_iterations = max_iterations.unwrap_or(20) as usize;
+
+    // Create session
+    let session = MobileAgentSession {
+        session_id: session_id.clone(),
+        provider: Arc::new(tokio::sync::Mutex::new(provider_box)),
+        memory,
+        tools,
+        runtime,
+        security,
+        history: history.clone(),
+        model: model.clone(),
+        temperature,
+        max_iterations,
+    };
+
+    // Store session in state (wrapped in Arc)
+    {
+        let mut sessions = state.mobile_agent_sessions.write().await;
+        sessions.insert(session_id.clone(), Arc::new(session));
+    }
+
+    // Emit initial greeting event
+    let greeting = "ZeroClaw agent started. How can I help you today?";
+    let event_json = serde_json::json!({
+        "sessionId": session_id,
+        "event": {
+            "type": "message",
+            "content": greeting,
+        },
+    });
+    let _ = app_handle.emit("local-agent-event", &event_json);
+
+    tracing::info!("[mobile_start_zeroclaw] Session started: {}", session_id);
+
+    Ok(session_id)
+}
+
+/// Send a message to a mobile ZeroClaw agent
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command(rename_all = "camelCase")]
+async fn mobile_send_agent_message(
+    session_id: String,
+    content: String,
+    _attachments: Vec<String>,
+    state: State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use zeroclaw::providers::traits::ChatMessage;
+    use zeroclaw::agent::{trim_history, agent_turn};
+
+    tracing::info!(
+        "[mobile_send_agent_message] session_id: {}, content: {}",
+        session_id,
+        content.chars().take(50).collect::<String>()
+    );
+
+    // Get session Arc from state
+    let session_arc = {
+        let sessions = state.mobile_agent_sessions.read().await;
+        sessions.get(&session_id).cloned()
+    };
+
+    let session_arc = session_arc.ok_or_else(|| "Session not found".to_string())?;
+
+    // Add user message to history
+    {
+        let mut history = session_arc.history.lock().await;
+        history.push(ChatMessage::user(&content));
+    }
+
+    // Create a callback that emits events to the frontend
+    struct AppCallback {
+        app_handle: tauri::AppHandle,
+        session_id: String,
+    }
+
+    impl zeroclaw::agent::TurnCallback for AppCallback {
+        fn on_text(&self, text: &str) {
+            tracing::info!("[mobile_callback] on_text called with: {}", text.chars().take(50).collect::<String>());
+            let event_json = serde_json::json!({
+                "sessionId": self.session_id,
+                "event": {
+                    "type": "message",
+                    "content": text,
+                },
+            });
+            let _ = self.app_handle.emit("local-agent-event", &event_json);
+        }
+        fn on_tool_started(&self, tool_name: &str, tool_id: &str) {
+            tracing::info!("[mobile_callback] on_tool_started: {} ({})", tool_name, tool_id);
+        }
+        fn on_tool_completed(&self, tool_name: &str, tool_id: &str, output: &str, success: bool) {
+            tracing::info!("[mobile_callback] on_tool_completed: {} ({}) success: {}", tool_name, tool_id, success);
+            let event_json = serde_json::json!({
+                "sessionId": self.session_id,
+                "event": {
+                    "type": "tool_result",
+                    "tool": tool_name,
+                    "toolId": tool_id,
+                    "output": output,
+                    "success": success,
+                },
+            });
+            let _ = self.app_handle.emit("local-agent-event", &event_json);
+        }
+        fn on_turn_completed(&self) {
+            tracing::info!("[mobile_callback] on_turn_completed");
+        }
+        fn on_turn_error(&self, error: &str) {
+            tracing::error!("[mobile_callback] on_turn_error: {}", error);
+            let event_json = serde_json::json!({
+                "sessionId": self.session_id,
+                "event": {
+                    "type": "error",
+                    "content": error,
+                },
+            });
+            let _ = self.app_handle.emit("local-agent-event", &event_json);
+        }
+    }
+
+    let callback = AppCallback {
+        app_handle: app_handle.clone(),
+        session_id: session_id.clone(),
+    };
+
+    // Run the agent turn with the session data
+    tracing::info!("[mobile_send_agent_message] Calling agent_turn with model: {}, temperature: {}, max_iterations: {}",
+        session_arc.model, session_arc.temperature, session_arc.max_iterations);
+
+    let result = {
+        let mut history = session_arc.history.lock().await;
+        let provider = session_arc.provider.lock().await;
+        let provider_ref: &dyn zeroclaw::providers::Provider = provider.as_ref();
+        let tools: &[Box<dyn zeroclaw::tools::Tool>] = &session_arc.tools;
+
+        tracing::info!("[mobile_send_agent_message] History length: {}, Tools count: {}",
+            history.len(), tools.len());
+
+        agent_turn(
+            provider_ref,
+            &mut history,
+            tools,
+            &callback,
+            &session_arc.model,
+            session_arc.temperature,
+            session_arc.max_iterations,
+        ).await
+    };
+
+    match result {
+        Ok(response_text) => {
+            // Trim history
+            {
+                let mut history = session_arc.history.lock().await;
+                trim_history(&mut history);
+            }
+
+            tracing::info!("[mobile_send_agent_message] SUCCESS - Response: {}", response_text.chars().take(100).collect::<String>());
+
+            // Emit final response to frontend
+            let event_json = serde_json::json!({
+                "sessionId": session_id,
+                "event": {
+                    "type": "message",
+                    "content": response_text,
+                },
+            });
+            let _ = app_handle.emit("local-agent-event", &event_json);
+
+            Ok(())
+        }
+        Err(e) => {
+            let error_msg = format!("Agent error: {}", e);
+            tracing::error!("[mobile_send_agent_message] FAILED - {}", error_msg);
+
+            // Emit error event
+            let event_json = serde_json::json!({
+                "sessionId": session_id,
+                "event": {
+                    "type": "error",
+                    "content": error_msg,
+                },
+            });
+            let _ = app_handle.emit("local-agent-event", &event_json);
+
+            Err(error_msg)
+        }
+    }
+}
+
+/// Stop a mobile ZeroClaw agent session
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command(rename_all = "camelCase")]
+async fn mobile_stop_agent(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    tracing::info!("[mobile_stop_agent] Stopping session: {}", session_id);
+
+    // Remove session from state
+    {
+        let mut sessions = state.mobile_agent_sessions.write().await;
+        if sessions.remove(&session_id).is_some() {
+            tracing::info!("[mobile_stop_agent] Session removed: {}", session_id);
+        } else {
+            tracing::warn!("[mobile_stop_agent] Session not found: {}", session_id);
+        }
+    }
+
+    Ok(())
 }
 
 /// Stop a local agent session
@@ -2320,8 +2665,8 @@ async fn save_session(
     metadata_json: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let store = state.session_store.as_ref();
-    let store = store.as_ref().ok_or("Session store not available")?;
+    let store_guard = state.session_store.read().await;
+    let store = store_guard.as_ref().ok_or("Session store not available")?;
 
     let agent_type_enum = match agent_type.as_str() {
         "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
@@ -2367,8 +2712,8 @@ async fn add_session_message(
     message: shared::session_store::ChatMessage,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let store = state.session_store.as_ref();
-    let store = store.as_ref().ok_or("Session store not available")?;
+    let store_guard = state.session_store.read().await;
+    let store = store_guard.as_ref().ok_or("Session store not available")?;
 
     store
         .add_message(&session_id, &message)
@@ -2386,8 +2731,8 @@ async fn list_sessions(
     offset: Option<usize>,
     state: State<'_, AppState>,
 ) -> Result<Vec<shared::session_store::SessionRecord>, String> {
-    let store = state.session_store.as_ref();
-    let store = store.as_ref().ok_or("Session store not available")?;
+    let store_guard = state.session_store.read().await;
+    let store = store_guard.as_ref().ok_or("Session store not available")?;
 
     let agent_type_enum = agent_type.map(|at| match at.as_str() {
         "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
@@ -2427,8 +2772,8 @@ async fn load_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<Option<shared::session_store::SessionRecord>, String> {
-    let store = state.session_store.as_ref();
-    let store = store.as_ref().ok_or("Session store not available")?;
+    let store_guard = state.session_store.read().await;
+    let store = store_guard.as_ref().ok_or("Session store not available")?;
 
     store
         .load_session(&session_id)
@@ -2439,8 +2784,8 @@ async fn load_session(
 /// Delete a saved session
 #[tauri::command(rename_all = "camelCase")]
 async fn delete_session(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let store = state.session_store.as_ref();
-    let store = store.as_ref().ok_or("Session store not available")?;
+    let store_guard = state.session_store.read().await;
+    let store = store_guard.as_ref().ok_or("Session store not available")?;
 
     store
         .delete_session(&session_id)
@@ -2455,8 +2800,8 @@ async fn update_session_status(
     status: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let store = state.session_store.as_ref();
-    let store = store.as_ref().ok_or("Session store not available")?;
+    let store_guard = state.session_store.read().await;
+    let store = store_guard.as_ref().ok_or("Session store not available")?;
 
     let record = store
         .load_session(&session_id)
@@ -2488,9 +2833,13 @@ fn init_tracing() {
     #[cfg(not(all(not(debug_assertions), feature = "release-logging")))]
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
 
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer().with_filter(filter))
-        .init();
+    // On other platforms, use standard fmt layer
+    #[cfg(not(target_os = "android"))]
+    {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(filter))
+            .init();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2543,6 +2892,7 @@ pub fn run() {
             parse_session_ticket,
             list_directory,
             list_remote_directory, // List remote directory via P2P
+            get_app_dir, // Get app directory for mobile
             // TCP Forwarding Management
             create_tcp_forwarding_session,
             list_tcp_forwarding_sessions,
@@ -2558,6 +2908,13 @@ pub fn run() {
             // Local Agent Commands (desktop only)
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_start_agent,
+            // Mobile ZeroClaw Agent Command
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            mobile_start_zeroclaw,
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            mobile_send_agent_message,
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            mobile_stop_agent,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_stop_agent,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2585,7 +2942,29 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             hide_panel,
         ])
-        .setup(|_app| {
+        .setup(|app| {
+            // Initialize session store using Tauri app data directory
+            let app_data_dir = app.path().app_data_dir()
+                .expect("Failed to get app data directory");
+
+            // Ensure the directory exists
+            std::fs::create_dir_all(&app_data_dir)
+                .expect("Failed to create app data directory");
+
+            // Create session store
+            match shared::session_store::create_session_store(&app_data_dir) {
+                Ok(store) => {
+                    let state = app.state::<AppState>();
+                    // Set the session store in state
+                    let mut store_guard = futures::executor::block_on(state.session_store.write());
+                    *store_guard = Some(store);
+                    tracing::info!("Session store initialized at {:?}", app_data_dir);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize session store: {}", e);
+                }
+            }
+
             // No additional setup needed - ensure_quic_client_initialized handles auto-initialization
             Ok(())
         })

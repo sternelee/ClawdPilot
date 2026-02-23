@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { chatStore } from "../stores/chatStore";
 import { notificationStore } from "../stores/notificationStore";
+import { isMobile } from "../stores/deviceStore";
 import type { AgentType, SessionRecord } from "../stores/sessionStore";
 import { Button } from "./ui/primitives";
 
@@ -17,39 +18,36 @@ import { Button } from "./ui/primitives";
 // Agent Icons - Using @lobehub/icons CDN
 // ============================================================================
 
-const ICON_BASE_URL = "https://unpkg.com/@lobehub/icons-static-svg@latest/icons";
-
 const getAgentIcon = (agentType: AgentType) => {
   const normalizedType = agentType?.toLowerCase() || "";
   const iconClass = "w-9 h-9 rounded-xl flex items-center justify-center";
 
-  // Map agent types to lobehub icon slugs
-  const iconSlugs: Record<string, string> = {
-    claude: "claude",
-    claudecode: "claude",
-    "claude-code": "claude",
-    codex: "openai",
-    opencode: "openai",
-    open: "openai",
-    openai: "openai",
-    gemini: "gemini",
-    "gemini-cli": "gemini",
-    copilot: "github-copilot",
-    "gh-copilot": "github-copilot",
-    qwen: "qwen",
-    openclaw: "open-claw",
-    "open-claw": "open-claw",
-    zeroclaw: "ai-two",
-    "ai-two": "ai-two",
+  // Map agent types to local SVG icons in public folder
+  const iconPaths: Record<string, string> = {
+    claude: "/claude-ai.svg",
+    claudecode: "/claude-ai.svg",
+    "claude-code": "/claude-ai.svg",
+    codex: "/openai-light.svg",
+    opencode: "/opencode-wordmark-dark.svg",
+    open: "/openai-light.svg",
+    openai: "/openai-light.svg",
+    gemini: "/google-gemini.svg",
+    "gemini-cli": "/google-gemini.svg",
+    copilot: "/github-copilot-dark.svg",
+    "gh-copilot": "/github-copilot-dark.svg",
+    qwen: "/qwen.svg",
+    openclaw: "/openclaw.svg",
+    "open-claw": "/openclaw.svg",
+    zeroclaw: "/claude-ai.svg",
   };
 
-  const slug = iconSlugs[normalizedType];
+  const iconPath = iconPaths[normalizedType];
 
-  if (slug) {
+  if (iconPath) {
     return (
       <div class={iconClass}>
         <img
-          src={`${ICON_BASE_URL}/${slug}.svg`}
+          src={iconPath}
           alt={normalizedType}
           class="w-6 h-6"
         />
@@ -99,7 +97,9 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       }}
     >
       {/* Agent Icon */}
-      <div class={`shrink-0 ${props.isActive ? "text-primary" : "text-muted-foreground/70"}`}>
+      <div
+        class={`shrink-0 ${props.isActive ? "text-primary" : "text-muted-foreground/70"}`}
+      >
         {getAgentIcon(session()?.agentType || "claude")}
       </div>
 
@@ -134,7 +134,9 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       </div>
 
       {/* Status Indicator */}
-      <div class={`w-2 h-2 rounded-full ${session()?.active !== false ? 'bg-green-500/80' : 'bg-muted'}`} />
+      <div
+        class={`w-2 h-2 rounded-full ${session()?.active !== false ? "bg-green-500/80" : "bg-muted"}`}
+      />
 
       {/* Close Button */}
       <Button
@@ -350,11 +352,18 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     e.stopPropagation();
     const session = sessionStore.getSession(sessionId);
     if (session?.mode === "local") {
-      // Stop local agent
-      invoke("local_stop_agent", { sessionId }).catch((err) => {
-        console.error("Failed to stop local agent:", err);
-        notificationStore.error("Failed to stop local agent", "Error");
-      });
+      // Stop local agent (mobile uses mobile_stop_agent)
+      if (isMobile()) {
+        invoke("mobile_stop_agent", { sessionId }).catch((err) => {
+          console.error("Failed to stop mobile agent:", err);
+          notificationStore.error("Failed to stop local agent", "Error");
+        });
+      } else {
+        invoke("local_stop_agent", { sessionId }).catch((err) => {
+          console.error("Failed to stop local agent:", err);
+          notificationStore.error("Failed to stop local agent", "Error");
+        });
+      }
     }
     // Clear chat messages for this session
     chatStore.clearMessages(sessionId);
@@ -455,6 +464,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         class={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-background to-base-200/50 border-r border-border/60
           transform transition-transform duration-300 ease-in-out backdrop-blur-sm
           ${props.isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+          pt-safe lg:pt-0
         `}
       >
         {/* Header */}
@@ -465,8 +475,12 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               <span class="text-white font-bold text-sm">R</span>
             </div>
             <div>
-              <h3 class="text-sm font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">riterm</h3>
-              <p class="text-[10px] text-muted-foreground/60 -mt-0.5">AI Terminal</p>
+              <h3 class="text-sm font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                riterm
+              </h3>
+              <p class="text-[10px] text-muted-foreground/60 -mt-0.5">
+                AI Terminal
+              </p>
             </div>
           </div>
           <div class="flex items-center gap-1">
@@ -521,7 +535,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 <div class="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-3">
                   <FiPlus size={24} class="text-muted-foreground/50" />
                 </div>
-                <p class="text-sm font-medium text-muted-foreground">No active sessions</p>
+                <p class="text-sm font-medium text-muted-foreground">
+                  No active sessions
+                </p>
                 <p class="text-xs text-muted-foreground/60 mt-1 max-w-[160px]">
                   Create a local session or connect to a remote CLI
                 </p>
@@ -554,8 +570,12 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             </Show>
             <Show when={!isLoadingSaved() && savedSessions().length === 0}>
               <div class="flex flex-col items-center justify-center py-8 text-center px-4">
-                <p class="text-sm text-muted-foreground/60">No saved sessions</p>
-                <p class="text-xs text-muted-foreground/40 mt-1">Sessions will be saved automatically</p>
+                <p class="text-sm text-muted-foreground/60">
+                  No saved sessions
+                </p>
+                <p class="text-xs text-muted-foreground/40 mt-1">
+                  Sessions will be saved automatically
+                </p>
               </div>
             </Show>
           </Show>

@@ -29,12 +29,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { chatStore } from "../stores/chatStore";
 import { sessionStore } from "../stores/sessionStore";
+import { isMobile } from "../stores/deviceStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import type { ChatMessage, PermissionRequest } from "../stores/chatStore";
 import { Alert } from "./ui/primitives";
 import { Button } from "./ui/primitives";
-import { MarkdownRenderer } from "solid-markdown-wasm";
+import { SolidMarkdown } from "solid-markdown";
 import { ToolCallList, ReasoningBlock } from "./ui/EnhancedMessageComponents";
 import { ChatInput } from "./ui/ChatInput";
 
@@ -189,8 +190,10 @@ function MessageBubble(props: { message: ChatMessage }) {
   const isUser = () => props.message.role === "user";
   const isSystem = () => props.message.role === "system";
   const bubbleClass = () => {
-    if (isUser()) return "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground border-primary/20 shadow-lg shadow-primary/10";
-    if (isSystem()) return "bg-gradient-to-br from-muted to-muted/50 text-muted-foreground border-border/50";
+    if (isUser())
+      return "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground border-primary/20 shadow-lg shadow-primary/10";
+    if (isSystem())
+      return "bg-gradient-to-br from-muted to-muted/50 text-muted-foreground border-border/50";
     return "bg-gradient-to-br from-muted/80 to-muted/40 text-foreground border-border/30";
   };
 
@@ -240,7 +243,7 @@ function MessageBubble(props: { message: ChatMessage }) {
         class={`max-w-[92vw] rounded-2xl border px-4 py-3 shadow-sm ${bubbleClass()}`}
       >
         <div class="prose prose-sm wrap-break-words text-sm max-w-none">
-          <MarkdownRenderer markdown={props.message.content} />
+          <SolidMarkdown children={props.message.content} />
         </div>
         <Show
           when={props.message.toolCalls && props.message.toolCalls.length > 0}
@@ -307,884 +310,892 @@ function PermissionRequestCard(props: {
 
 export function ChatView(props: ChatViewProps) {
   {
-  const session = () => sessionStore.getSession(props.sessionId);
-  const isActive = () => session()?.active !== false;
+    const session = () => sessionStore.getSession(props.sessionId);
+    const isActive = () => session()?.active !== false;
 
-  const messages = () => chatStore.getMessages(props.sessionId);
-  const pendingPermissions = () =>
-    chatStore.getPendingPermissions(props.sessionId);
+    const messages = () => chatStore.getMessages(props.sessionId);
+    const pendingPermissions = () =>
+      chatStore.getPendingPermissions(props.sessionId);
 
-  const [inputValue, setInputValue] = createSignal("");
-  const [messagesEnd, setMessagesEnd] = createSignal<HTMLDivElement | null>(
-    null,
-  );
-  const [scrollEl, setScrollEl] = createSignal<HTMLElement>();
-  const [isScrolledToBottom, setIsScrolledToBottom] = createSignal(true);
-  const [isStreaming, setIsStreaming] = createSignal(false);
-
-  // Track scroll position using solid-primitives hook
-  const scrollPos = createScrollPosition(scrollEl);
-
-  createEffect(() => {
-    const el = scrollEl();
-    if (el) {
-      const isAtBottom = el.scrollHeight - scrollPos.y - el.clientHeight < 100;
-      if (isAtBottom !== isScrolledToBottom()) {
-        setIsScrolledToBottom(isAtBottom);
-      }
-    }
-  });
-
-  // Auto-scroll to bottom when new messages arrive
-  createEffect(() => {
-    messages();
-    pendingPermissions();
-
-    if (isScrolledToBottom()) {
-      scrollToBottom();
-    }
-  });
-
-  // Auto-save session when messages change (debounced)
-  let saveTimeout: number | undefined;
-  createEffect(() => {
-    const msgs = messages();
-    const sessionId = props.sessionId;
-    const sessionMode = props.sessionMode;
-
-    // Only auto-save for local sessions
-    if (sessionMode !== "local" || !sessionId || msgs.length === 0) {
-      return;
-    }
-
-    // Debounce saves to avoid saving on every keystroke
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-    }
-
-    saveTimeout = window.setTimeout(() => {
-      console.log("[ChatView] Auto-saving session:", sessionId);
-      sessionStore.autoSaveSession(sessionId, msgs);
-    }, 2000); // Save after 2 seconds of inactivity
-  });
-
-  // Listen for incoming agent messages from backend
-  onMount(() => {
-    // Listen for local agent events
-    const unlistenLocalPromise = listen<Record<string, unknown>>(
-      "local-agent-event",
-      (event) => {
-        console.log("[ChatView] Received local-agent-event:", event.payload);
-        try {
-          const data = event.payload as {
-            sessionId: string;
-            turnId: string;
-            event: Record<string, unknown>;
-          };
-          if (data.sessionId === props.sessionId) {
-            // Parse event using helper that handles both Rust and frontend formats
-            const parsed = parseEvent(data.event);
-            const eventType = parsed.type;
-            const content = parsed.content || parsed.text || "";
-            const thinking = parsed.thinking || false;
-
-            // Handle different event types from local agent
-            switch (eventType) {
-              case "text_delta": {
-                const deltaContent = content || "";
-                // Update or create message
-                const currentMessages = messages();
-                const lastMessage = currentMessages[currentMessages.length - 1];
-
-                if (lastMessage?.role === "assistant") {
-                  chatStore.updateMessage(props.sessionId, lastMessage.id, {
-                    content: lastMessage.content + deltaContent,
-                    thinking,
-                    timestamp: Date.now(),
-                  });
-                } else {
-                  chatStore.addMessage(props.sessionId, {
-                    role: "assistant",
-                    content: deltaContent,
-                    thinking,
-                  });
-                }
-                setIsStreaming(true);
-                break;
-              }
-
-              case "turn_started":
-                setIsStreaming(true);
-                break;
-
-              case "turn_completed": {
-                setIsStreaming(false);
-                const currentMessages2 = messages();
-                const lastMessage2 =
-                  currentMessages2[currentMessages2.length - 1];
-                if (
-                  lastMessage2?.role === "assistant" &&
-                  lastMessage2.thinking
-                ) {
-                  chatStore.updateMessage(props.sessionId, lastMessage2.id, {
-                    thinking: false,
-                  });
-                }
-                break;
-              }
-
-              case "turn_error": {
-                setIsStreaming(false);
-                const error = parsed.error || "Unknown error";
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `Error: ${error}`,
-                });
-                break;
-              }
-
-              case "reasoning_delta": {
-                const reasoningContent = content || "";
-                // Append to current message or create new one
-                const reasonMessages = messages();
-                const lastReasonMsg = reasonMessages[reasonMessages.length - 1];
-
-                if (lastReasonMsg?.role === "assistant") {
-                  // Append thinking indicator text
-                  chatStore.updateMessage(props.sessionId, lastReasonMsg.id, {
-                    content: lastReasonMsg.content + reasoningContent,
-                    thinking: true,
-                    timestamp: Date.now(),
-                  });
-                } else {
-                  // New message with thinking
-                  chatStore.addMessage(props.sessionId, {
-                    role: "assistant",
-                    content: reasoningContent,
-                    thinking: true,
-                  });
-                }
-                setIsStreaming(true);
-                break;
-              }
-
-              case "tool_started": {
-                const toolName = parsed.toolName || "unknown";
-                const toolInput = parsed.input;
-                const inputStr = toolInput ? JSON.stringify(toolInput) : "";
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[Tool: ${toolName} started]${inputStr ? `\nInput: ${inputStr}` : ""}`,
-                });
-                break;
-              }
-
-              case "tool_inputUpdated": {
-                const updateToolName = parsed.toolName || "unknown";
-                const updatedInput = parsed.input;
-                const updateStr = updatedInput
-                  ? JSON.stringify(updatedInput)
-                  : "";
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[Tool: ${updateToolName} input updated]${updateStr ? `\n${updateStr}` : ""}`,
-                });
-                break;
-              }
-
-              case "tool_completed": {
-                const compToolName = parsed.toolName || "unknown";
-                const compOutput = parsed.output;
-                const compError = parsed.error;
-                if (compError) {
-                  chatStore.addMessage(props.sessionId, {
-                    role: "system",
-                    content: `[Tool: ${compToolName} failed]\nError: ${compError}`,
-                  });
-                } else {
-                  const outputStr = compOutput
-                    ? typeof compOutput === "string"
-                      ? compOutput
-                      : JSON.stringify(compOutput, null, 2)
-                    : "";
-                  chatStore.addMessage(props.sessionId, {
-                    role: "system",
-                    content: `[Tool: ${compToolName} completed]${outputStr ? `\n${outputStr}` : ""}`,
-                  });
-                }
-                break;
-              }
-
-              case "approval_request": {
-                const permToolName = parsed.toolName || "unknown";
-                const permMessage =
-                  parsed.message || `Permission request for ${permToolName}`;
-                const permInput = parsed.input;
-                const permRequestDesc = `${permMessage}${permInput ? `\nInput: ${JSON.stringify(permInput)}` : ""}`;
-                chatStore.addPermissionRequest(props.sessionId, {
-                  sessionId: props.sessionId,
-                  toolName: permToolName,
-                  toolParams: permInput as Record<string, unknown>,
-                  description: permRequestDesc,
-                });
-                setIsStreaming(false);
-                break;
-              }
-
-              case "tool_call": {
-                const legacyToolName = parsed.toolName || "unknown";
-                const legacyStatus = parsed.status || "started";
-                const legacyToolOutput = parsed.output as string | undefined;
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[Tool: ${legacyToolName}] Status: ${legacyStatus}${legacyToolOutput ? `\n${legacyToolOutput}` : ""}`,
-                });
-                break;
-              }
-
-              case "session_started": {
-                const agentName = parsed.agent || "Agent";
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[Session started: ${agentName}]`,
-                });
-                break;
-              }
-
-              case "session_ended":
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[Session ended]`,
-                });
-                break;
-
-              case "usage_update": {
-                const inputTokens = parsed.inputTokens;
-                const outputTokens = parsed.outputTokens;
-                const modelUsage = parsed.modelUsage;
-                if (inputTokens || outputTokens || modelUsage) {
-                  const usageParts: string[] = [];
-                  if (modelUsage) usageParts.push(`Model: ${modelUsage}`);
-                  if (inputTokens !== undefined)
-                    usageParts.push(`Input tokens: ${inputTokens}`);
-                  if (outputTokens !== undefined)
-                    usageParts.push(`Output tokens: ${outputTokens}`);
-                  chatStore.addMessage(props.sessionId, {
-                    role: "system",
-                    content: `[Token Usage] ${usageParts.join(" | ")}`,
-                  });
-                }
-                break;
-              }
-
-              case "progress_update": {
-                const progress = parsed.progress || 0;
-                const progressMsg = parsed.message || "";
-                const operation = parsed.operation || "Operation";
-                const progressPercent = Math.round(progress * 100);
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[Progress] ${operation}: ${progressPercent}%${progressMsg ? ` - ${progressMsg}` : ""}`,
-                });
-                break;
-              }
-
-              case "notification": {
-                const notifLevel = parsed.level || "Info";
-                const notifMessage = parsed.message || "";
-                if (notifMessage) {
-                  chatStore.addMessage(props.sessionId, {
-                    role: "system",
-                    content: `[${notifLevel}] ${notifMessage}`,
-                  });
-                }
-                break;
-              }
-
-              case "file_operation": {
-                const fileOp = parsed.operation || "unknown";
-                const filePath = parsed.path || "";
-                const fileStatus = parsed.status || "";
-                chatStore.addMessage(props.sessionId, {
-                  role: "system",
-                  content: `[File: ${fileOp} ${filePath}]${fileStatus ? ` - ${fileStatus}` : ""}`,
-                });
-                break;
-              }
-
-              case "terminal_output": {
-                const termCmd = parsed.command || "";
-                const termOutput = (parsed.output as string) || "";
-                const termExitCode = parsed.exitCode;
-                if (termCmd) {
-                  if (termExitCode === 0) {
-                    chatStore.addMessage(props.sessionId, {
-                      role: "system",
-                      content: `[Command completed: ${termCmd}]\n${termOutput}`,
-                    });
-                  } else if (termExitCode && termExitCode > 0) {
-                    chatStore.addMessage(props.sessionId, {
-                      role: "system",
-                      content: `[Command failed (exit ${termExitCode}): ${termCmd}]\n${termOutput}`,
-                    });
-                  } else {
-                    chatStore.addMessage(props.sessionId, {
-                      role: "system",
-                      content: `[Command output: ${termCmd}]\n${termOutput}`,
-                    });
-                  }
-                }
-                break;
-              }
-
-              default:
-                console.log(
-                  "[ChatView] Unknown local agent event:",
-                  eventType,
-                  parsed,
-                );
-            }
-          }
-        } catch (e) {
-          console.error("Failed to handle local agent event:", e);
-        }
-      },
+    const [inputValue, setInputValue] = createSignal("");
+    const [messagesEnd, setMessagesEnd] = createSignal<HTMLDivElement | null>(
+      null,
     );
+    const [scrollEl, setScrollEl] = createSignal<HTMLElement>();
+    const [isScrolledToBottom, setIsScrolledToBottom] = createSignal(true);
+    const [isStreaming, setIsStreaming] = createSignal(false);
 
-    // Listen for remote agent events from CLI
-    const unlistenPromise = listen<Record<string, unknown>>(
-      "agent-message",
-      (event) => {
-        console.log("[ChatView] Received agent-message event:", event.payload);
-        try {
-          const data = event.payload;
-          if (data.sessionId === props.sessionId) {
-            if (data.type === "text_delta") {
-              const content = (data.content as string) || "";
-              const thinking = (data.thinking as boolean) || false;
+    // Track scroll position using solid-primitives hook
+    const scrollPos = createScrollPosition(scrollEl);
 
-              // Ensure we show streaming state during response
-              setIsStreaming(true);
-
-              const currentMessages = messages();
-              const lastMessage = currentMessages[currentMessages.length - 1];
-
-              // Update existing message if it's an assistant message
-              if (lastMessage?.role === "assistant") {
-                chatStore.updateMessage(props.sessionId, lastMessage.id, {
-                  content: lastMessage.content + content,
-                  thinking,
-                  timestamp: Date.now(),
-                });
-              } else {
-                // New message
-                chatStore.addMessage(props.sessionId, {
-                  role: "assistant",
-                  content,
-                  thinking,
-                });
-              }
-            } else if (data.type === "response") {
-              // Full response - replace existing message or create new one
-              const content = (data.content as string) || "";
-              const thinking = (data.thinking as boolean) || false;
-              const messageId = data.messageId as string | undefined;
-
-              setIsStreaming(true);
-
-              const currentMessages = messages();
-              const lastMessage = currentMessages[currentMessages.length - 1];
-
-              // Update existing message if matching ID or streaming chunk (assistant role)
-              if (
-                (messageId && lastMessage?.messageId === messageId) ||
-                (!messageId && lastMessage?.role === "assistant")
-              ) {
-                chatStore.updateMessage(props.sessionId, lastMessage.id, {
-                  content: content, // Replace content instead of appending
-                  thinking,
-                  timestamp: Date.now(),
-                });
-              } else {
-                // New message
-                chatStore.addMessage(props.sessionId, {
-                  role: "assistant",
-                  content,
-                  thinking,
-                  messageId,
-                });
-              }
-            } else if (data.type === "permission_request") {
-              chatStore.addPermissionRequest(props.sessionId, {
-                sessionId: props.sessionId,
-                toolName: data.toolName as string,
-                toolParams: data.toolParams as Record<string, unknown>,
-                description:
-                  (data.description as string) ||
-                  `Permission request for ${data.toolName}`,
-              });
-              setIsStreaming(false); // Pause streaming on permission request
-            } else if (data.type === "tool_call") {
-              chatStore.addMessage(props.sessionId, {
-                role: "system",
-                content: `[Tool: ${data.toolName}] Status: ${data.status}${data.output ? `\n${data.output}` : ""}`,
-              });
-            } else if (data.type === "notification") {
-              const level = data.level as string;
-              const message = data.message as string;
-              if (level === "Info" && (!message || !message.trim())) return;
-              chatStore.addMessage(props.sessionId, {
-                role: "system",
-                content: `[${level}] ${message}`,
-              });
-            } else if (data.type === "turn_started") {
-              setIsStreaming(true);
-            } else if (data.type === "turn_completed") {
-              setIsStreaming(false);
-              // Ensure the last message is not thinking
-              const currentMessages = messages();
-              const lastMessage = currentMessages[currentMessages.length - 1];
-              if (lastMessage?.role === "assistant" && lastMessage.thinking) {
-                chatStore.updateMessage(props.sessionId, lastMessage.id, {
-                  thinking: false,
-                });
-              }
-            } else if (data.type === "turn_error") {
-              setIsStreaming(false);
-              chatStore.addMessage(props.sessionId, {
-                role: "system",
-                content: `Error: ${data.error}`,
-              });
-            }
-          }
-        } catch (e) {
-          console.error("Failed to handle agent message:", e);
-        }
-      },
-    );
-
-    onCleanup(() => {
-      // Cleanup local agent event listener
-      unlistenLocalPromise.then((fn) => fn());
-      // Cleanup remote agent event listener
-      unlistenPromise.then((fn) => fn());
-      // Save session on cleanup
-      if (saveTimeout) {
-        clearTimeout(saveTimeout);
-      }
-      const sessionId = props.sessionId;
-      const sessionMode = props.sessionMode;
-      if (sessionMode === "local" && sessionId) {
-        const msgs = messages();
-        if (msgs.length > 0) {
-          console.log("[ChatView] Saving session on cleanup:", sessionId);
-          sessionStore.autoSaveSession(sessionId, msgs);
+    createEffect(() => {
+      const el = scrollEl();
+      if (el) {
+        const isAtBottom =
+          el.scrollHeight - scrollPos.y - el.clientHeight < 100;
+        if (isAtBottom !== isScrolledToBottom()) {
+          setIsScrolledToBottom(isAtBottom);
         }
       }
     });
-  });
 
-  const scrollToBottom = () => {
-    messagesEnd()?.scrollIntoView({ behavior: "smooth" });
-  };
+    // Auto-scroll to bottom when new messages arrive
+    createEffect(() => {
+      messages();
+      pendingPermissions();
 
-  // Handle file attachments from ChatInput
-  const handleAttachFiles = (files: File[]) => {
-    const sessionId = props.sessionId;
-    if (!sessionId) return;
-
-    for (const file of files) {
-      chatStore.addAttachment(sessionId, {
-        filename: file.name,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        path: (file as File & { path?: string }).path,
-      });
-    }
-  };
-
-  const handleSend = async () => {
-    const sessionId = props.sessionId;
-    console.log(
-      "[handleSend] sessionId:",
-      sessionId,
-      "sessionMode:",
-      props.sessionMode,
-    );
-
-    const content = inputValue().trim();
-    if (!content && !chatStore.getAttachments(sessionId).length) return;
-    if (!sessionId) {
-      console.error("[handleSend] sessionId is undefined!");
-      notificationStore.error("No active session", "Error");
-      return;
-    }
-
-    setInputValue("");
-    setIsStreaming(true);
-
-    // Get attachments before clearing
-    const attachments = chatStore.getAttachments(sessionId);
-    const attachmentPaths = attachments.map((a) => a.path).filter(Boolean) as string[];
-
-    // Clear attachments after getting them
-    chatStore.clearAttachments(sessionId);
-
-    // Reset textarea height
-    const textarea = document.querySelector<HTMLTextAreaElement>(
-      "textarea[aria-label='Chat input']",
-    );
-    if (textarea) textarea.style.height = "auto";
-
-    if (content.startsWith("/")) {
-      try {
-        await invoke("send_slash_command", {
-          sessionId,
-          command: content,
-        });
-        chatStore.addMessage(sessionId, {
-          role: "system",
-          content: `Command sent: ${content}`,
-        });
-      } catch (error) {
-        const errorMsg =
-          error instanceof Error ? error.message : "Failed to send command";
-        notificationStore.error(errorMsg, "Command Error");
-        chatStore.addMessage(sessionId, {
-          role: "system",
-          content: `Error: ${errorMsg}`,
-        });
-        setIsStreaming(false);
+      if (isScrolledToBottom()) {
+        scrollToBottom();
       }
-    } else {
-      // Check session mode and call appropriate backend command
-      if (props.sessionMode === "local") {
-        // Local agent - add user message to store before sending
-        console.log(
-          "[ChatView] Sending to local agent:",
-          sessionId,
-          content.substring(0, 50),
-        );
-        chatStore.addMessage(sessionId, {
-          role: "user",
-          content,
-        });
-        try {
-          await invoke("local_send_agent_message", {
-            sessionId,
-            content,
-            attachments: attachmentPaths,
-          });
-          console.log("[ChatView] Message sent successfully");
-        } catch (error) {
-          console.error("[ChatView] Failed to send message:", error);
-          const errorMsg =
-            error instanceof Error
-              ? error.message
-              : "Failed to send message to local agent";
-          notificationStore.error(errorMsg, "Local Agent Error");
-          chatStore.addMessage(sessionId, {
-            role: "system",
-            content: `Error: ${errorMsg}`,
-          });
-          setIsStreaming(false);
+    });
+
+    // Auto-save session when messages change (debounced)
+    let saveTimeout: number | undefined;
+    createEffect(() => {
+      const msgs = messages();
+      const sessionId = props.sessionId;
+      const sessionMode = props.sessionMode;
+
+      // Only auto-save for local sessions
+      if (sessionMode !== "local" || !sessionId || msgs.length === 0) {
+        return;
+      }
+
+      // Debounce saves to avoid saving on every keystroke
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+
+      saveTimeout = window.setTimeout(() => {
+        console.log("[ChatView] Auto-saving session:", sessionId);
+        sessionStore.autoSaveSession(sessionId, msgs);
+      }, 2000); // Save after 2 seconds of inactivity
+    });
+
+    // Listen for incoming agent messages from backend
+    onMount(() => {
+      // Listen for local agent events
+      const unlistenLocalPromise = listen<Record<string, unknown>>(
+        "local-agent-event",
+        (event) => {
+          console.log("[ChatView] Received local-agent-event:", event.payload);
+          try {
+            const data = event.payload as {
+              sessionId: string;
+              turnId: string;
+              event: Record<string, unknown>;
+            };
+            if (data.sessionId === props.sessionId) {
+              // Parse event using helper that handles both Rust and frontend formats
+              const parsed = parseEvent(data.event);
+              const eventType = parsed.type;
+              const content = parsed.content || parsed.text || "";
+              const thinking = parsed.thinking || false;
+
+              // Handle different event types from local agent
+              switch (eventType) {
+                case "text_delta": {
+                  const deltaContent = content || "";
+                  // Update or create message
+                  const currentMessages = messages();
+                  const lastMessage =
+                    currentMessages[currentMessages.length - 1];
+
+                  if (lastMessage?.role === "assistant") {
+                    chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                      content: lastMessage.content + deltaContent,
+                      thinking,
+                      timestamp: Date.now(),
+                    });
+                  } else {
+                    chatStore.addMessage(props.sessionId, {
+                      role: "assistant",
+                      content: deltaContent,
+                      thinking,
+                    });
+                  }
+                  setIsStreaming(true);
+                  break;
+                }
+
+                case "turn_started":
+                  setIsStreaming(true);
+                  break;
+
+                case "turn_completed": {
+                  setIsStreaming(false);
+                  const currentMessages2 = messages();
+                  const lastMessage2 =
+                    currentMessages2[currentMessages2.length - 1];
+                  if (
+                    lastMessage2?.role === "assistant" &&
+                    lastMessage2.thinking
+                  ) {
+                    chatStore.updateMessage(props.sessionId, lastMessage2.id, {
+                      thinking: false,
+                    });
+                  }
+                  break;
+                }
+
+                case "turn_error": {
+                  setIsStreaming(false);
+                  const error = parsed.error || "Unknown error";
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `Error: ${error}`,
+                  });
+                  break;
+                }
+
+                case "reasoning_delta": {
+                  const reasoningContent = content || "";
+                  // Append to current message or create new one
+                  const reasonMessages = messages();
+                  const lastReasonMsg =
+                    reasonMessages[reasonMessages.length - 1];
+
+                  if (lastReasonMsg?.role === "assistant") {
+                    // Append thinking indicator text
+                    chatStore.updateMessage(props.sessionId, lastReasonMsg.id, {
+                      content: lastReasonMsg.content + reasoningContent,
+                      thinking: true,
+                      timestamp: Date.now(),
+                    });
+                  } else {
+                    // New message with thinking
+                    chatStore.addMessage(props.sessionId, {
+                      role: "assistant",
+                      content: reasoningContent,
+                      thinking: true,
+                    });
+                  }
+                  setIsStreaming(true);
+                  break;
+                }
+
+                case "tool_started": {
+                  const toolName = parsed.toolName || "unknown";
+                  const toolInput = parsed.input;
+                  const inputStr = toolInput ? JSON.stringify(toolInput) : "";
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[Tool: ${toolName} started]${inputStr ? `\nInput: ${inputStr}` : ""}`,
+                  });
+                  break;
+                }
+
+                case "tool_inputUpdated": {
+                  const updateToolName = parsed.toolName || "unknown";
+                  const updatedInput = parsed.input;
+                  const updateStr = updatedInput
+                    ? JSON.stringify(updatedInput)
+                    : "";
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[Tool: ${updateToolName} input updated]${updateStr ? `\n${updateStr}` : ""}`,
+                  });
+                  break;
+                }
+
+                case "tool_completed": {
+                  const compToolName = parsed.toolName || "unknown";
+                  const compOutput = parsed.output;
+                  const compError = parsed.error;
+                  if (compError) {
+                    chatStore.addMessage(props.sessionId, {
+                      role: "system",
+                      content: `[Tool: ${compToolName} failed]\nError: ${compError}`,
+                    });
+                  } else {
+                    const outputStr = compOutput
+                      ? typeof compOutput === "string"
+                        ? compOutput
+                        : JSON.stringify(compOutput, null, 2)
+                      : "";
+                    chatStore.addMessage(props.sessionId, {
+                      role: "system",
+                      content: `[Tool: ${compToolName} completed]${outputStr ? `\n${outputStr}` : ""}`,
+                    });
+                  }
+                  break;
+                }
+
+                case "approval_request": {
+                  const permToolName = parsed.toolName || "unknown";
+                  const permMessage =
+                    parsed.message || `Permission request for ${permToolName}`;
+                  const permInput = parsed.input;
+                  const permRequestDesc = `${permMessage}${permInput ? `\nInput: ${JSON.stringify(permInput)}` : ""}`;
+                  chatStore.addPermissionRequest(props.sessionId, {
+                    sessionId: props.sessionId,
+                    toolName: permToolName,
+                    toolParams: permInput as Record<string, unknown>,
+                    description: permRequestDesc,
+                  });
+                  setIsStreaming(false);
+                  break;
+                }
+
+                case "tool_call": {
+                  const legacyToolName = parsed.toolName || "unknown";
+                  const legacyStatus = parsed.status || "started";
+                  const legacyToolOutput = parsed.output as string | undefined;
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[Tool: ${legacyToolName}] Status: ${legacyStatus}${legacyToolOutput ? `\n${legacyToolOutput}` : ""}`,
+                  });
+                  break;
+                }
+
+                case "session_started": {
+                  const agentName = parsed.agent || "Agent";
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[Session started: ${agentName}]`,
+                  });
+                  break;
+                }
+
+                case "session_ended":
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[Session ended]`,
+                  });
+                  break;
+
+                case "usage_update": {
+                  const inputTokens = parsed.inputTokens;
+                  const outputTokens = parsed.outputTokens;
+                  const modelUsage = parsed.modelUsage;
+                  if (inputTokens || outputTokens || modelUsage) {
+                    const usageParts: string[] = [];
+                    if (modelUsage) usageParts.push(`Model: ${modelUsage}`);
+                    if (inputTokens !== undefined)
+                      usageParts.push(`Input tokens: ${inputTokens}`);
+                    if (outputTokens !== undefined)
+                      usageParts.push(`Output tokens: ${outputTokens}`);
+                    chatStore.addMessage(props.sessionId, {
+                      role: "system",
+                      content: `[Token Usage] ${usageParts.join(" | ")}`,
+                    });
+                  }
+                  break;
+                }
+
+                case "progress_update": {
+                  const progress = parsed.progress || 0;
+                  const progressMsg = parsed.message || "";
+                  const operation = parsed.operation || "Operation";
+                  const progressPercent = Math.round(progress * 100);
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[Progress] ${operation}: ${progressPercent}%${progressMsg ? ` - ${progressMsg}` : ""}`,
+                  });
+                  break;
+                }
+
+                case "notification": {
+                  const notifLevel = parsed.level || "Info";
+                  const notifMessage = parsed.message || "";
+                  if (notifMessage) {
+                    chatStore.addMessage(props.sessionId, {
+                      role: "system",
+                      content: `[${notifLevel}] ${notifMessage}`,
+                    });
+                  }
+                  break;
+                }
+
+                case "file_operation": {
+                  const fileOp = parsed.operation || "unknown";
+                  const filePath = parsed.path || "";
+                  const fileStatus = parsed.status || "";
+                  chatStore.addMessage(props.sessionId, {
+                    role: "system",
+                    content: `[File: ${fileOp} ${filePath}]${fileStatus ? ` - ${fileStatus}` : ""}`,
+                  });
+                  break;
+                }
+
+                case "terminal_output": {
+                  const termCmd = parsed.command || "";
+                  const termOutput = (parsed.output as string) || "";
+                  const termExitCode = parsed.exitCode;
+                  if (termCmd) {
+                    if (termExitCode === 0) {
+                      chatStore.addMessage(props.sessionId, {
+                        role: "system",
+                        content: `[Command completed: ${termCmd}]\n${termOutput}`,
+                      });
+                    } else if (termExitCode && termExitCode > 0) {
+                      chatStore.addMessage(props.sessionId, {
+                        role: "system",
+                        content: `[Command failed (exit ${termExitCode}): ${termCmd}]\n${termOutput}`,
+                      });
+                    } else {
+                      chatStore.addMessage(props.sessionId, {
+                        role: "system",
+                        content: `[Command output: ${termCmd}]\n${termOutput}`,
+                      });
+                    }
+                  }
+                  break;
+                }
+
+                default:
+                  console.log(
+                    "[ChatView] Unknown local agent event:",
+                    eventType,
+                    parsed,
+                  );
+              }
+            }
+          } catch (e) {
+            console.error("Failed to handle local agent event:", e);
+          }
+        },
+      );
+
+      // Listen for remote agent events from CLI
+      const unlistenPromise = listen<Record<string, unknown>>(
+        "agent-message",
+        (event) => {
+          console.log(
+            "[ChatView] Received agent-message event:",
+            event.payload,
+          );
+          try {
+            const data = event.payload;
+            if (data.sessionId === props.sessionId) {
+              if (data.type === "text_delta") {
+                const content = (data.content as string) || "";
+                const thinking = (data.thinking as boolean) || false;
+
+                // Ensure we show streaming state during response
+                setIsStreaming(true);
+
+                const currentMessages = messages();
+                const lastMessage = currentMessages[currentMessages.length - 1];
+
+                // Update existing message if it's an assistant message
+                if (lastMessage?.role === "assistant") {
+                  chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                    content: lastMessage.content + content,
+                    thinking,
+                    timestamp: Date.now(),
+                  });
+                } else {
+                  // New message
+                  chatStore.addMessage(props.sessionId, {
+                    role: "assistant",
+                    content,
+                    thinking,
+                  });
+                }
+              } else if (data.type === "response") {
+                // Full response - replace existing message or create new one
+                const content = (data.content as string) || "";
+                const thinking = (data.thinking as boolean) || false;
+                const messageId = data.messageId as string | undefined;
+
+                setIsStreaming(true);
+
+                const currentMessages = messages();
+                const lastMessage = currentMessages[currentMessages.length - 1];
+
+                // Update existing message if matching ID or streaming chunk (assistant role)
+                if (
+                  (messageId && lastMessage?.messageId === messageId) ||
+                  (!messageId && lastMessage?.role === "assistant")
+                ) {
+                  chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                    content: content, // Replace content instead of appending
+                    thinking,
+                    timestamp: Date.now(),
+                  });
+                } else {
+                  // New message
+                  chatStore.addMessage(props.sessionId, {
+                    role: "assistant",
+                    content,
+                    thinking,
+                    messageId,
+                  });
+                }
+              } else if (data.type === "permission_request") {
+                chatStore.addPermissionRequest(props.sessionId, {
+                  sessionId: props.sessionId,
+                  toolName: data.toolName as string,
+                  toolParams: data.toolParams as Record<string, unknown>,
+                  description:
+                    (data.description as string) ||
+                    `Permission request for ${data.toolName}`,
+                });
+                setIsStreaming(false); // Pause streaming on permission request
+              } else if (data.type === "tool_call") {
+                chatStore.addMessage(props.sessionId, {
+                  role: "system",
+                  content: `[Tool: ${data.toolName}] Status: ${data.status}${data.output ? `\n${data.output}` : ""}`,
+                });
+              } else if (data.type === "notification") {
+                const level = data.level as string;
+                const message = data.message as string;
+                if (level === "Info" && (!message || !message.trim())) return;
+                chatStore.addMessage(props.sessionId, {
+                  role: "system",
+                  content: `[${level}] ${message}`,
+                });
+              } else if (data.type === "turn_started") {
+                setIsStreaming(true);
+              } else if (data.type === "turn_completed") {
+                setIsStreaming(false);
+                // Ensure the last message is not thinking
+                const currentMessages = messages();
+                const lastMessage = currentMessages[currentMessages.length - 1];
+                if (lastMessage?.role === "assistant" && lastMessage.thinking) {
+                  chatStore.updateMessage(props.sessionId, lastMessage.id, {
+                    thinking: false,
+                  });
+                }
+              } else if (data.type === "turn_error") {
+                setIsStreaming(false);
+                chatStore.addMessage(props.sessionId, {
+                  role: "system",
+                  content: `Error: ${data.error}`,
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Failed to handle agent message:", e);
+          }
+        },
+      );
+
+      onCleanup(() => {
+        // Cleanup local agent event listener
+        unlistenLocalPromise.then((fn) => fn());
+        // Cleanup remote agent event listener
+        unlistenPromise.then((fn) => fn());
+        // Save session on cleanup
+        if (saveTimeout) {
+          clearTimeout(saveTimeout);
         }
-      } else {
-        // Remote agent - add user message to store
-        console.log(
-          "[ChatView] Sending to remote agent:",
-          sessionId,
-          content.substring(0, 50),
-        );
-        chatStore.addMessage(sessionId, {
-          role: "user",
-          content,
-        });
-        try {
-          const controlSessionId =
-            sessionStore.getSession(sessionId)?.controlSessionId;
-          await invoke("send_agent_message", {
-            sessionId,
-            content,
-            controlSessionId,
-            attachments: attachmentPaths,
-          });
-          console.log("[ChatView] Remote message sent successfully");
-        } catch (error) {
-          console.error("[ChatView] Failed to send remote message:", error);
-          const errorMsg =
-            error instanceof Error
-              ? error.message
-              : "Failed to send message to remote agent";
-          notificationStore.error(errorMsg, "Remote Agent Error");
-          chatStore.addMessage(sessionId, {
-            role: "system",
-            content: `Error: ${errorMsg}`,
-          });
-          setIsStreaming(false);
+        const sessionId = props.sessionId;
+        const sessionMode = props.sessionMode;
+        if (sessionMode === "local" && sessionId) {
+          const msgs = messages();
+          if (msgs.length > 0) {
+            console.log("[ChatView] Saving session on cleanup:", sessionId);
+            sessionStore.autoSaveSession(sessionId, msgs);
+          }
         }
-      }
-      props.onSendMessage?.(content);
-    }
-  };
-
-  const handleAbort = async () => {
-    try {
-      if (props.sessionMode === "local") {
-        await invoke("local_abort_agent_action", {
-          sessionId: props.sessionId,
-        });
-      } else {
-        const controlSessionId = sessionStore.getSession(
-          props.sessionId,
-        )?.controlSessionId;
-        await invoke("abort_agent_action", {
-          sessionId: props.sessionId,
-          controlSessionId,
-        });
-      }
-      setIsStreaming(false);
-      notificationStore.success("Action aborted", "System");
-      chatStore.addMessage(props.sessionId, {
-        role: "system",
-        content: "User aborted the action.",
       });
-    } catch (error) {
-      console.error("Failed to abort:", error);
-      notificationStore.error("Failed to abort action", "System");
-    }
-  };
+    });
 
-  const handlePermissionResponse = async (
-    permissionId: string,
-    response: "approved" | "denied" | "approved_for_session",
-  ) => {
-    chatStore.respondToPermission(props.sessionId, permissionId, response);
-    chatStore.clearPermission(props.sessionId, permissionId);
-
-    try {
-      if (props.sessionMode === "local") {
-        await invoke("local_respond_to_agent_permission", {
-          sessionId: props.sessionId,
-          permissionId,
-          approved: response !== "denied",
-          approveForSession: response === "approved_for_session",
-        });
-      } else {
-        const controlSessionId = sessionStore.getSession(
-          props.sessionId,
-        )?.controlSessionId;
-        await invoke("respond_to_agent_permission", {
-          sessionId: props.sessionId,
-          permissionId,
-          approved: response !== "denied",
-          approveForSession: response === "approved_for_session",
-          controlSessionId,
-        });
-      }
-    } catch (error) {
-      console.error("Failed to respond to permission:", error);
-      notificationStore.error("Failed to send permission response", "Error");
-    }
-
-    props.onPermissionResponse?.(permissionId, response);
-
-    // Resume streaming if approved?
-    // Backend should handle resumption upon receiving permission response
-    if (response !== "denied") {
-      setIsStreaming(true);
-    }
-  };
-
-  const handleOpenSpawnModal = () => {
-    const s = session();
-    if (s?.mode === "remote") {
-      // Open modal in remote mode with current connection selected
-      const controlId = s.controlSessionId || s.sessionId;
-      sessionStore.openNewSessionModal("remote", controlId);
-    } else {
-      // Open modal in local mode
-      sessionStore.openNewSessionModal("local");
-    }
-  };
-
-  const getAgentIcon = () => {
-    const normalizedType = props.agentType?.toLowerCase() || "";
-
-    // Map agent types to lobehub icon slugs
-    const iconSlugs: Record<string, string> = {
-      claude: "claude",
-      claudecode: "claude",
-      "claude-code": "claude",
-      codex: "openai",
-      opencode: "openai",
-      open: "openai",
-      openai: "openai",
-      gemini: "gemini",
-      "gemini-cli": "gemini",
-      copilot: "github-copilot",
-      "gh-copilot": "github-copilot",
-      qwen: "qwen",
-      openclaw: "open-claw",
-      "open-claw": "open-claw",
-      zeroclaw: "ai-two",
-      "ai-two": "ai-two",
+    const scrollToBottom = () => {
+      messagesEnd()?.scrollIntoView({ behavior: "smooth" });
     };
 
-    const slug = iconSlugs[normalizedType];
-    const iconUrl = slug
-      ? `https://unpkg.com/@lobehub/icons-static-svg@latest/icons/${slug}.svg`
-      : null;
+    // Handle file attachments from ChatInput
+    const handleAttachFiles = (files: File[]) => {
+      const sessionId = props.sessionId;
+      if (!sessionId) return;
 
-    if (iconUrl) {
-      return (
-        <img
-          src={iconUrl}
-          alt={normalizedType}
-          class="w-6 h-6"
-        />
+      for (const file of files) {
+        chatStore.addAttachment(sessionId, {
+          filename: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          path: (file as File & { path?: string }).path,
+        });
+      }
+    };
+
+    const handleSend = async () => {
+      const sessionId = props.sessionId;
+      console.log(
+        "[handleSend] sessionId:",
+        sessionId,
+        "sessionMode:",
+        props.sessionMode,
       );
-    }
 
-    // Fallback
-    return <span class="text-2xl">🤖</span>;
-  };
+      const content = inputValue().trim();
+      if (!content && !chatStore.getAttachments(sessionId).length) return;
+      if (!sessionId) {
+        console.error("[handleSend] sessionId is undefined!");
+        notificationStore.error("No active session", "Error");
+        return;
+      }
 
-  return (
-    <div class="flex flex-col h-full bg-muted relative">
-      {/* Header */}
-      <div class="z-20 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-sm pr-4 pl-16 lg:pl-6 py-3 shadow-sm">
-        <div class="flex-1">
-          <div class="flex items-center gap-3">
-            <div class="text-primary p-1.5 rounded-lg bg-primary/10">
-              {getAgentIcon()}
-            </div>
-            <div>
-              <h2 class="text-base font-semibold tracking-tight">
-                {props.agentType === "claude" && "Claude Code"}
-                {props.agentType === "codex" && "Codex"}
-                {props.agentType === "opencode" && "OpenCode"}
-                {props.agentType === "gemini" && "Gemini CLI"}
-                {props.agentType === "copilot" && "GitHub Copilot"}
-                {props.agentType === "qwen" && "Qwen Code"}
-                {props.agentType === "zeroclaw" && "ClawdAI"}
-                {props.agentType === "openclaw" && "OpenClaw"}
-              </h2>
-              <div
-                class="text-xs text-muted-foreground/50 truncate max-w-[20rem] flex items-center gap-1.5"
-                title={props.projectPath}
-              >
-                <span class="inline-flex items-center gap-1">
-                  <span class="w-1.5 h-1.5 rounded-full bg-green-500/80" />
-                  Active
-                </span>
-                <span class="text-muted-foreground/30">•</span>
-                <span>{props.projectPath?.split("/").pop() || "No project"}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <Button
-            type="button"
-            onClick={handleOpenSpawnModal}
-            variant="ghost"
-            size="icon"
-            class="h-9 w-9 hover:bg-primary/10 hover:text-primary"
-          >
-            <FiPlus size={18} />
-          </Button>
-        </div>
-      </div>
+      setInputValue("");
+      setIsStreaming(true);
 
-      {/* Messages Area */}
-      <div
-        ref={setScrollEl}
-        class="flex-1 overflow-y-auto px-4 py-6 scroll-smooth"
-      >
-        <Show
-          when={messages().length === 0 && pendingPermissions().length === 0}
-        >
-          <div class="flex flex-col items-center text-center p- justify-center h-full8">
-            <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-5 shadow-lg shadow-primary/10">
-              <div class="text-4xl">
+      // Get attachments before clearing
+      const attachments = chatStore.getAttachments(sessionId);
+      const attachmentPaths = attachments
+        .map((a) => a.path)
+        .filter(Boolean) as string[];
+
+      // Clear attachments after getting them
+      chatStore.clearAttachments(sessionId);
+
+      // Reset textarea height
+      const textarea = document.querySelector<HTMLTextAreaElement>(
+        "textarea[aria-label='Chat input']",
+      );
+      if (textarea) textarea.style.height = "auto";
+
+      if (content.startsWith("/")) {
+        try {
+          await invoke("send_slash_command", {
+            sessionId,
+            command: content,
+          });
+          chatStore.addMessage(sessionId, {
+            role: "system",
+            content: `Command sent: ${content}`,
+          });
+        } catch (error) {
+          const errorMsg =
+            error instanceof Error ? error.message : "Failed to send command";
+          notificationStore.error(errorMsg, "Command Error");
+          chatStore.addMessage(sessionId, {
+            role: "system",
+            content: `Error: ${errorMsg}`,
+          });
+          setIsStreaming(false);
+        }
+      } else {
+        // Check session mode and call appropriate backend command
+        if (props.sessionMode === "local") {
+          // Local agent - add user message to store before sending
+          console.log(
+            "[ChatView] Sending to local agent:",
+            sessionId,
+            content.substring(0, 50),
+          );
+          chatStore.addMessage(sessionId, {
+            role: "user",
+            content,
+          });
+          try {
+            // On mobile, use mobile-specific command
+            if (isMobile()) {
+              await invoke("mobile_send_agent_message", {
+                sessionId,
+                content,
+                attachments: attachmentPaths,
+              });
+            } else {
+              await invoke("local_send_agent_message", {
+                sessionId,
+                content,
+                attachments: attachmentPaths,
+              });
+            }
+            console.log("[ChatView] Message sent successfully");
+          } catch (error) {
+            console.error("[ChatView] Failed to send message:", error);
+            const errorMsg =
+              error instanceof Error
+                ? error.message
+                : "Failed to send message to local agent";
+            notificationStore.error(errorMsg, "Local Agent Error");
+            chatStore.addMessage(sessionId, {
+              role: "system",
+              content: `Error: ${errorMsg}`,
+            });
+            setIsStreaming(false);
+          }
+        } else {
+          // Remote agent - add user message to store
+          console.log(
+            "[ChatView] Sending to remote agent:",
+            sessionId,
+            content.substring(0, 50),
+          );
+          chatStore.addMessage(sessionId, {
+            role: "user",
+            content,
+          });
+          try {
+            const controlSessionId =
+              sessionStore.getSession(sessionId)?.controlSessionId;
+            await invoke("send_agent_message", {
+              sessionId,
+              content,
+              controlSessionId,
+              attachments: attachmentPaths,
+            });
+            console.log("[ChatView] Remote message sent successfully");
+          } catch (error) {
+            console.error("[ChatView] Failed to send remote message:", error);
+            const errorMsg =
+              error instanceof Error
+                ? error.message
+                : "Failed to send message to remote agent";
+            notificationStore.error(errorMsg, "Remote Agent Error");
+            chatStore.addMessage(sessionId, {
+              role: "system",
+              content: `Error: ${errorMsg}`,
+            });
+            setIsStreaming(false);
+          }
+        }
+        props.onSendMessage?.(content);
+      }
+    };
+
+    const handleAbort = async () => {
+      try {
+        if (props.sessionMode === "local") {
+          await invoke("local_abort_agent_action", {
+            sessionId: props.sessionId,
+          });
+        } else {
+          const controlSessionId = sessionStore.getSession(
+            props.sessionId,
+          )?.controlSessionId;
+          await invoke("abort_agent_action", {
+            sessionId: props.sessionId,
+            controlSessionId,
+          });
+        }
+        setIsStreaming(false);
+        notificationStore.success("Action aborted", "System");
+        chatStore.addMessage(props.sessionId, {
+          role: "system",
+          content: "User aborted the action.",
+        });
+      } catch (error) {
+        console.error("Failed to abort:", error);
+        notificationStore.error("Failed to abort action", "System");
+      }
+    };
+
+    const handlePermissionResponse = async (
+      permissionId: string,
+      response: "approved" | "denied" | "approved_for_session",
+    ) => {
+      chatStore.respondToPermission(props.sessionId, permissionId, response);
+      chatStore.clearPermission(props.sessionId, permissionId);
+
+      try {
+        if (props.sessionMode === "local") {
+          await invoke("local_respond_to_agent_permission", {
+            sessionId: props.sessionId,
+            permissionId,
+            approved: response !== "denied",
+            approveForSession: response === "approved_for_session",
+          });
+        } else {
+          const controlSessionId = sessionStore.getSession(
+            props.sessionId,
+          )?.controlSessionId;
+          await invoke("respond_to_agent_permission", {
+            sessionId: props.sessionId,
+            permissionId,
+            approved: response !== "denied",
+            approveForSession: response === "approved_for_session",
+            controlSessionId,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to respond to permission:", error);
+        notificationStore.error("Failed to send permission response", "Error");
+      }
+
+      props.onPermissionResponse?.(permissionId, response);
+
+      // Resume streaming if approved?
+      // Backend should handle resumption upon receiving permission response
+      if (response !== "denied") {
+        setIsStreaming(true);
+      }
+    };
+
+    const handleOpenSpawnModal = () => {
+      const s = session();
+      if (s?.mode === "remote") {
+        // Open modal in remote mode with current connection selected
+        const controlId = s.controlSessionId || s.sessionId;
+        sessionStore.openNewSessionModal("remote", controlId);
+      } else {
+        // Open modal in local mode
+        sessionStore.openNewSessionModal("local");
+      }
+    };
+
+    const getAgentIcon = () => {
+      const normalizedType = props.agentType?.toLowerCase() || "";
+
+      // Map agent types to local SVG icons in public folder
+      const iconPaths: Record<string, string> = {
+        claude: "/claude-ai.svg",
+        claudecode: "/claude-ai.svg",
+        "claude-code": "/claude-ai.svg",
+        codex: "/openai-light.svg",
+        opencode: "/opencode-wordmark-dark.svg",
+        open: "/openai-light.svg",
+        openai: "/openai-light.svg",
+        gemini: "/google-gemini.svg",
+        "gemini-cli": "/google-gemini.svg",
+        copilot: "/github-copilot-dark.svg",
+        "gh-copilot": "/github-copilot-dark.svg",
+        qwen: "/qwen.svg",
+        openclaw: "/openclaw.svg",
+        "open-claw": "/openclaw.svg",
+        zeroclaw: "/claude-ai.svg",
+      };
+
+      const iconPath = iconPaths[normalizedType];
+
+      if (iconPath) {
+        return <img src={iconPath} alt={normalizedType} class="w-6 h-6" />;
+      }
+
+      // Fallback
+      return <span class="text-2xl">🤖</span>;
+    };
+
+    return (
+      <div class="flex flex-col h-full bg-muted relative pb-safe lg:pb-0">
+        {/* Header */}
+        <div class="z-20 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-sm pr-4 pl-16 lg:pl-6 py-3 shadow-sm">
+          <div class="flex-1">
+            <div class="flex items-center gap-3">
+              <div class="text-primary p-1.5 rounded-lg bg-primary/10 shrink-0">
                 {getAgentIcon()}
               </div>
-            </div>
-            <h3 class="text-xl font-semibold mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Ready to assist
-            </h3>
-            <p class="max-w-xs mx-auto text-sm text-muted-foreground/70">
-              I can help you write code, explain concepts, or debug issues. Just ask!
-            </p>
-            {/* Quick actions */}
-            <div class="flex items-center gap-2 mt-6">
-              <Button
-                variant="outline"
-                size="sm"
-                class="text-xs"
-                onClick={() => {
-                  const session = sessionStore.getSession(props.sessionId);
-                  if (session?.projectPath) {
-                    setInputValue(`List files in ${session.projectPath}`);
-                  }
-                }}
-              >
-                List files
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                class="text-xs"
-                onClick={() => {
-                  setInputValue("Explain what you can do");
-                }}
-              >
-                What can you do?
-              </Button>
+              <div>
+                <h2 class="text-base font-semibold tracking-tight">
+                  {props.agentType === "claude" && "Claude Code"}
+                  {props.agentType === "codex" && "Codex"}
+                  {props.agentType === "opencode" && "OpenCode"}
+                  {props.agentType === "gemini" && "Gemini CLI"}
+                  {props.agentType === "copilot" && "GitHub Copilot"}
+                  {props.agentType === "qwen" && "Qwen Code"}
+                  {props.agentType === "zeroclaw" && "ClawdAI"}
+                  {props.agentType === "openclaw" && "OpenClaw"}
+                </h2>
+                <div
+                  class="text-xs text-muted-foreground/50 truncate max-w-[20rem] flex items-center gap-1.5"
+                  title={props.projectPath}
+                >
+                  <span class="inline-flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-green-500/80" />
+                    Active
+                  </span>
+                  <span class="text-muted-foreground/30">•</span>
+                  <span class="truncate max-w-full">
+                    {props.projectPath?.split("/").pop() || "No project"}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </Show>
-
-        {/* Permission Requests */}
-        <div class="space-y-4 mb-6">
-          <TransitionGroup name="message">
-            <For each={pendingPermissions()}>
-              {(permission) => (
-                <PermissionRequestCard
-                  permission={permission}
-                  onApprove={() =>
-                    handlePermissionResponse(permission.id, "approved")
-                  }
-                  onDeny={() =>
-                    handlePermissionResponse(permission.id, "denied")
-                  }
-                  onApproveForSession={() =>
-                    handlePermissionResponse(
-                      permission.id,
-                      "approved_for_session",
-                    )
-                  }
-                />
-              )}
-            </For>
-          </TransitionGroup>
+          <div class="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={handleOpenSpawnModal}
+              variant="ghost"
+              size="icon"
+              class="h-9 w-9 hover:bg-primary/10 hover:text-primary"
+            >
+              <FiPlus size={18} />
+            </Button>
+          </div>
         </div>
 
-        {/* Messages */}
-        <div class="space-y-6 mb-4">
-          <TransitionGroup name="message">
-            <For each={messages()}>
-              {(message) => <MessageBubble message={message} />}
-            </For>
-          </TransitionGroup>
+        {/* Messages Area */}
+        <div
+          ref={setScrollEl}
+          class="flex-1 overflow-y-auto px-4 py-6 scroll-smooth"
+        >
+          <Show
+            when={messages().length === 0 && pendingPermissions().length === 0}
+          >
+            <div class="flex flex-col items-center text-center p- justify-center h-full8">
+              <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-5 shadow-lg shadow-primary/10">
+                <div class="text-4xl">{getAgentIcon()}</div>
+              </div>
+              <h3 class="text-xl font-semibold mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                Ready to assist
+              </h3>
+              <p class="max-w-xs mx-auto text-sm text-muted-foreground/70">
+                I can help you write code, explain concepts, or debug issues.
+                Just ask!
+              </p>
+              {/* Quick actions */}
+              <div class="flex items-center gap-2 mt-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="text-xs"
+                  onClick={() => {
+                    const session = sessionStore.getSession(props.sessionId);
+                    if (session?.projectPath) {
+                      setInputValue(`List files in ${session.projectPath}`);
+                    }
+                  }}
+                >
+                  List files
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="text-xs"
+                  onClick={() => {
+                    setInputValue("Explain what you can do");
+                  }}
+                >
+                  What can you do?
+                </Button>
+              </div>
+            </div>
+          </Show>
+
+          {/* Permission Requests */}
+          <div class="space-y-4 mb-6">
+            <TransitionGroup name="message">
+              <For each={pendingPermissions()}>
+                {(permission) => (
+                  <PermissionRequestCard
+                    permission={permission}
+                    onApprove={() =>
+                      handlePermissionResponse(permission.id, "approved")
+                    }
+                    onDeny={() =>
+                      handlePermissionResponse(permission.id, "denied")
+                    }
+                    onApproveForSession={() =>
+                      handlePermissionResponse(
+                        permission.id,
+                        "approved_for_session",
+                      )
+                    }
+                  />
+                )}
+              </For>
+            </TransitionGroup>
+          </div>
+
+          {/* Messages */}
+          <div class="space-y-6 mb-4">
+            <TransitionGroup name="message">
+              <For each={messages()}>
+                {(message) => <MessageBubble message={message} />}
+              </For>
+            </TransitionGroup>
+          </div>
+
+          <div ref={setMessagesEnd} />
         </div>
 
-        <div ref={setMessagesEnd} />
-      </div>
-
-      <style>
-        {`
+        <style>
+          {`
         .message-enter {
           opacity: 0;
           transform: translateY(10px);
@@ -1201,66 +1212,66 @@ export function ChatView(props: ChatViewProps) {
           position: absolute;
         }
       `}
-      </style>
+        </style>
 
-      {/* Scroll to bottom button */}
-      <Show when={!isScrolledToBottom() && messages().length > 0}>
-        <Button
-          type="button"
-          onClick={scrollToBottom}
-          class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-background shadow-lg"
-          size="icon"
-          variant="ghost"
-          aria-label="Scroll to bottom"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="h-4 w-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+        {/* Scroll to bottom button */}
+        <Show when={!isScrolledToBottom() && messages().length > 0}>
+          <Button
+            type="button"
+            onClick={scrollToBottom}
+            class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-background shadow-lg"
+            size="icon"
+            variant="ghost"
+            aria-label="Scroll to bottom"
           >
-            <title>Scroll to bottom</title>
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M19 14l-7 7m0 0l-7-7m7 7V3"
-            />
-          </svg>
-        </Button>
-      </Show>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <title>Scroll to bottom</title>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M19 14l-7 7m0 0l-7-7m7 7V3"
+              />
+            </svg>
+          </Button>
+        </Show>
 
-      {/* Input Area */}
-      <Show
-        when={isActive()}
-        fallback={
-          <div class="flex items-center justify-center p-4 bg-muted/50 rounded-lg border border-dashed border-border">
-            <span class="text-sm text-muted-foreground/50 flex items-center gap-2">
-              <FiAlertTriangle size={16} />
-              This session is inactive. Connection might be lost.
-            </span>
-          </div>
-        }
-      >
-        <ChatInput
-          value={inputValue()}
-          onInput={setInputValue}
-          onSubmit={handleSend}
-          onInterrupt={handleAbort}
-          onAttach={handleAttachFiles}
-          attachments={chatStore.getAttachments(props.sessionId).map(a => {
-            const file = new File([], a.filename, { type: a.mimeType });
-            (file as File & { path?: string; id?: string }).path = a.path;
-            (file as File & { path?: string; id?: string }).id = a.id;
-            return file;
-          })}
-          isStreaming={isStreaming()}
-          disabled={!isActive()}
-        />
-      </Show>
-    </div>
-  );
+        {/* Input Area */}
+        <Show
+          when={isActive()}
+          fallback={
+            <div class="flex items-center justify-center p-4 bg-muted/50 rounded-lg border border-dashed border-border">
+              <span class="text-sm text-muted-foreground/50 flex items-center gap-2">
+                <FiAlertTriangle size={16} />
+                This session is inactive. Connection might be lost.
+              </span>
+            </div>
+          }
+        >
+          <ChatInput
+            value={inputValue()}
+            onInput={setInputValue}
+            onSubmit={handleSend}
+            onInterrupt={handleAbort}
+            onAttach={handleAttachFiles}
+            attachments={chatStore.getAttachments(props.sessionId).map((a) => {
+              const file = new File([], a.filename, { type: a.mimeType });
+              (file as File & { path?: string; id?: string }).path = a.path;
+              (file as File & { path?: string; id?: string }).id = a.id;
+              return file;
+            })}
+            isStreaming={isStreaming()}
+            disabled={!isActive()}
+          />
+        </Show>
+      </div>
+    );
   }
 }
 

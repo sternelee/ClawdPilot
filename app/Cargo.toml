@@ -62,6 +62,10 @@ release-logging = []
 # Mobile build: use mobile feature to exclude heavy agent dependencies (codex-core, agent-client-protocol, etc.)
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 shared = { path = "../shared", default-features = false, features = ["mobile"] }
+zeroclaw = { path = "../zeroclaw", default-features = false, features = [
+  "tauri",
+  "mobile",
+] }
 tauri-plugin-barcode-scanner = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -11,6 +11,7 @@
 import { createStore, produce } from "solid-js/store";
 import { invoke } from "@tauri-apps/api/core";
 import { notificationStore } from "./notificationStore";
+import { isMobile } from "./deviceStore";
 
 // ============================================================================
 // Types
@@ -480,12 +481,29 @@ export const createSessionStore = () => {
     try {
       const extraArgs = buildExtraArgs();
 
-      const sessionId = await invoke<string>("local_start_agent", {
-        agentTypeStr: state.newSessionAgent,
-        projectPath: state.newSessionPath,
-        sessionId: undefined,
-        extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
-      });
+      let sessionId: string;
+
+      // On mobile, use mobile-specific command for ZeroClaw
+      if (isMobile() && state.newSessionAgent === "zeroclaw") {
+        // Mobile: call mobile_start_zeroclaw with detailed params
+        sessionId = await invoke<string>("mobile_start_zeroclaw", {
+          sessionId: undefined,
+          projectPath: state.newSessionPath,
+          provider: state.zeroClawProvider,
+          model: state.zeroClawModel,
+          apiKey: state.zeroClawApiKey.trim() || undefined,
+          temperature: parseFloat(state.zeroClawTemperature),
+          maxIterations: parseInt(state.zeroClawMaxIterations.toString(), 10),
+        });
+      } else {
+        // Desktop: use standard local_start_agent
+        sessionId = await invoke<string>("local_start_agent", {
+          agentTypeStr: state.newSessionAgent,
+          projectPath: state.newSessionPath,
+          sessionId: undefined,
+          extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
+        });
+      }
 
       const newSession: AgentSessionMetadata = {
         sessionId,

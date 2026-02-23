@@ -18,6 +18,7 @@ import { FiPlus, FiHome, FiCloud, FiChevronRight } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { sessionStore, AgentType } from "../stores/sessionStore";
+import { isMobile } from "../stores/deviceStore";
 import { Alert } from "./ui/primitives";
 import { Button } from "./ui/primitives";
 import { Combobox } from "./ui/combobox";
@@ -65,6 +66,18 @@ export const NewSessionModal: Component = () => {
         setDirEntries(dirs);
       },
     );
+
+    // On mobile, get the app directory as default path
+    if (isMobile()) {
+      try {
+        const appDir = await invoke<string>("get_app_dir");
+        if (appDir) {
+          sessionStore.setNewSessionPath(appDir);
+        }
+      } catch (err) {
+        console.error("Failed to get app directory:", err);
+      }
+    }
   });
 
   onCleanup(() => {
@@ -294,15 +307,27 @@ export const NewSessionModal: Component = () => {
                   sessionStore.setNewSessionAgent(val as AgentType)
                 }
               >
-                <option value="claude">Claude Code</option>
-                <option value="zeroclaw">ClawdAI</option>
-                <option value="codex">Codex</option>
-                <option value="openclaw">OpenClaw</option>
-                <option value="opencode">OpenCode</option>
-                <option value="gemini">Gemini CLI</option>
-                <option value="copilot">GitHub Copilot</option>
-                <option value="qwen">Qwen Code</option>
-                <option value="custom">Custom</option>
+                {/* Local mode on mobile only supports ClawdAI */}
+                <Show
+                  when={
+                    sessionStore.state.newSessionMode === "local" && isMobile()
+                  }
+                  fallback={
+                    <>
+                      <option value="claude">Claude Code</option>
+                      <option value="zeroclaw">ClawdAI</option>
+                      <option value="codex">Codex</option>
+                      <option value="openclaw">OpenClaw</option>
+                      <option value="opencode">OpenCode</option>
+                      <option value="gemini">Gemini CLI</option>
+                      <option value="copilot">GitHub Copilot</option>
+                      <option value="qwen">Qwen Code</option>
+                      <option value="custom">Custom</option>
+                    </>
+                  }
+                >
+                  <option value="zeroclaw">ClawdAI</option>
+                </Show>
               </Select>
             </div>
 
@@ -403,7 +428,7 @@ export const NewSessionModal: Component = () => {
                   onClick={() => sessionStore.setZeroClawConfigOpen(true)}
                 >
                   <FiChevronRight class="mr-1" />
-                  更多设置 (Tools, System Prompt...)
+                  More Settings (Tools, System Prompt...)
                 </Button>
               </div>
             </Show>
@@ -443,11 +468,13 @@ export const NewSessionModal: Component = () => {
                     label: e.name,
                   };
                 })}
-                placeholder="/path/to/project"
+                placeholder={isMobile() ? "app directory" : "/path/to/project"}
                 class="font-mono"
               />
               <p class="text-xs text-muted-foreground">
-                Type a path to autocomplete directory names
+                {isMobile()
+                  ? "Subdirectory name (default: app directory)"
+                  : "Type a path to autocomplete directory names"}
               </p>
             </div>
           </Show>

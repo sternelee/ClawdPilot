@@ -8,6 +8,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import { Toaster } from "solid-sonner";
+import { type as osType } from "@tauri-apps/plugin-os";
 
 // Components
 import { AppLayout } from "./components/AppLayout";
@@ -19,16 +20,37 @@ import { ZeroclawConfigModal } from "./components/ZeroclawConfigModal";
 // Stores
 import { sessionStore } from "./stores/sessionStore";
 import { notificationStore } from "./stores/notificationStore";
+import { initializeDeviceDetection } from "./stores/deviceStore";
 
 // Types
 import type { AgentType } from "./stores/sessionStore";
 
+// Helper to check if running on mobile platform
+const isMobilePlatform = (): boolean => {
+  try {
+    const os = osType();
+    return os === "android" || os === "ios";
+  } catch {
+    // Fallback to CSS class detection
+    return (
+      document.documentElement.classList.contains("mobile") ||
+      document.documentElement.classList.contains("platform-android") ||
+      document.documentElement.classList.contains("platform-ios")
+    );
+  }
+};
+
 export default function App() {
   // Settings modal state
   const [isSettingsOpen, setIsSettingsOpen] = createSignal(false);
+  const [mobilePadding, setMobilePadding] = createSignal(false);
 
   // Initialize app on mount
   onMount(() => {
+    // Initialize device detection for mobile support
+    initializeDeviceDetection();
+    // Set mobile padding after initialization
+    setMobilePadding(isMobilePlatform());
     // Listen for agent session creation events
     setupEventListeners();
   });
@@ -143,8 +165,10 @@ export default function App() {
 
   return (
     <>
-      {/* Main Layout */}
-      <AppLayout />
+      {/* Main Layout - add paddingTop for mobile status bar */}
+      <div class={mobilePadding() ? "pt-safe" : ""}>
+        <AppLayout />
+      </div>
 
       {/* Settings Modal */}
       <SettingsModal

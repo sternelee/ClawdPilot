@@ -278,6 +278,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "uuid",
+ "zeroclaw",
 ]
 
 [[package]]

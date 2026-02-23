@@ -216,7 +216,7 @@ export const AppLayout: Component = () => {
 
       {/* Mobile Menu Button */}
       <Button
-        class="fixed left-4 top-4 z-50 flex bg-card shadow-md lg:hidden"
+        class="fixed left-4 top-4 z-50 flex bg-card shadow-md lg:hidden fixed-top-safe"
         size="icon"
         variant="ghost"
         onClick={() => setSidebarOpen(!sidebarOpen())}
@@ -237,7 +237,7 @@ export const AppLayout: Component = () => {
           fallback={
             <div class="flex-1 flex items-center justify-center p-8">
               {/* Theme Switcher - Top Right */}
-              <div class="fixed top-4 right-4">
+              <div class="fixed top-4 right-4 fixed-top-safe">
                 <ThemeSwitcher />
               </div>
 

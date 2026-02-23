@@ -41,6 +41,26 @@ textarea:focus {
     @apply ml-[-50px] mt-[-4px];
     content: counter(step);
   }
+
+  /* Safe area padding for mobile status bar */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Mobile-specific adjustments */
+  .platform-android .fixed-top-safe,
+  .platform-ios .fixed-top-safe {
+    top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Also support .mobile class */
+  .mobile .fixed-top-safe {
+    top: env(safe-area-inset-top, 0px);
+  }
 }
 
 @media (max-width: 640px) {
