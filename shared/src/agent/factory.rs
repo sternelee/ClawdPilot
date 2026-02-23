@@ -352,7 +352,11 @@ impl Agent for CopilotAgent {
 
     fn command(&self) -> &str {
         let (cmd, _) = Self::detect_config();
-        if cmd == "gh" { "gh" } else { "copilot" }
+        if cmd == "gh" {
+            "gh"
+        } else {
+            "copilot"
+        }
     }
 
     fn default_args(&self) -> Vec<String> {
@@ -578,39 +582,6 @@ impl Agent for OpenClawAgent {
     }
 }
 
-/// ZeroClaw Agent (built-in, no external binary)
-///
-/// ZeroClaw is an in-process agent that calls LLM APIs directly.
-/// It supports 22+ providers and needs no external CLI.
-pub struct ZeroClawAgent;
-
-impl Agent for ZeroClawAgent {
-    fn agent_type(&self) -> AgentType {
-        AgentType::ZeroClaw
-    }
-
-    fn command(&self) -> &str {
-        "zeroclaw" // Not actually used — in-process
-    }
-
-    fn default_args(&self) -> Vec<String> {
-        vec![] // Configuration passed via extra_args at spawn time
-    }
-
-    fn check_available(&self) -> Result<AgentAvailability> {
-        // Always available — it's built-in
-        Ok(AgentAvailability {
-            available: true,
-            version: Some(env!("CARGO_PKG_VERSION").to_string()),
-            executable: "built-in".to_string(),
-        })
-    }
-
-    fn get_version(&self) -> Result<String> {
-        Ok(env!("CARGO_PKG_VERSION").to_string())
-    }
-}
-
 /// Agent 工厂
 pub struct AgentFactory;
 
@@ -629,7 +600,6 @@ impl AgentFactory {
             AgentType::Qwen => Box::new(QwenAgent),
             AgentType::Goose => Box::new(GooseAgent),
             AgentType::OpenClaw => Box::new(OpenClawAgent),
-            AgentType::ZeroClaw => Box::new(ZeroClawAgent),
             AgentType::AcpAgent => Box::new(ClaudeCodeAgent), // AcpAgent uses Claude as default
             AgentType::Custom => Box::new(ClaudeCodeAgent),   // Custom defaults to Claude
         }
@@ -648,7 +618,6 @@ impl AgentFactory {
             Box::new(QwenAgent),
             Box::new(GooseAgent),
             Box::new(OpenClawAgent),
-            Box::new(ZeroClawAgent),
         ];
 
         for agent in agents {

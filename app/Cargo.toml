@@ -50,7 +50,7 @@ tauri-plugin-shell = "2"
 
 # Desktop build: full agent support with all agent protocols
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-shared = { path = "../shared", features = ["tauri-runtime"] }
+shared = { path = "../shared", features = ["std"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 
@@ -62,10 +62,6 @@ release-logging = []
 # Mobile build: use mobile feature to exclude heavy agent dependencies (codex-core, agent-client-protocol, etc.)
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 shared = { path = "../shared", default-features = false, features = ["mobile"] }
-zeroclaw = { path = "../zeroclaw", default-features = false, features = [
-  "tauri",
-  "mobile",
-] }
 tauri-plugin-barcode-scanner = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]

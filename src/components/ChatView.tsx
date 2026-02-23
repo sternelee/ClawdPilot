@@ -1047,7 +1047,6 @@ export function ChatView(props: ChatViewProps) {
         qwen: "/qwen.svg",
         openclaw: "/openclaw.svg",
         "open-claw": "/openclaw.svg",
-        zeroclaw: "/claude-ai.svg",
       };
 
       const iconPath = iconPaths[normalizedType];
@@ -1077,7 +1076,6 @@ export function ChatView(props: ChatViewProps) {
                   {props.agentType === "gemini" && "Gemini CLI"}
                   {props.agentType === "copilot" && "GitHub Copilot"}
                   {props.agentType === "qwen" && "Qwen Code"}
-                  {props.agentType === "zeroclaw" && "ClawdAI"}
                   {props.agentType === "openclaw" && "OpenClaw"}
                 </h2>
                 <div

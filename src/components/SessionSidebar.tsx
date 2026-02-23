@@ -38,7 +38,6 @@ const getAgentIcon = (agentType: AgentType) => {
     qwen: "/qwen.svg",
     openclaw: "/openclaw.svg",
     "open-claw": "/openclaw.svg",
-    zeroclaw: "/claude-ai.svg",
   };
 
   const iconPath = iconPaths[normalizedType];
@@ -46,11 +45,7 @@ const getAgentIcon = (agentType: AgentType) => {
   if (iconPath) {
     return (
       <div class={iconClass}>
-        <img
-          src={iconPath}
-          alt={normalizedType}
-          class="w-6 h-6"
-        />
+        <img src={iconPath} alt={normalizedType} class="w-6 h-6" />
       </div>
     );
   }
@@ -115,7 +110,6 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             {session()?.agentType === "copilot" && "Copilot"}
             {session()?.agentType === "qwen" && "Qwen"}
             {session()?.agentType === "codex" && "Codex"}
-            {session()?.agentType === "zeroclaw" && "ClawdAI"}
             {session()?.agentType === "custom" && "Custom"}
           </span>
           <span
@@ -228,12 +222,10 @@ const SavedSessionItem: Component<SavedSessionItemProps> = (props) => {
             {props.session.agentType === "copilot" && "Copilot"}
             {props.session.agentType === "qwen" && "Qwen"}
             {props.session.agentType === "codex" && "Codex"}
-            {props.session.agentType === "zeroClaw" && "ClawdAI"}
             {props.session.agentType === "custom" && "Custom"}
             {/* Also handle lowercase versions from frontend */}
             {props.session.agentType === "claude" && "Claude"}
             {props.session.agentType === "opencode" && "OpenCode"}
-            {props.session.agentType === "zeroclaw" && "ClawdAI"}
           </span>
           <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground/60 font-medium">
             {props.session.messages?.length || 0} msgs

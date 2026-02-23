@@ -484,8 +484,6 @@ pub enum AgentType {
     OpenClaw,
     /// Agent Client Protocol (ACP) compatible agent
     AcpAgent,
-    /// ZeroClaw built-in agent (multi-provider LLM, tool use, memory)
-    ZeroClaw,
     /// 其他自定义 Agent
     Custom,
 }

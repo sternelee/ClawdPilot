@@ -14,7 +14,6 @@ std = [
   "gethostname",
   "libc",
   "portable-pty",
-  "zeroclaw",
   "codex-core",
   "codex-protocol",
   "codex-apply-patch",
@@ -26,21 +25,14 @@ std = [
   "sha2",
   "chrono",
 ]
-# Mobile runtime: only zeroclaw, no codex/agent-client-protocol
+# Mobile: minimal dependencies for remote agent sessions
 mobile = [
   "tokio/full",
   "tracing-subscriber/env-filter",
   "dirs",
-  "zeroclaw/tauri",
-  "zeroclaw/mobile",
   "libc",
   "gethostname",
 ]
-# Tauri runtime (desktop): zeroclaw + desktop features
-tauri-runtime = ["zeroclaw/tauri", "zeroclaw/desktop", "zeroclaw"]
-desktop-runtime = ["zeroclaw/desktop", "zeroclaw"]
-# Mobile runtime for Tauri: uses mobile feature instead of std
-mobile-runtime = ["mobile"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -78,7 +70,6 @@ thiserror = "1.0"
 libc = { version = "0.2", optional = true }
 portable-pty = { workspace = true, optional = true }
 bytes = { workspace = true }
-zeroclaw = { path = "../zeroclaw", optional = true }
 
 # WebSocket support - only in std
 tokio-tungstenite = { workspace = true, optional = true }
@@ -122,5 +113,4 @@ optional = true
 # Mobile build: use rustls instead of native-tls to avoid OpenSSL linking issues
 # and exclude heavy agent dependencies
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-zeroclaw = { path = "../zeroclaw", default-features = false, features = ["tauri", "mobile"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }

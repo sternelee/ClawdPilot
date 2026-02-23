@@ -14,7 +14,7 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
-import { FiPlus, FiHome, FiCloud, FiChevronRight } from "solid-icons/fi";
+import { FiPlus, FiHome, FiCloud } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { sessionStore, AgentType } from "../stores/sessionStore";
@@ -25,7 +25,7 @@ import { Combobox } from "./ui/combobox";
 import { Dialog } from "./ui/primitives";
 import { Label } from "./ui/primitives";
 import { Select } from "./ui/primitives";
-import { Input, Textarea } from "./ui/primitives";
+import { Textarea } from "./ui/primitives";
 
 interface DirEntry {
   name: string;
@@ -196,21 +196,23 @@ export const NewSessionModal: Component = () => {
             >
               <FiCloud class="mr-2" /> Remote
             </Button>
-            <Button
-              type="button"
-              class="flex-1"
-              variant={
-                sessionStore.state.newSessionMode === "local"
-                  ? "primary"
-                  : "ghost"
-              }
-              onClick={() => {
-                sessionStore.setNewSessionMode("local");
-                sessionStore.setConnectionError(null);
-              }}
-            >
-              <FiHome class="mr-2" /> Local
-            </Button>
+            <Show when={!isMobile()}>
+              <Button
+                type="button"
+                class="flex-1"
+                variant={
+                  sessionStore.state.newSessionMode === "local"
+                    ? "primary"
+                    : "ghost"
+                }
+                onClick={() => {
+                  sessionStore.setNewSessionMode("local");
+                  sessionStore.setConnectionError(null);
+                }}
+              >
+                <FiHome class="mr-2" /> Local
+              </Button>
+            </Show>
           </div>
 
           {/* Remote Connection Selector */}
@@ -315,7 +317,6 @@ export const NewSessionModal: Component = () => {
                   fallback={
                     <>
                       <option value="claude">Claude Code</option>
-                      <option value="zeroclaw">ClawdAI</option>
                       <option value="codex">Codex</option>
                       <option value="openclaw">OpenClaw</option>
                       <option value="opencode">OpenCode</option>
@@ -326,112 +327,10 @@ export const NewSessionModal: Component = () => {
                     </>
                   }
                 >
-                  <option value="zeroclaw">ClawdAI</option>
+                  <option value="">Select an agent</option>
                 </Show>
               </Select>
             </div>
-
-            {/* ClawdAI Provider Config */}
-            <Show when={sessionStore.state.newSessionAgent === "zeroclaw"}>
-              <div class="mb-4 space-y-2">
-                <Label for="provider">Provider</Label>
-                <Select
-                  id="provider"
-                  value={sessionStore.state.zeroClawProvider}
-                  onChange={(val) => {
-                    sessionStore.setZeroClawProvider(val);
-                    // Set sensible default model per provider
-                    const defaults: Record<string, string> = {
-                      ollama: "qwen3:8b",
-                      anthropic: "claude-sonnet-4-20250514",
-                      openai: "gpt-4o",
-                      gemini: "gemini-2.0-flash",
-                      deepseek: "deepseek-chat",
-                      openrouter: "anthropic/claude-sonnet-4",
-                      groq: "llama-3.3-70b-versatile",
-                      mistral: "mistral-large-latest",
-                      glm: "glm-4-plus",
-                    };
-                    const model = defaults[val];
-                    if (model) sessionStore.setZeroClawModel(model);
-                  }}
-                >
-                  <option value="ollama">Ollama (Local)</option>
-                  <option value="anthropic">Anthropic</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="gemini">Gemini</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="openrouter">OpenRouter</option>
-                  <option value="groq">Groq</option>
-                  <option value="mistral">Mistral</option>
-                  <option value="glm">GLM / Zhipu</option>
-                  <option value="opencode">OpenCode</option>
-                  <option value="zai">Z.AI</option>
-                </Select>
-              </div>
-
-              <div class="mb-4 space-y-2">
-                <Label for="model">Model</Label>
-                <Input
-                  id="model"
-                  type="text"
-                  value={sessionStore.state.zeroClawModel}
-                  onInput={(e) =>
-                    sessionStore.setZeroClawModel(e.currentTarget.value)
-                  }
-                  placeholder="e.g. qwen3:8b"
-                  class="font-mono text-sm"
-                />
-              </div>
-
-              <Show when={sessionStore.state.zeroClawProvider !== "ollama"}>
-                <div class="mb-4 space-y-2">
-                  <Label for="api-key">API Key</Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    value={sessionStore.state.zeroClawApiKey}
-                    onInput={(e) =>
-                      sessionStore.setZeroClawApiKey(e.currentTarget.value)
-                    }
-                    placeholder="sk-... (or leave empty to use env var)"
-                    class="font-mono text-sm"
-                  />
-                  <p class="text-xs text-muted-foreground">
-                    Leave empty to use environment variable
-                  </p>
-                </div>
-              </Show>
-
-              <div class="mb-4 space-y-2">
-                <Label for="temperature">Temperature</Label>
-                <Input
-                  id="temperature"
-                  type="number"
-                  value={sessionStore.state.zeroClawTemperature}
-                  onInput={(e) =>
-                    sessionStore.setZeroClawTemperature(e.currentTarget.value)
-                  }
-                  placeholder="0.7"
-                  class="font-mono text-sm w-24"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                />
-              </div>
-
-              {/* Advanced Settings Button */}
-              <div class="mt-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => sessionStore.setZeroClawConfigOpen(true)}
-                >
-                  <FiChevronRight class="mr-1" />
-                  More Settings (Tools, System Prompt...)
-                </Button>
-              </div>
-            </Show>
 
             <div class="mb-4 space-y-2">
               <Label for="project-path">Project Path</Label>

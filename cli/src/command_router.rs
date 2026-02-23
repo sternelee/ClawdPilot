@@ -252,7 +252,7 @@ impl CommandRouter {
             AgentType::Copilot => COPILOT_SPECIFIC_COMMANDS,
             AgentType::Qwen => QWEN_SPECIFIC_COMMANDS,
             AgentType::Goose | AgentType::OpenClaw => &[],
-            AgentType::AcpAgent | AgentType::Custom | AgentType::ZeroClaw => &[],
+            AgentType::AcpAgent | AgentType::Custom => &[],
         };
 
         for cmd in agent_commands {
@@ -404,7 +404,7 @@ impl CommandRouter {
                 AgentType::Copilot => COPILOT_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::Qwen => QWEN_SPECIFIC_COMMANDS.contains(&command_name),
                 AgentType::Goose | AgentType::OpenClaw => false,
-                AgentType::AcpAgent | AgentType::Custom | AgentType::ZeroClaw => false,
+                AgentType::AcpAgent | AgentType::Custom => false,
             }
     }
 

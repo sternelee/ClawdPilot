@@ -49,7 +49,8 @@ pnpm tsc                                   # TypeScript type check
 ### Error Handling
 
 - Use `anyhow::Result<T>` for fallible APIs and `?` for propagation.
-- Add context with `.with_context(|| format!("..."))?` when errors need explanation.
+- Add context with `.with_context(|| format!("..."))?` or `.context("...")?` when errors need explanation.
+- Use `.ok_or_else(|| anyhow::anyhow!("..."))?` for `Option` to `Result` conversions.
 - Avoid `.unwrap()` and `.expect()` in non-test code.
 
 ### Async and Concurrency
@@ -79,6 +80,12 @@ pnpm tsc                                   # TypeScript type check
 - Variables/Functions: `snake_case`
 - Types/Structs/Enums: `PascalCase`
 - Constants: `SCREAMING_SNAKE_CASE`
+
+### Comments & Documentation
+
+- Use `///` for item-level, `//!` for module-level docs
+- Include doc examples in ` ```rust ` blocks when useful
+- Use `#[cfg(test)]` modules with `#[test]`/`#[tokio::test]`
 
 ## Code Style: TypeScript + SolidJS
 

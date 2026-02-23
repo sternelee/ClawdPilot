@@ -137,24 +137,6 @@ pub struct AppState {
     // Local agent manager for in-app agent sessions (desktop only)
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     agent_manager: Arc<RwLock<Option<Arc<AgentManager>>>>,
-    // Mobile ZeroClaw agent sessions (stored as Arc for sharing)
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    mobile_agent_sessions: Arc<RwLock<HashMap<String, Arc<MobileAgentSession>>>>,
-}
-
-// Mobile agent session data
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub struct MobileAgentSession {
-    pub session_id: String,
-    pub provider: Arc<tokio::sync::Mutex<Box<dyn zeroclaw::providers::Provider>>>,
-    pub memory: Arc<dyn zeroclaw::memory::Memory>,
-    pub tools: Vec<Box<dyn zeroclaw::tools::Tool>>,
-    pub runtime: Arc<dyn zeroclaw::runtime::RuntimeAdapter>,
-    pub security: Arc<zeroclaw::security::SecurityPolicy>,
-    pub history: Arc<tokio::sync::Mutex<Vec<zeroclaw::providers::ChatMessage>>>,
-    pub model: String,
-    pub temperature: f64,
-    pub max_iterations: usize,
 }
 
 impl Default for AppState {
@@ -169,8 +151,6 @@ impl Default for AppState {
             session_store: Arc::new(RwLock::new(None)),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             agent_manager: Arc::new(RwLock::new(None)),
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            mobile_agent_sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -1695,7 +1675,6 @@ async fn send_slash_command(
                         "opencode" | "open" => AgentType::OpenCode,
                         "codex" => AgentType::Codex,
                         "gemini" => AgentType::Gemini,
-                        "zeroclaw" => AgentType::ZeroClaw,
                         _ => AgentType::Custom,
                     };
 
@@ -1807,7 +1786,6 @@ async fn remote_spawn_session(
         "qwen" => AgentType::Qwen,
         "goose" | "block-goose" => AgentType::Goose,
         "openclaw" | "open-claw" => AgentType::OpenClaw,
-        "zeroclaw" => AgentType::ZeroClaw,
         "custom" => AgentType::Custom,
         _ => return Err(format!("Unknown agent type: {}", agent_type)),
     };
@@ -1815,15 +1793,12 @@ async fn remote_spawn_session(
     // Platform-based agent availability check
     #[cfg(mobile)]
     {
-        // On mobile platforms, only ZeroClaw is supported (for remote P2P agent management)
-        match agent_type {
-            AgentType::ZeroClaw | AgentType::Custom => {}
-            _ => {
-                return Err(format!(
-                    "{:?} is not available on mobile platform. Only ZeroClaw is supported.",
-                    agent_type
-                ));
-            }
+        // On mobile platforms, check if agent is available
+        if matches!(agent_type, AgentType::Custom) {
+            return Err(format!(
+                "{:?} is not available on mobile platform.",
+                agent_type
+            ));
         }
     }
     #[cfg(not(mobile))]
@@ -2061,7 +2036,6 @@ async fn local_start_agent(
         "qwen" => AgentType::Qwen,
         "goose" | "block-goose" => AgentType::Goose,
         "openclaw" | "open-claw" => AgentType::OpenClaw,
-        "zeroclaw" => AgentType::ZeroClaw,
         "custom" => AgentType::Custom,
         _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };
@@ -2069,15 +2043,12 @@ async fn local_start_agent(
     // Platform-based agent availability check
     #[cfg(mobile)]
     {
-        // On mobile platforms, only ZeroClaw is supported (for remote P2P agent management)
-        match agent_type {
-            AgentType::ZeroClaw | AgentType::Custom => {}
-            _ => {
-                return Err(format!(
-                    "{} is not available on mobile platform. Only ZeroClaw is supported.",
-                    agent_type_str
-                ));
-            }
+        // On mobile platforms, check if agent is available
+        if matches!(agent_type, AgentType::Custom) {
+            return Err(format!(
+                "{} is not available on mobile platform.",
+                agent_type_str
+            ));
         }
     }
     #[cfg(not(mobile))]
@@ -2174,329 +2145,6 @@ async fn local_start_agent(
     Ok(session_id)
 }
 
-/// Start a ZeroClaw agent session on mobile platforms
-/// Uses zeroclaw crate directly without AgentManager
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command(rename_all = "camelCase")]
-async fn mobile_start_zeroclaw(
-    session_id: Option<String>,
-    project_path: String,
-    provider: String,
-    model: String,
-    api_key: Option<String>,
-    temperature: Option<f64>,
-    max_iterations: Option<i32>,
-    app_handle: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    use zeroclaw::providers::create_provider;
-    use zeroclaw::memory::create_memory;
-    use zeroclaw::security::SecurityPolicy;
-    use zeroclaw::config::AutonomyConfig;
-    use zeroclaw::tools::default_tools;
-    use zeroclaw::runtime::TauriRuntime;
-    use zeroclaw::providers::traits::ChatMessage;
-    use std::sync::Arc;
-
-    tracing::info!(
-        "[mobile_start_zeroclaw] project_path: {}, provider: {}, model: {}",
-        project_path, provider, model
-    );
-
-    // Generate session ID if not provided
-    let session_id = session_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-    // Expand ~ in project path
-    let expanded_project_path = if project_path.starts_with("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            format!("{}{}", home, &project_path[1..])
-        } else {
-            project_path.clone()
-        }
-    } else if project_path == "~" {
-        std::env::var("HOME").unwrap_or(project_path.clone())
-    } else {
-        project_path.clone()
-    };
-
-    // Verify project path exists
-    let working_dir = std::path::PathBuf::from(&expanded_project_path);
-    if !working_dir.exists() {
-        return Err(format!("Project path does not exist: {}", expanded_project_path));
-    }
-
-    // Create provider
-    let provider_box = create_provider(&provider, api_key.as_deref())
-        .map_err(|e| format!("Failed to create provider: {}", e))?;
-
-    // Create memory (returns Box<dyn Memory>, wrap in Arc)
-    let memory: Arc<dyn zeroclaw::memory::Memory> = Arc::from(
-        create_memory("sqlite", &working_dir)
-            .map_err(|e| format!("Failed to create memory: {}", e))?
-    );
-
-    // Create security policy
-    let security = Arc::new(SecurityPolicy::from_config(
-        &AutonomyConfig::default(),
-        &working_dir,
-    ));
-
-    // Create runtime
-    let runtime: Arc<dyn zeroclaw::runtime::RuntimeAdapter> = Arc::new(TauriRuntime::new());
-
-    // Create tools
-    let tools = default_tools(security.clone());
-
-    // Create history
-    let history = Arc::new(tokio::sync::Mutex::new(Vec::new()));
-
-    // Build system prompt
-    let tool_instructions = zeroclaw::agent::build_tool_instructions(&tools);
-    let system_prompt = format!(
-        "You are ZeroClaw, a helpful AI coding assistant.\n\
-        You have access to various tools to help you complete tasks.\n\
-        {}\n\
-        Always think step by step and use the appropriate tools to accomplish the user's request.",
-        tool_instructions
-    );
-
-    // Initialize history with system message
-    {
-        let mut history_lock = history.lock().await;
-        history_lock.push(ChatMessage::system(&system_prompt));
-    }
-
-    // Get temperature and max_iterations with defaults
-    let temperature = temperature.unwrap_or(0.7);
-    let max_iterations = max_iterations.unwrap_or(20) as usize;
-
-    // Create session
-    let session = MobileAgentSession {
-        session_id: session_id.clone(),
-        provider: Arc::new(tokio::sync::Mutex::new(provider_box)),
-        memory,
-        tools,
-        runtime,
-        security,
-        history: history.clone(),
-        model: model.clone(),
-        temperature,
-        max_iterations,
-    };
-
-    // Store session in state (wrapped in Arc)
-    {
-        let mut sessions = state.mobile_agent_sessions.write().await;
-        sessions.insert(session_id.clone(), Arc::new(session));
-    }
-
-    // Emit initial greeting event
-    let greeting = "ZeroClaw agent started. How can I help you today?";
-    let event_json = serde_json::json!({
-        "sessionId": session_id,
-        "event": {
-            "type": "message",
-            "content": greeting,
-        },
-    });
-    let _ = app_handle.emit("local-agent-event", &event_json);
-
-    tracing::info!("[mobile_start_zeroclaw] Session started: {}", session_id);
-
-    Ok(session_id)
-}
-
-/// Send a message to a mobile ZeroClaw agent
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command(rename_all = "camelCase")]
-async fn mobile_send_agent_message(
-    session_id: String,
-    content: String,
-    _attachments: Vec<String>,
-    state: State<'_, AppState>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    use zeroclaw::providers::traits::ChatMessage;
-    use zeroclaw::agent::{trim_history, agent_turn};
-
-    tracing::info!(
-        "[mobile_send_agent_message] session_id: {}, content: {}",
-        session_id,
-        content.chars().take(50).collect::<String>()
-    );
-
-    // Get session Arc from state
-    let session_arc = {
-        let sessions = state.mobile_agent_sessions.read().await;
-        sessions.get(&session_id).cloned()
-    };
-
-    let session_arc = session_arc.ok_or_else(|| "Session not found".to_string())?;
-
-    // Add user message to history
-    {
-        let mut history = session_arc.history.lock().await;
-        history.push(ChatMessage::user(&content));
-    }
-
-    // Create a callback that emits events to the frontend
-    struct AppCallback {
-        app_handle: tauri::AppHandle,
-        session_id: String,
-    }
-
-    impl zeroclaw::agent::TurnCallback for AppCallback {
-        fn on_text(&self, text: &str) {
-            tracing::info!("[mobile_callback] on_text called with: {}", text.chars().take(50).collect::<String>());
-            let event_json = serde_json::json!({
-                "sessionId": self.session_id,
-                "event": {
-                    "type": "message",
-                    "content": text,
-                },
-            });
-            let _ = self.app_handle.emit("local-agent-event", &event_json);
-        }
-        fn on_tool_started(&self, tool_name: &str, tool_id: &str) {
-            tracing::info!("[mobile_callback] on_tool_started: {} ({})", tool_name, tool_id);
-        }
-        fn on_tool_completed(&self, tool_name: &str, tool_id: &str, output: &str, success: bool) {
-            tracing::info!("[mobile_callback] on_tool_completed: {} ({}) success: {}", tool_name, tool_id, success);
-            let event_json = serde_json::json!({
-                "sessionId": self.session_id,
-                "event": {
-                    "type": "tool_result",
-                    "tool": tool_name,
-                    "toolId": tool_id,
-                    "output": output,
-                    "success": success,
-                },
-            });
-            let _ = self.app_handle.emit("local-agent-event", &event_json);
-        }
-        fn on_turn_completed(&self) {
-            tracing::info!("[mobile_callback] on_turn_completed");
-        }
-        fn on_turn_error(&self, error: &str) {
-            tracing::error!("[mobile_callback] on_turn_error: {}", error);
-            let event_json = serde_json::json!({
-                "sessionId": self.session_id,
-                "event": {
-                    "type": "error",
-                    "content": error,
-                },
-            });
-            let _ = self.app_handle.emit("local-agent-event", &event_json);
-        }
-    }
-
-    let callback = AppCallback {
-        app_handle: app_handle.clone(),
-        session_id: session_id.clone(),
-    };
-
-    // Run the agent turn with the session data
-    tracing::info!("[mobile_send_agent_message] Calling agent_turn with model: {}, temperature: {}, max_iterations: {}",
-        session_arc.model, session_arc.temperature, session_arc.max_iterations);
-
-    let result = {
-        let mut history = session_arc.history.lock().await;
-        let provider = session_arc.provider.lock().await;
-        let provider_ref: &dyn zeroclaw::providers::Provider = provider.as_ref();
-        let tools: &[Box<dyn zeroclaw::tools::Tool>] = &session_arc.tools;
-
-        tracing::info!("[mobile_send_agent_message] History length: {}, Tools count: {}",
-            history.len(), tools.len());
-
-        agent_turn(
-            provider_ref,
-            &mut history,
-            tools,
-            &callback,
-            &session_arc.model,
-            session_arc.temperature,
-            session_arc.max_iterations,
-        ).await
-    };
-
-    match result {
-        Ok(response_text) => {
-            // Trim history
-            {
-                let mut history = session_arc.history.lock().await;
-                trim_history(&mut history);
-            }
-
-            tracing::info!("[mobile_send_agent_message] SUCCESS - Response: {}", response_text.chars().take(100).collect::<String>());
-
-            // Emit final response to frontend
-            let event_json = serde_json::json!({
-                "sessionId": session_id,
-                "event": {
-                    "type": "message",
-                    "content": response_text,
-                },
-            });
-            let _ = app_handle.emit("local-agent-event", &event_json);
-
-            Ok(())
-        }
-        Err(e) => {
-            let error_msg = format!("Agent error: {}", e);
-            tracing::error!("[mobile_send_agent_message] FAILED - {}", error_msg);
-
-            // Emit error event
-            let event_json = serde_json::json!({
-                "sessionId": session_id,
-                "event": {
-                    "type": "error",
-                    "content": error_msg,
-                },
-            });
-            let _ = app_handle.emit("local-agent-event", &event_json);
-
-            Err(error_msg)
-        }
-    }
-}
-
-/// Stop a mobile ZeroClaw agent session
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command(rename_all = "camelCase")]
-async fn mobile_stop_agent(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    tracing::info!("[mobile_stop_agent] Stopping session: {}", session_id);
-
-    // Remove session from state
-    {
-        let mut sessions = state.mobile_agent_sessions.write().await;
-        if sessions.remove(&session_id).is_some() {
-            tracing::info!("[mobile_stop_agent] Session removed: {}", session_id);
-        } else {
-            tracing::warn!("[mobile_stop_agent] Session not found: {}", session_id);
-        }
-    }
-
-    Ok(())
-}
-
-/// Stop a local agent session
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[tauri::command(rename_all = "camelCase")]
-async fn local_stop_agent(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let agent_manager_guard = state.agent_manager.read().await;
-    let manager = agent_manager_guard
-        .as_ref()
-        .ok_or("Agent manager not initialized")?
-        .clone();
-
-    manager
-        .stop_session(&session_id)
-        .await
-        .map_err(|e| format!("Failed to stop local agent: {}", e))
-}
 
 /// Send a message to a local agent
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2677,7 +2325,6 @@ async fn save_session(
         "qwen" => AgentType::Qwen,
         "goose" | "block-goose" => AgentType::Goose,
         "openclaw" | "open-claw" => AgentType::OpenClaw,
-        "zeroclaw" => AgentType::ZeroClaw,
         _ => AgentType::Custom,
     };
 
@@ -2743,7 +2390,6 @@ async fn list_sessions(
         "qwen" => AgentType::Qwen,
         "goose" | "block-goose" => AgentType::Goose,
         "openclaw" | "open-claw" => AgentType::OpenClaw,
-        "zeroclaw" => AgentType::ZeroClaw,
         _ => AgentType::Custom,
     });
 
@@ -2908,15 +2554,6 @@ pub fn run() {
             // Local Agent Commands (desktop only)
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_start_agent,
-            // Mobile ZeroClaw Agent Command
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            mobile_start_zeroclaw,
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            mobile_send_agent_message,
-            #[cfg(any(target_os = "android", target_os = "ios"))]
-            mobile_stop_agent,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            local_stop_agent,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_send_agent_message,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]

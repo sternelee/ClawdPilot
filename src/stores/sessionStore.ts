@@ -11,7 +11,6 @@
 import { createStore, produce } from "solid-js/store";
 import { invoke } from "@tauri-apps/api/core";
 import { notificationStore } from "./notificationStore";
-import { isMobile } from "./deviceStore";
 
 // ============================================================================
 // Types
@@ -24,7 +23,6 @@ export type AgentType =
   | "copilot"
   | "qwen"
   | "codex"
-  | "zeroclaw"
   | "openclaw"
   | "custom";
 
@@ -401,27 +399,7 @@ export const createSessionStore = () => {
   };
 
   const buildExtraArgs = (): string[] => {
-    const extraArgs: string[] = [];
-    if (state.newSessionAgent === "zeroclaw") {
-      extraArgs.push(state.zeroClawProvider);
-      extraArgs.push(state.zeroClawModel);
-      if (state.zeroClawApiKey.trim()) {
-        extraArgs.push(state.zeroClawApiKey.trim());
-      } else {
-        extraArgs.push(""); // placeholder for api_key
-      }
-      extraArgs.push(state.zeroClawTemperature);
-      extraArgs.push(state.zeroClawMaxIterations.toString());
-      // Add system prompt (base64 encoded to handle special chars)
-      const promptEncoded = btoa(
-        unescape(encodeURIComponent(state.zeroClawSystemPrompt || "")),
-      );
-      extraArgs.push(promptEncoded);
-      // Add enabled tools (comma-separated)
-      const toolsStr = state.zeroClawEnabledTools.join(",");
-      extraArgs.push(toolsStr);
-    }
-    return extraArgs;
+    return [];
   };
 
   const handleRemoteSpawn = async () => {
@@ -483,27 +461,13 @@ export const createSessionStore = () => {
 
       let sessionId: string;
 
-      // On mobile, use mobile-specific command for ZeroClaw
-      if (isMobile() && state.newSessionAgent === "zeroclaw") {
-        // Mobile: call mobile_start_zeroclaw with detailed params
-        sessionId = await invoke<string>("mobile_start_zeroclaw", {
-          sessionId: undefined,
-          projectPath: state.newSessionPath,
-          provider: state.zeroClawProvider,
-          model: state.zeroClawModel,
-          apiKey: state.zeroClawApiKey.trim() || undefined,
-          temperature: parseFloat(state.zeroClawTemperature),
-          maxIterations: parseInt(state.zeroClawMaxIterations.toString(), 10),
-        });
-      } else {
-        // Desktop: use standard local_start_agent
-        sessionId = await invoke<string>("local_start_agent", {
-          agentTypeStr: state.newSessionAgent,
-          projectPath: state.newSessionPath,
-          sessionId: undefined,
-          extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
-        });
-      }
+      // Use standard local_start_agent
+      sessionId = await invoke<string>("local_start_agent", {
+        agentTypeStr: state.newSessionAgent,
+        projectPath: state.newSessionPath,
+        sessionId: undefined,
+        extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
+      });
 
       const newSession: AgentSessionMetadata = {
         sessionId,
