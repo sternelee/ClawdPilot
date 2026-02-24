@@ -12,8 +12,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow};
@@ -116,14 +116,17 @@ fn load_or_create_device_identity(config_dir: &std::path::Path) -> Result<Device
 
     if identity_path.exists() {
         let content = std::fs::read_to_string(&identity_path)?;
-        let stored: serde_json::Value = serde_json::from_str(&content)
-            .context("Failed to parse identity file")?;
+        let stored: serde_json::Value =
+            serde_json::from_str(&content).context("Failed to parse identity file")?;
 
-        let device_id = stored["deviceId"].as_str()
+        let device_id = stored["deviceId"]
+            .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing deviceId"))?;
-        let public_key_b64 = stored["publicKey"].as_str()
+        let public_key_b64 = stored["publicKey"]
+            .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing publicKey"))?;
-        let private_key_b64 = stored["privateKey"].as_str()
+        let private_key_b64 = stored["privateKey"]
+            .as_str()
             .ok_or_else(|| anyhow::anyhow!("missing privateKey"))?;
 
         let public_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -214,7 +217,10 @@ fn load_gateway_config() -> Option<GatewayConfig> {
     let config: serde_json::Value = serde_json::from_str(&content).ok()?;
 
     let gateway = config.get("gateway")?;
-    let port = gateway.get("port").and_then(|v| v.as_u64()).unwrap_or(18789) as u16;
+    let port = gateway
+        .get("port")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(18789) as u16;
     let token = gateway.get("auth")?.get("token")?.as_str()?.to_string();
 
     // Load device identity
@@ -266,7 +272,8 @@ impl OpenClawWsSession {
                 manager_clone,
                 event_sender_clone,
                 command_rx,
-            ).await;
+            )
+            .await;
         });
 
         Ok(Self {
@@ -312,7 +319,9 @@ impl OpenClawWsSession {
         Ok(())
     }
 
-    pub async fn get_pending_permissions(&self) -> std::result::Result<Vec<PendingPermission>, String> {
+    pub async fn get_pending_permissions(
+        &self,
+    ) -> std::result::Result<Vec<PendingPermission>, String> {
         // Get from manager
         Ok(vec![])
     }
@@ -357,8 +366,9 @@ async fn get_or_create_gateway_manager() -> Result<Arc<OpenClawGatewayManager>> 
     }
 
     // Load config
-    let config = load_gateway_config()
-        .ok_or_else(|| anyhow!("No OpenClaw gateway config found. Create ~/.openclaw/openclaw.json"))?;
+    let config = load_gateway_config().ok_or_else(|| {
+        anyhow!("No OpenClaw gateway config found. Create ~/.openclaw/openclaw.json")
+    })?;
 
     // Create new manager
     let manager = Arc::new(OpenClawGatewayManager::new(config)?);
@@ -513,7 +523,8 @@ impl OpenClawGatewayManager {
                 config,
                 rx,
                 shutdown_rx,
-            ).await;
+            )
+            .await;
         });
 
         info!("[OpenClaw] Gateway connected and running");
@@ -523,7 +534,9 @@ impl OpenClawGatewayManager {
     async fn send_connect_request(
         &self,
         write: &mut futures_util::stream::SplitSink<
-            tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+            tokio_tungstenite::WebSocketStream<
+                tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+            >,
             Message,
         >,
     ) -> Result<()> {
@@ -576,11 +589,7 @@ impl OpenClawGatewayManager {
     }
 
     /// Send a message to the agent
-    pub async fn send_agent_message(
-        &self,
-        text: String,
-        session_key: String,
-    ) -> Result<String> {
+    pub async fn send_agent_message(&self, text: String, session_key: String) -> Result<String> {
         let _request_id = self.request_counter.fetch_add(1, Ordering::SeqCst);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -601,7 +610,8 @@ impl OpenClawGatewayManager {
         });
 
         if let Some(tx) = self.send_tx.read().await.as_ref() {
-            tx.send(serde_json::to_vec(&request)?).await
+            tx.send(serde_json::to_vec(&request)?)
+                .await
                 .map_err(|e| anyhow!("Failed to send: {}", e))?;
         }
 
@@ -650,8 +660,17 @@ async fn handle_session_commands(
 
 /// Main message loop for the gateway connection
 async fn gateway_message_loop(
-    mut read: futures_util::stream::SplitStream<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>>,
-    mut write: futures_util::stream::SplitSink<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>, Message>,
+    mut read: futures_util::stream::SplitStream<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+    >,
+    mut write: futures_util::stream::SplitSink<
+        tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        Message,
+    >,
     connected: Arc<AtomicBool>,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     _request_counter: Arc<AtomicU64>,
@@ -776,7 +795,10 @@ async fn handle_gateway_message(
                     },
                 });
             } else {
-                let error = msg.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                let error = msg
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error");
                 let _ = event_sender.send(AgentTurnEvent {
                     turn_id: id.to_string(),
                     event: AgentEvent::TurnError {
@@ -873,7 +895,10 @@ async fn handle_gateway_message(
                         response_tx: None,
                     };
 
-                    pending_permissions.write().await.insert(request_id.clone(), permission);
+                    pending_permissions
+                        .write()
+                        .await
+                        .insert(request_id.clone(), permission);
 
                     let _ = event_sender.send(AgentTurnEvent {
                         turn_id: Uuid::new_v4().to_string(),

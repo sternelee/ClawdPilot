@@ -474,18 +474,8 @@ pub enum AgentType {
     Codex,
     /// Gemini CLI (Google)
     Gemini,
-    /// GitHub Copilot CLI
-    Copilot,
-    /// Qwen Code (Alibaba Cloud)
-    Qwen,
-    /// Goose (Block) — uses "goose acp" subcommand
-    Goose,
     /// OpenClaw (OpenClaw) — uses WebSocket Gateway
     OpenClaw,
-    /// Agent Client Protocol (ACP) compatible agent
-    AcpAgent,
-    /// 其他自定义 Agent
-    Custom,
 }
 
 /// AI Agent 会话元数据
@@ -658,7 +648,10 @@ pub enum AgentControlAction {
     /// 终止 Agent
     Terminate,
     /// 发送用户输入
-    SendInput { content: String, attachments: Vec<String> },
+    SendInput {
+        content: String,
+        attachments: Vec<String>,
+    },
     /// 发送中断信号
     SendInterrupt,
     /// 获取 Agent 状态

@@ -146,7 +146,7 @@ impl SessionStore for SqliteSessionStore {
                 Ok(SessionRecord {
                     session_id: row.get(0)?,
                     agent_type: serde_json::from_str(&agent_type_str)
-                        .unwrap_or(crate::message_protocol::AgentType::Custom),
+                        .unwrap_or(crate::message_protocol::AgentType::ClaudeCode),
                     project_path: row.get(2)?,
                     started_at: row.get(3)?,
                     last_active_at: row.get(4)?,
@@ -225,7 +225,7 @@ impl SessionStore for SqliteSessionStore {
             Ok(SessionRecord {
                 session_id: row.get(0)?,
                 agent_type: serde_json::from_str(&agent_type_str)
-                    .unwrap_or(crate::message_protocol::AgentType::Custom),
+                    .unwrap_or(crate::message_protocol::AgentType::ClaudeCode),
                 project_path: row.get(2)?,
                 started_at: row.get(3)?,
                 last_active_at: row.get(4)?,

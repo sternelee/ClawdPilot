@@ -2705,7 +2705,10 @@ impl AgentControlMessageHandler {
         let req_id = request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
 
         let result = match &action {
-            AgentControlAction::SendInput { content, attachments } => {
+            AgentControlAction::SendInput {
+                content,
+                attachments,
+            } => {
                 self.agent_manager
                     .send_message(&session_id, content.clone(), attachments.clone())
                     .await

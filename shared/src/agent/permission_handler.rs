@@ -459,9 +459,11 @@ mod tests {
     fn test_auto_approve_always_approved_tools() {
         let handler = PermissionHandler::new(PermissionMode::AlwaysAsk);
 
-        assert!(handler
-            .should_auto_approve("change_title", "tool-123")
-            .is_some());
+        assert!(
+            handler
+                .should_auto_approve("change_title", "tool-123")
+                .is_some()
+        );
         assert!(handler.should_auto_approve("think", "tool-456").is_some());
     }
 
@@ -482,12 +484,16 @@ mod tests {
         let handler = PermissionHandler::new(PermissionMode::AcceptEdits);
 
         // Edit tools should be auto-approved
-        assert!(handler
-            .should_auto_approve("write_file", "tool-123")
-            .is_some());
-        assert!(handler
-            .should_auto_approve("edit_file", "tool-456")
-            .is_some());
+        assert!(
+            handler
+                .should_auto_approve("write_file", "tool-123")
+                .is_some()
+        );
+        assert!(
+            handler
+                .should_auto_approve("edit_file", "tool-456")
+                .is_some()
+        );
 
         // Non-edit tools should require approval
         assert!(handler.should_auto_approve("bash", "tool-789").is_none());
@@ -498,14 +504,18 @@ mod tests {
         let handler = PermissionHandler::new(PermissionMode::Plan);
 
         // Read operations should be auto-approved
-        assert!(handler
-            .should_auto_approve("read_file", "tool-123")
-            .is_some());
+        assert!(
+            handler
+                .should_auto_approve("read_file", "tool-123")
+                .is_some()
+        );
 
         // Write operations should require approval
-        assert!(handler
-            .should_auto_approve("write_file", "tool-456")
-            .is_none());
+        assert!(
+            handler
+                .should_auto_approve("write_file", "tool-456")
+                .is_none()
+        );
     }
 
     #[test]

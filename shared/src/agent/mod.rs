@@ -27,13 +27,13 @@ pub use acp_permission::{AcpPermissionHandler, AcpPermissionState};
 pub use claude_sdk::ClaudeSdkSession;
 pub use codex_acp::CodexAcpSession;
 pub use events::{AgentEvent, AgentTurnEvent, PendingPermission, PermissionResponse};
-pub use permission_handler::{
-    ApprovalDecision, AutoApprovalDecision, CompletedPermissionEntry, PermissionHandler,
-    PermissionHandlerState, PermissionMode, PermissionStatus, PendingPermissionEntry,
-};
 pub use factory::{Agent, AgentAvailability, AgentFactory};
 pub use message_adapter::event_to_message_content;
 pub use openclaw_ws::OpenClawWsSession;
+pub use permission_handler::{
+    ApprovalDecision, AutoApprovalDecision, CompletedPermissionEntry, PendingPermissionEntry,
+    PermissionHandler, PermissionHandlerState, PermissionMode, PermissionStatus,
+};
 
 /// Session kind enum for unified agent management.
 ///
@@ -236,9 +236,6 @@ impl AgentManager {
                             AgentType::ClaudeCode => {
                                 error_msg += " You can install it with: npm install -g @anthropic-ai/claude-code";
                             }
-                            AgentType::Copilot => {
-                                error_msg += " You can install the Copilot extension with: gh extension install github/gh-copilot";
-                            }
                             AgentType::Gemini => {
                                 error_msg += " You can install the Gemini CLI with: npm install -g @google/gemini-code-cli";
                             }
@@ -279,10 +276,14 @@ impl AgentManager {
             Arc::new(SessionKind::Sdk(Arc::new(sdk_session)))
         } else if agent_type == AgentType::Codex {
             // Codex uses codex-core directly (in-process)
-            let codex_session =
-                CodexAcpSession::spawn(session_id.clone(), agent_type, working_dir.clone(), home_dir)
-                    .await
-                    .with_context(|| format!("Failed to start Codex session"))?;
+            let codex_session = CodexAcpSession::spawn(
+                session_id.clone(),
+                agent_type,
+                working_dir.clone(),
+                home_dir,
+            )
+            .await
+            .with_context(|| format!("Failed to start Codex session"))?;
 
             Arc::new(SessionKind::CodexAcp(Arc::new(codex_session)))
         } else if agent_type == AgentType::OpenClaw {

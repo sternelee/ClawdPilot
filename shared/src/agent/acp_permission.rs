@@ -107,11 +107,14 @@ impl AcpPermissionHandler {
             match decision {
                 ApprovalDecision::Approved | ApprovalDecision::ApprovedForSession => {
                     // Find AllowOnce or AllowAlways option
-                    return options.iter()
-                        .find(|opt| matches!(
-                            opt.kind,
-                            PermissionOptionKind::AllowOnce | PermissionOptionKind::AllowAlways
-                        ))
+                    return options
+                        .iter()
+                        .find(|opt| {
+                            matches!(
+                                opt.kind,
+                                PermissionOptionKind::AllowOnce | PermissionOptionKind::AllowAlways
+                            )
+                        })
                         .cloned();
                 }
                 ApprovalDecision::Abort => {
@@ -120,7 +123,7 @@ impl AcpPermissionHandler {
                 }
             }
         }
-        
+
         // Manual approval needed
         None
     }
@@ -142,14 +145,14 @@ impl AcpPermissionHandler {
         // Get the pending entry
         let entry = {
             let mut pending = self.pending.write().await;
-            pending.remove(request_id).ok_or_else(|| {
-                format!("Permission request '{}' not found", request_id)
-            })?
+            pending
+                .remove(request_id)
+                .ok_or_else(|| format!("Permission request '{}' not found", request_id))?
         };
 
         // Clone tool_name for later use
         let tool_name = entry.tool_name.clone();
-        
+
         // Create completed entry
         let completed = CompletedAcpPermissionEntry {
             request_id: request_id.to_string(),
