@@ -18,11 +18,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Crate | Purpose |
 |-------|---------|
-| **cli/** | CLI binary — `clawdchat run`, `clawdchat host`, `clawdchat connect`, `clawdchat runner` subcommands |
-| **shared/** | P2P networking, message protocol, QUIC server, event manager |
+| **cli/** | CLI binary — `clawdchat host` subcommand only |
+| **shared/** | P2P networking, message protocol, QUIC server, event manager, agent protocols |
 | **app/** | Tauri 2 desktop+mobile backend — Tauri commands, P2P client, TCP forwarding |
 | **browser/** | WebAssembly browser client |
-| **zeroclaw/** | Runtime and tool system for AI agent orchestration |
 
 ### Session Storage
 
@@ -40,6 +39,7 @@ Persistent session storage uses SQLite:
 | **src/components/** | UI components (ChatView, SessionSidebar, NewSessionModal, etc.) |
 | **src/hooks/** | Custom SolidJS hooks |
 | **src/utils/** | Utility functions |
+| **plugins/** | Custom Vite plugins (e.g., `fix-cjs-modules.ts` for solid-markdown) |
 
 ### Message Flow
 
@@ -63,14 +63,14 @@ Serialized with bincode. `MessageHandler` trait for extensible dispatch.
 
 ### Agent Session Protocols
 
-The `shared/src/agent/` module manages AI agent subprocesses via three session protocols:
+The `shared/src/agent/` module manages AI agent subprocesses via four session protocols:
 
 - **`SessionKind::Sdk`** (`claude_sdk.rs`) — Claude Code uses SDK Control Protocol directly
-- **`SessionKind::Acp`** (`acp.rs`) — OpenCode, Gemini, Copilot, Qwen use Agent Client Protocol (ACP)
+- **`SessionKind::Acp`** (`acp.rs`) — OpenCode, Gemini, Copilot, Qwen, Goose use Agent Client Protocol (ACP)
 - **`SessionKind::CodexAcp`** (`codex_acp.rs`) — Codex uses codex-core in-process via ACP
-- **`SessionKind::ZeroClaw`** (`zeroclaw_session.rs`) — ZeroClaw agent using in-process runtime
+- **`SessionKind::OpenClawWs`** (`openclaw_ws.rs`) — OpenClaw agent using WebSocket Gateway
 
-`AgentManager` routes to the correct protocol based on `AgentType`. All three implement a common interface: `send_message`, `interrupt`, `subscribe`, `get_pending_permissions`, `respond_to_permission`, `shutdown`.
+`AgentManager` routes to the correct protocol based on `AgentType`. All four implement a common interface: `send_message`, `interrupt`, `subscribe`, `get_pending_permissions`, `respond_to_permission`, `shutdown`.
 
 ## Supported AI Agents
 
@@ -78,10 +78,14 @@ The `shared/src/agent/` module manages AI agent subprocesses via three session p
 |-------|---------------|----------|---------|
 | Claude Code | `ClaudeCode` | SDK | `claude` |
 | OpenCode | `OpenCode` | ACP | `opencode` |
+| OpenAI Codex | `Codex` | CodexACP | `codex` (in-process via codex-core) |
 | Gemini CLI | `Gemini` | ACP | `gemini` |
 | GitHub Copilot | `Copilot` | ACP | `gh copilot` |
 | Qwen Code | `Qwen` | ACP | `qwen` |
-| OpenAI Codex | `Codex` | CodexACP | `codex` (in-process via codex-core) |
+| Goose | `Goose` | ACP | `goose acp` |
+| OpenClaw | `OpenClaw` | WebSocket Gateway | (custom URL) |
+| Generic ACP Agent | `AcpAgent` | ACP | (custom) |
+| Custom Agent | `Custom` | (depends) | (custom) |
 
 ## Development Commands
 
@@ -114,10 +118,8 @@ pnpm tsc
 cargo build -p cli --release
 # Output: cli/target/release/clawdchat
 
-# Run CLI subcommands
-./cli/target/release/clawdchat run --agent claude --project .
+# Run CLI
 ./cli/target/release/clawdchat host
-./cli/target/release/clawdchat connect --ticket <ticket>
 
 # Rust checks
 cargo check
@@ -135,6 +137,8 @@ cargo test --workspace -- --nocapture
 ```
 
 ### Mobile Development
+
+Mobile builds use the `mobile` feature on the `shared` crate to exclude heavy agent dependencies (codex-core, agent-client-protocol).
 
 ```bash
 # Android development
@@ -203,6 +207,10 @@ export function MyComponent(props: Props) {
 }
 ```
 
+### Vite Custom Plugin
+
+The project uses a custom `fix-cjs-modules` plugin in `plugins/fix-cjs-modules.ts` to handle CJS dependencies from `solid-markdown`. This plugin ensures proper module resolution during the build process.
+
 ### Styling
 
 - Tailwind CSS v4 is configured in `tailwind.config.js`
@@ -262,8 +270,11 @@ export function MyComponent(props: Props) {
 
 ## Adding a Slash Command
 
-1. Add to `cli/src/command_router.rs` (builtin or passthrough)
+Slash commands in the CLI are routed via `cli/src/command_router.rs`. Built-in commands are defined in `CLAWDCHAT_BUILTIN_COMMANDS` and agent-specific commands in agent-specific constants.
+
+1. Add to appropriate command list in `cli/src/command_router.rs`
 2. If builtin: implement handler in `cli/src/message_server.rs`
+3. Otherwise: passthrough to the agent
 
 ## Testing
 
@@ -314,8 +325,11 @@ cargo build -p cli
 # Run with logging
 RUST_LOG=debug ./cli/target/debug/clawdchat host
 
-# Check system info
-./cli/target/debug/clawdchat system-info
+# Use temporary key (no persistence)
+./cli/target/release/clawdchat host --temp-key
+
+# Daemon mode (run in background after printing QR)
+./cli/target/release/clawdchat host --daemon
 ```
 
 ### App Debugging
@@ -345,10 +359,11 @@ idevicesyslog | grep ClawdChat
 | File | Purpose |
 |------|---------|
 | `shared/src/message_protocol.rs` | Central message protocol definition |
-| `shared/src/agent/mod.rs` | AgentManager routing logic |
+| `shared/src/agent/mod.rs` | AgentManager routing logic and SessionKind enum |
 | `shared/src/agent/factory.rs` | Agent session factory |
 | `cli/src/command_router.rs` | Slash command routing |
 | `cli/src/message_server.rs` | Message handling |
+| `cli/src/main.rs` | CLI entry point (host subcommand) |
 | `app/src/lib.rs` | Tauri commands and P2P client |
 | `src/components/ChatView.tsx` | Main chat interface |
 | `src/stores/sessionStore.ts` | Session state management |

@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::message_protocol::AgentType;
+use crate::message_protocol::{AgentSessionMetadata, AgentType};
 use anyhow::{Context, Result, anyhow};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -155,6 +155,8 @@ impl SessionKind {
 pub struct AgentManager {
     /// Active sessions by session ID
     sessions: Arc<RwLock<HashMap<String, Arc<SessionKind>>>>,
+    /// Session metadata by session ID
+    session_metadata: Arc<RwLock<HashMap<String, AgentSessionMetadata>>>,
 }
 
 impl AgentManager {
@@ -162,6 +164,7 @@ impl AgentManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            session_metadata: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -267,7 +270,7 @@ impl AgentManager {
                 agent_type,
                 binary_path.unwrap_or(command),
                 args,
-                working_dir,
+                working_dir.clone(),
                 home_dir,
             )
             .await
@@ -277,7 +280,7 @@ impl AgentManager {
         } else if agent_type == AgentType::Codex {
             // Codex uses codex-core directly (in-process)
             let codex_session =
-                CodexAcpSession::spawn(session_id.clone(), agent_type, working_dir, home_dir)
+                CodexAcpSession::spawn(session_id.clone(), agent_type, working_dir.clone(), home_dir)
                     .await
                     .with_context(|| format!("Failed to start Codex session"))?;
 
@@ -294,7 +297,7 @@ impl AgentManager {
                 agent_type,
                 binary_path.unwrap_or(command),
                 args,
-                working_dir,
+                working_dir.clone(),
                 home_dir,
             )
             .await
@@ -313,7 +316,7 @@ impl AgentManager {
                 agent_type,
                 binary_path.unwrap_or(command),
                 args,
-                working_dir,
+                working_dir.clone(),
                 home_dir,
             )
             .await
@@ -325,6 +328,33 @@ impl AgentManager {
         // Store session
         let mut sessions = self.sessions.write().await;
         sessions.insert(session_id.clone(), session);
+
+        // Store session metadata
+        let project_path_str = working_dir.to_string_lossy().to_string();
+        let hostname = gethostname::gethostname().to_string_lossy().to_string();
+        let machine_id = gethostname::gethostname().to_string_lossy().to_string();
+
+        let metadata = AgentSessionMetadata {
+            session_id: session_id.clone(),
+            agent_type,
+            project_path: project_path_str.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            active: true,
+            controlled_by_remote: false,
+            hostname: hostname.clone(),
+            os: std::env::consts::OS.to_string(),
+            agent_version: None,
+            current_dir: project_path_str,
+            git_branch: None,
+            machine_id,
+        };
+
+        drop(sessions); // Release lock before acquiring metadata lock
+        let mut metadata_map = self.session_metadata.write().await;
+        metadata_map.insert(session_id.clone(), metadata);
 
         let protocol_name = if agent_type == AgentType::ClaudeCode {
             "SDK Control Protocol"
@@ -341,7 +371,7 @@ impl AgentManager {
 
     /// Stop an agent session
     ///
-    /// This method gracefully shuts down the session by calling shutdown().
+    /// This method gracefully shuts down the session and removes metadata.
     pub async fn stop_session(&self, session_id: &str) -> Result<()> {
         let sessions = self.sessions.read().await;
 
@@ -353,6 +383,11 @@ impl AgentManager {
                 .await
                 .map_err(|e| anyhow!("Failed to shutdown session {}: {}", session_id, e))?;
 
+            // Remove metadata
+            drop(sessions);
+            let mut metadata_map = self.session_metadata.write().await;
+            metadata_map.remove(session_id);
+
             info!("✅ Session shut down: {}", session_id);
             Ok(())
         } else {
@@ -363,13 +398,19 @@ impl AgentManager {
 
     /// Force stop an agent session (immediate termination)
     ///
-    /// This method immediately removes the session without graceful shutdown.
+    /// This method immediately removes the session and metadata without graceful shutdown.
     /// Use this only when graceful shutdown fails or is not needed.
     pub async fn force_stop_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.write().await;
 
         if sessions.remove(session_id).is_some() {
             debug!("Force stopped session: {}", session_id);
+
+            // Remove metadata
+            drop(sessions);
+            let mut metadata_map = self.session_metadata.write().await;
+            metadata_map.remove(session_id);
+
             info!("✅ Session force stopped: {}", session_id);
             Ok(())
         } else {
@@ -428,6 +469,18 @@ impl AgentManager {
     pub async fn get_session_agent_type(&self, session_id: &str) -> Option<AgentType> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).map(|s| s.agent_type())
+    }
+
+    /// Get session metadata
+    pub async fn get_session_metadata(&self, session_id: &str) -> Option<AgentSessionMetadata> {
+        let metadata_map = self.session_metadata.read().await;
+        metadata_map.get(session_id).cloned()
+    }
+
+    /// Get all session metadata
+    pub async fn get_all_session_metadata(&self) -> Vec<AgentSessionMetadata> {
+        let metadata_map = self.session_metadata.read().await;
+        metadata_map.values().cloned().collect()
     }
 
     /// Subscribe to events from a session

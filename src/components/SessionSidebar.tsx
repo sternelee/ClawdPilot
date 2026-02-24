@@ -4,7 +4,7 @@
  * Sidebar for managing AI agent sessions in a unified list.
  */
 
-import { onMount, Show, For, createSignal, type Component } from "solid-js";
+import { onMount, Show, For, createSignal, createMemo, type Component } from "solid-js";
 import { FiPlus, FiX, FiRefreshCw, FiTrash2, FiClock } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
@@ -71,8 +71,6 @@ interface SessionItemProps {
 }
 
 const SessionItem: Component<SessionItemProps> = (props) => {
-  const session = () => props.session;
-
   return (
     <div
       role="button"
@@ -95,7 +93,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       <div
         class={`shrink-0 ${props.isActive ? "text-primary" : "text-muted-foreground/70"}`}
       >
-        {getAgentIcon(session()?.agentType || "claude")}
+        {getAgentIcon(props.session?.agentType || "claude")}
       </div>
 
       {/* Session Info */}
@@ -104,32 +102,34 @@ const SessionItem: Component<SessionItemProps> = (props) => {
           <span
             class={`font-medium text-sm truncate ${props.isActive ? "text-foreground" : "text-foreground/80"}`}
           >
-            {session()?.agentType === "claude" && "Claude"}
-            {session()?.agentType === "gemini" && "Gemini"}
-            {session()?.agentType === "opencode" && "OpenCode"}
-            {session()?.agentType === "copilot" && "Copilot"}
-            {session()?.agentType === "qwen" && "Qwen"}
-            {session()?.agentType === "codex" && "Codex"}
-            {session()?.agentType === "custom" && "Custom"}
+            {props.session?.agentType === "claude" && "Claude"}
+            {props.session?.agentType === "gemini" && "Gemini"}
+            {props.session?.agentType === "opencode" && "OpenCode"}
+            {props.session?.agentType === "copilot" && "Copilot"}
+            {props.session?.agentType === "qwen" && "Qwen"}
+            {props.session?.agentType === "codex" && "Codex"}
+            {props.session?.agentType === "custom" && "Custom"}
+            {props.session?.agentType === "openclaw" && "OpenClaw"}
+            {props.session?.agentType === "goose" && "Goose"}
           </span>
           <span
             class={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-              session()?.mode === "local"
+              props.session?.mode === "local"
                 ? "bg-primary/15 text-primary/80"
                 : "bg-muted text-muted-foreground/60"
             }`}
           >
-            {session()?.mode === "local" ? "Local" : "Remote"}
+            {props.session?.mode === "local" ? "Local" : "Remote"}
           </span>
         </div>
         <div class="text-xs text-muted-foreground/50 truncate mt-0.5">
-          {session()?.projectPath?.split("/").pop() || "No project"}
+          {props.session?.projectPath?.split("/").pop() || "No project"}
         </div>
       </div>
 
       {/* Status Indicator */}
       <div
-        class={`w-2 h-2 rounded-full ${session()?.active !== false ? "bg-green-500/80" : "bg-muted"}`}
+        class={`w-2 h-2 rounded-full ${props.session?.active !== false ? "bg-green-500/80" : "bg-muted"}`}
       />
 
       {/* Close Button */}
@@ -284,9 +284,9 @@ interface SessionSidebarProps {
 }
 
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
-  const sessions = () => sessionStore.getSessions();
-  const activeSession = () => sessionStore.getActiveSession();
-  const activeSessions = () => sessionStore.getActiveSessions();
+  const sessions = createMemo(() => sessionStore.getSessions());
+  const activeSession = createMemo(() => sessionStore.getActiveSession());
+  const activeSessions = createMemo(() => sessionStore.getActiveSessions());
 
   // Saved sessions state
   const [savedSessions, setSavedSessions] = createSignal<SessionRecord[]>([]);
@@ -296,45 +296,68 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   // Load local sessions on mount
   const handleLoadLocalSessions = async () => {
     try {
-      // 定义后端返回的类型
+      // 定义后端返回的类型 (snake_case)
       type BackendSessionMetadata = {
         session_id: string;
-        agentType: string;
-        projectPath: string;
-        startedAt: number;
+        agent_type: string;
+        project_path: string;
+        started_at: number;
         active: boolean;
-        controlledByRemote: boolean;
+        controlled_by_remote: boolean;
         hostname: string;
         os: string;
-        agentVersion?: string;
-        currentDir: string;
-        gitBranch?: string;
-        machineId: string;
+        agent_version?: string;
+        current_dir: string;
+        git_branch?: string;
+        machine_id: string;
       };
 
       const localSessions =
         await invoke<BackendSessionMetadata[]>("local_list_agents");
-      // Add mode property to each session and convert session_id to sessionId
+      console.log("[handleLoadLocalSessions] Raw localSessions:", localSessions);
+
+      // Add mode property to each session and convert snake_case to camelCase
+      // Also normalize agentType to lowercase for consistency
+      const normalizeAgentType = (type: string): AgentType => {
+        const lower = type.toLowerCase();
+        // Map common variations
+        if (lower === "claudecode" || lower === "claude-code") return "claude";
+        if (lower === "opencode") return "opencode";
+        if (lower === "gh-copilot") return "copilot";
+        if (lower === "gemini-cli") return "gemini";
+        if (lower === "open-claw") return "openclaw";
+        return lower as AgentType;
+      };
+
       const sessionsWithMode = localSessions.map((s) => ({
         sessionId: s.session_id,
-        agentType: s.agentType as AgentType,
-        projectPath: s.projectPath,
-        startedAt: s.startedAt,
+        agentType: normalizeAgentType(s.agent_type),
+        projectPath: s.project_path,
+        startedAt: s.started_at,
         active: s.active,
-        controlledByRemote: s.controlledByRemote,
+        controlledByRemote: s.controlled_by_remote,
         hostname: s.hostname,
         os: s.os,
-        agentVersion: s.agentVersion,
-        currentDir: s.currentDir,
-        gitBranch: s.gitBranch,
-        machineId: s.machineId,
+        agentVersion: s.agent_version,
+        currentDir: s.current_dir,
+        gitBranch: s.git_branch,
+        machineId: s.machine_id,
         mode: "local" as const,
       }));
+
+      console.log("[handleLoadLocalSessions] Mapped sessions:", sessionsWithMode);
 
       // Update sessions in store
       for (const session of sessionsWithMode) {
         sessionStore.addSession(session);
       }
+
+      // Set first session as active if no active session exists
+      if (sessionsWithMode.length > 0 && !sessionStore.getActiveSession()) {
+        sessionStore.setActiveSession(sessionsWithMode[0].sessionId);
+      }
+
+      console.log("[handleLoadLocalSessions] Sessions in store after add:", sessionStore.getSessions());
     } catch (error) {
       console.error("Failed to load local sessions:", error);
     }

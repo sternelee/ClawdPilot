@@ -8,16 +8,16 @@
  * - Loading states
  */
 
-import { type Component, Show, createSignal, createEffect, onMount } from "solid-js";
+import {
+  type Component,
+  Show,
+  createSignal,
+  createEffect,
+  onMount,
+} from "solid-js";
 import { cn } from "~/lib/utils";
 import { open } from "@tauri-apps/plugin-dialog";
-import {
-  FiSend,
-  FiSquare,
-  FiPlus,
-  FiCommand,
-  FiX,
-} from "solid-icons/fi";
+import { FiSend, FiPlus, FiCommand, FiX, FiStopCircle } from "solid-icons/fi";
 
 // ============================================================================
 // Types
@@ -75,7 +75,10 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   const adjustHeight = () => {
     if (textareaRef) {
       textareaRef.style.height = "auto";
-      const newHeight = Math.min(textareaRef.scrollHeight, props.maxHeight || 200);
+      const newHeight = Math.min(
+        textareaRef.scrollHeight,
+        props.maxHeight || 200,
+      );
       textareaRef.style.height = `${newHeight}px`;
     }
   };
@@ -115,7 +118,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
       class={cn(
         "flex flex-col gap-2 px-4 py-3 bg-background/80 backdrop-blur-md border-t border-border/60",
         focused() && "bg-background",
-        props.class
+        props.class,
       )}
     >
       {/* Input Container */}
@@ -124,7 +127,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           "flex items-end gap-2 rounded-2xl border-2 bg-muted/30 transition-all duration-300",
           focused()
             ? "border-primary/50 shadow-xl shadow-primary/5 bg-background"
-            : "border-border/60 hover:border-muted-foreground/20 hover:bg-muted/50"
+            : "border-border/60 hover:border-muted-foreground/20 hover:bg-muted/50",
         )}
       >
         {/* Attach Button */}
@@ -169,12 +172,12 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             "shrink-0 p-3 rounded-xl transition-all duration-300 shadow-lg",
             props.isStreaming
               ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
-              : "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+              : "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none",
           )}
           title={props.isStreaming ? "Stop generation" : "Send message"}
         >
           <Show when={props.isStreaming} fallback={<FiSend size={20} />}>
-            <FiSquare size={20} />
+            <FiStopCircle size={30} color="red" />
           </Show>
         </button>
       </div>
@@ -205,7 +208,9 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             <kbd class="kbd kbd-xs bg-muted/50 border-border/30">↵</kbd> send
           </span>
           <span class="flex items-center gap-1">
-            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">⇧</kbd>+<kbd class="kbd kbd-xs bg-muted/50 border-border/30">↵</kbd> new line
+            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">⇧</kbd>+
+            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">↵</kbd> new
+            line
           </span>
         </div>
         <span class="opacity-60">Markdown supported</span>
@@ -245,7 +250,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
     return props.items.filter(
       (item) =>
         item.label.toLowerCase().includes(query) ||
-        item.description?.toLowerCase().includes(query)
+        item.description?.toLowerCase().includes(query),
     );
   };
 
@@ -302,7 +307,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
         <div
           class={cn(
             "relative w-full max-w-lg bg-base-100 rounded-xl border border-border shadow-2xl overflow-hidden",
-            props.class
+            props.class,
           )}
         >
           {/* Search Input */}
@@ -341,7 +346,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
                     "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
                     index === selectedIndex()
                       ? "bg-primary/10 text-primary"
-                      : "hover:bg-muted"
+                      : "hover:bg-muted",
                   )}
                 >
                   <Show when={item.icon}>
@@ -388,12 +393,7 @@ export interface PromptSuggestionsProps {
 
 export const PromptSuggestions: Component<PromptSuggestionsProps> = (props) => {
   return (
-    <div
-      class={cn(
-        "flex flex-wrap gap-2 px-3 pb-2",
-        props.class
-      )}
-    >
+    <div class={cn("flex flex-wrap gap-2 px-3 pb-2", props.class)}>
       {props.suggestions.map((suggestion) => (
         <button
           type="button"

@@ -2235,29 +2235,8 @@ async fn local_list_agents(
         None => return Ok(Vec::new()),
     };
 
-    let session_ids = manager.list_sessions().await;
-    let mut sessions = Vec::new();
-    for sid in session_ids {
-        let agent_type = manager
-            .get_session_agent_type(&sid)
-            .await
-            .unwrap_or(AgentType::Custom);
-        sessions.push(shared::message_protocol::AgentSessionMetadata {
-            session_id: sid,
-            agent_type,
-            project_path: String::new(),
-            started_at: 0,
-            active: true,
-            controlled_by_remote: false,
-            hostname: String::new(),
-            os: String::new(),
-            agent_version: None,
-            current_dir: String::new(),
-            git_branch: None,
-            machine_id: String::new(),
-        });
-    }
-    Ok(sessions)
+    // Get all session metadata including project_path
+    Ok(manager.get_all_session_metadata().await)
 }
 
 /// Get agent session metadata (for session info display)

@@ -24,6 +24,7 @@ export type AgentType =
   | "qwen"
   | "codex"
   | "openclaw"
+  | "goose"
   | "custom";
 
 export type SessionMode = "remote" | "local";

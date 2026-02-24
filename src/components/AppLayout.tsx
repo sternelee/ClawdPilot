@@ -160,6 +160,10 @@ export const AppLayout: Component = () => {
     console.log(
       "[AppLayout] activeSession changed:",
       session?.sessionId,
+      "projectPath:",
+      session?.projectPath,
+      "agentType:",
+      session?.agentType,
       "mode:",
       session?.mode,
     );
@@ -241,7 +245,7 @@ export const AppLayout: Component = () => {
                 <ThemeSwitcher />
               </div>
 
-              <div class="text-center max-w-md">
+              <div class="text-center max-w-lg">
                 {/* Logo */}
                 <div class="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary via-primary/90 to-primary/60 flex items-center justify-center shadow-2xl shadow-primary/30">
                   <span class="text-5xl text-white font-bold">R</span>
