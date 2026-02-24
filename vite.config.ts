@@ -4,14 +4,16 @@ import { defineConfig } from "vite";
 import solid from "vite-plugin-solid";
 import tailwindcss from "@tailwindcss/vite";
 import wasm from "vite-plugin-wasm";
+import { fixCjsModules } from "./plugins/fix-cjs-modules";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
-    wasm(), // Add this plugin (must be before solid())
+    wasm(),
     solid(),
     tailwindcss(),
+    fixCjsModules(), // Fix CJS modules that cause issues
   ],
   resolve: {
     alias: {
@@ -20,14 +22,13 @@ export default defineConfig({
   },
   clearScreen: false,
   server: {
-    host: true, // 允许从网络访问，包括 localhost 和系统 IP
+    host: true,
     port: 1420,
     strictPort: true,
     watch: {
       ignored: ["**/src-tauri/**"],
     },
   },
-  // Ensure proper base path for Tauri
   base: "./",
   optimizeDeps: {
     exclude: ["solid-markdown-wasm"],
