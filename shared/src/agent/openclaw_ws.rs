@@ -67,11 +67,13 @@ pub struct OpenClawWsSession {
     /// Agent type
     agent_type: AgentType,
     /// Session key for gateway (maps to session_id)
-    session_key: String,
+    _session_key: String,
     /// Event broadcaster for this session
     event_sender: broadcast::Sender<AgentTurnEvent>,
     /// Command channel for this session
     command_tx: mpsc::UnboundedSender<SessionCommand>,
+    /// Permission mode for this session (stored locally for UI consistency)
+    permission_mode: Arc<RwLock<super::permission_handler::PermissionMode>>,
 }
 
 /// Commands from session to manager
@@ -279,9 +281,10 @@ impl OpenClawWsSession {
         Ok(Self {
             session_id,
             agent_type,
-            session_key,
+            _session_key: session_key,
             event_sender,
             command_tx,
+            permission_mode: Arc::new(RwLock::new(super::permission_handler::PermissionMode::AlwaysAsk)),
         })
     }
 
@@ -295,6 +298,20 @@ impl OpenClawWsSession {
 
     pub fn subscribe(&self) -> broadcast::Receiver<AgentTurnEvent> {
         self.event_sender.subscribe()
+    }
+
+    pub async fn set_permission_mode(
+        &self,
+        mode: super::permission_handler::PermissionMode,
+    ) -> std::result::Result<(), String> {
+        let mut current = self.permission_mode.write().await;
+        *current = mode;
+        Ok(())
+    }
+
+    pub async fn get_permission_mode(&self) -> super::permission_handler::PermissionMode {
+        let current = self.permission_mode.read().await;
+        *current
     }
 
     pub async fn send_message(
@@ -330,6 +347,7 @@ impl OpenClawWsSession {
         &self,
         _request_id: String,
         _approved: bool,
+        _approve_for_session: bool,
         _reason: Option<String>,
     ) -> std::result::Result<(), String> {
         Ok(())

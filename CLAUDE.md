@@ -63,29 +63,36 @@ Serialized with bincode. `MessageHandler` trait for extensible dispatch.
 
 ### Agent Session Protocols
 
-The `shared/src/agent/` module manages AI agent subprocesses via four session protocols:
+The `shared/src/agent/` module manages AI agent subprocesses via two session protocols:
 
-- **`SessionKind::Sdk`** (`claude_sdk.rs`) — Claude Code uses SDK Control Protocol directly
-- **`SessionKind::Acp`** (`acp.rs`) — OpenCode, Gemini, Copilot, Qwen, Goose use Agent Client Protocol (ACP)
-- **`SessionKind::CodexAcp`** (`codex_acp.rs`) — Codex uses codex-core in-process via ACP
+- **`SessionKind::Acp`** (`acp.rs`) — External agents via Agent Client Protocol (ACP)
 - **`SessionKind::OpenClawWs`** (`openclaw_ws.rs`) — OpenClaw agent using WebSocket Gateway
 
-`AgentManager` routes to the correct protocol based on `AgentType`. All four implement a common interface: `send_message`, `interrupt`, `subscribe`, `get_pending_permissions`, `respond_to_permission`, `shutdown`.
+`AgentManager` routes to the correct protocol based on `AgentType`. Both implement a common interface: `send_message`, `interrupt`, `subscribe`, `get_pending_permissions`, `respond_to_permission`, `shutdown`.
 
 ## Supported AI Agents
 
-| Agent | AgentType enum | Protocol | Command |
-|-------|---------------|----------|---------|
-| Claude Code | `ClaudeCode` | SDK | `claude` |
+| Agent | AgentType enum | Protocol | Default Command |
+|-------|---------------|----------|-----------------|
+| Claude Agent | `ClaudeCode` | ACP | `claude-agent-acp` |
 | OpenCode | `OpenCode` | ACP | `opencode` |
-| OpenAI Codex | `Codex` | CodexACP | `codex` (in-process via codex-core) |
+| OpenAI Codex | `Codex` | ACP | `codex-acp` |
 | Gemini CLI | `Gemini` | ACP | `gemini` |
-| GitHub Copilot | `Copilot` | ACP | `gh copilot` |
-| Qwen Code | `Qwen` | ACP | `qwen` |
-| Goose | `Goose` | ACP | `goose acp` |
-| OpenClaw | `OpenClaw` | WebSocket Gateway | (custom URL) |
-| Generic ACP Agent | `AcpAgent` | ACP | (custom) |
-| Custom Agent | `Custom` | (depends) | (custom) |
+| OpenClaw | `OpenClaw` | WebSocket Gateway | `openclaw gateway` |
+
+### External Agent Overrides
+
+Override commands/args/env in `~/.config/clawdchat/agents.json` (or `~/.clawdchat/agents.json`):
+
+```json
+{
+  "agents": {
+    "claude": { "command": "claude-agent-acp", "args": [], "env": {} },
+    "codex": { "command": "codex-acp", "args": [], "env": {} },
+    "gemini": { "command": "gemini", "args": ["--stdio"], "env": { "GEMINI_API_KEY": "..." } }
+  }
+}
+```
 
 ## Development Commands
 
@@ -138,7 +145,7 @@ cargo test --workspace -- --nocapture
 
 ### Mobile Development
 
-Mobile builds use the `mobile` feature on the `shared` crate to exclude heavy agent dependencies (codex-core, agent-client-protocol).
+Mobile builds use the `mobile` feature on the `shared` crate to exclude desktop-only agent dependencies (agent-client-protocol, portable-pty, etc.).
 
 ```bash
 # Android development
@@ -164,15 +171,14 @@ cd browser && wasm-pack build --target web
 ## Key Crate Dependencies
 
 - **iroh** 0.95 + **iroh-tickets** — P2P with QUIC and NAT traversal
-- **agent-client-protocol** 0.9.4 — ACP for non-Claude agents
-- **codex-core** (git, zed-industries/codex acp branch) — in-process Codex
+- **agent-client-protocol** 0.9.4 — ACP for external agents
 - **tauri** 2 — cross-platform desktop/mobile
 - **bincode** — network serialization
 - **chacha20poly1305** — E2E encryption
 
 ## Crate Patch Note
 
-`Cargo.toml` patches `tokio-tungstenite` and `tungstenite` with OpenAI forks (required by codex-core).
+`Cargo.toml` patches `tokio-tungstenite` and `tungstenite` with OpenAI forks (used by WebSocket gateway support).
 
 ## Frontend Development Patterns
 

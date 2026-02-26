@@ -9,6 +9,7 @@
 
 use crate::message_protocol::AgentType;
 use anyhow::Result;
+use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -26,6 +27,74 @@ pub struct AgentAvailability {
     pub version: Option<String>,
     /// Agent 可执行路径
     pub executable: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct AgentLaunchConfig {
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct AgentConfigFile {
+    agents: HashMap<String, AgentConfigEntry>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct AgentConfigEntry {
+    command: Option<String>,
+    args: Option<Vec<String>>,
+    env: Option<HashMap<String, String>>,
+}
+
+fn agent_config_path() -> Option<std::path::PathBuf> {
+    if let Some(config_dir) = dirs::config_dir() {
+        return Some(config_dir.join("clawdchat").join("agents.json"));
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return Some(std::path::PathBuf::from(home).join(".clawdchat").join("agents.json"));
+    }
+    None
+}
+
+fn load_agent_config() -> Option<AgentConfigFile> {
+    let path = agent_config_path()?;
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn agent_key(agent_type: AgentType) -> &'static str {
+    match agent_type {
+        AgentType::ClaudeCode => "claude",
+        AgentType::OpenCode => "opencode",
+        AgentType::Codex => "codex",
+        AgentType::Gemini => "gemini",
+        AgentType::OpenClaw => "openclaw",
+    }
+}
+
+fn resolve_launch_config(agent_type: AgentType) -> AgentLaunchConfig {
+    let agent = AgentFactory::create(agent_type);
+    let mut config = AgentLaunchConfig {
+        command: agent.command().to_string(),
+        args: agent.default_args(),
+        env: HashMap::new(),
+    };
+
+    if let Some(entry) = load_agent_config().and_then(|cfg| cfg.agents.get(agent_key(agent_type)).cloned()) {
+        if let Some(command) = entry.command {
+            config.command = command;
+        }
+        if let Some(args) = entry.args {
+            config.args.extend(args);
+        }
+        if let Some(env) = entry.env {
+            config.env.extend(env);
+        }
+    }
+
+    config
 }
 
 /// 统一的 Agent 接口
@@ -58,13 +127,9 @@ pub trait Agent {
     }
 }
 
-/// Claude Code Agent
+/// Claude Agent (ACP-compatible)
 ///
-/// Uses the `claude` CLI directly with SDK Control Protocol for streaming
-/// JSON communication over stdio. The default_args provide the flags needed
-/// for SDK-mode sessions (streaming JSON input/output with permission prompts).
-///
-/// Requires: `claude` CLI installed (https://docs.anthropic.com/en/docs/claude-code)
+/// Runs a Claude Agent ACP adapter process (external agent model).
 pub struct ClaudeCodeAgent;
 
 impl Agent for ClaudeCodeAgent {
@@ -73,24 +138,15 @@ impl Agent for ClaudeCodeAgent {
     }
 
     fn command(&self) -> &str {
-        "claude"
+        "claude-agent-acp"
     }
 
     fn default_args(&self) -> Vec<String> {
-        vec![
-            "-p".to_string(),
-            "--output-format".to_string(),
-            "stream-json".to_string(),
-            "--input-format".to_string(),
-            "stream-json".to_string(),
-            "--verbose".to_string(),
-            "--permission-prompt-tool".to_string(),
-            "stdio".to_string(),
-        ]
+        vec![]
     }
 
     fn check_available(&self) -> Result<AgentAvailability> {
-        let output = Command::new("claude")
+        let output = Command::new(self.command())
             .arg("--version")
             .env("PATH", get_extended_path())
             .output()?;
@@ -108,13 +164,13 @@ impl Agent for ClaudeCodeAgent {
     }
 
     fn get_version(&self) -> Result<String> {
-        let output = Command::new("claude")
+        let output = Command::new(self.command())
             .arg("--version")
             .env("PATH", get_extended_path())
             .output()?;
         if !output.status.success() {
             return Err(anyhow::anyhow!(
-                "Failed to get Claude Code version. Ensure 'claude' CLI is installed."
+                "Failed to get Claude Agent ACP adapter version. Ensure 'claude-agent-acp' is installed."
             ));
         }
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -239,12 +295,11 @@ impl Agent for CodexAgent {
     }
 
     fn command(&self) -> &str {
-        "codex"
+        "codex-acp"
     }
 
     fn default_args(&self) -> Vec<String> {
-        // Codex uses --stdio for ACP communication
-        vec!["--stdio".to_string()]
+        vec![]
     }
 
     fn check_available(&self) -> Result<AgentAvailability> {
@@ -274,7 +329,9 @@ impl Agent for CodexAgent {
             .output()?;
 
         if !output.status.success() {
-            return Err(anyhow::anyhow!("Failed to get Codex version"));
+            return Err(anyhow::anyhow!(
+                "Failed to get Codex ACP adapter version. Ensure 'codex-acp' is installed."
+            ));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -357,17 +414,16 @@ impl AgentFactory {
     pub fn check_all_available() -> Result<HashMap<AgentType, AgentAvailability>> {
         let mut results = HashMap::new();
 
-        let agents: Vec<Box<dyn Agent>> = vec![
-            Box::new(ClaudeCodeAgent),
-            Box::new(OpenCodeAgent),
-            Box::new(CodexAgent),
-            Box::new(GeminiAgent),
-            Box::new(OpenClawAgent),
+        let agent_types = [
+            AgentType::ClaudeCode,
+            AgentType::OpenCode,
+            AgentType::Codex,
+            AgentType::Gemini,
+            AgentType::OpenClaw,
         ];
 
-        for agent in agents {
-            let agent_type = agent.agent_type();
-            match agent.check_available() {
+        for agent_type in agent_types {
+            match Self::check_available_with_config(agent_type) {
                 Ok(availability) => {
                     if availability.available {
                         info!(
@@ -420,23 +476,37 @@ impl AgentFactory {
     ///
     /// 返回 (command, args) 元组，用于启动 ACP 会话。
     pub fn get_acp_command(agent_type: AgentType) -> (String, Vec<String>) {
-        let agent = Self::create(agent_type);
-        (agent.command().to_string(), agent.default_args())
+        let config = resolve_launch_config(agent_type);
+        (config.command, config.args)
     }
 
-    /// Get the SDK command and arguments for Claude Code
-    ///
-    /// This returns the command and args for direct Claude CLI communication
-    /// via the SDK Control Protocol (streaming JSON over stdio).
-    pub fn get_sdk_command(agent_type: AgentType) -> Option<(String, Vec<String>)> {
-        match agent_type {
-            AgentType::ClaudeCode => {
-                let agent = ClaudeCodeAgent;
-                Some((agent.command().to_string(), agent.default_args()))
-            }
-            _ => None, // Other agents use ACP
-        }
+    pub fn get_acp_launch(agent_type: AgentType) -> AgentLaunchConfig {
+        resolve_launch_config(agent_type)
     }
+
+    pub fn check_available_with_config(agent_type: AgentType) -> Result<AgentAvailability> {
+        let config = resolve_launch_config(agent_type);
+        let output = Command::new(&config.command)
+            .arg("--version")
+            .env("PATH", get_extended_path())
+            .envs(&config.env)
+            .output()?;
+
+        let available = output.status.success();
+        let version = if available {
+            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            None
+        };
+
+        Ok(AgentAvailability {
+            available,
+            version,
+            executable: config.command,
+        })
+    }
+
+    // All supported agents use ACP; SDK Control Protocol is not used here.
 }
 
 #[cfg(test)]
@@ -447,28 +517,15 @@ mod tests {
     fn test_agent_factory_create() {
         let claude = AgentFactory::create(AgentType::ClaudeCode);
         assert_eq!(claude.agent_type(), AgentType::ClaudeCode);
-        assert_eq!(claude.command(), "claude");
-        assert!(!claude.default_args().is_empty());
+        assert_eq!(claude.command(), "claude-agent-acp");
+        assert!(claude.default_args().is_empty());
     }
 
     #[test]
     fn test_acp_command() {
         let (cmd, args) = AgentFactory::get_acp_command(AgentType::ClaudeCode);
-        assert_eq!(cmd, "claude");
-        assert!(!args.is_empty());
-    }
-
-    #[test]
-    fn test_sdk_command() {
-        let result = AgentFactory::get_sdk_command(AgentType::ClaudeCode);
-        assert!(result.is_some());
-        let (cmd, args) = result.unwrap();
-        assert_eq!(cmd, "claude");
-        assert!(args.contains(&"-p".to_string()));
-
-        // Other agents should return None for SDK
-        let result = AgentFactory::get_sdk_command(AgentType::OpenCode);
-        assert!(result.is_none());
+        assert_eq!(cmd, "claude-agent-acp");
+        assert!(args.is_empty());
     }
 
     #[test]

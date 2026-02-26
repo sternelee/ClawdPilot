@@ -194,13 +194,6 @@ export const AppLayout: Component = () => {
     }
   };
 
-  const handlePermissionResponse = (
-    permissionId: string,
-    response: "approved" | "denied" | "approved_for_session",
-  ) => {
-    console.log("Permission response:", permissionId, response);
-    // TODO: Implement permission response via Tauri command
-  };
 
   return (
     <div class="flex h-screen bg-muted overflow-hidden">
@@ -305,7 +298,6 @@ export const AppLayout: Component = () => {
                 projectPath={session().projectPath}
                 sessionMode={session().mode}
                 onSendMessage={handleSendMessage}
-                onPermissionResponse={handlePermissionResponse}
               />
             );
           }}

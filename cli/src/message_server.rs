@@ -6,7 +6,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shared::{
-    AgentControlAction, AgentSessionAction, AgentSessionMetadata, AgentType, AvailableTools,
+    AgentControlAction, AgentPermissionMode, AgentSessionAction, AgentSessionMetadata, AgentType,
+    AvailableTools,
     BuiltinCommand, CommunicationManager, FileBrowserAction, GitAction, Message, MessageBuilder,
     MessageHandler, MessagePayload, MessageType, NotificationData, NotificationType, OSInfo,
     OutputFormat, PackageManager, QuicMessageServer, QuicMessageServerConfig, RemoteSpawnAction,
@@ -2712,6 +2713,47 @@ impl AgentControlMessageHandler {
                 self.agent_manager
                     .send_message(&session_id, content.clone(), attachments.clone())
                     .await
+            }
+            AgentControlAction::SetPermissionMode { mode } => {
+                let permission_mode = match mode {
+                    AgentPermissionMode::AlwaysAsk => shared::agent::PermissionMode::AlwaysAsk,
+                    AgentPermissionMode::AcceptEdits => shared::agent::PermissionMode::AcceptEdits,
+                    AgentPermissionMode::AutoApprove => shared::agent::PermissionMode::AutoApprove,
+                    AgentPermissionMode::Plan => shared::agent::PermissionMode::Plan,
+                };
+                self.agent_manager
+                    .set_permission_mode(&session_id, permission_mode)
+                    .await
+            }
+            AgentControlAction::GetPermissionMode => {
+                let mode = self.agent_manager.get_permission_mode(&session_id).await;
+                let response = match mode {
+                    Ok(mode) => {
+                        let mode_str = match mode {
+                            shared::agent::PermissionMode::AlwaysAsk => "AlwaysAsk",
+                            shared::agent::PermissionMode::AcceptEdits => "AcceptEdits",
+                            shared::agent::PermissionMode::AutoApprove => "AutoApprove",
+                            shared::agent::PermissionMode::Plan => "Plan",
+                        };
+                        let response_data = serde_json::json!({
+                            "permission_mode": mode_str,
+                        });
+                        MessageBuilder::response(
+                            "cli".to_string(),
+                            req_id,
+                            true,
+                            Some(response_data),
+                            None,
+                        )
+                    }
+                    Err(e) => MessageBuilder::error(
+                        "cli".to_string(),
+                        500,
+                        format!("Failed to get permission mode: {}", e),
+                        None,
+                    ),
+                };
+                return Ok(Some(response));
             }
             AgentControlAction::SendInterrupt => {
                 self.agent_manager.interrupt_session(&session_id).await

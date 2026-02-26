@@ -45,7 +45,7 @@ import { ChatInput } from "./ui/ChatInput";
 
 interface ParsedEvent {
   type: string;
-  // SDK protocol event types
+  // External agent protocol event types
   sessionId?: string;
   turnId?: string;
   agent?: string;
@@ -91,17 +91,17 @@ interface ParsedEvent {
  * Parse event from either format:
  * 1. Rust externally tagged: {TurnStarted: {turn_id: "..."}} -> type: "turn_started"
  * 2. Frontend inline format: {type: "text_delta", content: "..."}
- * 3. SDK protocol format: {type: "text:delta", sessionId: "...", text: "..."}
+ * 3. External agent protocol format: {type: "text:delta", sessionId: "...", text: "..."}
  */
 function parseEvent(eventObj: Record<string, unknown>): ParsedEvent {
-  // Check for inline/SKD format first (type: "text_delta" or "text:delta")
+  // Check for inline protocol format first (type: "text_delta" or "text:delta")
   if ("type" in eventObj) {
     const result: ParsedEvent = { type: eventObj.type as string };
 
-    // Convert SDK protocol type names from kebab-case to camelCase
+    // Convert protocol type names from kebab-case to camelCase
     const typeStr = result.type;
     if (typeStr.includes(":")) {
-      // SDK protocol: "text:delta" -> "text_delta"
+      // Protocol: "text:delta" -> "text_delta"
       result.type = typeStr.replace(":", "_");
     }
 
@@ -165,10 +165,6 @@ function parseEvent(eventObj: Record<string, unknown>): ParsedEvent {
 interface ChatViewProps {
   sessionId: string;
   onSendMessage?: (message: string) => void;
-  onPermissionResponse?: (
-    permissionId: string,
-    response: "approved" | "denied" | "approved_for_session",
-  ) => void;
   onSpawnRemoteSession?: (
     agentType: AgentType,
     projectPath: string,
@@ -323,7 +319,10 @@ export function ChatView(props: ChatViewProps) {
     );
     const [scrollEl, setScrollEl] = createSignal<HTMLElement>();
     const [isScrolledToBottom, setIsScrolledToBottom] = createSignal(true);
-    const [isStreaming, setIsStreaming] = createSignal(false);
+  const [isStreaming, setIsStreaming] = createSignal(false);
+  const [permissionMode, setPermissionMode] = createSignal<
+    "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove"
+  >("AlwaysAsk");
 
     // Track scroll position using solid-primitives hook
     const scrollPos = createScrollPosition(scrollEl);
@@ -347,29 +346,6 @@ export function ChatView(props: ChatViewProps) {
       if (isScrolledToBottom()) {
         scrollToBottom();
       }
-    });
-
-    // Auto-save session when messages change (debounced)
-    let saveTimeout: number | undefined;
-    createEffect(() => {
-      const msgs = messages();
-      const sessionId = props.sessionId;
-      const sessionMode = props.sessionMode;
-
-      // Only auto-save for local sessions
-      if (sessionMode !== "local" || !sessionId || msgs.length === 0) {
-        return;
-      }
-
-      // Debounce saves to avoid saving on every keystroke
-      if (saveTimeout) {
-        clearTimeout(saveTimeout);
-      }
-
-      saveTimeout = window.setTimeout(() => {
-        console.log("[ChatView] Auto-saving session:", sessionId);
-        sessionStore.autoSaveSession(sessionId, msgs);
-      }, 2000); // Save after 2 seconds of inactivity
     });
 
     // Listen for incoming agent messages from backend
@@ -529,9 +505,14 @@ export function ChatView(props: ChatViewProps) {
                   const permRequestDesc = `${permMessage}${permInput ? `\nInput: ${JSON.stringify(permInput)}` : ""}`;
                   chatStore.addPermissionRequest(props.sessionId, {
                     sessionId: props.sessionId,
+                    id: parsed.requestId,
                     toolName: permToolName,
                     toolParams: permInput as Record<string, unknown>,
                     description: permRequestDesc,
+                    requestedAt:
+                      typeof parsed.createdAt === "number"
+                        ? parsed.createdAt * 1000
+                        : undefined,
                   });
                   setIsStreaming(false);
                   break;
@@ -726,11 +707,16 @@ export function ChatView(props: ChatViewProps) {
               } else if (data.type === "permission_request") {
                 chatStore.addPermissionRequest(props.sessionId, {
                   sessionId: props.sessionId,
+                  id: data.requestId as string | undefined,
                   toolName: data.toolName as string,
                   toolParams: data.toolParams as Record<string, unknown>,
                   description:
                     (data.description as string) ||
                     `Permission request for ${data.toolName}`,
+                  requestedAt:
+                    typeof data.requestedAt === "number"
+                      ? data.requestedAt * 1000
+                      : undefined,
                 });
                 setIsStreaming(false); // Pause streaming on permission request
               } else if (data.type === "tool_call") {
@@ -777,20 +763,73 @@ export function ChatView(props: ChatViewProps) {
         unlistenLocalPromise.then((fn) => fn());
         // Cleanup remote agent event listener
         unlistenPromise.then((fn) => fn());
-        // Save session on cleanup
-        if (saveTimeout) {
-          clearTimeout(saveTimeout);
-        }
-        const sessionId = props.sessionId;
-        const sessionMode = props.sessionMode;
-        if (sessionMode === "local" && sessionId) {
-          const msgs = messages();
-          if (msgs.length > 0) {
-            console.log("[ChatView] Saving session on cleanup:", sessionId);
-            sessionStore.autoSaveSession(sessionId, msgs);
-          }
-        }
       });
+    });
+
+    // Load pending permissions for local sessions (restore after reload)
+    createEffect(() => {
+      if (!props.sessionId || props.sessionMode !== "local") return;
+
+      invoke<
+        Array<{
+          request_id: string;
+          tool_name: string;
+          tool_params: unknown;
+          message?: string | null;
+          created_at: number;
+        }>
+      >("local_get_pending_permissions", { sessionId: props.sessionId })
+        .then((pending) => {
+          const permissions = pending.map((entry) => ({
+            id: entry.request_id,
+            sessionId: props.sessionId,
+            toolName: entry.tool_name,
+            toolParams: entry.tool_params,
+            description:
+              entry.message ||
+              `Permission request for ${entry.tool_name || "tool"}`,
+            requestedAt: entry.created_at * 1000,
+            status: "pending" as const,
+          }));
+          const existing = chatStore.getPendingPermissions(props.sessionId);
+          if (permissions.length > 0 || existing.length === 0) {
+            chatStore.setPendingPermissions(props.sessionId, permissions);
+          }
+          if (permissions.length > 0) {
+            setIsStreaming(false);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to load pending permissions:", error);
+        });
+    });
+
+    // Load permission mode from backend
+    createEffect(() => {
+      if (!props.sessionId) return;
+
+      const controlSessionId =
+        props.sessionMode === "remote"
+          ? sessionStore.getSession(props.sessionId)?.controlSessionId
+          : undefined;
+
+      invoke<string>("get_permission_mode", {
+        sessionId: props.sessionId,
+        controlSessionId,
+      })
+        .then((mode) => {
+          if (
+            mode === "AlwaysAsk" ||
+            mode === "AcceptEdits" ||
+            mode === "Plan" ||
+            mode === "AutoApprove"
+          ) {
+            setPermissionMode(mode);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to load permission mode:", error);
+        });
     });
 
     const scrollToBottom = () => {
@@ -1007,7 +1046,6 @@ export function ChatView(props: ChatViewProps) {
         notificationStore.error("Failed to send permission response", "Error");
       }
 
-      props.onPermissionResponse?.(permissionId, response);
 
       // Resume streaming if approved?
       // Backend should handle resumption upon receiving permission response
@@ -1028,6 +1066,32 @@ export function ChatView(props: ChatViewProps) {
       }
     };
 
+    const handlePermissionModeChange = async (
+      mode: "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove",
+    ) => {
+      setPermissionMode(mode);
+      try {
+        if (props.sessionMode === "local") {
+          await invoke("set_permission_mode", {
+            sessionId: props.sessionId,
+            mode,
+          });
+        } else {
+          const controlSessionId = sessionStore.getSession(
+            props.sessionId,
+          )?.controlSessionId;
+          await invoke("set_permission_mode", {
+            sessionId: props.sessionId,
+            mode,
+            controlSessionId,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to set permission mode:", error);
+        notificationStore.error("Failed to set permission mode", "Error");
+      }
+    };
+
     const getAgentIcon = () => {
       const normalizedType = props.agentType?.toLowerCase() || "";
 
@@ -1042,9 +1106,6 @@ export function ChatView(props: ChatViewProps) {
         openai: "/openai-light.svg",
         gemini: "/google-gemini.svg",
         "gemini-cli": "/google-gemini.svg",
-        copilot: "/github-copilot-dark.svg",
-        "gh-copilot": "/github-copilot-dark.svg",
-        qwen: "/qwen.svg",
         openclaw: "/openclaw.svg",
         "open-claw": "/openclaw.svg",
       };
@@ -1070,10 +1131,10 @@ export function ChatView(props: ChatViewProps) {
               </div>
               <div>
                 <h2 class="text-base font-semibold tracking-tight">
-                  {props.agentType === "claude" && "Claude Code"}
+                  {props.agentType === "claude" && "Claude Agent"}
                   {props.agentType === "codex" && "Codex"}
                   {props.agentType === "opencode" && "OpenCode"}
-                  {props.agentType === "gemini" && "Gemini CLI"}
+                  {props.agentType === "gemini" && "Gemini"}
                   {props.agentType === "openclaw" && "OpenClaw"}
                 </h2>
                 <div
@@ -1093,6 +1154,22 @@ export function ChatView(props: ChatViewProps) {
             </div>
           </div>
           <div class="flex items-center gap-2">
+            <select
+              class="select select-xs h-8 bg-background/60 border-border/50"
+              value={permissionMode()}
+              onChange={(e) =>
+                handlePermissionModeChange(
+                  e.currentTarget
+                    .value as "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove",
+                )
+              }
+              title="Permission mode"
+            >
+              <option value="AlwaysAsk">Always ask</option>
+              <option value="AcceptEdits">Accept edits</option>
+              <option value="Plan">Plan (read-only)</option>
+              <option value="AutoApprove">Auto approve</option>
+            </select>
             <Button
               type="button"
               onClick={handleOpenSpawnModal}

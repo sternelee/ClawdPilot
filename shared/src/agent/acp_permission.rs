@@ -140,7 +140,7 @@ impl AcpPermissionHandler {
         request_id: &str,
         approved: bool,
         decision: Option<ApprovalDecision>,
-        allowed_tools: Option<Vec<String>>,
+        _allowed_tools: Option<Vec<String>>,
     ) -> Result<(), String> {
         // Get the pending entry
         let entry = {

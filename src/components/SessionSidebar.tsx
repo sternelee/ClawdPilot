@@ -4,15 +4,22 @@
  * Sidebar for managing AI agent sessions in a unified list.
  */
 
-import { onMount, Show, For, createSignal, createMemo, type Component } from "solid-js";
-import { FiPlus, FiX, FiRefreshCw, FiTrash2, FiClock } from "solid-icons/fi";
+import {
+  onMount,
+  Show,
+  For,
+  createSignal,
+  createMemo,
+  type Component,
+} from "solid-js";
+import { FiPlus, FiX, FiRefreshCw, FiClock } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { chatStore } from "../stores/chatStore";
 import { notificationStore } from "../stores/notificationStore";
 import { isMobile } from "../stores/deviceStore";
-import type { AgentType, SessionRecord } from "../stores/sessionStore";
-import { Button } from "./ui/primitives";
+import type { AgentType, AgentSessionMetadata } from "../stores/sessionStore";
+import { Button, Select } from "./ui/primitives";
 
 // ============================================================================
 // Agent Icons - Using @lobehub/icons CDN
@@ -33,9 +40,6 @@ const getAgentIcon = (agentType: AgentType) => {
     openai: "/openai-light.svg",
     gemini: "/google-gemini.svg",
     "gemini-cli": "/google-gemini.svg",
-    copilot: "/github-copilot-dark.svg",
-    "gh-copilot": "/github-copilot-dark.svg",
-    qwen: "/qwen.svg",
     openclaw: "/openclaw.svg",
     "open-claw": "/openclaw.svg",
   };
@@ -145,129 +149,6 @@ const SessionItem: Component<SessionItemProps> = (props) => {
 };
 
 // ============================================================================
-// Saved Session Item Component
-// ============================================================================
-
-interface SavedSessionItemProps {
-  session: SessionRecord;
-  onRestore: (sessionId: string) => void;
-  onDelete: (sessionId: string) => void;
-}
-
-const SavedSessionItem: Component<SavedSessionItemProps> = (props) => {
-  const [isDeleting, setIsDeleting] = createSignal(false);
-
-  const handleRestore = async () => {
-    setIsDeleting(true);
-    try {
-      await props.onRestore(props.session.sessionId);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (confirm("Are you sure you want to delete this saved session?")) {
-      setIsDeleting(true);
-      try {
-        await props.onDelete(props.session.sessionId);
-      } finally {
-        setIsDeleting(false);
-      }
-    }
-  };
-
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } else if (diffDays === 1) {
-      return "Yesterday";
-    } else if (diffDays < 7) {
-      return `${diffDays} days ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
-  };
-
-  return (
-    <div
-      class="group relative flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 mx-1
-        hover:bg-muted/60 border border-transparent"
-      onClick={handleRestore}
-    >
-      {/* Agent Icon */}
-      <div class="shrink-0 text-muted-foreground/50">
-        <FiClock size={16} />
-      </div>
-
-      {/* Session Info */}
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2">
-          <span class="font-medium text-sm truncate text-foreground/80">
-            {props.session.agentType === "claudeCode" && "Claude"}
-            {props.session.agentType === "gemini" && "Gemini"}
-            {props.session.agentType === "openCode" && "OpenCode"}
-            {props.session.agentType === "codex" && "Codex"}
-            {/* Also handle lowercase versions from frontend */}
-            {props.session.agentType === "claude" && "Claude"}
-            {props.session.agentType === "opencode" && "OpenCode"}
-          </span>
-          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground/60 font-medium">
-            {props.session.messages?.length || 0} msgs
-          </span>
-        </div>
-        <div class="text-xs text-muted-foreground/40 truncate mt-0.5">
-          {props.session.projectPath?.split("/").pop() || "No project"}
-        </div>
-        <div class="text-[10px] text-muted-foreground/30 mt-0.5">
-          {formatDate(props.session.lastActiveAt)}
-        </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          class="p-1.5 rounded-md hover:bg-primary/20 text-muted-foreground/60 hover:text-primary"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRestore();
-          }}
-          title="Restore session"
-          disabled={isDeleting()}
-        >
-          <FiRefreshCw size={14} />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          class="p-1.5 rounded-md hover:bg-destructive/20 text-muted-foreground/60 hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDelete();
-          }}
-          title="Delete session"
-          disabled={isDeleting()}
-        >
-          <FiTrash2 size={14} />
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================================
 // Session Sidebar Component
 // ============================================================================
 
@@ -276,15 +157,26 @@ interface SessionSidebarProps {
   onToggle: () => void;
 }
 
+interface AgentHistoryEntry {
+  agent_type: string;
+  session_id: string;
+  title?: string | null;
+  updated_at?: string | null;
+  cwd?: string | null;
+}
+
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const sessions = createMemo(() => sessionStore.getSessions());
   const activeSession = createMemo(() => sessionStore.getActiveSession());
   const activeSessions = createMemo(() => sessionStore.getActiveSessions());
 
-  // Saved sessions state
-  const [savedSessions, setSavedSessions] = createSignal<SessionRecord[]>([]);
-  const [isLoadingSaved, setIsLoadingSaved] = createSignal(false);
   const [showSaved, setShowSaved] = createSignal(false);
+  const [historyEntries, setHistoryEntries] = createSignal<AgentHistoryEntry[]>(
+    [],
+  );
+  const [isLoadingHistory, setIsLoadingHistory] = createSignal(false);
+  const [historyAgent, setHistoryAgent] = createSignal<AgentType>("claude");
+  const [resumeHistory, setResumeHistory] = createSignal(false);
 
   // Load local sessions on mount
   const handleLoadLocalSessions = async () => {
@@ -307,7 +199,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
       const localSessions =
         await invoke<BackendSessionMetadata[]>("local_list_agents");
-      console.log("[handleLoadLocalSessions] Raw localSessions:", localSessions);
+      console.log(
+        "[handleLoadLocalSessions] Raw localSessions:",
+        localSessions,
+      );
 
       // Add mode property to each session and convert snake_case to camelCase
       // Also normalize agentType to lowercase for consistency
@@ -316,7 +211,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         // Map common variations
         if (lower === "claudecode" || lower === "claude-code") return "claude";
         if (lower === "opencode") return "opencode";
-        if (lower === "gh-copilot") return "copilot";
         if (lower === "gemini-cli") return "gemini";
         if (lower === "open-claw") return "openclaw";
         return lower as AgentType;
@@ -338,7 +232,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         mode: "local" as const,
       }));
 
-      console.log("[handleLoadLocalSessions] Mapped sessions:", sessionsWithMode);
+      console.log(
+        "[handleLoadLocalSessions] Mapped sessions:",
+        sessionsWithMode,
+      );
 
       // Update sessions in store
       for (const session of sessionsWithMode) {
@@ -350,7 +247,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         sessionStore.setActiveSession(sessionsWithMode[0].sessionId);
       }
 
-      console.log("[handleLoadLocalSessions] Sessions in store after add:", sessionStore.getSessions());
+      console.log(
+        "[handleLoadLocalSessions] Sessions in store after add:",
+        sessionStore.getSessions(),
+      );
     } catch (error) {
       console.error("Failed to load local sessions:", error);
     }
@@ -401,57 +301,77 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     void handleLoadLocalSessions();
   });
 
-  // Load saved sessions
-  const loadSavedSessions = async () => {
-    setIsLoadingSaved(true);
-    try {
-      const sessions = await sessionStore.loadSavedSessions({ limit: 20 });
-      setSavedSessions(sessions);
-    } catch (error) {
-      console.error("Failed to load saved sessions:", error);
-    } finally {
-      setIsLoadingSaved(false);
-    }
-  };
-
-  // Toggle saved sessions panel
+  // Toggle history panel
   const handleToggleSaved = async () => {
     const newShow = !showSaved();
     setShowSaved(newShow);
-    if (newShow && savedSessions().length === 0) {
-      await loadSavedSessions();
+    if (newShow && historyEntries().length === 0) {
+      await loadHistory();
     }
   };
 
-  // Restore a saved session
-  const handleRestoreSession = async (sessionId: string) => {
-    try {
-      const newSessionId = await sessionStore.restoreSession(sessionId);
-      if (newSessionId) {
-        notificationStore.success("Session restored successfully", "Restore");
-        // Reload saved sessions
-        await loadSavedSessions();
-      }
-    } catch (error) {
-      console.error("Failed to restore session:", error);
-      notificationStore.error("Failed to restore session", "Error");
+  const loadHistory = async () => {
+    if (isMobile()) {
+      setHistoryEntries([]);
+      return;
     }
-  };
-
-  // Delete a saved session
-  const handleDeleteSavedSession = async (sessionId: string) => {
+    setIsLoadingHistory(true);
     try {
-      await sessionStore.deleteSavedSession(sessionId);
-      // Clear chat messages for this session
-      chatStore.clearMessages(sessionId);
-      // Update local state
-      setSavedSessions(
-        savedSessions().filter((s) => s.sessionId !== sessionId),
+      const basePath =
+        activeSession()?.projectPath ||
+        sessionStore.state.newSessionPath ||
+        ".";
+      const entries = await invoke<AgentHistoryEntry[]>(
+        "local_list_agent_history",
+        {
+          agentTypeStr: historyAgent(),
+          projectPath: basePath,
+        },
       );
-      notificationStore.success("Session deleted", "Delete");
+      setHistoryEntries(entries);
     } catch (error) {
-      console.error("Failed to delete session:", error);
-      notificationStore.error("Failed to delete session", "Error");
+      console.error("Failed to load agent history:", error);
+      notificationStore.error("Failed to load agent history", "Error");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleLoadHistorySession = async (entry: AgentHistoryEntry) => {
+    try {
+      const projectPath =
+        entry.cwd ||
+        activeSession()?.projectPath ||
+        sessionStore.state.newSessionPath ||
+        ".";
+      const sessionId = await invoke<string>("local_load_agent_history", {
+        agentTypeStr: historyAgent(),
+        historySessionId: entry.session_id,
+        projectPath,
+        resume: resumeHistory(),
+        extraArgs: [],
+      });
+
+      const newSession: AgentSessionMetadata = {
+        sessionId,
+        agentType: historyAgent(),
+        projectPath,
+        startedAt: Date.now(),
+        active: true,
+        controlledByRemote: false,
+        hostname: "localhost",
+        os: navigator.userAgent,
+        currentDir: projectPath,
+        machineId: "local",
+        mode: "local",
+      };
+
+      sessionStore.addSession(newSession);
+      sessionStore.setActiveSession(sessionId);
+      notificationStore.success("History session loaded", "History");
+    } catch (error) {
+      console.error("Failed to load history session:", error);
+      notificationStore.error("Failed to load history session", "Error");
     }
   };
 
@@ -495,9 +415,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               variant="ghost"
               class="text-xs h-7 text-muted-foreground hover:text-foreground"
               onClick={handleToggleSaved}
-              title={
-                showSaved() ? "Hide saved sessions" : "Show saved sessions"
-              }
+              title={showSaved() ? "Hide history" : "Show history"}
             >
               <FiClock size={14} />
             </Button>
@@ -550,36 +468,82 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             </Show>
           </Show>
 
-          {/* Saved Sessions */}
+          {/* Agent History */}
           <Show when={showSaved()}>
             <div class="pt-2 border-t border-border/40">
               <div class="px-2 py-2 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">
-                Saved Sessions ({savedSessions().length})
+                Agent History
               </div>
             </div>
-            <Show when={isLoadingSaved()}>
+            <div class="px-2 pb-2 space-y-2">
+              <div class="flex items-center gap-2">
+                <Select
+                  value={historyAgent()}
+                  onChange={(val) => {
+                    setHistoryAgent(val as AgentType);
+                    void loadHistory();
+                  }}
+                >
+                  <option value="claude">Claude Agent</option>
+                  <option value="codex">Codex</option>
+                  <option value="opencode">OpenCode</option>
+                  <option value="gemini">Gemini</option>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => loadHistory()}
+                  title="Refresh history"
+                >
+                  <FiRefreshCw size={14} />
+                </Button>
+              </div>
+              <label class="flex items-center gap-2 text-xs text-muted-foreground/70">
+                <input
+                  type="checkbox"
+                  class="checkbox checkbox-xs"
+                  checked={resumeHistory()}
+                  onChange={(e) => setResumeHistory(e.currentTarget.checked)}
+                />
+                Resume session (if supported)
+              </label>
+            </div>
+            <Show when={isLoadingHistory()}>
               <div class="flex items-center justify-center py-6">
                 <div class="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
               </div>
             </Show>
-            <Show when={!isLoadingSaved() && savedSessions().length > 0}>
-              <For each={savedSessions()}>
-                {(session) => (
-                  <SavedSessionItem
-                    session={session}
-                    onRestore={handleRestoreSession}
-                    onDelete={handleDeleteSavedSession}
-                  />
+            <Show when={!isLoadingHistory() && historyEntries().length > 0}>
+              <For each={historyEntries()}>
+                {(entry) => (
+                  <div class="group flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                    <button
+                      type="button"
+                      class="flex flex-col text-left min-w-0"
+                      onClick={() => handleLoadHistorySession(entry)}
+                    >
+                      <span class="text-sm font-medium truncate">
+                        {entry.title || entry.session_id.slice(0, 8)}
+                      </span>
+                      <span class="text-xs text-muted-foreground/70 truncate">
+                        {entry.cwd || "Unknown path"}
+                      </span>
+                    </button>
+                    <div class="text-[10px] text-muted-foreground/60">
+                      {entry.updated_at || ""}
+                    </div>
+                  </div>
                 )}
               </For>
             </Show>
-            <Show when={!isLoadingSaved() && savedSessions().length === 0}>
-              <div class="flex flex-col items-center justify-center py-8 text-center px-4">
+            <Show when={!isLoadingHistory() && historyEntries().length === 0}>
+              <div class="flex flex-col items-center justify-center py-6 text-center px-4">
                 <p class="text-sm text-muted-foreground/60">
-                  No saved sessions
+                  No history sessions
                 </p>
                 <p class="text-xs text-muted-foreground/40 mt-1">
-                  Sessions will be saved automatically
+                  This agent may not support history
                 </p>
               </div>
             </Show>

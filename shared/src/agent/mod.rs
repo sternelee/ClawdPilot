@@ -1,12 +1,10 @@
 //! Agent management module
 //!
 //! This module provides unified agent session management.
-//! ClaudeCode uses SDK Control Protocol directly, other agents use ACP.
+//! All external agents are treated as ACP-compatible processes (Zed-style external agents).
 
 pub mod acp;
 pub mod acp_permission;
-pub mod claude_sdk;
-pub mod codex_acp;
 pub mod events;
 pub mod factory;
 pub mod message_adapter;
@@ -17,15 +15,15 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::message_protocol::{AgentSessionMetadata, AgentType};
+use crate::agent::acp::get_extended_path;
+use crate::message_protocol::{AgentHistoryEntry, AgentSessionMetadata, AgentType};
 use anyhow::{Context, Result, anyhow};
 use tokio::sync::RwLock;
+use tokio::task;
 use tracing::{debug, info, warn};
 
-pub use acp::AcpStreamingSession;
+pub use acp::{AcpSessionStartMode, AcpStreamingSession};
 pub use acp_permission::{AcpPermissionHandler, AcpPermissionState};
-pub use claude_sdk::ClaudeSdkSession;
-pub use codex_acp::CodexAcpSession;
 pub use events::{AgentEvent, AgentTurnEvent, PendingPermission, PermissionResponse};
 pub use factory::{Agent, AgentAvailability, AgentFactory};
 pub use message_adapter::event_to_message_content;
@@ -37,16 +35,11 @@ pub use permission_handler::{
 
 /// Session kind enum for unified agent management.
 ///
-/// This enum wraps both ACP and SDK session types, providing
-/// a unified interface through delegation methods.
+/// This enum wraps ACP-based external agents and OpenClaw gateway sessions.
 #[derive(Clone)]
 pub enum SessionKind {
-    /// ACP-based session (for OpenCode, Gemini, etc.)
+    /// ACP-based session (Claude Agent, Codex CLI, Gemini CLI, OpenCode, etc.)
     Acp(Arc<AcpStreamingSession>),
-    /// SDK Control Protocol session (for Claude Code)
-    Sdk(Arc<ClaudeSdkSession>),
-    /// Codex session via codex-core directly
-    CodexAcp(Arc<CodexAcpSession>),
     /// OpenClaw Gateway WebSocket session
     OpenClawWs(Arc<OpenClawWsSession>),
 }
@@ -56,8 +49,6 @@ impl SessionKind {
     pub fn session_id(&self) -> &str {
         match self {
             SessionKind::Acp(s) => s.session_id(),
-            SessionKind::Sdk(s) => s.session_id(),
-            SessionKind::CodexAcp(s) => s.session_id(),
             SessionKind::OpenClawWs(s) => s.session_id(),
         }
     }
@@ -66,8 +57,6 @@ impl SessionKind {
     pub fn agent_type(&self) -> AgentType {
         match self {
             SessionKind::Acp(s) => s.agent_type(),
-            SessionKind::Sdk(s) => s.agent_type(),
-            SessionKind::CodexAcp(s) => s.agent_type(),
             SessionKind::OpenClawWs(s) => s.agent_type(),
         }
     }
@@ -76,8 +65,6 @@ impl SessionKind {
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<AgentTurnEvent> {
         match self {
             SessionKind::Acp(s) => s.subscribe(),
-            SessionKind::Sdk(s) => s.subscribe(),
-            SessionKind::CodexAcp(s) => s.subscribe(),
             SessionKind::OpenClawWs(s) => s.subscribe(),
         }
     }
@@ -91,8 +78,6 @@ impl SessionKind {
     ) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.send_message(text, turn_id, attachments).await,
-            SessionKind::Sdk(s) => s.send_message(text, turn_id, attachments).await,
-            SessionKind::CodexAcp(s) => s.send_message(text, turn_id, attachments).await,
             SessionKind::OpenClawWs(s) => s.send_message(text, turn_id, attachments).await,
         }
     }
@@ -101,8 +86,6 @@ impl SessionKind {
     pub async fn interrupt(&self) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.interrupt().await,
-            SessionKind::Sdk(s) => s.interrupt().await,
-            SessionKind::CodexAcp(s) => s.interrupt().await,
             SessionKind::OpenClawWs(s) => s.interrupt().await,
         }
     }
@@ -113,8 +96,6 @@ impl SessionKind {
     ) -> std::result::Result<Vec<PendingPermission>, String> {
         match self {
             SessionKind::Acp(s) => s.get_pending_permissions().await,
-            SessionKind::Sdk(s) => s.get_pending_permissions().await,
-            SessionKind::CodexAcp(s) => s.get_pending_permissions().await,
             SessionKind::OpenClawWs(s) => s.get_pending_permissions().await,
         }
     }
@@ -124,15 +105,40 @@ impl SessionKind {
         &self,
         request_id: String,
         approved: bool,
+        approve_for_session: bool,
         reason: Option<String>,
     ) -> std::result::Result<(), String> {
         match self {
-            SessionKind::Acp(s) => s.respond_to_permission(request_id, approved, reason).await,
-            SessionKind::Sdk(s) => s.respond_to_permission(request_id, approved, reason).await,
-            SessionKind::CodexAcp(s) => s.respond_to_permission(request_id, approved, reason).await,
-            SessionKind::OpenClawWs(s) => {
-                s.respond_to_permission(request_id, approved, reason).await
+            SessionKind::Acp(s) => {
+                s.respond_to_permission(request_id, approved, approve_for_session, reason)
+                    .await
             }
+            SessionKind::OpenClawWs(s) => {
+                s.respond_to_permission(request_id, approved, approve_for_session, reason)
+                    .await
+            }
+        }
+    }
+
+    /// Set permission mode for this session.
+    pub async fn set_permission_mode(
+        &self,
+        mode: PermissionMode,
+    ) -> std::result::Result<(), String> {
+        match self {
+            SessionKind::Acp(s) => {
+                s.set_permission_mode(mode).await;
+                Ok(())
+            }
+            SessionKind::OpenClawWs(s) => s.set_permission_mode(mode).await,
+        }
+    }
+
+    /// Get permission mode for this session.
+    pub async fn get_permission_mode(&self) -> std::result::Result<PermissionMode, String> {
+        match self {
+            SessionKind::Acp(s) => Ok(s.get_permission_mode().await),
+            SessionKind::OpenClawWs(s) => Ok(s.get_permission_mode().await),
         }
     }
 
@@ -140,8 +146,6 @@ impl SessionKind {
     pub async fn shutdown(&self) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.shutdown().await,
-            SessionKind::Sdk(s) => s.shutdown().await,
-            SessionKind::CodexAcp(s) => s.shutdown().await,
             SessionKind::OpenClawWs(s) => s.shutdown().await,
         }
     }
@@ -150,7 +154,7 @@ impl SessionKind {
 /// Agent manager for managing multiple agent sessions
 ///
 /// The AgentManager is responsible for creating and managing agent sessions.
-/// ClaudeCode uses SDK Control Protocol; other agents use ACP.
+/// External agents are launched as ACP-compatible processes (Zed-style external agents).
 #[derive(Clone)]
 pub struct AgentManager {
     /// Active sessions by session ID
@@ -205,8 +209,7 @@ impl AgentManager {
 
     /// Start an agent session with specific session ID
     ///
-    /// For ClaudeCode, this creates a SDK Control Protocol session.
-    /// For other agents, this creates an ACP-based session.
+    /// For all external agents, this creates an ACP-based session.
     pub async fn start_session_with_id(
         &self,
         session_id: String,
@@ -220,24 +223,79 @@ impl AgentManager {
         info!("Starting {:?} session with ID: {}", agent_type, session_id);
 
         // Perform availability check before starting to provide better error messages
+        let launch_config = AgentFactory::get_acp_launch(agent_type);
+
         if binary_path.is_none() {
-            let agent = AgentFactory::create(agent_type);
-            match agent.check_available() {
+            match AgentFactory::check_available_with_config(agent_type) {
                 Ok(availability) => {
                     if !availability.available {
                         let mut error_msg = format!(
                             "Agent {:?} is not available. Please ensure '{}' is installed and in your PATH.",
                             agent_type,
-                            agent.command()
+                            availability.executable
                         );
 
                         // Provide specific instructions for common agents
                         match agent_type {
                             AgentType::ClaudeCode => {
-                                error_msg += " You can install it with: npm install -g @anthropic-ai/claude-code";
+                                let installed = task::spawn_blocking(|| try_install_claude_acp())
+                                    .await
+                                    .unwrap_or_else(|_| Ok(false))?;
+
+                                if installed {
+                                    match AgentFactory::check_available_with_config(agent_type) {
+                                        Ok(recheck) if recheck.available => {
+                                            info!("✅ Claude Agent ACP adapter installed successfully.");
+                                        }
+                                        _ => {
+                                            error_msg += " Auto-install attempted but still not available. Please ensure claude-agent-acp is on PATH or pass an explicit --binary-path.";
+                                            return Err(anyhow!(error_msg));
+                                        }
+                                    }
+                                } else {
+                                    error_msg += " Auto-install failed. Install @zed-industries/claude-agent-acp or pass an explicit --binary-path.";
+                                    return Err(anyhow!(error_msg));
+                                }
+                            }
+                            AgentType::Codex => {
+                                let installed = task::spawn_blocking(|| try_install_codex_acp())
+                                    .await
+                                    .unwrap_or_else(|_| Ok(false))?;
+
+                                if installed {
+                                    match AgentFactory::check_available_with_config(agent_type) {
+                                        Ok(recheck) if recheck.available => {
+                                            info!("✅ Codex ACP adapter installed successfully.");
+                                        }
+                                        _ => {
+                                            error_msg += " Auto-install attempted but still not available. Please ensure codex-acp is on PATH or pass an explicit --binary-path.";
+                                            return Err(anyhow!(error_msg));
+                                        }
+                                    }
+                                } else {
+                                    error_msg += " Auto-install failed. Install @zed-industries/codex-acp or pass an explicit --binary-path.";
+                                    return Err(anyhow!(error_msg));
+                                }
                             }
                             AgentType::Gemini => {
-                                error_msg += " You can install the Gemini CLI with: npm install -g @google/gemini-code-cli";
+                                let installed = task::spawn_blocking(|| try_install_gemini_cli())
+                                    .await
+                                    .unwrap_or_else(|_| Ok(false))?;
+
+                                if installed {
+                                    match AgentFactory::check_available_with_config(agent_type) {
+                                        Ok(recheck) if recheck.available => {
+                                            info!("✅ Gemini CLI installed successfully.");
+                                        }
+                                        _ => {
+                                            error_msg += " Auto-install attempted but still not available. Please ensure gemini is on PATH or pass an explicit --binary-path.";
+                                            return Err(anyhow!(error_msg));
+                                        }
+                                    }
+                                } else {
+                                    error_msg += " Auto-install failed. Install @google/gemini-cli or pass an explicit --binary-path.";
+                                    return Err(anyhow!(error_msg));
+                                }
                             }
                             _ => {}
                         }
@@ -250,53 +308,59 @@ impl AgentManager {
                         "Pre-start availability check failed for {:?}: {}",
                         agent_type, err
                     );
+
+                    let installed = match agent_type {
+                        AgentType::ClaudeCode => {
+                            task::spawn_blocking(|| try_install_claude_acp())
+                                .await
+                                .unwrap_or_else(|_| Ok(false))?
+                        }
+                        AgentType::Codex => {
+                            task::spawn_blocking(|| try_install_codex_acp())
+                                .await
+                                .unwrap_or_else(|_| Ok(false))?
+                        }
+                        AgentType::Gemini => {
+                            task::spawn_blocking(|| try_install_gemini_cli())
+                                .await
+                                .unwrap_or_else(|_| Ok(false))?
+                        }
+                        _ => false,
+                    };
+
+                    if installed {
+                        match AgentFactory::check_available_with_config(agent_type) {
+                            Ok(recheck) if recheck.available => {
+                                info!("✅ Agent auto-install succeeded for {:?}", agent_type);
+                            }
+                            _ => {
+                                return Err(anyhow!(
+                                    "Agent auto-install attempted but still not available. Please ensure it is on PATH or pass an explicit --binary-path."
+                                ));
+                            }
+                        }
+                    } else if matches!(
+                        agent_type,
+                        AgentType::ClaudeCode | AgentType::Codex | AgentType::Gemini
+                    ) {
+                        return Err(anyhow!(
+                            "Agent auto-install failed. Install the agent CLI or pass an explicit --binary-path."
+                        ));
+                    }
                 }
             }
         }
 
-        let session: Arc<SessionKind> = if agent_type == AgentType::ClaudeCode {
-            // Claude Code uses SDK Control Protocol
-            let (command, _default_args) = AgentFactory::get_sdk_command(agent_type)
-                .ok_or_else(|| anyhow!("No SDK command available for ClaudeCode"))?;
-
-            // Only pass extra_args; run_sdk_runtime adds the SDK flags itself
-            let args = extra_args;
-
-            let sdk_session = ClaudeSdkSession::spawn(
-                session_id.clone(),
-                agent_type,
-                binary_path.unwrap_or(command),
-                args,
-                working_dir.clone(),
-                home_dir,
-            )
-            .await
-            .with_context(|| format!("Failed to start SDK session for {:?}", agent_type))?;
-
-            Arc::new(SessionKind::Sdk(Arc::new(sdk_session)))
-        } else if agent_type == AgentType::Codex {
-            // Codex uses codex-core directly (in-process)
-            let codex_session = CodexAcpSession::spawn(
-                session_id.clone(),
-                agent_type,
-                working_dir.clone(),
-                home_dir,
-            )
-            .await
-            .with_context(|| format!("Failed to start Codex session"))?;
-
-            Arc::new(SessionKind::CodexAcp(Arc::new(codex_session)))
-        } else if agent_type == AgentType::OpenClaw {
+        let session: Arc<SessionKind> = if agent_type == AgentType::OpenClaw {
             // OpenClaw uses WebSocket Gateway mode
-            let (command, default_args) = AgentFactory::get_acp_command(agent_type);
-
-            let mut args = default_args;
+            let command = binary_path.unwrap_or(launch_config.command);
+            let mut args = launch_config.args;
             args.extend(extra_args);
 
             let openclaw_session = OpenClawWsSession::spawn(
                 session_id.clone(),
                 agent_type,
-                binary_path.unwrap_or(command),
+                command,
                 args,
                 working_dir.clone(),
                 home_dir,
@@ -306,17 +370,17 @@ impl AgentManager {
 
             Arc::new(SessionKind::OpenClawWs(Arc::new(openclaw_session)))
         } else {
-            // Other agents use ACP
-            let (command, default_args) = AgentFactory::get_acp_command(agent_type);
-
-            let mut args = default_args;
+            // All other agents use ACP (external agent model)
+            let command = binary_path.unwrap_or(launch_config.command);
+            let mut args = launch_config.args;
             args.extend(extra_args);
 
             let acp_session = AcpStreamingSession::spawn(
                 session_id.clone(),
                 agent_type,
-                binary_path.unwrap_or(command),
+                command,
                 args,
+                launch_config.env,
                 working_dir.clone(),
                 home_dir,
             )
@@ -357,17 +421,153 @@ impl AgentManager {
         let mut metadata_map = self.session_metadata.write().await;
         metadata_map.insert(session_id.clone(), metadata);
 
-        let protocol_name = if agent_type == AgentType::ClaudeCode {
-            "SDK Control Protocol"
-        } else if agent_type == AgentType::Codex {
-            "Codex (codex-core)"
-        } else if agent_type == AgentType::OpenClaw {
+        let protocol_name = if agent_type == AgentType::OpenClaw {
             "OpenClaw (WebSocket Gateway)"
         } else {
-            "ACP"
+            "ACP (External Agent)"
         };
         info!("✅ {} session started: {}", protocol_name, session_id);
         Ok(())
+    }
+
+    /// Start an agent session from a history entry (ACP load/resume)
+    pub async fn start_session_from_history(
+        &self,
+        agent_type: AgentType,
+        history_session_id: String,
+        binary_path: Option<String>,
+        extra_args: Vec<String>,
+        working_dir: PathBuf,
+        home_dir: Option<String>,
+        _source: String,
+        resume: bool,
+    ) -> Result<String> {
+        let session_id = uuid::Uuid::new_v4().to_string();
+        info!(
+            "Starting {:?} history session with ID: {} (history={})",
+            agent_type, session_id, history_session_id
+        );
+
+        let launch_config = AgentFactory::get_acp_launch(agent_type);
+
+        if binary_path.is_none() {
+            match AgentFactory::check_available_with_config(agent_type) {
+                Ok(availability) => {
+                    if !availability.available {
+                        let mut error_msg = format!(
+                            "Agent {:?} is not available. Please ensure '{}' is installed and in your PATH.",
+                            agent_type,
+                            availability.executable
+                        );
+                        match agent_type {
+                            AgentType::ClaudeCode => {
+                                error_msg += " Install a Claude Agent ACP adapter (e.g. claude-agent-acp) or pass an explicit --binary-path.";
+                            }
+                            AgentType::Codex => {
+                                error_msg += " Install a Codex ACP adapter (e.g. codex-acp) or pass an explicit --binary-path.";
+                            }
+                            AgentType::Gemini => {
+                                error_msg += " Install the Gemini CLI (e.g. npm install -g @google/gemini-cli) or pass an explicit --binary-path.";
+                            }
+                            _ => {}
+                        }
+                        return Err(anyhow!(error_msg));
+                    }
+                }
+                Err(err) => {
+                    warn!(
+                        "Pre-start availability check failed for {:?}: {}",
+                        agent_type, err
+                    );
+                }
+            }
+        }
+
+        if agent_type == AgentType::OpenClaw {
+            return Err(anyhow!("OpenClaw does not support history load"));
+        }
+
+        let command = binary_path.unwrap_or(launch_config.command);
+        let mut args = launch_config.args;
+        args.extend(extra_args);
+
+        let start_mode = if resume {
+            AcpSessionStartMode::Resume {
+                session_id: history_session_id,
+            }
+        } else {
+            AcpSessionStartMode::Load {
+                session_id: history_session_id,
+            }
+        };
+
+        let acp_session = AcpStreamingSession::spawn_with_start_mode(
+            session_id.clone(),
+            agent_type,
+            command,
+            args,
+            launch_config.env,
+            working_dir.clone(),
+            home_dir,
+            start_mode,
+            acp::RetryConfig::default(),
+        )
+        .await
+        .with_context(|| format!("Failed to load ACP history session for {:?}", agent_type))?;
+
+        // Store session
+        let mut sessions = self.sessions.write().await;
+        sessions.insert(session_id.clone(), Arc::new(SessionKind::Acp(Arc::new(acp_session))));
+
+        let project_path_str = working_dir.to_string_lossy().to_string();
+        let hostname = gethostname::gethostname().to_string_lossy().to_string();
+        let machine_id = gethostname::gethostname().to_string_lossy().to_string();
+
+        let metadata = AgentSessionMetadata {
+            session_id: session_id.clone(),
+            agent_type,
+            project_path: project_path_str.clone(),
+            started_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            active: true,
+            controlled_by_remote: false,
+            hostname: hostname.clone(),
+            os: std::env::consts::OS.to_string(),
+            agent_version: None,
+            current_dir: project_path_str,
+            git_branch: None,
+            machine_id,
+        };
+
+        drop(sessions);
+        let mut metadata_map = self.session_metadata.write().await;
+        metadata_map.insert(session_id.clone(), metadata);
+
+        info!("✅ ACP history session started: {}", session_id);
+        Ok(session_id)
+    }
+
+    pub async fn list_agent_history(
+        &self,
+        agent_type: AgentType,
+        working_dir: PathBuf,
+        home_dir: Option<String>,
+    ) -> Result<Vec<AgentHistoryEntry>> {
+        if agent_type == AgentType::OpenClaw {
+            return Ok(Vec::new());
+        }
+        let launch_config = AgentFactory::get_acp_launch(agent_type);
+        acp::list_agent_history(
+            agent_type,
+            launch_config.command,
+            launch_config.args,
+            launch_config.env,
+            working_dir,
+            home_dir,
+        )
+        .await
     }
 
     /// Stop an agent session
@@ -542,19 +742,105 @@ impl AgentManager {
         session_id: &str,
         request_id: String,
         approved: bool,
+        approve_for_session: bool,
         reason: Option<String>,
     ) -> Result<()> {
         let sessions = self.sessions.read().await;
 
         if let Some(session) = sessions.get(session_id) {
             session
-                .respond_to_permission(request_id, approved, reason)
+                .respond_to_permission(request_id, approved, approve_for_session, reason)
                 .await
                 .map_err(|e| anyhow!("Failed to respond to permission: {}", e))
         } else {
             Err(anyhow!("Session not found: {}", session_id))
         }
     }
+
+    /// Set permission mode for a session
+    pub async fn set_permission_mode(
+        &self,
+        session_id: &str,
+        mode: PermissionMode,
+    ) -> Result<()> {
+        let sessions = self.sessions.read().await;
+
+        if let Some(session) = sessions.get(session_id) {
+            session
+                .set_permission_mode(mode)
+                .await
+                .map_err(|e| anyhow!("Failed to set permission mode: {}", e))
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Get permission mode for a session
+    pub async fn get_permission_mode(&self, session_id: &str) -> Result<PermissionMode> {
+        let sessions = self.sessions.read().await;
+
+        if let Some(session) = sessions.get(session_id) {
+            session
+                .get_permission_mode()
+                .await
+                .map_err(|e| anyhow!("Failed to get permission mode: {}", e))
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+}
+
+fn command_exists(command: &str) -> bool {
+    std::process::Command::new(command)
+        .arg("--version")
+        .env("PATH", get_extended_path())
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn try_install_claude_acp() -> Result<bool> {
+    try_install_package("@zed-industries/claude-agent-acp", "Claude Agent ACP")
+}
+
+fn try_install_codex_acp() -> Result<bool> {
+    try_install_package("@zed-industries/codex-acp", "Codex ACP")
+}
+
+fn try_install_gemini_cli() -> Result<bool> {
+    try_install_package("@google/gemini-cli", "Gemini CLI")
+}
+
+fn try_install_package(package: &str, label: &str) -> Result<bool> {
+    let installers: [(&str, &[&str]); 4] = [
+        ("pnpm", &["add", "-g", package]),
+        ("npm", &["install", "-g", package]),
+        ("bun", &["add", "-g", package]),
+        ("yarn", &["global", "add", package]),
+    ];
+
+    for (tool, args) in installers {
+        if !command_exists(tool) {
+            continue;
+        }
+        info!("Attempting to install {} via {}...", label, tool);
+        let status = std::process::Command::new(tool)
+            .args(args)
+            .env("PATH", get_extended_path())
+            .status();
+
+        match status {
+            Ok(status) if status.success() => return Ok(true),
+            Ok(status) => {
+                warn!("Installer {} failed with status: {}", tool, status);
+            }
+            Err(err) => {
+                warn!("Installer {} failed to start: {}", tool, err);
+            }
+        }
+    }
+
+    Ok(false)
 }
 
 impl Default for AgentManager {

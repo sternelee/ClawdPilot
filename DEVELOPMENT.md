@@ -199,6 +199,24 @@ pnpm tsc
 - `OPENAI_API_KEY`: For AI features (in production)
 - `GITHUB_TOKEN`: For release automation (provided by Actions)
 
+### External Agent Configuration
+
+External agents are launched via ACP and can be overridden in:
+
+- `~/.config/clawdchat/agents.json` (XDG) or `~/.clawdchat/agents.json`
+
+Example:
+
+```json
+{
+  "agents": {
+    "claude": { "command": "claude-agent-acp", "args": [], "env": {} },
+    "codex": { "command": "codex-acp", "args": [], "env": {} },
+    "gemini": { "command": "gemini", "args": ["--stdio"], "env": {} }
+  }
+}
+```
+
 ### Tauri Configuration
 
 See `app/tauri.conf.json` for:

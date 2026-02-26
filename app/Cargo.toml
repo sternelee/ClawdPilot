@@ -59,7 +59,7 @@ default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 release-logging = []
 
-# Mobile build: use mobile feature to exclude heavy agent dependencies (codex-core, agent-client-protocol, etc.)
+# Mobile build: use mobile feature to exclude heavy agent dependencies (agent-client-protocol, portable-pty, etc.)
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 shared = { path = "../shared", default-features = false, features = ["mobile"] }
 tauri-plugin-barcode-scanner = "2"

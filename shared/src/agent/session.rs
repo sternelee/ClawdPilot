@@ -52,7 +52,13 @@ pub trait AgentSession: Send + Sync {
     fn get_pending_permissions(&self) -> impl std::future::Future<Output = Vec<PendingPermission>> + Send;
 
     /// Respond to a permission request
-    fn respond_to_permission(&self, request_id: &str, approved: bool, reason: Option<String>) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    fn respond_to_permission(
+        &self,
+        request_id: &str,
+        approved: bool,
+        approve_for_session: bool,
+        reason: Option<String>,
+    ) -> impl std::future::Future<Output = Result<(), String>> + Send;
 }
 
 /// Shared state for managing agent processes

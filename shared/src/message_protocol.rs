@@ -466,7 +466,7 @@ pub struct UserInfo {
 /// AI Agent 类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AgentType {
-    /// Claude Code (Anthropic) — SDK Control Protocol
+    /// Claude Agent (Anthropic) — ACP
     ClaudeCode,
     /// OpenCode (OpenAI)
     OpenCode,
@@ -520,6 +520,17 @@ pub enum AgentSessionAction {
     StopSession { session_id: String },
     /// 心跳更新
     Heartbeat { sequence: u64 },
+}
+
+/// External agent history entry (ACP session list)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentHistoryEntry {
+    pub agent_type: AgentType,
+    pub session_id: String,
+    pub title: Option<String>,
+    pub updated_at: Option<String>,
+    pub cwd: Option<String>,
+    pub meta: Option<serde_json::Value>,
 }
 
 /// AI Agent 消息内容类型
@@ -647,6 +658,10 @@ pub enum AgentControlAction {
     Resume,
     /// 终止 Agent
     Terminate,
+    /// Set permission mode for agent tools
+    SetPermissionMode { mode: AgentPermissionMode },
+    /// Get current permission mode
+    GetPermissionMode,
     /// 发送用户输入
     SendInput {
         content: String,
@@ -656,6 +671,19 @@ pub enum AgentControlAction {
     SendInterrupt,
     /// 获取 Agent 状态
     GetStatus,
+}
+
+/// Permission modes for agent tool approval
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AgentPermissionMode {
+    /// Always ask for approval
+    AlwaysAsk,
+    /// Auto-approve file edits, ask for other tools
+    AcceptEdits,
+    /// Auto-approve all tools
+    AutoApprove,
+    /// Read-only mode, approve reads automatically
+    Plan,
 }
 
 /// AI Agent 元数据更新

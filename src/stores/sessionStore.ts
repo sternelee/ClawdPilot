@@ -25,8 +25,6 @@ export type AgentType =
 
 export type SessionMode = "remote" | "local";
 
-export type SessionStatus = "active" | "paused" | "completed";
-
 export interface AgentSessionMetadata {
   sessionId: string;
   agentType: AgentType;
@@ -46,34 +44,9 @@ export interface AgentSessionMetadata {
   controlSessionId?: string; // ID of the connection session
 }
 
-// Chat message for persistent storage
-export interface ChatMessage {
-  id: string;
-  isUser: boolean;
-  content: string;
-  timestamp: number;
-  sequence: number;
-}
-
-// Session record for persistent storage
-// Note: agentType can be either camelCase from backend (claudeCode, openCode) or lowercase from frontend (claude, opencode)
-export interface SessionRecord {
-  sessionId: string;
-  agentType: AgentType | string;
-  projectPath: string;
-  startedAt: number;
-  lastActiveAt: number;
-  status: SessionStatus;
-  hostname: string;
-  os: string;
-  messages: ChatMessage[];
-  metadataJson: string;
-}
-
-// Session filter for listing
+// Session filter for listing (reserved for future use)
 export interface SessionFilter {
   agentType?: AgentType;
-  status?: SessionStatus;
   projectPath?: string;
   limit?: number;
   offset?: number;
@@ -95,15 +68,12 @@ interface SessionState {
   connectionState: ConnectionState;
   lastConnected: number | null;
 
-  // Saved/Persistent sessions
-  savedSessions: SessionRecord[];
-  isLoadingSavedSessions: boolean;
-
   // New Session Modal State
   isNewSessionModalOpen: boolean;
   newSessionMode: SessionMode;
   newSessionAgent: AgentType;
   newSessionPath: string;
+  newSessionArgs: string;
   sessionTicket: string;
   targetControlSessionId: string | null;
 
@@ -131,13 +101,11 @@ const initialState: SessionState = {
   connectionState: "disconnected",
   lastConnected: null,
 
-  savedSessions: [],
-  isLoadingSavedSessions: false,
-
   isNewSessionModalOpen: false,
   newSessionMode: "remote",
   newSessionAgent: "claude",
   newSessionPath: "",
+  newSessionArgs: "",
   sessionTicket: "",
   targetControlSessionId: null,
 
@@ -267,6 +235,10 @@ export const createSessionStore = () => {
     setState("newSessionPath", path);
   };
 
+  const setNewSessionArgs = (args: string) => {
+    setState("newSessionArgs", args);
+  };
+
   const setSessionTicket = (ticket: string) => {
     setState("sessionTicket", ticket);
   };
@@ -386,7 +358,28 @@ export const createSessionStore = () => {
   };
 
   const buildExtraArgs = (): string[] => {
-    return [];
+    const raw = state.newSessionArgs.trim();
+    if (!raw) return [];
+
+    if (raw.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.every((v) => typeof v === "string")) {
+          return parsed;
+        }
+        notificationStore.error(
+          "Args must be a JSON array of strings",
+          "Invalid Args",
+        );
+        return [];
+      } catch {
+        notificationStore.error("Args JSON is invalid", "Invalid Args");
+        return [];
+      }
+    }
+
+    const matches = raw.match(/(?:[^\s\"]+|\"[^\"]*\")+/g) || [];
+    return matches.map((arg) => arg.replace(/^\"|\"$/g, ""));
   };
 
   const handleRemoteSpawn = async () => {
@@ -417,6 +410,7 @@ export const createSessionStore = () => {
       );
       closeNewSessionModal();
       setNewSessionPath("");
+      setNewSessionArgs("");
     } catch (error) {
       console.error(
         "[handleRemoteSpawn] Failed to spawn remote session:",
@@ -474,6 +468,7 @@ export const createSessionStore = () => {
       setActiveSession(sessionId);
       closeNewSessionModal();
       setNewSessionPath("");
+      setNewSessionArgs("");
     } catch (error) {
       console.error(
         "[handleCreateSession] Failed to start local agent:",
@@ -501,208 +496,6 @@ export const createSessionStore = () => {
       notificationStore.error("Failed to initialize network", "Error");
       throw error;
     }
-  };
-
-  // ========================================================================
-  // Persistent Session Storage
-  // ========================================================================
-
-  const loadSavedSessions = async (filter?: SessionFilter) => {
-    setState("isLoadingSavedSessions", true);
-    try {
-      const sessions = await invoke<SessionRecord[]>("list_sessions", {
-        agentType: filter?.agentType,
-        status: filter?.status,
-        projectPath: filter?.projectPath,
-        limit: filter?.limit,
-        offset: filter?.offset,
-      });
-      setState("savedSessions", sessions);
-      return sessions;
-    } catch (error) {
-      console.error("Failed to load saved sessions:", error);
-      notificationStore.error("Failed to load saved sessions", "Error");
-      return [];
-    } finally {
-      setState("isLoadingSavedSessions", false);
-    }
-  };
-
-  const saveSession = async (
-    sessionId: string,
-    agentType: AgentType,
-    projectPath: string,
-    messages: ChatMessage[],
-    metadataJson: string = "{}",
-  ) => {
-    try {
-      const hostname = "localhost"; // Could be dynamically determined
-      const os = navigator.userAgent;
-
-      await invoke("save_session", {
-        sessionId,
-        agentType,
-        projectPath,
-        hostname,
-        os,
-        messages,
-        metadataJson,
-      });
-      console.log("Session saved:", sessionId);
-    } catch (error) {
-      console.error("Failed to save session:", error);
-      notificationStore.error("Failed to save session", "Error");
-    }
-  };
-
-  const addSessionMessage = async (sessionId: string, message: ChatMessage) => {
-    try {
-      await invoke("addSessionMessage", {
-        sessionId,
-        message,
-      });
-    } catch (error) {
-      console.error("Failed to add session message:", error);
-    }
-  };
-
-  const loadSession = async (
-    sessionId: string,
-  ): Promise<SessionRecord | null> => {
-    try {
-      const session = await invoke<SessionRecord | null>("loadSession", {
-        sessionId,
-      });
-      return session;
-    } catch (error) {
-      console.error("Failed to load session:", error);
-      notificationStore.error("Failed to load session", "Error");
-      return null;
-    }
-  };
-
-  const deleteSavedSession = async (sessionId: string) => {
-    try {
-      await invoke("deleteSession", { sessionId });
-      // Update local state
-      setState(
-        produce((s: SessionState) => {
-          s.savedSessions = s.savedSessions.filter(
-            (session) => session.sessionId !== sessionId,
-          );
-        }),
-      );
-      console.log("Session deleted:", sessionId);
-    } catch (error) {
-      console.error("Failed to delete session:", error);
-      notificationStore.error("Failed to delete session", "Error");
-    }
-  };
-
-  const updateSessionStatus = async (
-    sessionId: string,
-    status: SessionStatus,
-  ) => {
-    try {
-      await invoke("updateSessionStatus", {
-        sessionId,
-        status,
-      });
-      console.log("Session status updated:", sessionId, status);
-    } catch (error) {
-      console.error("Failed to update session status:", error);
-      notificationStore.error("Failed to update session status", "Error");
-    }
-  };
-
-  // Restore a saved session - starts a new agent session with the saved context
-  const restoreSession = async (sessionId: string): Promise<string | null> => {
-    try {
-      // Load the saved session
-      const savedSession = await loadSession(sessionId);
-      if (!savedSession) {
-        notificationStore.error("Session not found", "Error");
-        return null;
-      }
-
-      // Start a new agent session
-      const newSessionId = await invoke<string>("local_start_agent", {
-        agentTypeStr: savedSession.agentType,
-        projectPath: savedSession.projectPath,
-        sessionId: undefined,
-        extraArgs: undefined,
-      });
-
-      // Replay messages to restore context
-      if (savedSession.messages && savedSession.messages.length > 0) {
-        console.log(
-          "[restoreSession] Replaying",
-          savedSession.messages.length,
-          "messages to session",
-          newSessionId,
-        );
-
-        // Convert stored messages to the format expected by replay command
-        const replayMessages = savedSession.messages.map((msg) => ({
-          id: msg.id,
-          isUser: msg.isUser,
-          content: msg.content,
-          timestamp: msg.timestamp,
-          sequence: msg.sequence,
-        }));
-
-        await invoke("replayAgentMessages", {
-          sessionId: newSessionId,
-          messages: replayMessages,
-        });
-      }
-
-      // Mark the saved session as "paused" since it's now active
-      await updateSessionStatus(sessionId, "paused");
-
-      // Reload saved sessions
-      await loadSavedSessions();
-
-      return newSessionId;
-    } catch (error) {
-      console.error("Failed to restore session:", error);
-      notificationStore.error("Failed to restore session", "Error");
-      return null;
-    }
-  };
-
-  // Auto-save helper - converts chat messages to storage format and saves
-  const autoSaveSession = async (
-    sessionId: string,
-    chatMessages: Array<{ role: string; content: string; thinking?: boolean }>,
-  ) => {
-    const session = state.sessions[sessionId];
-    if (!session) {
-      console.warn("[autoSaveSession] Session not found:", sessionId);
-      return;
-    }
-
-    // Convert chat messages to storage format
-    const messages: ChatMessage[] = chatMessages.map((msg, index) => ({
-      id: crypto.randomUUID(),
-      isUser: msg.role === "user",
-      content: msg.content,
-      timestamp: Date.now() + index, // Use index to ensure ordering
-      sequence: index,
-    }));
-
-    await saveSession(
-      sessionId,
-      session.agentType,
-      session.projectPath,
-      messages,
-      JSON.stringify({
-        hostname: session.hostname,
-        os: session.os,
-        currentDir: session.currentDir,
-        gitBranch: session.gitBranch,
-      }),
-    );
   };
 
   // ========================================================================
@@ -737,6 +530,7 @@ export const createSessionStore = () => {
     setNewSessionMode,
     setNewSessionAgent,
     setNewSessionPath,
+    setNewSessionArgs,
     setSessionTicket,
     setConnectionError,
     setConnecting,
@@ -758,16 +552,6 @@ export const createSessionStore = () => {
     handleCreateSession,
     handleRemoteConnect,
     handleRemoteSpawn,
-
-    // Persistent Session Storage
-    loadSavedSessions,
-    saveSession,
-    addSessionMessage,
-    loadSession,
-    deleteSavedSession,
-    updateSessionStatus,
-    restoreSession,
-    autoSaveSession,
 
     // Derived
     getActiveSessions,

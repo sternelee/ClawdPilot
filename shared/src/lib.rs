@@ -4,15 +4,11 @@ pub mod agent;
 pub mod event_manager;
 pub mod message_protocol;
 pub mod quic_server;
-pub mod session_store;
 pub mod util;
 
 pub use event_manager::*;
 pub use message_protocol::*;
 pub use quic_server::*;
-pub use session_store::{
-    ChatMessage, SessionFilter, SessionRecord, SessionStatus, SessionStore, create_session_store,
-};
 pub use util::*;
 
 #[cfg(feature = "std")]

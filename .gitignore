@@ -5,6 +5,7 @@ logs
 *.jks
 keystore.properties
 clawdchat_secret_key
-.claude/tsc-cache
+tsc-cache
 .output
 .vinxi
+*.xml

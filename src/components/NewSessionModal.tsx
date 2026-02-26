@@ -316,11 +316,11 @@ export const NewSessionModal: Component = () => {
                   }
                   fallback={
                     <>
-                      <option value="claude">Claude Code</option>
+                      <option value="claude">Claude Agent</option>
                       <option value="codex">Codex</option>
                       <option value="openclaw">OpenClaw</option>
                       <option value="opencode">OpenCode</option>
-                      <option value="gemini">Gemini CLI</option>
+                      <option value="gemini">Gemini</option>
                     </>
                   }
                 >
@@ -373,6 +373,22 @@ export const NewSessionModal: Component = () => {
                   : "Type a path to autocomplete directory names"}
               </p>
             </div>
+
+            <div class="mb-4 space-y-2">
+              <Label for="agent-args">Agent Args</Label>
+              <Textarea
+                id="agent-args"
+                class="h-20 font-mono text-sm"
+                placeholder='e.g. --model gpt-5 --max-tokens 2048 or ["--model","gpt-5"]'
+                value={sessionStore.state.newSessionArgs}
+                onInput={(e) => {
+                  sessionStore.setNewSessionArgs(e.currentTarget.value);
+                }}
+              />
+              <p class="text-xs text-muted-foreground">
+                Passed to the agent process. Supports JSON array or space-separated args.
+              </p>
+            </div>
           </Show>
 
           <div class="mt-8 flex justify-end gap-2">
@@ -383,6 +399,7 @@ export const NewSessionModal: Component = () => {
                 sessionStore.closeNewSessionModal();
                 sessionStore.setConnectionError(null);
                 sessionStore.setSessionTicket("");
+                sessionStore.setNewSessionArgs("");
               }}
             >
               Cancel

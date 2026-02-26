@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -26,10 +27,10 @@ mod tcp_forwarding;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use shared::AgentManager;
 use shared::{
-    AgentControlAction, AgentPermissionResponse, AgentType, CommunicationManager, DirEntry, Event,
-    EventListener, EventType, FileBrowserAction, Message as ClawdChatMessage, MessageBuilder,
-    MessagePayload, QuicMessageClientHandle, SessionStore, TcpDataType, TcpForwardingAction,
-    TcpForwardingType,
+    AgentControlAction, AgentPermissionMode, AgentPermissionResponse, AgentType,
+    CommunicationManager, DirEntry, Event, EventListener, EventType, FileBrowserAction,
+    Message as ClawdChatMessage, MessageBuilder, MessagePayload, QuicMessageClientHandle,
+    TcpDataType, TcpForwardingAction, TcpForwardingType,
 };
 
 use crate::tcp_forwarding::TcpForwardingManager;
@@ -132,8 +133,6 @@ pub struct AppState {
     quic_client: RwLock<Option<QuicMessageClientHandle>>,
     cleanup_token: RwLock<Option<CancellationToken>>,
     tcp_forwarding_manager: Arc<tokio::sync::Mutex<TcpForwardingManager>>,
-    // Session store for persistent session data (initialized in setup for mobile support)
-    session_store: Arc<RwLock<Option<shared::session_store::SqliteSessionStore>>>,
     // Local agent manager for in-app agent sessions (desktop only)
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     agent_manager: Arc<RwLock<Option<Arc<AgentManager>>>>,
@@ -147,8 +146,6 @@ impl Default for AppState {
             quic_client: RwLock::new(None),
             cleanup_token: RwLock::new(None),
             tcp_forwarding_manager: Arc::new(tokio::sync::Mutex::new(TcpForwardingManager::new())),
-            // Session store will be initialized in setup()
-            session_store: Arc::new(RwLock::new(None)),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             agent_manager: Arc::new(RwLock::new(None)),
         }
@@ -165,6 +162,15 @@ pub struct ConnectionSession {
     pub event_count: Arc<std::sync::atomic::AtomicUsize>,
     // Note: message_receiver is not included here as it can't be cloned
     // It's managed separately in the connection task
+}
+
+#[derive(Serialize)]
+struct PendingPermissionDto {
+    request_id: String,
+    tool_name: String,
+    tool_params: Value,
+    message: Option<String>,
+    created_at: u64,
 }
 
 /// App Event Listener that converts events to Tauri emissions
@@ -239,13 +245,6 @@ impl EventListener for AppEventListener {
                 let _ = self.app_handle.emit(
                     &format!("peer-disconnected-{}", self.session_id),
                     &event.data,
-                );
-                // Also emit a global event for the session store to handle
-                let _ = self.app_handle.emit(
-                    "peer-disconnected",
-                    &serde_json::json!({
-                        "sessionId": self.session_id,
-                    }),
                 );
             }
             _ => {}
@@ -867,6 +866,7 @@ async fn connect_to_peer(
                                                 "toolName": request.tool_name,
                                                 "toolParams": request.tool_params,
                                                 "description": request.description,
+                                                "requestedAt": request.requested_at,
                                             })
                                         );
                                     }
@@ -1161,6 +1161,47 @@ async fn send_message_via_client(
     } else {
         Err("QUIC client not available".to_string())
     }
+}
+
+// Helper function to send a message and wait for a ResponseMessage with matching request_id
+async fn send_message_via_client_with_response(
+    state: &State<'_, AppState>,
+    connection_id: &str,
+    message: ClawdChatMessage,
+    request_id: &str,
+    operation_name: &str,
+    timeout_secs: u64,
+) -> Result<shared::message_protocol::ResponseMessage, String> {
+    let client_guard = state.quic_client.read().await;
+    let Some(quic_client) = client_guard.as_ref() else {
+        return Err("QUIC client not available".to_string());
+    };
+
+    let mut receiver = quic_client.get_message_receiver().await;
+
+    quic_client
+        .send_message_to_server(connection_id, message)
+        .await
+        .map_err(|e| format!("Failed to send {} message: {}", operation_name, e))?;
+
+    let request_id = request_id.to_string();
+    let wait = async {
+        loop {
+            if let Ok(msg) = receiver.recv().await {
+                if let MessagePayload::Response(resp) = msg.payload {
+                    if resp.request_id == request_id {
+                        return resp;
+                    }
+                }
+            }
+        }
+    };
+
+    let response = tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), wait)
+        .await
+        .map_err(|_| format!("Timed out waiting for {} response", operation_name))?;
+
+    Ok(response)
 }
 
 #[tauri::command]
@@ -1897,7 +1938,7 @@ async fn local_respond_to_agent_permission(
     session_id: String,
     permission_id: String,
     approved: bool,
-    _approve_for_session: bool,
+    approve_for_session: bool,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let agent_manager_guard = state.agent_manager.read().await;
@@ -1907,7 +1948,7 @@ async fn local_respond_to_agent_permission(
         .clone();
 
     manager
-        .respond_to_permission(&session_id, permission_id, approved, None)
+        .respond_to_permission(&session_id, permission_id, approved, approve_for_session, None)
         .await
         .map_err(|e| format!("Failed to respond to local agent permission: {}", e))
 }
@@ -2113,8 +2154,25 @@ async fn local_start_agent(
             // Convert agent events to frontend format
             while let Ok(event) = event_rx.recv().await {
                 // Convert AgentTurnEvent to frontend-expected JSON
-                let event_payload =
-                    shared::message_adapter::event_to_message_content(&event.event, None);
+                let event_payload = match &event.event {
+                    shared::agent::AgentEvent::ApprovalRequest {
+                        request_id,
+                        tool_name,
+                        input,
+                        message,
+                        ..
+                    } => serde_json::json!({
+                        "type": "approval_request",
+                        "request_id": request_id,
+                        "tool_name": tool_name,
+                        "input": input,
+                        "message": message,
+                    }),
+                    _ => serde_json::to_value(
+                        shared::message_adapter::event_to_message_content(&event.event, None),
+                    )
+                    .unwrap_or_else(|_| serde_json::json!({ "type": "unknown" })),
+                };
                 let session_id_clone = session_id_for_spawn.clone();
                 let frontend_event = serde_json::json!({
                     "sessionId": session_id_clone.clone(),
@@ -2151,42 +2209,6 @@ async fn local_send_agent_message(
         .map_err(|e| format!("Failed to send message to local agent: {}", e))
 }
 
-/// Replay messages to a local agent session (for session restoration)
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[tauri::command(rename_all = "camelCase")]
-async fn replay_agent_messages(
-    session_id: String,
-    messages: Vec<shared::session_store::ChatMessage>,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let agent_manager_guard = state.agent_manager.read().await;
-    let manager = agent_manager_guard
-        .as_ref()
-        .ok_or("Agent manager not initialized")?
-        .clone();
-
-    let message_count = messages.len();
-
-    // Replay each message in order
-    for msg in messages {
-        if msg.is_user {
-            // Only replay user messages (agent responses would be regenerated)
-            // Extract attachments from the message if available
-            let attachments = msg.attachments.unwrap_or_default();
-            manager
-                .send_message(&session_id, msg.content, attachments)
-                .await
-                .map_err(|e| format!("Failed to replay message: {}", e))?;
-        }
-    }
-
-    tracing::info!(
-        "Replayed {} messages to session {}",
-        message_count,
-        session_id
-    );
-    Ok(())
-}
 
 /// Abort a local agent action
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2223,220 +2245,192 @@ async fn local_list_agents(
     Ok(manager.get_all_session_metadata().await)
 }
 
-/// Get agent session metadata (for session info display)
+/// Get pending permission requests for a local agent session
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(rename_all = "camelCase")]
-async fn local_get_agent_sessions(
+async fn local_get_pending_permissions(
+    session_id: String,
     state: State<'_, AppState>,
-) -> Result<Vec<shared::message_protocol::AgentSessionMetadata>, String> {
+) -> Result<Vec<PendingPermissionDto>, String> {
     let agent_manager_guard = state.agent_manager.read().await;
-    let manager = match agent_manager_guard.as_ref() {
-        Some(m) => m.clone(),
-        None => return Ok(Vec::new()),
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    let pending = manager
+        .get_pending_permissions(&session_id)
+        .await
+        .map_err(|e| format!("Failed to get pending permissions: {}", e))?;
+
+    Ok(pending
+        .into_iter()
+        .map(|p| PendingPermissionDto {
+            request_id: p.request_id,
+            tool_name: p.tool_name,
+            tool_params: p.tool_params,
+            message: p.message,
+            created_at: p.created_at,
+        })
+        .collect())
+}
+
+/// List external agent history sessions (ACP list_sessions)
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command(rename_all = "camelCase")]
+async fn local_list_agent_history(
+    agent_type_str: String,
+    project_path: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<shared::message_protocol::AgentHistoryEntry>, String> {
+    let agent_type = match agent_type_str.as_str() {
+        "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
+        "opencode" | "open" | "openai" => AgentType::OpenCode,
+        "codex" => AgentType::Codex,
+        "gemini" | "gemini-cli" => AgentType::Gemini,
+        "openclaw" | "open-claw" => AgentType::OpenClaw,
+        _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };
 
-    let session_ids = manager.list_sessions().await;
-    let mut sessions = Vec::new();
-    for sid in session_ids {
-        let agent_type = manager
-            .get_session_agent_type(&sid)
-            .await
-            .unwrap_or(AgentType::ClaudeCode);
-        sessions.push(shared::message_protocol::AgentSessionMetadata {
-            session_id: sid,
+    {
+        let mut agent_manager_guard = state.agent_manager.write().await;
+        if agent_manager_guard.is_none() {
+            let manager = Arc::new(AgentManager::new());
+            *agent_manager_guard = Some(manager.clone());
+        }
+    }
+
+    let expanded_project_path = if project_path.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            format!("{}{}", home, &project_path[1..])
+        } else {
+            project_path.clone()
+        }
+    } else if project_path == "~" {
+        std::env::var("HOME").unwrap_or(project_path.clone())
+    } else {
+        project_path.clone()
+    };
+
+    let working_dir = std::path::PathBuf::from(&expanded_project_path);
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    manager
+        .list_agent_history(agent_type, working_dir, None)
+        .await
+        .map_err(|e| format!("Failed to list agent history: {}", e))
+}
+
+/// Load or resume an external agent history session
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command(rename_all = "camelCase")]
+async fn local_load_agent_history(
+    agent_type_str: String,
+    history_session_id: String,
+    project_path: String,
+    resume: bool,
+    extra_args: Option<Vec<String>>,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let agent_type = match agent_type_str.as_str() {
+        "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
+        "opencode" | "open" | "openai" => AgentType::OpenCode,
+        "codex" => AgentType::Codex,
+        "gemini" | "gemini-cli" => AgentType::Gemini,
+        "openclaw" | "open-claw" => AgentType::OpenClaw,
+        _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
+    };
+
+    {
+        let mut agent_manager_guard = state.agent_manager.write().await;
+        if agent_manager_guard.is_none() {
+            let manager = Arc::new(AgentManager::new());
+            *agent_manager_guard = Some(manager.clone());
+        }
+    }
+
+    let expanded_project_path = if project_path.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            format!("{}{}", home, &project_path[1..])
+        } else {
+            project_path.clone()
+        }
+    } else if project_path == "~" {
+        std::env::var("HOME").unwrap_or(project_path.clone())
+    } else {
+        project_path.clone()
+    };
+
+    let working_dir = std::path::PathBuf::from(&expanded_project_path);
+    if !working_dir.exists() {
+        return Err(format!(
+            "Project path does not exist: {}",
+            expanded_project_path
+        ));
+    }
+
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    let session_id = manager
+        .start_session_from_history(
             agent_type,
-            project_path: String::new(),
-            started_at: 0,
-            active: true,
-            controlled_by_remote: false,
-            hostname: String::new(),
-            os: String::new(),
-            agent_version: None,
-            current_dir: String::new(),
-            git_branch: None,
-            machine_id: String::new(),
+            history_session_id,
+            None,
+            extra_args.unwrap_or_default(),
+            working_dir,
+            None,
+            "local".to_string(),
+            resume,
+        )
+        .await
+        .map_err(|e| format!("Failed to load agent history: {}", e))?;
+
+    if let Some(mut event_rx) = manager.subscribe(&session_id).await {
+        let session_id_for_spawn = session_id.clone();
+        tokio::spawn(async move {
+            while let Ok(event) = event_rx.recv().await {
+                let event_payload =
+                    shared::message_adapter::event_to_message_content(&event.event, None);
+                let session_id_clone = session_id_for_spawn.clone();
+                let frontend_event = serde_json::json!({
+                    "sessionId": session_id_clone.clone(),
+                    "turnId": event.turn_id,
+                    "event": event_payload,
+                });
+
+                let _ = app_handle.emit("local-agent-event", &frontend_event);
+            }
         });
     }
-    Ok(sessions)
+
+    Ok(session_id)
 }
 
-// ============================================================================
-// Session Store Commands
-// ============================================================================
-
-/// Save a session to persistent storage
-#[tauri::command(rename_all = "camelCase")]
-async fn save_session(
-    session_id: String,
-    agent_type: String,
-    project_path: String,
-    hostname: String,
-    os: String,
-    messages: Vec<shared::session_store::ChatMessage>,
-    metadata_json: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let store_guard = state.session_store.read().await;
-    let store = store_guard.as_ref().ok_or("Session store not available")?;
-
-    let agent_type_enum = match agent_type.as_str() {
-        "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
-        "opencode" | "open" | "openai" => AgentType::OpenCode,
-        "codex" => AgentType::Codex,
-        "gemini" | "gemini-cli" => AgentType::Gemini,
-        "openclaw" | "open-claw" => AgentType::OpenClaw,
-        _ => AgentType::ClaudeCode,
-    };
-
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
-    let record = shared::session_store::SessionRecord {
-        session_id,
-        agent_type: agent_type_enum,
-        project_path,
-        started_at: now,
-        last_active_at: now,
-        status: shared::session_store::SessionStatus::Active,
-        hostname,
-        os,
-        messages,
-        metadata_json,
-    };
-
-    store
-        .save_session(&record)
-        .await
-        .map_err(|e| format!("Failed to save session: {}", e))
-}
-
-/// Add a message to an existing session
-#[tauri::command(rename_all = "camelCase")]
-async fn add_session_message(
-    session_id: String,
-    message: shared::session_store::ChatMessage,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let store_guard = state.session_store.read().await;
-    let store = store_guard.as_ref().ok_or("Session store not available")?;
-
-    store
-        .add_message(&session_id, &message)
-        .await
-        .map_err(|e| format!("Failed to add message: {}", e))
-}
-
-/// List saved sessions with optional filter
-#[tauri::command(rename_all = "camelCase")]
-async fn list_sessions(
-    agent_type: Option<String>,
-    status: Option<String>,
-    project_path: Option<String>,
-    limit: Option<usize>,
-    offset: Option<usize>,
-    state: State<'_, AppState>,
-) -> Result<Vec<shared::session_store::SessionRecord>, String> {
-    let store_guard = state.session_store.read().await;
-    let store = store_guard.as_ref().ok_or("Session store not available")?;
-
-    let agent_type_enum = agent_type.map(|at| match at.as_str() {
-        "claude" | "claudecode" | "claude-code" => AgentType::ClaudeCode,
-        "opencode" | "open" | "openai" => AgentType::OpenCode,
-        "codex" => AgentType::Codex,
-        "gemini" | "gemini-cli" => AgentType::Gemini,
-        "openclaw" | "open-claw" => AgentType::OpenClaw,
-        _ => AgentType::ClaudeCode,
-    });
-
-    let status_enum = status.map(|s| {
-        s.parse()
-            .unwrap_or(shared::session_store::SessionStatus::Active)
-    });
-
-    let filter = shared::session_store::SessionFilter {
-        agent_type: agent_type_enum,
-        status: status_enum,
-        project_path,
-        limit,
-        offset,
-    };
-
-    store
-        .list_sessions(&filter)
-        .await
-        .map_err(|e| format!("Failed to list sessions: {}", e))
-}
-
-/// Load a specific session by ID
-#[tauri::command(rename_all = "camelCase")]
-async fn load_session(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<Option<shared::session_store::SessionRecord>, String> {
-    let store_guard = state.session_store.read().await;
-    let store = store_guard.as_ref().ok_or("Session store not available")?;
-
-    store
-        .load_session(&session_id)
-        .await
-        .map_err(|e| format!("Failed to load session: {}", e))
-}
-
-/// Delete a saved session
-#[tauri::command(rename_all = "camelCase")]
-async fn delete_session(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
-    let store_guard = state.session_store.read().await;
-    let store = store_guard.as_ref().ok_or("Session store not available")?;
-
-    store
-        .delete_session(&session_id)
-        .await
-        .map_err(|e| format!("Failed to delete session: {}", e))
-}
-
-/// Update session status (e.g., mark as paused/completed)
-#[tauri::command(rename_all = "camelCase")]
-async fn update_session_status(
-    session_id: String,
-    status: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let store_guard = state.session_store.read().await;
-    let store = store_guard.as_ref().ok_or("Session store not available")?;
-
-    let record = store
-        .load_session(&session_id)
-        .await
-        .map_err(|e| format!("Failed to load session: {}", e))?
-        .ok_or("Session not found")?;
-
-    let status_enum: shared::session_store::SessionStatus = status
-        .parse()
-        .map_err(|e: String| format!("Invalid status: {}", e))?;
-
-    let updated_record = shared::session_store::SessionRecord {
-        status: status_enum,
-        ..record
-    };
-
-    store
-        .update_session(&updated_record)
-        .await
-        .map_err(|e| format!("Failed to update session: {}", e))
-}
 
 /// Set permission mode for a session
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(rename_all = "camelCase")]
-async fn set_permission_mode(session_id: String, mode: String) -> Result<(), String> {
+async fn set_permission_mode(
+    session_id: String,
+    mode: String,
+    control_session_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     info!(
         "Setting permission mode for session {}: {}",
         session_id, mode
     );
 
-    let _permission_mode = match mode.as_str() {
+    let permission_mode = match mode.as_str() {
         "AlwaysAsk" => shared::agent::PermissionMode::AlwaysAsk,
         "AcceptEdits" => shared::agent::PermissionMode::AcceptEdits,
         "AutoApprove" => shared::agent::PermissionMode::AutoApprove,
@@ -2444,39 +2438,119 @@ async fn set_permission_mode(session_id: String, mode: String) -> Result<(), Str
         _ => return Err(format!("Invalid permission mode: {}", mode)),
     };
 
-    // TODO: Integrate with session's permission handler
+    if let Some(manager) = state.agent_manager.read().await.as_ref().cloned() {
+        if manager
+            .set_permission_mode(&session_id, permission_mode)
+            .await
+            .is_ok()
+        {
+            return Ok(());
+        }
+    }
+
+    let connection_id = if let Some(cs_id) = control_session_id {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&cs_id)
+            .map(|s| s.connection_id.clone())
+            .ok_or_else(|| format!("Control session not found: {}", cs_id))?
+    } else {
+        let sessions = state.sessions.read().await;
+        if let Some(first_session) = sessions.values().next() {
+            first_session.connection_id.clone()
+        } else {
+            return Err("No active connection available".to_string());
+        }
+    };
+
+    let mode_for_remote = match permission_mode {
+        shared::agent::PermissionMode::AlwaysAsk => AgentPermissionMode::AlwaysAsk,
+        shared::agent::PermissionMode::AcceptEdits => AgentPermissionMode::AcceptEdits,
+        shared::agent::PermissionMode::AutoApprove => AgentPermissionMode::AutoApprove,
+        shared::agent::PermissionMode::Plan => AgentPermissionMode::Plan,
+    };
+
+    let control_message = ClawdChatMessage::new(
+        shared::MessageType::AgentControl,
+        "app".to_string(),
+        shared::MessagePayload::AgentControl(shared::AgentControlMessage {
+            session_id: session_id.clone(),
+            action: AgentControlAction::SetPermissionMode {
+                mode: mode_for_remote,
+            },
+            request_id: Some(uuid::Uuid::new_v4().to_string()),
+        }),
+    );
+
+    send_message_via_client(&state, &connection_id, control_message, "set permission mode")
+        .await?;
     Ok(())
 }
 
-/// Approve a pending permission request
+/// Get permission mode for a session
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(rename_all = "camelCase")]
-async fn approve_permission(
+async fn get_permission_mode(
     session_id: String,
-    request_id: String,
-    decision: Option<String>,
-) -> Result<(), String> {
-    info!(
-        "Approving permission {} for session {} with decision: {:?}",
-        request_id, session_id, decision
-    );
+    control_session_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    if let Some(manager) = state.agent_manager.read().await.as_ref().cloned() {
+        if let Ok(mode) = manager.get_permission_mode(&session_id).await {
+            return Ok(format!("{:?}", mode));
+        }
+    }
 
-    let _approve_for_session = decision.as_deref() == Some("ApprovedForSession");
+    let connection_id = if let Some(cs_id) = control_session_id {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&cs_id)
+            .map(|s| s.connection_id.clone())
+            .ok_or_else(|| format!("Control session not found: {}", cs_id))?
+    } else {
+        let sessions = state.sessions.read().await;
+        if let Some(first_session) = sessions.values().next() {
+            first_session.connection_id.clone()
+        } else {
+            return Err("No active connection available".to_string());
+        }
+    };
 
-    // TODO: Integrate with session's permission handler
-    Ok(())
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let control_message = ClawdChatMessage::new(
+        shared::MessageType::AgentControl,
+        "app".to_string(),
+        shared::MessagePayload::AgentControl(shared::AgentControlMessage {
+            session_id: session_id.clone(),
+            action: AgentControlAction::GetPermissionMode,
+            request_id: Some(request_id.clone()),
+        }),
+    )
+    .requires_response();
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &connection_id,
+        control_message,
+        &request_id,
+        "get permission mode",
+        10,
+    )
+    .await?;
+
+    let data = response
+        .data
+        .ok_or_else(|| "Missing permission mode response data".to_string())?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&data).map_err(|e| format!("Invalid response data: {}", e))?;
+    let mode = parsed
+        .get("permission_mode")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Missing permission_mode in response".to_string())?;
+
+    Ok(mode.to_string())
 }
 
-/// Deny a pending permission request
-#[tauri::command(rename_all = "camelCase")]
-async fn deny_permission(session_id: String, request_id: String) -> Result<(), String> {
-    info!(
-        "Denying permission {} for session {}",
-        request_id, session_id
-    );
-
-    // TODO: Integrate with session's permission handler
-    Ok(())
-}
 
 /// Initialize tracing with conditional log levels based on build configuration
 fn init_tracing() {
@@ -2562,15 +2636,11 @@ pub fn run() {
             // Permission Management Commands
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             set_permission_mode,
-            approve_permission,
-            deny_permission,
             // Local Agent Commands (desktop only)
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_start_agent,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_send_agent_message,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            replay_agent_messages,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_abort_agent_action,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -2578,47 +2648,19 @@ pub fn run() {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_list_agents,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            local_get_agent_sessions,
-            // Session Store Commands
-            save_session,
-            add_session_message,
-            list_sessions,
-            load_session,
-            delete_session,
-            update_session_status,
+            local_get_pending_permissions,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            local_list_agent_history,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            local_load_agent_history,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            get_permission_mode,
             // macOS Panel Commands
             #[cfg(target_os = "macos")]
             show_panel,
             #[cfg(target_os = "macos")]
             hide_panel,
         ])
-        .setup(|app| {
-            // Initialize session store using Tauri app data directory
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to get app data directory");
-
-            // Ensure the directory exists
-            std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
-
-            // Create session store
-            match shared::session_store::create_session_store(&app_data_dir) {
-                Ok(store) => {
-                    let state = app.state::<AppState>();
-                    // Set the session store in state
-                    let mut store_guard = futures::executor::block_on(state.session_store.write());
-                    *store_guard = Some(store);
-                    tracing::info!("Session store initialized at {:?}", app_data_dir);
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize session store: {}", e);
-                }
-            }
-
-            // No additional setup needed - ensure_quic_client_initialized handles auto-initialization
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

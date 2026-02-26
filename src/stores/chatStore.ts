@@ -134,13 +134,17 @@ export const createChatStore = () => {
 
   const addPermissionRequest = (
     sessionId: string,
-    request: Omit<PermissionRequest, 'id' | 'requestedAt' | 'status'>,
+    request: Omit<PermissionRequest, 'id' | 'requestedAt' | 'status'> & {
+      id?: string
+      requestedAt?: number
+      status?: PermissionRequest['status']
+    },
   ) => {
     const permission: PermissionRequest = {
       ...request,
-      id: crypto.randomUUID(),
-      requestedAt: Date.now(),
-      status: 'pending',
+      id: request.id ?? crypto.randomUUID(),
+      requestedAt: request.requestedAt ?? Date.now(),
+      status: request.status ?? 'pending',
     }
 
     setState(
@@ -153,6 +157,14 @@ export const createChatStore = () => {
     )
 
     return permission.id
+  }
+
+  const setPendingPermissions = (sessionId: string, permissions: PermissionRequest[]) => {
+    setState(
+      produce((s: ChatState) => {
+        s.pendingPermissions[sessionId] = permissions
+      }),
+    )
   }
 
   const respondToPermission = (
@@ -279,6 +291,7 @@ export const createChatStore = () => {
     // Permissions
     getPendingPermissions,
     addPermissionRequest,
+    setPendingPermissions,
     respondToPermission,
     clearPermission,
 
