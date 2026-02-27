@@ -65,7 +65,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::io::Read;
 use std::path::PathBuf;
-use std::process::Stdio;
+use std::process::{Command as StdCommand, Stdio};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -77,7 +77,7 @@ use anyhow::{Context, Result, anyhow};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
-use tokio::process::Command;
+use tokio::process::Command as TokioCommand;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc, oneshot};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::{debug, error, info, warn};
@@ -670,7 +670,7 @@ pub async fn list_agent_history(
         command, resolved_command
     );
     info!("[ACP history] PATH={}", extended_path);
-    let mut cmd = Command::new(&resolved_command);
+    let mut cmd = TokioCommand::new(&resolved_command);
     cmd.args(&args)
         .current_dir(&cwd)
         .stdin(Stdio::piped())
@@ -893,7 +893,7 @@ pub(super) fn resolve_command_path(command: &str) -> String {
     }
 
     // Fallback: try `which` command
-    if let Ok(output) = std::process::Command::new("which").arg(command).output() {
+    if let Ok(output) = StdCommand::new("which").arg(command).output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -920,7 +920,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         params.command, resolved_command
     );
 
-    let mut cmd = Command::new(&resolved_command);
+    let mut cmd = TokioCommand::new(&resolved_command);
     cmd.args(&params.args)
         .current_dir(&params.working_dir)
         .stdin(Stdio::piped())
@@ -1188,9 +1188,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         let mut terms = terminals.lock().await;
         for (_, term) in terms.drain() {
             if let Some(pid) = term.pid {
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGKILL);
-                }
+                kill_process_force(pid);
             }
         }
     }
@@ -1526,6 +1524,20 @@ fn stop_reason_to_string(reason: acp::StopReason) -> &'static str {
         acp::StopReason::Refusal => "refusal",
         acp::StopReason::Cancelled => "cancelled",
         _ => "unknown",
+    }
+}
+
+fn kill_process_force(pid: u32) {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(pid as i32, libc::SIGKILL);
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = StdCommand::new("taskkill")
+            .args(["/PID", &pid.to_string(), "/F", "/T"])
+            .output();
     }
 }
 
@@ -2066,9 +2078,7 @@ impl acp::Client for AcpClientHandler {
         let mut terminals = self.terminals.lock().await;
         if let Some(term) = terminals.remove(&args.terminal_id) {
             if let Some(pid) = term.pid {
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGKILL);
-                }
+                kill_process_force(pid);
             }
         }
         Ok(acp::ReleaseTerminalResponse::new())
@@ -2084,9 +2094,7 @@ impl acp::Client for AcpClientHandler {
             .ok_or_else(|| acp::Error::invalid_params().data("Terminal not found"))?;
 
         if let Some(pid) = term.pid {
-            unsafe {
-                libc::kill(pid as i32, libc::SIGKILL);
-            }
+            kill_process_force(pid);
         }
         Ok(acp::KillTerminalCommandResponse::new())
     }
