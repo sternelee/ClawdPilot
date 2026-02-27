@@ -62,7 +62,7 @@
 //! The implementation uses structured error handling with automatic retry for transient
 //! failures. All errors are logged with session context for debugging.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::Read;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -285,6 +285,7 @@ pub struct AcpStreamingSession {
     session_id: String,
     agent_type: AgentType,
     event_sender: broadcast::Sender<AgentTurnEvent>,
+    event_buffer: Arc<Mutex<VecDeque<AgentTurnEvent>>>,
     command_tx: mpsc::UnboundedSender<AcpCommand>,
     manager_tx: mpsc::UnboundedSender<PermissionManagerCommand>,
     retry_config: RetryConfig,
@@ -337,6 +338,7 @@ impl AcpStreamingSession {
         retry_config: RetryConfig,
     ) -> Result<Self> {
         let (event_sender, _) = broadcast::channel(1024);
+        let event_buffer = Arc::new(Mutex::new(VecDeque::new()));
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (manager_tx, manager_rx) = mpsc::unbounded_channel();
         let (ready_tx, ready_rx) = oneshot::channel::<std::result::Result<(), String>>();
@@ -347,6 +349,7 @@ impl AcpStreamingSession {
 
         let runtime_session_id = session_id.clone();
         let runtime_event_sender = event_sender.clone();
+        let runtime_event_buffer = event_buffer.clone();
         let runtime_retry_config = retry_config.clone();
         let runtime_manager_tx = manager_tx.clone();
         let runtime_command_tx = command_tx.clone();
@@ -381,6 +384,7 @@ impl AcpStreamingSession {
                         home_dir,
                         start_mode,
                         event_sender: runtime_event_sender,
+                        event_buffer: runtime_event_buffer,
                         command_tx: runtime_command_tx,
                         command_rx,
                         manager_tx: runtime_manager_tx,
@@ -403,6 +407,7 @@ impl AcpStreamingSession {
                 session_id,
                 agent_type,
                 event_sender,
+                event_buffer,
                 command_tx,
                 manager_tx,
                 retry_config,
@@ -429,6 +434,12 @@ impl AcpStreamingSession {
     /// Subscribe to agent events
     pub fn subscribe(&self) -> broadcast::Receiver<AgentTurnEvent> {
         self.event_sender.subscribe()
+    }
+
+    /// Drain buffered events captured before a subscriber was ready.
+    pub async fn drain_event_buffer(&self) -> Vec<AgentTurnEvent> {
+        let mut buffer = self.event_buffer.lock().await;
+        buffer.drain(..).collect()
     }
 
     /// Set permission mode for this session
@@ -599,6 +610,7 @@ struct AcpRuntimeParams {
     home_dir: Option<String>,
     start_mode: AcpSessionStartMode,
     event_sender: broadcast::Sender<AgentTurnEvent>,
+    event_buffer: Arc<Mutex<VecDeque<AgentTurnEvent>>>,
     command_tx: mpsc::UnboundedSender<AcpCommand>,
     command_rx: mpsc::UnboundedReceiver<AcpCommand>,
     manager_tx: mpsc::UnboundedSender<PermissionManagerCommand>,
@@ -963,15 +975,16 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
     let tool_name_map = Arc::new(Mutex::new(HashMap::<String, String>::new()));
     let terminals = Arc::new(Mutex::new(HashMap::<acp::TerminalId, TerminalState>::new()));
 
-    let client = AcpClientHandler {
-        session_id: params.session_id.clone(),
-        agent_type: params.agent_type,
-        event_sender: params.event_sender.clone(),
-        active_turn: active_turn.clone(),
-        tool_name_map: tool_name_map.clone(),
-        command_tx: params.command_tx.clone(),
-        terminals: terminals.clone(),
-        permission_handler: params.permission_handler.clone(),
+        let client = AcpClientHandler {
+            session_id: params.session_id.clone(),
+            agent_type: params.agent_type,
+            event_sender: params.event_sender.clone(),
+            event_buffer: params.event_buffer.clone(),
+            active_turn: active_turn.clone(),
+            tool_name_map: tool_name_map.clone(),
+            command_tx: params.command_tx.clone(),
+            terminals: terminals.clone(),
+            permission_handler: params.permission_handler.clone(),
         pending_tool_names: params.pending_tool_names.clone(),
     };
 
@@ -1536,6 +1549,7 @@ struct AcpClientHandler {
     session_id: String,
     agent_type: AgentType,
     event_sender: broadcast::Sender<AgentTurnEvent>,
+    event_buffer: Arc<Mutex<VecDeque<AgentTurnEvent>>>,
     active_turn: Arc<RwLock<Option<String>>>,
     tool_name_map: Arc<Mutex<HashMap<String, String>>>,
     command_tx: mpsc::UnboundedSender<AcpCommand>,
@@ -1555,7 +1569,15 @@ impl AcpClientHandler {
 
     async fn emit_event(&self, event: AgentEvent) {
         let turn_id = self.current_turn_id().await;
-        let _ = self.event_sender.send(AgentTurnEvent { turn_id, event });
+        let event = AgentTurnEvent { turn_id, event };
+        {
+            let mut buffer = self.event_buffer.lock().await;
+            buffer.push_back(event.clone());
+            if buffer.len() > 5000 {
+                buffer.pop_front();
+            }
+        }
+        let _ = self.event_sender.send(event);
     }
 
     fn content_block_text(block: &acp::ContentBlock) -> String {

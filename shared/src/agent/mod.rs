@@ -69,6 +69,14 @@ impl SessionKind {
         }
     }
 
+    /// Drain buffered events captured before subscribers were ready.
+    pub async fn drain_event_buffer(&self) -> Vec<AgentTurnEvent> {
+        match self {
+            SessionKind::Acp(s) => s.drain_event_buffer().await,
+            SessionKind::OpenClawWs(_) => Vec::new(),
+        }
+    }
+
     /// Send a message to the agent.
     pub async fn send_message(
         &self,
@@ -443,6 +451,34 @@ impl AgentManager {
         resume: bool,
     ) -> Result<String> {
         let session_id = uuid::Uuid::new_v4().to_string();
+        self.start_session_from_history_with_id(
+            session_id.clone(),
+            agent_type,
+            history_session_id,
+            binary_path,
+            extra_args,
+            working_dir,
+            home_dir,
+            _source,
+            resume,
+        )
+        .await?;
+        Ok(session_id)
+    }
+
+    /// Start an agent session from a history entry with a specific session ID (ACP load/resume)
+    pub async fn start_session_from_history_with_id(
+        &self,
+        session_id: String,
+        agent_type: AgentType,
+        history_session_id: String,
+        binary_path: Option<String>,
+        extra_args: Vec<String>,
+        working_dir: PathBuf,
+        home_dir: Option<String>,
+        _source: String,
+        resume: bool,
+    ) -> Result<()> {
         info!(
             "Starting {:?} history session with ID: {} (history={})",
             agent_type, session_id, history_session_id
@@ -501,6 +537,14 @@ impl AgentManager {
             }
         };
 
+        let mut sessions = self.sessions.write().await;
+        if let Some(existing) = sessions.remove(&session_id) {
+            drop(sessions);
+            existing.shutdown().await.ok();
+            sessions = self.sessions.write().await;
+        }
+        drop(sessions);
+
         let acp_session = AcpStreamingSession::spawn_with_start_mode(
             session_id.clone(),
             agent_type,
@@ -546,7 +590,7 @@ impl AgentManager {
         metadata_map.insert(session_id.clone(), metadata);
 
         info!("✅ ACP history session started: {}", session_id);
-        Ok(session_id)
+        Ok(())
     }
 
     pub async fn list_agent_history(
@@ -691,6 +735,15 @@ impl AgentManager {
     ) -> Option<tokio::sync::broadcast::Receiver<AgentTurnEvent>> {
         let sessions = self.sessions.read().await;
         sessions.get(session_id).map(|s| s.subscribe())
+    }
+
+    /// Drain buffered events for a session.
+    pub async fn drain_event_buffer(&self, session_id: &str) -> Vec<AgentTurnEvent> {
+        let sessions = self.sessions.read().await;
+        match sessions.get(session_id) {
+            Some(session) => session.drain_event_buffer().await,
+            None => Vec::new(),
+        }
     }
 
     /// Get a session reference

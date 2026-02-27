@@ -2338,6 +2338,7 @@ async fn local_load_agent_history(
     project_path: String,
     resume: bool,
     extra_args: Option<Vec<String>>,
+    target_session_id: Option<String>,
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -2384,19 +2385,50 @@ async fn local_load_agent_history(
         .ok_or("Agent manager not initialized")?
         .clone();
 
-    let session_id = manager
-        .start_session_from_history(
-            agent_type,
-            history_session_id,
-            None,
-            extra_args.unwrap_or_default(),
-            working_dir,
-            None,
-            "local".to_string(),
-            resume,
-        )
-        .await
-        .map_err(|e| format!("Failed to load agent history: {}", e))?;
+    let session_id = if let Some(target_session_id) = target_session_id.clone() {
+        manager
+            .start_session_from_history_with_id(
+                target_session_id.clone(),
+                agent_type,
+                history_session_id,
+                None,
+                extra_args.unwrap_or_default(),
+                working_dir,
+                None,
+                "local".to_string(),
+                resume,
+            )
+            .await
+            .map_err(|e| format!("Failed to load agent history: {}", e))?;
+        target_session_id
+    } else {
+        manager
+            .start_session_from_history(
+                agent_type,
+                history_session_id,
+                None,
+                extra_args.unwrap_or_default(),
+                working_dir,
+                None,
+                "local".to_string(),
+                resume,
+            )
+            .await
+            .map_err(|e| format!("Failed to load agent history: {}", e))?
+    };
+
+    let buffered_events = manager.drain_event_buffer(&session_id).await;
+    for event in buffered_events {
+        let event_payload =
+            shared::message_adapter::event_to_message_content(&event.event, None);
+        let frontend_event = serde_json::json!({
+            "sessionId": session_id.clone(),
+            "turnId": event.turn_id,
+            "event": event_payload,
+        });
+
+        let _ = app_handle.emit("local-agent-event", &frontend_event);
+    }
 
     if let Some(mut event_rx) = manager.subscribe(&session_id).await {
         let session_id_for_spawn = session_id.clone();

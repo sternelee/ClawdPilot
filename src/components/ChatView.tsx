@@ -529,10 +529,7 @@ export function ChatView(props: ChatViewProps) {
                 }
 
                 case "session_ended":
-                  chatStore.addMessage(props.sessionId, {
-                    role: "system",
-                    content: `[Session ended]`,
-                  });
+                  setIsStreaming(false);
                   break;
 
                 case "usage_update": {

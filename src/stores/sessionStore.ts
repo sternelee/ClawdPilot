@@ -93,6 +93,7 @@ interface SessionState {
   isConnecting: boolean;
   connectionError: string | null;
   nodeId: string | null;
+  isHistoryLoading: boolean;
 }
 
 const initialState: SessionState = {
@@ -137,6 +138,7 @@ const initialState: SessionState = {
   isConnecting: false,
   connectionError: null,
   nodeId: null,
+  isHistoryLoading: false,
 };
 
 export const createSessionStore = () => {
@@ -322,6 +324,10 @@ export const createSessionStore = () => {
 
   const setStartingAgent = (starting: boolean) => {
     setState("isStartingAgent", starting);
+  };
+
+  const setHistoryLoading = (loading: boolean) => {
+    setState("isHistoryLoading", loading);
   };
 
   const handleRemoteConnect = async () => {
@@ -549,6 +555,7 @@ export const createSessionStore = () => {
     setNetworkInitialized,
     initializeNetwork,
     setStartingAgent,
+    setHistoryLoading,
     handleCreateSession,
     handleRemoteConnect,
     handleRemoteSpawn,

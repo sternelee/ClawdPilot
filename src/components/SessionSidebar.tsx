@@ -380,39 +380,35 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     entry: AgentHistoryEntry,
   ) => {
     try {
+      sessionStore.setHistoryLoading(true);
       const projectPath =
         entry.cwd ||
         session.projectPath ||
         sessionStore.state.newSessionPath ||
         ".";
+      chatStore.clearMessages(session.sessionId);
       const sessionId = await invoke<string>("local_load_agent_history", {
         agentTypeStr: session.agentType,
         historySessionId: entry.session_id,
         projectPath,
-        resume: true,
+        resume: false,
         extraArgs: [],
+        targetSessionId: session.sessionId,
       });
 
-      const newSession: AgentSessionMetadata = {
-        sessionId,
-        agentType: session.agentType,
+      sessionStore.updateSession(sessionId, {
         projectPath,
+        currentDir: projectPath,
         startedAt: Date.now(),
         active: true,
-        controlledByRemote: false,
-        hostname: "localhost",
-        os: navigator.userAgent,
-        currentDir: projectPath,
-        machineId: "local",
-        mode: "local",
-      };
-
-      sessionStore.addSession(newSession);
+      });
       sessionStore.setActiveSession(sessionId);
       notificationStore.success("History session loaded", "History");
     } catch (error) {
       console.error("Failed to load history session:", error);
       notificationStore.error("Failed to load history session", "Error");
+    } finally {
+      sessionStore.setHistoryLoading(false);
     }
   };
 
