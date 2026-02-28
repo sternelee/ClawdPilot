@@ -883,7 +883,12 @@ async fn handle_gateway_message(
             let id = msg.get("id").and_then(|v| v.as_str()).unwrap_or("");
             let ok = msg.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
 
-            info!("[OpenClaw] Response id={}, ok={}, payload={:?}", id, ok, msg.get("payload"));
+            info!(
+                "[OpenClaw] Response id={}, ok={}, payload={:?}",
+                id,
+                ok,
+                msg.get("payload")
+            );
 
             if ok {
                 // Check for content in payload
@@ -891,7 +896,10 @@ async fn handle_gateway_message(
                     info!("[OpenClaw] Response payload: {:?}", payload);
                     // Handle agent response with content
                     if let Some(content) = payload.get("content").and_then(|v| v.as_str()) {
-                        info!("[OpenClaw] Found content in response: {} bytes", content.len());
+                        info!(
+                            "[OpenClaw] Found content in response: {} bytes",
+                            content.len()
+                        );
                         let _ = event_sender.send(AgentTurnEvent {
                             turn_id: id.to_string(),
                             event: AgentEvent::TextDelta {
@@ -937,7 +945,9 @@ async fn handle_gateway_message(
             match event_name {
                 // OpenClaw Gateway agent event (streaming content)
                 "agent" => {
-                    let stream = payload.and_then(|p| p.get("stream")).and_then(|v| v.as_str());
+                    let stream = payload
+                        .and_then(|p| p.get("stream"))
+                        .and_then(|v| v.as_str());
 
                     match stream {
                         Some("assistant") => {
@@ -956,7 +966,11 @@ async fn handle_gateway_message(
                                 .to_string();
 
                             if !delta.is_empty() {
-                                info!("[OpenClaw] Broadcasting agent delta: {} bytes (cumulative: {})", delta.len(), cumulative_text.len());
+                                info!(
+                                    "[OpenClaw] Broadcasting agent delta: {} bytes (cumulative: {})",
+                                    delta.len(),
+                                    cumulative_text.len()
+                                );
                                 let _ = event_sender.send(AgentTurnEvent {
                                     turn_id: "stream".to_string(),
                                     event: AgentEvent::TextDelta {
@@ -1003,7 +1017,9 @@ async fn handle_gateway_message(
                 // OpenClaw Gateway chat event (structured messages)
                 // Note: chat event content is cumulative, so we need to compute incremental delta
                 "chat" => {
-                    let state = payload.and_then(|p| p.get("state")).and_then(|v| v.as_str());
+                    let state = payload
+                        .and_then(|p| p.get("state"))
+                        .and_then(|v| v.as_str());
 
                     match state {
                         Some("delta") => {
@@ -1029,7 +1045,11 @@ async fn handle_gateway_message(
                             };
 
                             if !delta.is_empty() {
-                                info!("[OpenClaw] Broadcasting chat delta (state=delta): {} bytes (full: {})", delta.len(), content.len());
+                                info!(
+                                    "[OpenClaw] Broadcasting chat delta (state=delta): {} bytes (full: {})",
+                                    delta.len(),
+                                    content.len()
+                                );
                                 let _ = event_sender.send(AgentTurnEvent {
                                     turn_id: "stream".to_string(),
                                     event: AgentEvent::TextDelta {
@@ -1055,7 +1075,8 @@ async fn handle_gateway_message(
 
                             // Compute incremental delta for final content
                             let mut last = last_sent_content.write().await;
-                            let delta = if content.starts_with(&*last) && content.len() > last.len() {
+                            let delta = if content.starts_with(&*last) && content.len() > last.len()
+                            {
                                 content[last.len()..].to_string()
                             } else if content != *last {
                                 content.clone()
@@ -1064,7 +1085,11 @@ async fn handle_gateway_message(
                             };
 
                             if !delta.is_empty() {
-                                info!("[OpenClaw] Broadcasting chat delta (state=final): {} bytes (full: {})", delta.len(), content.len());
+                                info!(
+                                    "[OpenClaw] Broadcasting chat delta (state=final): {} bytes (full: {})",
+                                    delta.len(),
+                                    content.len()
+                                );
                                 let _ = event_sender.send(AgentTurnEvent {
                                     turn_id: "stream".to_string(),
                                     event: AgentEvent::TextDelta {
@@ -1101,7 +1126,12 @@ async fn handle_gateway_message(
                     let text = payload
                         .and_then(|p| p.get("content"))
                         .and_then(|v| v.as_str())
-                        .or_else(|| payload.and_then(|p| p.get("message")).and_then(|m| m.get("content")).and_then(|v| v.as_str()))
+                        .or_else(|| {
+                            payload
+                                .and_then(|p| p.get("message"))
+                                .and_then(|m| m.get("content"))
+                                .and_then(|v| v.as_str())
+                        })
                         .unwrap_or("")
                         .to_string();
 
@@ -1122,12 +1152,20 @@ async fn handle_gateway_message(
                     let text = payload
                         .and_then(|p| p.get("content"))
                         .and_then(|v| v.as_str())
-                        .or_else(|| payload.and_then(|p| p.get("message")).and_then(|m| m.get("content")).and_then(|v| v.as_str()))
+                        .or_else(|| {
+                            payload
+                                .and_then(|p| p.get("message"))
+                                .and_then(|m| m.get("content"))
+                                .and_then(|v| v.as_str())
+                        })
                         .unwrap_or("")
                         .to_string();
 
                     if !text.is_empty() {
-                        info!("[OpenClaw] Broadcasting agent.final content: {} bytes", text.len());
+                        info!(
+                            "[OpenClaw] Broadcasting agent.final content: {} bytes",
+                            text.len()
+                        );
                         let _ = event_sender.send(AgentTurnEvent {
                             turn_id: "stream".to_string(),
                             event: AgentEvent::TextDelta {
@@ -1142,7 +1180,11 @@ async fn handle_gateway_message(
                     let text = payload
                         .and_then(|p| p.get("text"))
                         .and_then(|v| v.as_str())
-                        .or_else(|| payload.and_then(|p| p.get("content")).and_then(|v| v.as_str()))
+                        .or_else(|| {
+                            payload
+                                .and_then(|p| p.get("content"))
+                                .and_then(|v| v.as_str())
+                        })
                         .unwrap_or("")
                         .to_string();
 
@@ -1244,8 +1286,16 @@ async fn handle_gateway_message(
                     let error = payload
                         .and_then(|p| p.get("message"))
                         .and_then(|v| v.as_str())
-                        .or_else(|| payload.and_then(|p| p.get("error")).and_then(|v| v.as_str()))
-                        .or_else(|| payload.and_then(|p| p.get("errorMessage")).and_then(|v| v.as_str()))
+                        .or_else(|| {
+                            payload
+                                .and_then(|p| p.get("error"))
+                                .and_then(|v| v.as_str())
+                        })
+                        .or_else(|| {
+                            payload
+                                .and_then(|p| p.get("errorMessage"))
+                                .and_then(|v| v.as_str())
+                        })
                         .unwrap_or("Unknown error")
                         .to_string();
 
@@ -1259,7 +1309,8 @@ async fn handle_gateway_message(
                         },
                     });
                 }
-                "connected" | "progress" | "complete" | "connect.challenge" | "gateway.response" => {
+                "connected" | "progress" | "complete" | "connect.challenge"
+                | "gateway.response" => {
                     info!("[OpenClaw] Skipping control event: {}", event_name);
                 }
                 // Health event from OpenClaw Gateway
@@ -1292,12 +1343,18 @@ async fn handle_gateway_message(
                 }
                 _ => {
                     // Log unknown events with their full payload for debugging
-                    info!("[OpenClaw] Unknown event '{}', full message: {}", event_name, text);
+                    info!(
+                        "[OpenClaw] Unknown event '{}', full message: {}",
+                        event_name, text
+                    );
                 }
             }
         }
         _ => {
-            info!("[OpenClaw] Unknown message type '{}', full message: {}", msg_type, text);
+            info!(
+                "[OpenClaw] Unknown message type '{}', full message: {}",
+                msg_type, text
+            );
         }
     }
 }

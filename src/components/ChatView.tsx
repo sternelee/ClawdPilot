@@ -24,6 +24,9 @@ import {
   FiAlertTriangle,
   FiCopy,
   FiMoreVertical,
+  FiFolder,
+  FiGitBranch,
+  FiX,
 } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -40,6 +43,8 @@ import { Dropdown } from "./ui/Dropdown";
 import { SolidMarkdown } from "solid-markdown";
 import { ToolCallList, ReasoningBlock } from "./ui/EnhancedMessageComponents";
 import { ChatInput } from "./ui/ChatInput";
+import { FileBrowserView } from "./FileBrowserView";
+import { GitDiffView } from "./GitDiffView";
 
 // ============================================================================
 // Helper Functions
@@ -177,6 +182,8 @@ interface ChatViewProps {
   projectPath?: string;
   sessionMode?: "remote" | "local"; // Added session mode
 }
+
+type RightPanelView = "none" | "file" | "git";
 
 // ============================================================================
 // Helper Components
@@ -533,6 +540,9 @@ export function ChatView(props: ChatViewProps) {
     const [permissionMode, setPermissionMode] = createSignal<
       "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove"
     >("AlwaysAsk");
+    const [rightPanelView, setRightPanelView] = createSignal<RightPanelView>(
+      "none",
+    );
     const toolMessageIds = new Map<string, string>();
     const pendingPermissionsForModal = () =>
       pendingPermissions().map((permission) => ({
@@ -1429,6 +1439,12 @@ export function ChatView(props: ChatViewProps) {
       }
     };
 
+    const toggleRightPanel = (view: Exclude<RightPanelView, "none">) => {
+      setRightPanelView((prev) => (prev === view ? "none" : view));
+    };
+
+    const closeRightPanel = () => setRightPanelView("none");
+
     const getAgentIcon = () => {
       const normalizedType = props.agentType?.toLowerCase() || "";
 
@@ -1458,7 +1474,8 @@ export function ChatView(props: ChatViewProps) {
     };
 
     return (
-      <div class="flex flex-col h-full bg-muted relative pb-safe lg:pb-0">
+      <div class="flex h-full bg-muted relative pb-safe lg:pb-0 overflow-hidden">
+        <div class="flex flex-col h-full min-w-0 flex-1">
         {/* Header */}
         <div class="z-20 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-sm pr-4 pl-16 lg:pl-6 md:py-3 shadow-sm">
           <div class="flex-1">
@@ -1491,6 +1508,30 @@ export function ChatView(props: ChatViewProps) {
             </div>
           </div>
           <div class="flex items-center gap-2">
+            <Show when={!isMobile()}>
+              <Button
+                type="button"
+                variant={rightPanelView() === "file" ? "default" : "ghost"}
+                size="sm"
+                class="h-8 px-2.5"
+                onClick={() => toggleRightPanel("file")}
+                title="Toggle file browser"
+              >
+                <FiFolder size={14} />
+                <span class="ml-1 text-xs">Files</span>
+              </Button>
+              <Button
+                type="button"
+                variant={rightPanelView() === "git" ? "default" : "ghost"}
+                size="sm"
+                class="h-8 px-2.5"
+                onClick={() => toggleRightPanel("git")}
+                title="Toggle git panel"
+              >
+                <FiGitBranch size={14} />
+                <span class="ml-1 text-xs">Git</span>
+              </Button>
+            </Show>
             <Show
               when={!isMobile()}
               fallback={
@@ -1708,6 +1749,46 @@ export function ChatView(props: ChatViewProps) {
             isStreaming={isStreaming()}
             disabled={!isActive()}
           />
+        </Show>
+      </div>
+
+        <Show when={!isMobile() && rightPanelView() !== "none"}>
+          <aside class="h-full w-[360px] max-w-[42vw] border-l border-border/60 bg-background/95 backdrop-blur-sm flex flex-col overflow-hidden">
+            <div class="h-11 px-3 border-b border-border/60 flex items-center justify-between">
+              <div class="text-sm font-medium flex items-center gap-2">
+                <Show
+                  when={rightPanelView() === "file"}
+                  fallback={<FiGitBranch size={14} />}
+                >
+                  <FiFolder size={14} />
+                </Show>
+                <span>
+                  {rightPanelView() === "file" ? "File Browser" : "Git Changes"}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                class="btn btn-ghost btn-xs btn-square"
+                onClick={closeRightPanel}
+                title="Close panel"
+              >
+                <FiX size={12} />
+              </Button>
+            </div>
+            <div class="flex-1 overflow-auto">
+              <Show when={rightPanelView() === "file"}>
+                <FileBrowserView class="h-full" />
+              </Show>
+              <Show when={rightPanelView() === "git"}>
+                <GitDiffView
+                  class="h-full"
+                  projectPath={session()?.projectPath || props.projectPath}
+                />
+              </Show>
+            </div>
+          </aside>
         </Show>
       </div>
     );

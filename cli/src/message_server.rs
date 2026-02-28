@@ -1855,7 +1855,7 @@ impl FileBrowserMessageHandler {
         path: String,
         request_id: Option<String>,
     ) -> Result<Option<Message>> {
-        let entries = shared::list_directory(&path)
+        let entries = shared::file_browser_list(&path)
             .map_err(|e| anyhow::anyhow!("Failed to list directory: {}", e))?;
         let entries_json = serde_json::to_value(entries)?;
         Ok(Some(MessageBuilder::response(
@@ -1868,8 +1868,7 @@ impl FileBrowserMessageHandler {
     }
 
     async fn handle_read_file(&self, path: String) -> Result<Option<Message>> {
-        use std::fs;
-        match fs::read_to_string(&path) {
+        match shared::file_browser_read(&path) {
             Ok(content) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
                 Uuid::new_v4().to_string(),
@@ -1924,53 +1923,41 @@ impl GitStatusMessageHandler {
     }
 
     async fn handle_get_status(&self, path: String) -> Result<Option<Message>> {
-        let output = tokio::process::Command::new("git")
-            .args(["status", "--porcelain"])
-            .current_dir(&path)
-            .output()
-            .await;
-
-        let is_ok = output.is_ok();
-        let status = output
-            .as_ref()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        Ok(Some(MessageBuilder::response(
-            "cli".to_string(),
-            Uuid::new_v4().to_string(),
-            is_ok,
-            Some(serde_json::json!({"status": status})),
-            if !is_ok {
-                Some("Failed to get git status".to_string())
-            } else {
-                None
-            },
-        )))
+        match shared::git_status(&path) {
+            Ok(status) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                true,
+                Some(serde_json::json!({"status": status})),
+                None,
+            ))),
+            Err(error) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                false,
+                None,
+                Some(format!("Failed to get git status: {}", error)),
+            ))),
+        }
     }
 
     async fn handle_get_diff(&self, path: String, file: String) -> Result<Option<Message>> {
-        let output = tokio::process::Command::new("git")
-            .args(["diff", &file])
-            .current_dir(&path)
-            .output()
-            .await;
-
-        let is_ok = output.is_ok();
-        let diff = output
-            .as_ref()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        Ok(Some(MessageBuilder::response(
-            "cli".to_string(),
-            Uuid::new_v4().to_string(),
-            is_ok,
-            Some(serde_json::json!({"file": file, "diff": diff})),
-            if !is_ok {
-                Some("Failed to get diff".to_string())
-            } else {
-                None
-            },
-        )))
+        match shared::git_diff(&path, &file) {
+            Ok(diff) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                true,
+                Some(serde_json::json!({"file": file, "diff": diff})),
+                None,
+            ))),
+            Err(error) => Ok(Some(MessageBuilder::response(
+                "cli".to_string(),
+                Uuid::new_v4().to_string(),
+                false,
+                None,
+                Some(format!("Failed to get diff: {}", error)),
+            ))),
+        }
     }
 }
 

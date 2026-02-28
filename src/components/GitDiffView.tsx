@@ -4,69 +4,95 @@
  * P2P git operations component for viewing git status and diffs.
  */
 
-import { Component, For, Show, onMount } from 'solid-js'
-import { gitStore } from '../stores/gitStore'
-import { notificationStore } from '../stores/notificationStore'
-import { Alert } from './ui/primitives';
-import { Badge } from './ui/primitives';
-import { Button } from './ui/primitives';
-import { Spinner } from './ui/primitives';
+import { Component, For, Show, onMount } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
+import { gitStore } from "../stores/gitStore";
+import { notificationStore } from "../stores/notificationStore";
+import { Alert } from "./ui/primitives";
+import { Badge } from "./ui/primitives";
+import { Button } from "./ui/primitives";
+import { Spinner } from "./ui/primitives";
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface GitDiffViewProps {
-  class?: string
-  projectPath?: string
+  class?: string;
+  projectPath?: string;
 }
 
 // ============================================================================
 // Types helpers
 // ============================================================================
 
-type GitStatusChar = '?' | ' ' | 'M' | 'A' | 'D' | 'R' | 'C' | 'U'
+type GitStatusChar = "?" | " " | "M" | "A" | "D" | "R" | "C" | "U";
 
 const getStatusColor = (status: GitStatusChar): string => {
   switch (status) {
-    case 'M': return 'text-warning'
-    case 'A': return 'text-success'
-    case 'D': return 'text-error'
-    case 'R': return 'text-info'
-    case '?': return 'text-foreground/50'
-    case ' ': return 'text-success'
-    default: return 'text-foreground'
+    case "M":
+      return "text-warning";
+    case "A":
+      return "text-success";
+    case "D":
+      return "text-error";
+    case "R":
+      return "text-info";
+    case "?":
+      return "text-foreground/50";
+    case " ":
+      return "text-success";
+    default:
+      return "text-foreground";
   }
-}
+};
 
 const getStatusLabel = (x: GitStatusChar, y: GitStatusChar): string => {
-  if (x === '?' && y === '?') return 'Untracked'
-  if (x === ' ' && y === 'M') return 'Modified'
-  if (x === 'M' && y === ' ') return 'Staged'
-  if (x === 'M' && y === 'M') return 'Modified & Staged'
-  if (x === 'A') return 'Added'
-  if (x === 'D') return 'Deleted'
-  if (x === 'R') return 'Renamed'
-  return 'Changed'
-}
+  if (x === "?" && y === "?") return "Untracked";
+  if (x === " " && y === "M") return "Modified";
+  if (x === "M" && y === " ") return "Staged";
+  if (x === "M" && y === "M") return "Modified & Staged";
+  if (x === "A") return "Added";
+  if (x === "D") return "Deleted";
+  if (x === "R") return "Renamed";
+  return "Changed";
+};
 
 // ============================================================================
 // Icons
 // ============================================================================
 
 const FileIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    class="h-4 w-4"
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path
+      fill-rule="evenodd"
+      d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
+      clip-rule="evenodd"
+    />
   </svg>
-)
+);
 
 const GitBranchIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    class="h-5 w-5"
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path
+      fill-rule="evenodd"
+      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+      clip-rule="evenodd"
+    />
     <path d="M12.5 4a1.5 1.5 0 100 3 1.5 1.5 0 000-3z" />
     <path d="M4 12.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
   </svg>
-)
+);
 
 // ============================================================================
 // Component
@@ -86,82 +112,101 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
     getModifiedFiles,
     getUntrackedFiles,
     hasChanges,
-    getStatusSummary
-  } = gitStore
+    getStatusSummary,
+  } = gitStore;
 
   // Load git status
   const loadStatus = async () => {
-    setLoadingStatus(true)
-    setError(null)
+    setLoadingStatus(true);
+    setError(null);
 
     try {
-      const response = await (window as any).invoke?.('git_status', {
-        path: props.projectPath || '.'
-      })
+      const response = await invoke<{
+        success: boolean;
+        status?: string;
+        error?: string;
+      }>("git_status", {
+        path: props.projectPath || ".",
+      });
       if (response?.success) {
-        setStatusOutput(response.status || '')
+        setStatusOutput(response.status || "");
       } else {
-        throw new Error(response?.error || 'Failed to get git status')
+        throw new Error(response?.error || "Failed to get git status");
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to get git status'
-      setError(errorMsg)
-      notificationStore.error(errorMsg, 'Git Error')
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to get git status";
+      setError(errorMsg);
+      notificationStore.error(errorMsg, "Git Error");
     } finally {
-      setLoadingStatus(false)
+      setLoadingStatus(false);
     }
-  }
+  };
 
   // Load diff for a file
   const loadDiff = async (filePath: string) => {
-    setLoadingDiff(true)
-    setError(null)
-    setSelectedFile(filePath)
+    setLoadingDiff(true);
+    setError(null);
+    setSelectedFile(filePath);
 
     try {
-      const response = await (window as any).invoke?.('git_diff', {
-        path: props.projectPath || '.',
-        file: filePath
-      })
+      const response = await invoke<{
+        success: boolean;
+        diff?: string;
+        error?: string;
+      }>("git_diff", {
+        path: props.projectPath || ".",
+        file: filePath,
+      });
       if (response?.success) {
         setCurrentDiff({
           file: filePath,
-          diff: response.diff || ''
-        })
-        setViewMode('diff')
+          diff: response.diff || "",
+        });
+        setViewMode("diff");
       } else {
-        throw new Error(response?.error || 'Failed to get diff')
+        throw new Error(response?.error || "Failed to get diff");
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to get diff'
-      setError(errorMsg)
-      notificationStore.error(errorMsg, 'Git Error')
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to get diff";
+      setError(errorMsg);
+      notificationStore.error(errorMsg, "Git Error");
     } finally {
-      setLoadingDiff(false)
+      setLoadingDiff(false);
     }
-  }
+  };
 
   // Refresh
   const refresh = () => {
-    loadStatus()
-  }
+    loadStatus();
+  };
 
   // Initial load
   onMount(() => {
-    loadStatus()
-  })
+    loadStatus();
+  });
 
   // Summary
-  const summary = () => getStatusSummary()
+  const summary = () => getStatusSummary();
 
   // ============================================================================
   // Diff Line Component
   // ============================================================================
 
-  const DiffLine = (props: { line: { type: string; content: string; oldLineNum?: number; newLineNum?: number } }) => {
-    const line = () => props.line
+  const DiffLine = (props: {
+    line: {
+      type: string;
+      content: string;
+      oldLineNum?: number;
+      newLineNum?: number;
+    };
+  }) => {
+    const line = () => props.line;
     return (
-      <div class={`flex ${line().type === 'add' ? 'bg-success/10' : line().type === 'remove' ? 'bg-error/10' : ''}`}>
+      <div
+        class={`flex ${line().type === "add" ? "bg-success/10" : line().type === "remove" ? "bg-error/10" : ""}`}
+      >
         <Show when={line().oldLineNum !== undefined}>
           <span class="w-12 text-right pr-2 text-foreground/30 select-none text-xs font-mono">
             {line().oldLineNum}
@@ -172,27 +217,31 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
             {line().newLineNum}
           </span>
         </Show>
-        <span class={`flex-1 font-mono text-sm whitespace-pre ${
-          line().type === 'add' ? 'text-success' :
-          line().type === 'remove' ? 'text-error' :
-          'text-foreground'
-        }`}>
-          {line().type === 'add' && '+'}
-          {line().type === 'remove' && '-'}
+        <span
+          class={`flex-1 font-mono text-xs whitespace-pre ${
+            line().type === "add"
+              ? "text-success"
+              : line().type === "remove"
+                ? "text-error"
+                : "text-foreground"
+          }`}
+        >
+          {line().type === "add" && "+"}
+          {line().type === "remove" && "-"}
           {line().content}
         </span>
       </div>
-    )
-  }
+    );
+  };
 
   return (
-    <div class={`git-diff-view ${props.class || ''}`}>
+    <div class={`git-diff-view ${props.class || ""}`}>
       {/* Header */}
-      <div class="git-diff-header p-4 border-b border-border">
+      <div class="git-diff-header p-3 border-b border-border">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <GitBranchIcon />
-            <h2 class="text-lg font-semibold">Git Status</h2>
+            <h2 class="text-base font-semibold">Git Status</h2>
             <Show when={state.currentBranch}>
               <Badge>{state.currentBranch}</Badge>
             </Show>
@@ -207,8 +256,17 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
               <Spinner size="sm" />
             </Show>
             <Show when={!state.isLoadingStatus}>
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-4 w-4"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                  clip-rule="evenodd"
+                />
               </svg>
             </Show>
             Refresh
@@ -217,36 +275,40 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
         {/* Summary */}
         <Show when={hasChanges()}>
-          <div class="flex gap-4 mt-3 text-sm">
+          <div class="flex gap-3 mt-2 text-xs">
             <span class="text-success">Staged: {summary().staged}</span>
             <span class="text-warning">Modified: {summary().modified}</span>
-            <span class="text-foreground/50">Untracked: {summary().untracked}</span>
+            <span class="text-foreground/50">
+              Untracked: {summary().untracked}
+            </span>
           </div>
         </Show>
 
         <Show when={!hasChanges() && !state.isLoadingStatus}>
-          <div class="mt-3 text-sm text-foreground/50">
-            No changes detected
-          </div>
+          <div class="mt-2 text-xs text-foreground/50">No changes detected</div>
         </Show>
       </div>
 
       {/* Content */}
       <div class="git-diff-content">
         {/* Status View */}
-        <Show when={state.viewMode === 'status'}>
+        <Show when={state.viewMode === "status"}>
           <div class="divide-y divide-border">
             {/* Staged Files */}
             <Show when={getStagedFiles().length > 0}>
-              <div class="p-3">
-                <h3 class="text-sm font-semibold mb-2 text-success">Staged Changes</h3>
+              <div class="p-2.5">
+                <h3 class="text-xs font-semibold mb-1.5 text-success">
+                  Staged Changes
+                </h3>
                 <For each={getStagedFiles()}>
                   {(entry) => (
                     <div
-                      class="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
+                      class="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer text-sm"
                       onClick={() => loadDiff(entry.from)}
                     >
-                      <span class={`text-lg ${getStatusColor(entry.x as GitStatusChar)}`}>
+                      <span
+                        class={`text-lg ${getStatusColor(entry.x as GitStatusChar)}`}
+                      >
                         {entry.x}
                       </span>
                       <FileIcon />
@@ -262,21 +324,28 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
             {/* Modified Files */}
             <Show when={getModifiedFiles().length > 0}>
-              <div class="p-3">
-                <h3 class="text-sm font-semibold mb-2 text-warning">Modified</h3>
+              <div class="p-2.5">
+                <h3 class="text-xs font-semibold mb-1.5 text-warning">
+                  Modified
+                </h3>
                 <For each={getModifiedFiles()}>
                   {(entry) => (
                     <div
-                      class="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
+                      class="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer text-sm"
                       onClick={() => loadDiff(entry.from)}
                     >
-                      <span class={`text-lg ${getStatusColor(entry.y as GitStatusChar)}`}>
+                      <span
+                        class={`text-lg ${getStatusColor(entry.y as GitStatusChar)}`}
+                      >
                         {entry.y}
                       </span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
                       <span class="text-xs text-foreground/50">
-                        {getStatusLabel(entry.x as GitStatusChar, entry.y as GitStatusChar)}
+                        {getStatusLabel(
+                          entry.x as GitStatusChar,
+                          entry.y as GitStatusChar,
+                        )}
                       </span>
                     </div>
                   )}
@@ -286,11 +355,13 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
             {/* Untracked Files */}
             <Show when={getUntrackedFiles().length > 0}>
-              <div class="p-3">
-                <h3 class="text-sm font-semibold mb-2 text-foreground/50">Untracked</h3>
+              <div class="p-2.5">
+                <h3 class="text-xs font-semibold mb-1.5 text-foreground/50">
+                  Untracked
+                </h3>
                 <For each={getUntrackedFiles()}>
                   {(entry) => (
-                    <div class="flex items-center gap-2 p-2 rounded hover:bg-muted">
+                    <div class="flex items-center gap-2 p-1.5 rounded hover:bg-muted text-sm">
                       <span class="text-lg text-foreground/30">?</span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
@@ -303,21 +374,30 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
         </Show>
 
         {/* Diff View */}
-        <Show when={state.viewMode === 'diff' && state.currentDiff}>
-          <div class="p-3">
+        <Show when={state.viewMode === "diff" && state.currentDiff}>
+          <div class="p-2.5">
             {/* Diff Header */}
-            <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center justify-between mb-2">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setViewMode('status')}
+                onClick={() => setViewMode("status")}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
+                    clip-rule="evenodd"
+                  />
                 </svg>
                 Back
               </Button>
-              <span class="font-mono text-sm truncate flex-1 text-center">
+              <span class="font-mono text-xs truncate flex-1 text-center">
                 {state.currentDiff?.file}
               </span>
               <div class="w-16"></div>
@@ -332,7 +412,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
             {/* Diff Content */}
             <Show when={!state.isLoadingDiff && state.currentDiff?.hunks}>
-              <div class="bg-muted rounded-lg overflow-hidden text-sm">
+              <div class="bg-muted rounded-lg overflow-hidden text-xs">
                 <For each={state.currentDiff?.hunks}>
                   {(hunk) => (
                     <div class="border-b border-border last:border-0">
@@ -352,7 +432,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
 
             {/* Raw Diff */}
             <Show when={!state.isLoadingDiff && !state.currentDiff?.hunks}>
-              <pre class="bg-muted rounded-lg p-3 text-sm overflow-x-auto whitespace-pre-wrap">
+              <pre class="bg-muted rounded-lg p-2.5 text-xs overflow-x-auto whitespace-pre-wrap">
                 {state.currentDiff?.diff}
               </pre>
             </Show>
@@ -363,14 +443,24 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
       {/* Error Display */}
       <Show when={state.error}>
         <Alert variant="destructive" class="m-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="stroke-current shrink-0 h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           <span>{state.error}</span>
         </Alert>
       </Show>
     </div>
-  )
-}
+  );
+};
 
-export default GitDiffView
+export default GitDiffView;

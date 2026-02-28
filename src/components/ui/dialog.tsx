@@ -29,7 +29,7 @@ export function Dialog(props: DialogProps) {
 
         {/* Modal Box */}
         <div
-          class={`modal-box ${props.contentClass || ""}`}
+          class={`modal-box rounded-sm ${props.contentClass || ""}`}
           onClick={(e) => e.stopPropagation()}
         >
           {props.children}
@@ -41,7 +41,16 @@ export function Dialog(props: DialogProps) {
               onClick={props.onClose}
               aria-label="Close"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="size-4">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="size-4"
+              >
                 <path d="M18 6 6 18" />
                 <path d="m6 6 12 12" />
               </svg>
@@ -55,21 +64,30 @@ export function Dialog(props: DialogProps) {
 
 // Re-export Dialog components for compatibility
 export const DialogTrigger = "button";
-export const DialogContent: any = (props: { class?: string; children?: JSX.Element }) => (
-  <div class={`modal-box ${props.class || ""}`}>{props.children}</div>
+export const DialogContent: any = (props: {
+  class?: string;
+  children?: JSX.Element;
+}) => <div class={`modal-box ${props.class || ""}`}>{props.children}</div>;
+export const DialogHeader: any = (props: {
+  class?: string;
+  children?: JSX.Element;
+}) => <div class={`modal-header ${props.class || ""}`}>{props.children}</div>;
+export const DialogFooter: any = (props: {
+  class?: string;
+  children?: JSX.Element;
+}) => <div class={`modal-action ${props.class || ""}`}>{props.children}</div>;
+export const DialogTitle: any = (props: {
+  class?: string;
+  children?: JSX.Element;
+}) => (
+  <h3 class={`modal-title font-bold text-lg ${props.class || ""}`}>
+    {props.children}
+  </h3>
 );
-export const DialogHeader: any = (props: { class?: string; children?: JSX.Element }) => (
-  <div class={`modal-header ${props.class || ""}`}>{props.children}</div>
-);
-export const DialogFooter: any = (props: { class?: string; children?: JSX.Element }) => (
-  <div class={`modal-action ${props.class || ""}`}>{props.children}</div>
-);
-export const DialogTitle: any = (props: { class?: string; children?: JSX.Element }) => (
-  <h3 class={`modal-title font-bold text-lg ${props.class || ""}`}>{props.children}</h3>
-);
-export const DialogDescription: any = (props: { class?: string; children?: JSX.Element }) => (
-  <p class={`text-sm opacity-60 ${props.class || ""}`}>{props.children}</p>
-);
+export const DialogDescription: any = (props: {
+  class?: string;
+  children?: JSX.Element;
+}) => <p class={`text-sm opacity-60 ${props.class || ""}`}>{props.children}</p>;
 
 export type DialogComponentProps = {
   class?: string;

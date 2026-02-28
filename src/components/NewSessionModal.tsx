@@ -79,7 +79,8 @@ export const NewSessionModal: Component = () => {
     // On mobile, get the app directory as default path
     if (isMobile()) {
       try {
-        const appDir = await invoke<string>("get_app_dir");
+        // const appDir = await invoke<string>("get_app_dir");
+        const appDir = "~";
         if (appDir) {
           sessionStore.setNewSessionPath(appDir);
         }
@@ -379,7 +380,7 @@ export const NewSessionModal: Component = () => {
                   };
                 })}
                 placeholder={isMobile() ? "app directory" : "/path/to/project"}
-                class="font-mono"
+                class="font-mono rounded-sm"
               />
               <p class="text-xs text-muted-foreground">
                 {isMobile()

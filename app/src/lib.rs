@@ -29,8 +29,8 @@ use shared::AgentManager;
 use shared::{
     AgentControlAction, AgentPermissionMode, AgentPermissionResponse, AgentType,
     CommunicationManager, DirEntry, Event, EventListener, EventType, FileBrowserAction,
-    Message as ClawdChatMessage, MessageBuilder, MessagePayload, QuicMessageClientHandle,
-    TcpDataType, TcpForwardingAction, TcpForwardingType,
+    FileBrowserEntry, Message as ClawdChatMessage, MessageBuilder, MessagePayload,
+    QuicMessageClientHandle, TcpDataType, TcpForwardingAction, TcpForwardingType,
 };
 
 use crate::tcp_forwarding::TcpForwardingManager;
@@ -276,6 +276,40 @@ pub struct ConnectionConfig {
 #[derive(Serialize, Deserialize)]
 pub struct NetworkConfig {
     pub relay_url: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStatusResponse {
+    success: bool,
+    status: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitDiffResponse {
+    success: bool,
+    file: Option<String>,
+    diff: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileBrowserListResponse {
+    success: bool,
+    entries: Vec<FileBrowserEntry>,
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileBrowserReadResponse {
+    success: bool,
+    path: String,
+    content: Option<String>,
+    error: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1357,6 +1391,74 @@ async fn parse_session_ticket(ticket: String) -> Result<String, String> {
 #[tauri::command]
 async fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
     shared::list_directory(&path)
+}
+
+#[tauri::command]
+async fn file_browser_list(path: String) -> FileBrowserListResponse {
+    match shared::file_browser_list(&path) {
+        Ok(entries) => FileBrowserListResponse {
+            success: true,
+            entries,
+            error: None,
+        },
+        Err(error) => FileBrowserListResponse {
+            success: false,
+            entries: Vec::new(),
+            error: Some(error),
+        },
+    }
+}
+
+#[tauri::command]
+async fn file_browser_read(path: String) -> FileBrowserReadResponse {
+    match shared::file_browser_read(&path) {
+        Ok(content) => FileBrowserReadResponse {
+            success: true,
+            path,
+            content: Some(content),
+            error: None,
+        },
+        Err(error) => FileBrowserReadResponse {
+            success: false,
+            path,
+            content: None,
+            error: Some(error),
+        },
+    }
+}
+
+#[tauri::command]
+async fn git_status(path: String) -> GitStatusResponse {
+    match shared::git_status(&path) {
+        Ok(status) => GitStatusResponse {
+            success: true,
+            status: Some(status),
+            error: None,
+        },
+        Err(error) => GitStatusResponse {
+            success: false,
+            status: None,
+            error: Some(error),
+        },
+    }
+}
+
+#[tauri::command]
+async fn git_diff(path: String, file: String) -> GitDiffResponse {
+    match shared::git_diff(&path, &file) {
+        Ok(diff) => GitDiffResponse {
+            success: true,
+            file: Some(file),
+            diff: Some(diff),
+            error: None,
+        },
+        Err(error) => GitDiffResponse {
+            success: false,
+            file: Some(file),
+            diff: None,
+            error: Some(error),
+        },
+    }
 }
 
 #[tauri::command]
@@ -2720,6 +2822,10 @@ pub fn run() {
             get_node_info,
             parse_session_ticket,
             list_directory,
+            file_browser_list,
+            file_browser_read,
+            git_status,
+            git_diff,
             list_remote_directory, // List remote directory via P2P
             get_app_dir,           // Get app directory for mobile
             // TCP Forwarding Management
