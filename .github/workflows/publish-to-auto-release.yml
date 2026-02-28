@@ -75,19 +75,23 @@ jobs:
           path: target/${{ matrix.target }}/release/${{ matrix.asset_name }}${{ runner.os == 'Windows' && '.exe' || '' }}
 
   build-tauri:
-    name: Build App ${{ matrix.platform }}
+    name: Build App ${{ matrix.name }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - name: macOS ARM64
+            platform: macos-latest
             args: --target aarch64-apple-darwin
-          - platform: macos-latest
+          - name: macOS AMD64
+            platform: macos-13
             args: --target x86_64-apple-darwin
           - platform: ubuntu-22.04
+            name: Linux (Ubuntu 22.04)
             args: ""
           - platform: windows-latest
+            name: Windows
             args: ""
 
     steps:
@@ -112,7 +116,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Add macOS Rust targets
-        if: matrix.platform == 'macos-latest'
+        if: startsWith(matrix.platform, 'macos-')
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
       - name: Install Linux dependencies
