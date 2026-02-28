@@ -356,7 +356,7 @@ impl AcpStreamingSession {
         let runtime_permission_handler = permission_handler.clone();
         let runtime_pending_tool_names = pending_tool_names.clone();
 
-        let thread_name = format!("clawdchat-acp-{}", &session_id[..session_id.len().min(8)]);
+        let thread_name = format!("clawdpilot-acp-{}", &session_id[..session_id.len().min(8)]);
 
         std::thread::Builder::new()
             .name(thread_name)
@@ -715,7 +715,7 @@ pub async fn list_agent_history(
         }
     });
 
-    let thread_name = format!("clawdchat-acp-history-{}", Uuid::new_v4());
+    let thread_name = format!("clawdpilot-acp-history-{}", Uuid::new_v4());
     let (result_tx, result_rx) = oneshot::channel();
 
     std::thread::Builder::new()
@@ -765,7 +765,7 @@ pub async fn list_agent_history(
                             )
                             .client_info(
                                 acp::Implementation::new(
-                                    "clawdchat-cli",
+                                    "clawdpilot-cli",
                                     env!("CARGO_PKG_VERSION"),
                                 )
                                 .title("ClawdChat CLI"),
@@ -1035,7 +1035,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                                 .terminal(true),
                         )
                         .client_info(
-                            acp::Implementation::new("clawdchat-cli", env!("CARGO_PKG_VERSION"))
+                            acp::Implementation::new("clawdpilot-cli", env!("CARGO_PKG_VERSION"))
                                 .title("ClawdChat CLI"),
                         ),
                 )

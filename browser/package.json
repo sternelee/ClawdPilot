@@ -1,5 +1,5 @@
 {
-  "name": "clawdchat-browser",
+  "name": "clawdpilot-browser",
   "version": "0.1.0",
   "description": "ClawdChat browser WASM client",
   "main": "pkg/clawdchat_browser.js",

@@ -826,7 +826,7 @@ impl OpenClawGatewayManager {
                     "token": token
                 },
                 "locale": "zh-CN",
-                "userAgent": "clawdchat-openclaw",
+                "userAgent": "clawdpilot-openclaw",
                 "device": {
                     "id": device_identity.device_id,
                     "publicKey": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_identity.public_key),

@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `cli/` Rust CLI binary (`clawdchat`), host command and terminal handling.
+- `cli/` Rust CLI binary (`clawdpilot`), host command and terminal handling.
 - `app/` Tauri backend (Rust) for desktop/mobile app.
 - `shared/` Rust networking and protocol library shared by CLI/app.
 - `src/` SolidJS frontend (Vite + TailwindCSS + DaisyUI).

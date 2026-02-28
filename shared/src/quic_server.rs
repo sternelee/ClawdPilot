@@ -201,7 +201,7 @@ use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
 use tracing::{debug, error, info, warn};
 
 /// ALPN协议标识符
-pub const QUIC_MESSAGE_ALPN: &[u8] = b"com.clawdchat.messages/1";
+pub const QUIC_MESSAGE_ALPN: &[u8] = b"com.clawdpilot.messages/1";
 
 /// TCP转发握手协议魔数
 /// 格式: [魔数(5字节)] [session_id长度(4字节u32BE)] [session_id(UTF-8字符串)]

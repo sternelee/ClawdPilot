@@ -122,13 +122,13 @@ cargo build --release -p cli
 
 ### Client/Host Dual Mode
 
-1. **Client Mode** (`clawdchat run`):
+1. **Client Mode** (`clawdpilot run`):
    - Direct local ACP agent interaction
    - Uses AgentManager to spawn ACP subprocess
    - Interactive CLI with slash commands
    - Reads from stdin, writes to stdout
 
-2. **Host Mode** (`clawdchat host`):
+2. **Host Mode** (`clawdpilot host`):
    - P2P server via iroh QUIC
    - Forwards requests to local ACP agents
    - Handles connection management

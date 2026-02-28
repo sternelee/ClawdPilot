@@ -21,7 +21,7 @@ fn generate_qr_string(ticket: &str) -> String {
 }
 
 #[derive(Parser)]
-#[command(name = "clawdchat")]
+#[command(name = "clawdpilot")]
 #[command(about = "ClawdChat - P2P AI Agent Remote Management Tool")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
@@ -91,7 +91,7 @@ async fn main() -> Result<()> {
 fn setup_logging() -> Result<()> {
     std::fs::create_dir_all("logs").ok();
 
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "clawdchat-cli.log");
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "clawdpilot-cli.log");
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(file_appender)
         .with_ansi(false)
@@ -348,7 +348,7 @@ fn setup_daemon_logging() -> Result<()> {
     // 重新创建日志目录和文件
     std::fs::create_dir_all("logs").ok();
 
-    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "clawdchat-cli.log");
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "clawdpilot-cli.log");
     let file_layer = tracing_subscriber::fmt::layer()
         .with_writer(file_appender)
         .with_ansi(false)

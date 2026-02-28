@@ -77,10 +77,10 @@
 **命令设计**：
 
 ```bash
-clawdchat              # 启动 Claude Code 会话
-clawdchat opencode     # 启动 OpenCode 会话
-clawdchat gemini       # 启动 Gemini CLI 会话
-clawdchat runner       # 后台服务模式
+clawdpilot              # 启动 Claude Code 会话
+clawdpilot opencode     # 启动 OpenCode 会话
+clawdpilot gemini       # 启动 Gemini CLI 会话
+clawdpilot runner       # 后台服务模式
 ```
 
 #### 2. iroh P2P Network
@@ -151,7 +151,7 @@ pub enum AgentType {
 #### 会话启动流程
 
 ```
-1. 用户运行 `clawdchat`
+1. 用户运行 `clawdpilot`
          │
          ▼
 2. CLI 启动 Claude Code 子进程

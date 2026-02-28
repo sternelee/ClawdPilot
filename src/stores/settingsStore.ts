@@ -49,7 +49,7 @@ const defaultSettings: UserSettings = {
 };
 
 // Local storage key
-const SETTINGS_KEY = "clawdchat-settings";
+const SETTINGS_KEY = "clawdpilot-settings";
 
 // Load settings from localStorage
 const loadSettings = (): UserSettings => {

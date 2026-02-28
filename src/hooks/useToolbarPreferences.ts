@@ -17,7 +17,7 @@ export interface ToolbarPreferences {
   visible: boolean;
 }
 
-const STORAGE_KEY = "clawdchat-toolbar-preferences";
+const STORAGE_KEY = "clawdpilot-toolbar-preferences";
 
 const DEFAULT_PREFERENCES: ToolbarPreferences = {
   layout: "auto",

@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ClawdChat** (directory: `riterm`) is a P2P terminal session sharing tool built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile). It enables real-time collaboration on terminal sessions with automatic history logging and secure P2P networking using iroh.
+**ClawdPilot** (directory: `riterm`) is a multi-agent local/remote management platform built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile). It provides unified session management for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, OpenClaw) across local and remote modes.
 
 ## Project Naming
 
-- **Binary**: `clawdchat` (Rust CLI binary in `cli/`)
+- **Product**: ClawdPilot
+- **CLI crate**: `cli` (binary name: `cli`, command: `clawdpilot`)
+- **Tauri app crate**: `app` (lib name: `clawdpilot`)
 - **Directory**: `riterm` (repository root)
 - **Frontend**: SolidJS (not React)
 
@@ -18,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | Crate | Purpose |
 |-------|---------|
-| **cli/** | CLI binary — `clawdchat host` subcommand only |
+| **cli/** | CLI binary — `clawdpilot host` subcommand only |
 | **shared/** | P2P networking, message protocol, QUIC server, event manager, agent protocols |
 | **app/** | Tauri 2 desktop+mobile backend — Tauri commands, P2P client, TCP forwarding |
 | **browser/** | WebAssembly browser client |
@@ -29,6 +31,20 @@ Persistent session storage uses SQLite:
 - **Location**: `~/.riterm/sessions.db` (macOS/Linux)
 - **Module**: `shared/src/session_store/sqlite.rs`
 - **Schema**: Auto-migrated via `rusqlite_migration`
+
+### Agent Configuration
+
+Override agent commands/args/env in `~/.config/clawdpilot/agents.json` (or `~/.clawdpilot/agents.json`):
+
+```json
+{
+  "agents": {
+    "claude": { "command": "claude-agent-acp", "args": [], "env": {} },
+    "codex": { "command": "codex-acp", "args": [], "env": {} },
+    "gemini": { "command": "gemini", "args": ["--stdio"], "env": { "GEMINI_API_KEY": "..." } }
+  }
+}
+```
 
 ### Frontend Structure
 
@@ -80,20 +96,6 @@ The `shared/src/agent/` module manages AI agent subprocesses via two session pro
 | Gemini CLI | `Gemini` | ACP | `gemini` |
 | OpenClaw | `OpenClaw` | WebSocket Gateway | `openclaw gateway` |
 
-### External Agent Overrides
-
-Override commands/args/env in `~/.config/clawdchat/agents.json` (or `~/.clawdchat/agents.json`):
-
-```json
-{
-  "agents": {
-    "claude": { "command": "claude-agent-acp", "args": [], "env": {} },
-    "codex": { "command": "codex-acp", "args": [], "env": {} },
-    "gemini": { "command": "gemini", "args": ["--stdio"], "env": { "GEMINI_API_KEY": "..." } }
-  }
-}
-```
-
 ## Development Commands
 
 ### Frontend Development
@@ -123,10 +125,15 @@ pnpm tsc
 ```bash
 # Build CLI binary (release)
 cargo build -p cli --release
-# Output: cli/target/release/clawdchat
+# Output: target/release/cli
 
 # Run CLI
-./cli/target/release/clawdchat host
+./target/release/cli host
+
+# The host server prints a QR code and connection ticket for mobile app to scan
+# Logs to: ./logs/clawdpilot-cli.log
+# Secret key stored at: ./clawdchat_secret_key (in CLI directory)
+# Default bind address: 0.0.0.0:61103
 
 # Rust checks
 cargo check
@@ -331,13 +338,13 @@ pnpm tsc  # TypeScript type check
 cargo build -p cli
 
 # Run with logging
-RUST_LOG=debug ./cli/target/debug/clawdchat host
+RUST_LOG=debug ./target/debug/cli host
 
 # Use temporary key (no persistence)
-./cli/target/release/clawdchat host --temp-key
+./target/release/cli host --temp-key
 
 # Daemon mode (run in background after printing QR)
-./cli/target/release/clawdchat host --daemon
+./target/release/cli host --daemon
 ```
 
 ### App Debugging
@@ -347,12 +354,12 @@ RUST_LOG=debug ./cli/target/debug/clawdchat host
 RUST_LOG=debug pnpm tauri:dev
 
 # Check app logs
-# Windows: %APPDATA%\ClawdChat\logs\
-# macOS: ~/Library/Logs/ClawdChat/
-# Linux: ~/.local/share/ClawdChat/logs/
+# Windows: %APPDATA%\ClawdPilot\logs\
+# macOS: ~/Library/Logs/ClawdPilot/
+# Linux: ~/.local/share/ClawdPilot/logs/
 
 # iOS debugging (macOS only)
-idevicesyslog | grep ClawdChat
+idevicesyslog | grep ClawdPilot
 ```
 
 ## Session Lifecycle

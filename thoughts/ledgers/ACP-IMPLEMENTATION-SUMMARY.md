@@ -137,7 +137,7 @@ A comprehensive continuity ledger documenting:
 
 ## Architecture
 
-### Client Mode (`clawdchat run`)
+### Client Mode (`clawdpilot run`)
 
 ```
 User (CLI) → LocalClientSession → AgentManager → AcpStreamingSession → ACP Agent
@@ -146,7 +146,7 @@ User (CLI) → LocalClientSession → AgentManager → AcpStreamingSession → A
               commands                 management        routing
 ```
 
-### Host Mode (`clawdchat host` - Already Existing)
+### Host Mode (`clawdpilot host` - Already Existing)
 
 ```
 Mobile App → P2P Network (iroh QUIC) → CliMessageServer → AgentManager → ACP Agent
@@ -241,8 +241,8 @@ Commands:
 ```bash
 # Build CLI (dev)
 $ cargo build -p cli
-   Compiling lib v0.1.0 (/Users/sternelee/www/github/clawdchat/lib)
-   Compiling cli v0.1.0 (/Users/sternelee/www/github/clawdchat/cli)
+   Compiling lib v0.1.0 (/Users/sternelee/www/github/clawdpilot/lib)
+   Compiling cli v0.1.0 (/Users/sternelee/www/github/clawdpilot/cli)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.91s
 
 # Build CLI (release)
