@@ -65,17 +65,6 @@ function PermissionCard(props: PermissionCardProps) {
     }
   };
 
-  const formatTimestamp = (timestamp: number): string => {
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffSecs = Math.floor(diffMs / 1000);
-
-    if (diffSecs < 60) return `${diffSecs}s ago`;
-    if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m ago`;
-    return date.toLocaleTimeString();
-  };
-
   const handleApprove = () => {
     onApprove("Approved");
   };
@@ -95,17 +84,7 @@ function PermissionCard(props: PermissionCardProps) {
 
   return (
     <Card class="border-l-4 border-l-amber-500">
-      <CardHeader
-        title={permission.tool_name}
-        // description={`Requested ${formatTimestamp(permission.created_at)}`}
-        action={
-          <Show when={permission.message}>
-            <span class="text-xs text-muted-foreground">
-              {permission.message}
-            </span>
-          </Show>
-        }
-      />
+      <CardHeader title={permission.tool_name} />
       <CardContent class="space-y-3">
         <Show when={permission.tool_params}>
           <div>

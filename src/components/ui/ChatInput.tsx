@@ -17,7 +17,8 @@ import {
 } from "solid-js";
 import { cn } from "~/lib/utils";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FiSend, FiPlus, FiCommand, FiX, FiStopCircle } from "solid-icons/fi";
+import { FiSend, FiPlus, FiCommand, FiX } from "solid-icons/fi";
+import { FaSolidStopCircle } from "solid-icons/fa";
 
 // ============================================================================
 // Types
@@ -133,7 +134,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         {/* Attach Button */}
         <button
           type="button"
-          class="p-3 text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 rounded-xl transition-all duration-200 shrink-0"
+          class="p-3 text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 rounded-xl transition-all duration-200 shrink-0 hidden"
           title="Attach files"
           disabled={props.disabled}
           onClick={handleAttach}
@@ -150,7 +151,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           placeholder={props.placeholder || "Type your message..."}
-          class="flex-1 py-3.5 bg-transparent border-none outline-none resize-none text-sm max-h-[200px] min-h-[24px] leading-relaxed placeholder:text-muted-foreground/40"
+          class="flex-1 p-3.5 bg-transparent border-none outline-none resize-none text-sm max-h-[200px] min-h-[24px] leading-relaxed placeholder:text-muted-foreground/40 scrollbar-hide"
           disabled={props.disabled}
           rows={1}
         />
@@ -177,7 +178,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           title={props.isStreaming ? "Stop generation" : "Send message"}
         >
           <Show when={props.isStreaming} fallback={<FiSend size={20} />}>
-            <FiStopCircle size={30} color="red" />
+            <FaSolidStopCircle size={30} color="red" />
           </Show>
         </button>
       </div>

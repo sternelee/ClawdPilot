@@ -21,7 +21,6 @@ import {
   FiTerminal,
   FiPlus,
   FiCheck,
-  FiX,
   FiAlertTriangle,
   FiCopy,
 } from "solid-icons/fi";
@@ -32,7 +31,7 @@ import { sessionStore } from "../stores/sessionStore";
 import { isMobile } from "../stores/deviceStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
-import type { ChatMessage, PermissionRequest } from "../stores/chatStore";
+import type { ChatMessage } from "../stores/chatStore";
 import { Dialog } from "./ui/dialog";
 import { PermissionList } from "./ui/PermissionCard";
 import { Button } from "./ui/primitives";
@@ -66,6 +65,7 @@ interface ParsedEvent {
   // Permission
   requestId?: string;
   message?: string;
+  createdAt?: number;
   // Usage
   inputTokens?: number;
   outputTokens?: number;
@@ -180,18 +180,258 @@ interface ChatViewProps {
 // Helper Components
 // ============================================================================
 
+type SystemMessageKind =
+  | "tool"
+  | "command"
+  | "approval"
+  | "progress"
+  | "usage"
+  | "file"
+  | "session"
+  | "notification"
+  | "error"
+  | "plain";
+
+interface ParsedSystemMessage {
+  kind: SystemMessageKind;
+  title: string;
+  subtitle?: string;
+  status?: "info" | "success" | "warning" | "error" | "running";
+  details?: string;
+}
+
+function parseSystemMessage(content: string): ParsedSystemMessage {
+  const text = content.trim();
+
+  const toolMatch = text.match(
+    /^\[Tool:\s*(.+?)\s+(started|input updated|completed|failed)\](?:\n([\s\S]*))?$/i,
+  );
+  if (toolMatch) {
+    const toolName = toolMatch[1];
+    const state = toolMatch[2].toLowerCase();
+    const details = toolMatch[3]?.trim();
+    const status =
+      state === "completed"
+        ? "success"
+        : state === "failed"
+          ? "error"
+          : state === "started"
+            ? "running"
+            : "info";
+    return {
+      kind: "tool",
+      title: toolName,
+      subtitle: `Tool ${state}`,
+      status,
+      details,
+    };
+  }
+
+  const legacyToolMatch = text.match(
+    /^\[Tool:\s*(.+?)\]\s*Status:\s*([^\n]+)(?:\n([\s\S]*))?$/i,
+  );
+  if (legacyToolMatch) {
+    const state = legacyToolMatch[2].toLowerCase();
+    return {
+      kind: "tool",
+      title: legacyToolMatch[1],
+      subtitle: `Tool ${legacyToolMatch[2]}`,
+      status:
+        state.includes("fail") || state.includes("error")
+          ? "error"
+          : state.includes("complete")
+            ? "success"
+            : "running",
+      details: legacyToolMatch[3]?.trim(),
+    };
+  }
+
+  const commandFailMatch = text.match(
+    /^\[Command failed \(exit (\d+)\):\s*(.+?)\](?:\n([\s\S]*))?$/i,
+  );
+  if (commandFailMatch) {
+    return {
+      kind: "command",
+      title: commandFailMatch[2],
+      subtitle: `Command failed (exit ${commandFailMatch[1]})`,
+      status: "error",
+      details: commandFailMatch[3]?.trim(),
+    };
+  }
+
+  const commandMatch = text.match(
+    /^\[Command (completed|output):\s*(.+?)\](?:\n([\s\S]*))?$/i,
+  );
+  if (commandMatch) {
+    return {
+      kind: "command",
+      title: commandMatch[2],
+      subtitle:
+        commandMatch[1].toLowerCase() === "completed"
+          ? "Command completed"
+          : "Command output",
+      status:
+        commandMatch[1].toLowerCase() === "completed" ? "success" : "info",
+      details: commandMatch[3]?.trim(),
+    };
+  }
+
+  const sessionMatch = text.match(/^\[Session started:\s*(.+?)\]$/i);
+  if (sessionMatch) {
+    return {
+      kind: "session",
+      title: sessionMatch[1],
+      subtitle: "Session started",
+      status: "success",
+    };
+  }
+
+  const usageMatch = text.match(/^\[Token Usage\]\s*([\s\S]+)$/i);
+  if (usageMatch) {
+    return {
+      kind: "usage",
+      title: "Token usage",
+      subtitle: "Model usage update",
+      status: "info",
+      details: usageMatch[1].trim(),
+    };
+  }
+
+  const progressMatch = text.match(/^\[Progress\]\s*([\s\S]+)$/i);
+  if (progressMatch) {
+    return {
+      kind: "progress",
+      title: "Progress update",
+      subtitle: progressMatch[1].trim(),
+      status: "running",
+    };
+  }
+
+  const fileMatch = text.match(/^\[File:\s*(.+?)\](?:\s*-\s*([\s\S]+))?$/i);
+  if (fileMatch) {
+    return {
+      kind: "file",
+      title: fileMatch[1].trim(),
+      subtitle: fileMatch[2]?.trim() || "File operation",
+      status: "info",
+    };
+  }
+
+  const approvalMatch = text.match(/^Permission request for\s+(.+)$/i);
+  if (approvalMatch) {
+    return {
+      kind: "approval",
+      title: approvalMatch[1].trim(),
+      subtitle: "Approval required",
+      status: "warning",
+    };
+  }
+
+  if (text.startsWith("Error:")) {
+    return {
+      kind: "error",
+      title: "Agent error",
+      subtitle: text.replace(/^Error:\s*/i, ""),
+      status: "error",
+    };
+  }
+
+  const notificationMatch = text.match(/^\[([^\]]+)\]\s*([\s\S]+)$/);
+  if (notificationMatch) {
+    const level = notificationMatch[1].trim();
+    const message = notificationMatch[2].trim();
+    return {
+      kind: "notification",
+      title: level,
+      subtitle: message,
+      status:
+        level.toLowerCase().includes("warn") ||
+        level.toLowerCase().includes("alert")
+          ? "warning"
+          : level.toLowerCase().includes("error")
+            ? "error"
+            : "info",
+    };
+  }
+
+  return {
+    kind: "plain",
+    title: "System message",
+    subtitle: text,
+    status: "info",
+  };
+}
+
+function SystemMessageCard(props: { content: string }) {
+  const parsed = () => parseSystemMessage(props.content);
+
+  const statusClass = () => {
+    switch (parsed().status) {
+      case "success":
+        return "border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300";
+      case "warning":
+        return "border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-300";
+      case "error":
+        return "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300";
+      case "running":
+        return "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300";
+      default:
+        return "border-border/60 bg-muted/50 text-muted-foreground";
+    }
+  };
+
+  return (
+    <div class={`rounded-lg border px-3 py-2.5 ${statusClass()}`}>
+      <div class="flex items-start gap-2">
+        <div class="mt-0.5">
+          <Show
+            when={parsed().status === "error"}
+            fallback={<FiTerminal size={14} />}
+          >
+            <FiAlertTriangle size={14} />
+          </Show>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] uppercase tracking-wide opacity-80">
+            {parsed().kind}
+          </div>
+          <div class="font-medium break-words">{parsed().title}</div>
+          <Show when={parsed().subtitle}>
+            <div class="text-xs opacity-90 break-words">
+              {parsed().subtitle}
+            </div>
+          </Show>
+        </div>
+      </div>
+      <Show when={parsed().details}>
+        <pre class="mt-2 rounded-md border border-black/10 bg-background/70 p-2 text-xs leading-relaxed whitespace-pre-wrap break-all">
+          {parsed().details}
+        </pre>
+      </Show>
+    </div>
+  );
+}
+
 function MessageBubble(props: { message: ChatMessage }) {
   const [, , write] = createClipboard();
   const [copied, setCopied] = createSignal(false);
 
   const isUser = () => props.message.role === "user";
   const isSystem = () => props.message.role === "system";
+  const roleLabel = () => {
+    if (isUser()) return "You";
+    if (isSystem()) return "System";
+    return "Assistant";
+  };
+
   const bubbleClass = () => {
-    if (isUser())
-      return "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground border-primary/20 shadow-lg shadow-primary/10";
-    if (isSystem())
-      return "bg-gradient-to-br from-muted to-muted/50 text-muted-foreground border-border/50";
-    return "bg-gradient-to-br from-muted/80 to-muted/40 text-foreground border-border/30";
+    if (isUser()) {
+      return "bg-primary/10 text-foreground border-primary/30";
+    }
+    if (isSystem()) {
+      return "bg-background/80 text-foreground border-border/70";
+    }
+    return "bg-muted/50 text-foreground border-border/60";
   };
 
   const handleCopy = () => {
@@ -202,24 +442,28 @@ function MessageBubble(props: { message: ChatMessage }) {
 
   return (
     <div
-      class={`flex flex-col gap-1 animate-fade-in ${isUser() ? "items-end" : "items-start"} group/bubble transition-all duration-300`}
+      class={`flex flex-col gap-1.5 animate-fade-in ${isUser() ? "items-end" : "items-start"} group/bubble transition-all duration-300`}
     >
-      <div class="flex items-center gap-2 text-xs text-muted-foreground/50 px-1">
+      <div class="flex items-center gap-2 text-[11px] text-muted-foreground/70 px-1">
         <Show when={isUser()}>
-          <div class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/20">
-            <FiUser size={16} />
+          <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-primary/30 bg-primary/15 text-primary">
+            <FiUser size={13} />
           </div>
         </Show>
         <Show when={!isUser() && !isSystem()}>
-          <div class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-secondary to-secondary/80 text-secondary-foreground shadow-md">
-            <FiTerminal size={16} />
+          <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-muted/70 text-muted-foreground">
+            <FiTerminal size={13} />
           </div>
         </Show>
         <Show when={isSystem()}>
-          <div class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-muted to-muted/80 text-muted-foreground">
-            <FiTerminal size={16} />
+          <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
+            <FiTerminal size={13} />
           </div>
         </Show>
+        <span class="font-medium tracking-wide uppercase text-[10px] opacity-80">
+          {roleLabel()}
+        </span>
+        <span class="opacity-30">•</span>
         <time class="opacity-60">
           {new Date(props.message.timestamp || Date.now()).toLocaleTimeString()}
         </time>
@@ -237,18 +481,29 @@ function MessageBubble(props: { message: ChatMessage }) {
         </Show>
       </div>
       <div
-        class={`max-w-[92vw] rounded-2xl border px-4 py-3 shadow-sm ${bubbleClass()}`}
+        class={`w-full max-w-[min(92vw,54rem)] rounded-xl border px-3.5 py-3 ${bubbleClass()}`}
       >
-        <div class="prose prose-sm wrap-break-words text-sm max-w-none">
-          <SolidMarkdown children={props.message.content} />
-        </div>
+        <Show
+          when={isSystem()}
+          fallback={
+            <div class="prose prose-sm wrap-break-words text-sm max-w-none leading-6">
+              <SolidMarkdown children={props.message.content} />
+            </div>
+          }
+        >
+          <SystemMessageCard content={props.message.content} />
+        </Show>
         <Show
           when={props.message.toolCalls && props.message.toolCalls.length > 0}
         >
-          <ToolCallList toolCalls={props.message.toolCalls!} />
+          <div class="mt-3 pt-3 border-t border-border/50">
+            <ToolCallList toolCalls={props.message.toolCalls!} />
+          </div>
         </Show>
         <Show when={props.message.thinking}>
-          <ReasoningBlock thinking="Thinking..." isStreaming={true} />
+          <div class="mt-3 pt-3 border-t border-border/50">
+            <ReasoningBlock thinking="Thinking..." isStreaming={true} />
+          </div>
         </Show>
       </div>
     </div>
@@ -1120,11 +1375,11 @@ export function ChatView(props: ChatViewProps) {
       const iconPath = iconPaths[normalizedType];
 
       if (iconPath) {
-        return <img src={iconPath} alt={normalizedType} class="w-6 h-6" />;
+        return <img src={iconPath} alt={normalizedType} class="w-12 h-12" />;
       }
 
       // Fallback
-      return <span class="text-2xl">🤖</span>;
+      return <span class="text-4xl">🤖</span>;
     };
 
     return (
@@ -1200,7 +1455,7 @@ export function ChatView(props: ChatViewProps) {
           <Show
             when={messages().length === 0 && pendingPermissions().length === 0}
           >
-            <div class="flex flex-col items-center text-center p- justify-center h-full8">
+            <div class="flex flex-col items-center text-center justify-center h-full8">
               <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-5 shadow-lg shadow-primary/10">
                 <div class="text-4xl">{getAgentIcon()}</div>
               </div>
