@@ -182,11 +182,21 @@ async fn run_host(
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {
             info!("Received shutdown signal");
-            server_ref.shutdown().await?;
-            #[cfg(not(debug_assertions))]
-            println!("🛑 Stopped");
-            #[cfg(debug_assertions)]
-            println!("🛑 Server stopped gracefully");
+            // 使用超时保护防止关闭过程无限挂起
+            match tokio::time::timeout(std::time::Duration::from_secs(30), server_ref.shutdown()).await {
+                Ok(Ok(())) => {
+                    #[cfg(not(debug_assertions))]
+                    println!("🛑 Stopped");
+                    #[cfg(debug_assertions)]
+                    println!("🛑 Server stopped gracefully");
+                }
+                Ok(Err(e)) => {
+                    eprintln!("🛑 Server shutdown error: {}", e);
+                }
+                Err(_) => {
+                    eprintln!("🛑 Server shutdown timed out after 30 seconds, forcing exit");
+                }
+            }
         }
         _ = async {
             // 保持服务器运行并显示状态

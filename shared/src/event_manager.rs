@@ -423,25 +423,15 @@ impl CommunicationManager {
         &self.node_id
     }
 
-    /// 启动消息处理循环
+    /// 初始化消息处理
+    ///
+    /// 注意：此方法保留用于向后兼容，但不再启动无用的心跳循环。
+    /// outgoing_message_tx 的生命周期现在由结构体自身管理。
     async fn start_message_processing_loop(&self) -> Result<()> {
-        let _outgoing_tx = self.outgoing_message_tx.clone();
-        let node_id = self.node_id.clone();
-
-        tokio::spawn(async move {
-            debug!("Message processing loop started for node: {}", node_id);
-
-            // 保持 outgoing_tx 存活，这样通道就不会被关闭
-            // 实际的消息发送是通过 send_message() 方法进行的
-            loop {
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                debug!("Message processing loop alive for node: {}", node_id);
-            }
-
-            // 注意：这个循环永远不会退出，除非任务被取消
-            // 这样可以保持 outgoing_tx 存活，防止通道关闭
-        });
-
+        // outgoing_message_tx 由 CommunicationManager 持有，
+        // 只要 CommunicationManager 存活，发送器就有效。
+        // 不再需要额外的循环任务来保持发送器存活。
+        debug!("Message processing initialized for node: {}", self.node_id);
         Ok(())
     }
 

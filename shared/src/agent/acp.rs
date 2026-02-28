@@ -951,17 +951,26 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
     let stdin = child
         .stdin
         .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to capture ACP agent stdin"))?;
+        .ok_or_else(|| {
+            let _ = child.start_kill();
+            anyhow::anyhow!("Failed to capture ACP agent stdin")
+        })?;
 
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to capture ACP agent stdout"))?;
+        .ok_or_else(|| {
+            let _ = child.start_kill();
+            anyhow::anyhow!("Failed to capture ACP agent stdout")
+        })?;
 
     let stderr = child
         .stderr
         .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to capture ACP agent stderr"))?;
+        .ok_or_else(|| {
+            let _ = child.start_kill();
+            anyhow::anyhow!("Failed to capture ACP agent stderr")
+        })?;
 
     let active_turn = Arc::new(RwLock::new(None::<String>));
     let tool_name_map = Arc::new(Mutex::new(HashMap::<String, String>::new()));
@@ -1057,6 +1066,10 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                 );
             }
 
+            // Kill the child process on initialization failure
+            let _ = child.start_kill();
+            let _ = child.wait().await;
+
             let _ = params.ready_tx.send(Err(error_msg.clone()));
             return Err(anyhow::anyhow!(error_msg));
         }
@@ -1092,6 +1105,9 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                 }
                 Err(err) => {
                     let error_msg = format!("ACP new_session failed: {err}");
+                    // Kill the child process on session creation failure
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
                     let _ = params.ready_tx.send(Err(error_msg.clone()));
                     return Err(anyhow::anyhow!(error_msg));
                 }
@@ -1100,6 +1116,9 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         AcpSessionStartMode::Load { session_id } => {
             if !supports_load {
                 let error_msg = "Agent does not support load_session".to_string();
+                // Kill the child process on failure
+                let _ = child.start_kill();
+                let _ = child.wait().await;
                 let _ = params.ready_tx.send(Err(error_msg.clone()));
                 return Err(anyhow::anyhow!(error_msg));
             }
@@ -1122,6 +1141,9 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                 Ok(_resp) => acp::SessionId::new(session_id.clone()),
                 Err(err) => {
                     let error_msg = format!("ACP load_session failed: {err}");
+                    // Kill the child process on failure
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
                     let _ = params.ready_tx.send(Err(error_msg.clone()));
                     return Err(anyhow::anyhow!(error_msg));
                 }
@@ -1130,6 +1152,9 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         AcpSessionStartMode::Resume { session_id } => {
             if !supports_resume {
                 let error_msg = "Agent does not support resume_session".to_string();
+                // Kill the child process on failure
+                let _ = child.start_kill();
+                let _ = child.wait().await;
                 let _ = params.ready_tx.send(Err(error_msg.clone()));
                 return Err(anyhow::anyhow!(error_msg));
             }
@@ -1152,6 +1177,9 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                 Ok(_resp) => acp::SessionId::new(session_id.clone()),
                 Err(err) => {
                     let error_msg = format!("ACP resume_session failed: {err}");
+                    // Kill the child process on failure
+                    let _ = child.start_kill();
+                    let _ = child.wait().await;
                     let _ = params.ready_tx.send(Err(error_msg.clone()));
                     return Err(anyhow::anyhow!(error_msg));
                 }
