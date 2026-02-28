@@ -211,12 +211,12 @@ jobs:
         shell: bash
         run: |
           cd app/gen/android
-          cat > keystore.properties << EOF
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          password=${{ secrets.ANDROID_KEY_PASSWORD }}
-          storeFile=$RUNNER_TEMP/upload-keystore.jks
-          EOF
-          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
+          {
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'password=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'storeFile=%s\n' "$RUNNER_TEMP/upload-keystore.jks"
+          } > keystore.properties
+          printf '%s' "$ANDROID_KEY_BASE64" | tr -d '\r\n' | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
 
       - name: Build Android app (APK + AAB)
         if: steps.check-secrets.outputs.has_android_secrets == 'true'
