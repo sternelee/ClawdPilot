@@ -1,0 +1,41 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="96" y1="96" x2="928" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#111B2E"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="224" y1="208" x2="804" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="flare" x1="410" y1="356" x2="626" y2="672" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#FB923C"/>
+    </linearGradient>
+    <filter id="shadow" x="148" y="116" width="744" height="792" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#020617" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="212" fill="url(#bg)"/>
+
+  <g filter="url(#shadow)">
+    <!-- cockpit bubble -->
+    <path d="M512 228C408 228 324 313 324 417V598C324 699 407 782 508 782H537C641 782 724 698 724 594V417C724 313 640 228 537 228H512Z" fill="#E2E8F0"/>
+
+    <!-- winged command frame -->
+    <path d="M210 430L388 355V446L210 512V430Z" fill="url(#accent)"/>
+    <path d="M814 430L636 355V446L814 512V430Z" fill="url(#accent)"/>
+
+    <!-- pilot P mark -->
+    <path d="M434 370H545C602 370 648 416 648 473C648 530 602 576 545 576H498V665H434V370Z" fill="#0F172A"/>
+    <path d="M498 433V513H542C564 513 582 495 582 473C582 451 564 433 542 433H498Z" fill="url(#flare)"/>
+
+    <!-- nose/route mark -->
+    <path d="M512 782L558 860H466L512 782Z" fill="url(#accent)"/>
+  </g>
+
+  <!-- signal traces -->
+  <path d="M266 602C328 584 366 634 424 634" stroke="#2DD4BF" stroke-opacity="0.55" stroke-width="16" stroke-linecap="round"/>
+  <path d="M758 602C696 584 658 634 600 634" stroke="#22C55E" stroke-opacity="0.55" stroke-width="16" stroke-linecap="round"/>
+</svg>

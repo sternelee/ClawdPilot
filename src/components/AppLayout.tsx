@@ -247,11 +247,15 @@ export const AppLayout: Component = () => {
 
               <div class="text-center max-w-lg">
                 {/* Logo */}
-                <div class="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary via-primary/90 to-primary/60 flex items-center justify-center shadow-2xl shadow-primary/30">
-                  <span class="text-5xl text-white font-bold">R</span>
+                <div class="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/30">
+                  <img
+                    src="/clawdpilot-icon.svg"
+                    alt="ClawdPilot logo"
+                    class="h-20 w-20 rounded-2xl object-cover"
+                  />
                 </div>
                 <h2 class="text-3xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                  Welcome to riterm
+                  Welcome to ClawdPilot
                 </h2>
                 <p class="text-muted-foreground/70 mb-8 max-w-xs mx-auto leading-relaxed">
                   Manage multiple AI agent sessions in one place. Create a new
@@ -286,7 +290,7 @@ export const AppLayout: Component = () => {
                   </div>
                   <div class="p-3 rounded-xl bg-muted/50 border border-border/50">
                     <div class="text-lg mb-1">💬</div>
-                    <div class="text-xs font-medium">Terminal</div>
+                    <div class="text-xs font-medium">Agent</div>
                     <div class="text-[10px] text-muted-foreground/60">
                       Real-time sharing
                     </div>

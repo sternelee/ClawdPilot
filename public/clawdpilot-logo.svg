@@ -1,0 +1,26 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="iconBg" x1="24" y1="24" x2="296" y2="296" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#111B2E"/>
+    </linearGradient>
+    <linearGradient id="iconAccent" x1="72" y1="56" x2="268" y2="276" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="word" x1="360" y1="90" x2="1100" y2="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#1E293B"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="24" y="24" width="272" height="272" rx="64" fill="url(#iconBg)"/>
+  <path d="M74 138L132 112V160L74 182V138Z" fill="url(#iconAccent)"/>
+  <path d="M246 138L188 112V160L246 182V138Z" fill="url(#iconAccent)"/>
+  <path d="M130 116H168C188 116 204 132 204 152C204 172 188 188 168 188H154V222H130V116Z" fill="#E2E8F0"/>
+  <path d="M154 140V164H167C174 164 180 158 180 152C180 146 174 140 167 140H154Z" fill="#F59E0B"/>
+  <path d="M160 222L178 250H142L160 222Z" fill="url(#iconAccent)"/>
+
+  <text x="344" y="198" fill="url(#word)" font-family="'Segoe UI', 'SF Pro Display', sans-serif" font-size="112" font-weight="700" letter-spacing="-2">ClawdPilot</text>
+  <text x="350" y="244" fill="#334155" font-family="'Segoe UI', 'SF Pro Text', sans-serif" font-size="30" font-weight="500" letter-spacing="1.2">MULTI-AGENT CONTROL DECK</text>
+</svg>

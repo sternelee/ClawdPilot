@@ -491,11 +491,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           <div class="flex items-center gap-2">
             {/* App Logo */}
             <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
-              <span class="text-white font-bold text-sm">R</span>
+              <span class="text-white font-bold text-sm">P</span>
             </div>
             <div>
               <p class="text-[10px] text-muted-foreground/60 -mt-0.5">
-                AI Terminal
+                AI Copilot
               </p>
             </div>
           </div>
