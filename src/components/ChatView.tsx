@@ -10,12 +10,12 @@ import {
   Show,
   createEffect,
   createSignal,
+  on,
   onMount,
   onCleanup,
 } from "solid-js";
 import { TransitionGroup } from "solid-transition-group";
 import { createClipboard } from "@solid-primitives/clipboard";
-import { createScrollPosition } from "@solid-primitives/scroll";
 import {
   FiUser,
   FiTerminal,
@@ -526,12 +526,10 @@ export function ChatView(props: ChatViewProps) {
       chatStore.getPendingPermissions(props.sessionId);
 
     const [inputValue, setInputValue] = createSignal("");
-    const [messagesEnd, setMessagesEnd] = createSignal<HTMLDivElement | null>(
-      null,
-    );
     const [scrollEl, setScrollEl] = createSignal<HTMLElement>();
     const [isScrolledToBottom, setIsScrolledToBottom] = createSignal(true);
     const [isStreaming, setIsStreaming] = createSignal(false);
+    const [lastScrollTop, setLastScrollTop] = createSignal(0);
     const [permissionMode, setPermissionMode] = createSignal<
       "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove"
     >("AlwaysAsk");
@@ -546,29 +544,27 @@ export function ChatView(props: ChatViewProps) {
         created_at: Math.floor(permission.requestedAt / 1000),
       }));
 
-    // Track scroll position using solid-primitives hook
-    const scrollPos = createScrollPosition(scrollEl);
+    const isNearBottom = (el: HTMLElement) =>
+      el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 
-    createEffect(() => {
+    const handleMessageScroll = () => {
       const el = scrollEl();
-      if (el) {
-        const isAtBottom =
-          el.scrollHeight - scrollPos.y - el.clientHeight < 100;
-        if (isAtBottom !== isScrolledToBottom()) {
-          setIsScrolledToBottom(isAtBottom);
-        }
-      }
-    });
+      if (!el) return;
+      const atBottom = isNearBottom(el);
+      const currentTop = el.scrollTop;
+      const scrollingUp = currentTop < lastScrollTop();
+      setLastScrollTop(currentTop);
 
-    // Auto-scroll to bottom when new messages arrive
-    createEffect(() => {
-      messages();
-      pendingPermissions();
-
-      if (isScrolledToBottom()) {
-        scrollToBottom();
+      // User is actively scrolling up to read history; disable stick-to-bottom immediately.
+      if (scrollingUp && !atBottom) {
+        if (isScrolledToBottom()) setIsScrolledToBottom(false);
+        return;
       }
-    });
+
+      if (atBottom !== isScrolledToBottom()) {
+        setIsScrolledToBottom(atBottom);
+      }
+    };
 
     // Listen for incoming agent messages from backend
     onMount(() => {
@@ -1076,9 +1072,41 @@ export function ChatView(props: ChatViewProps) {
         });
     });
 
-    const scrollToBottom = () => {
-      messagesEnd()?.scrollIntoView({ behavior: "smooth" });
+    const scrollToBottom = (behavior: ScrollBehavior = "auto") => {
+      const el = scrollEl();
+      if (!el) return;
+      el.scrollTo({ top: el.scrollHeight, behavior });
     };
+
+    // Auto-scroll to bottom after message/permission updates, if user is near bottom.
+    createEffect(
+      on(
+        () => {
+          const list = messages();
+          const last = list[list.length - 1];
+          return {
+            messageCount: list.length,
+            lastId: last?.id,
+            lastLen: last?.content?.length ?? 0,
+            pendingCount: pendingPermissions().length,
+          };
+        },
+        () => {
+          if (!isScrolledToBottom()) return;
+          requestAnimationFrame(() => scrollToBottom("auto"));
+        },
+      ),
+    );
+
+    onMount(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom("auto");
+        const el = scrollEl();
+        if (el) {
+          setLastScrollTop(el.scrollTop);
+        }
+      });
+    });
 
     // Handle file attachments from ChatInput
     const handleAttachFiles = (files: File[]) => {
@@ -1518,6 +1546,7 @@ export function ChatView(props: ChatViewProps) {
         {/* Messages Area */}
         <div
           ref={setScrollEl}
+          onScroll={handleMessageScroll}
           class="flex-1 overflow-y-auto px-4 py-6 scroll-smooth overflow-x-hidden scrollbar-hide"
         >
           <Show
@@ -1599,8 +1628,6 @@ export function ChatView(props: ChatViewProps) {
               </For>
             </TransitionGroup>
           </div>
-
-          <div ref={setMessagesEnd} />
         </div>
 
         <style>
@@ -1627,7 +1654,10 @@ export function ChatView(props: ChatViewProps) {
         <Show when={!isScrolledToBottom() && messages().length > 0}>
           <Button
             type="button"
-            onClick={scrollToBottom}
+            onClick={() => {
+              setIsScrolledToBottom(true);
+              scrollToBottom("smooth");
+            }}
             class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-background shadow-lg"
             size="icon"
             variant="ghost"
