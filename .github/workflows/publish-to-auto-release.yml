@@ -220,7 +220,7 @@ jobs:
 
       - name: Build Android app (APK + AAB)
         if: steps.check-secrets.outputs.has_android_secrets == 'true'
-        run: pnpm tauri android build --config app/tauri.conf.json --target aarch64-linux-android --apk --aab
+        run: pnpm tauri android build --config app/tauri.conf.json --target aarch64 --apk --aab
 
       - name: Upload Android artifacts
         if: steps.check-secrets.outputs.has_android_secrets == 'true'
