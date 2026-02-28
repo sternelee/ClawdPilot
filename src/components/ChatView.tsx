@@ -23,6 +23,7 @@ import {
   FiCheck,
   FiAlertTriangle,
   FiCopy,
+  FiMoreVertical,
 } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -35,6 +36,7 @@ import type { ChatMessage } from "../stores/chatStore";
 import { Dialog } from "./ui/dialog";
 import { PermissionList } from "./ui/PermissionCard";
 import { Button } from "./ui/primitives";
+import { Dropdown } from "./ui/Dropdown";
 import { SolidMarkdown } from "solid-markdown";
 import { ToolCallList, ReasoningBlock } from "./ui/EnhancedMessageComponents";
 import { ChatInput } from "./ui/ChatInput";
@@ -1354,6 +1356,51 @@ export function ChatView(props: ChatViewProps) {
       }
     };
 
+    const mobileHeaderOptions = () => [
+      {
+        id: "menu",
+        label: "Actions",
+        disabled: true,
+      },
+      { id: "divider-1", label: "", divider: true },
+      {
+        id: "perm:AlwaysAsk",
+        label: "Always ask",
+      },
+      {
+        id: "perm:AcceptEdits",
+        label: "Accept edits",
+      },
+      {
+        id: "perm:Plan",
+        label: "Plan (read-only)",
+      },
+      {
+        id: "perm:AutoApprove",
+        label: "Auto approve",
+      },
+      { id: "divider-2", label: "", divider: true },
+      {
+        id: "action:new-session",
+        label: "New session",
+      },
+    ];
+
+    const handleMobileHeaderAction = (value: string) => {
+      if (value.startsWith("perm:")) {
+        const mode = value.replace("perm:", "") as
+          | "AlwaysAsk"
+          | "AcceptEdits"
+          | "Plan"
+          | "AutoApprove";
+        void handlePermissionModeChange(mode);
+        return;
+      }
+      if (value === "action:new-session") {
+        handleOpenSpawnModal();
+      }
+    };
+
     const getAgentIcon = () => {
       const normalizedType = props.agentType?.toLowerCase() || "";
 
@@ -1375,17 +1422,17 @@ export function ChatView(props: ChatViewProps) {
       const iconPath = iconPaths[normalizedType];
 
       if (iconPath) {
-        return <img src={iconPath} alt={normalizedType} class="w-12 h-12" />;
+        return <img src={iconPath} alt={normalizedType} class="w-6 h-6" />;
       }
 
       // Fallback
-      return <span class="text-4xl">🤖</span>;
+      return <span class="text-2xl">🤖</span>;
     };
 
     return (
       <div class="flex flex-col h-full bg-muted relative pb-safe lg:pb-0">
         {/* Header */}
-        <div class="z-20 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-sm pr-4 pl-16 lg:pl-6 py-3 shadow-sm">
+        <div class="z-20 flex items-center justify-between border-b border-border/60 bg-background/80 backdrop-blur-sm pr-4 pl-16 lg:pl-6 md:py-3 shadow-sm">
           <div class="flex-1">
             <div class="flex items-center gap-3">
               <div class="text-primary p-1.5 rounded-lg bg-primary/10 shrink-0">
@@ -1416,48 +1463,69 @@ export function ChatView(props: ChatViewProps) {
             </div>
           </div>
           <div class="flex items-center gap-2">
-            <select
-              class="select select-xs h-8 bg-background/60 border-border/50"
-              value={permissionMode()}
-              onChange={(e) =>
-                handlePermissionModeChange(
-                  e.currentTarget.value as
-                    | "AlwaysAsk"
-                    | "AcceptEdits"
-                    | "Plan"
-                    | "AutoApprove",
-                )
+            <Show
+              when={!isMobile()}
+              fallback={
+                <Dropdown
+                  class="min-w-0"
+                  options={mobileHeaderOptions()}
+                  value={`perm:${permissionMode()}`}
+                  onChange={handleMobileHeaderAction}
+                  trigger={
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-square"
+                      title="Chat actions"
+                    >
+                      <FiMoreVertical size={12} />
+                    </button>
+                  }
+                />
               }
-              title="Permission mode"
             >
-              <option value="AlwaysAsk">Always ask</option>
-              <option value="AcceptEdits">Accept edits</option>
-              <option value="Plan">Plan (read-only)</option>
-              <option value="AutoApprove">Auto approve</option>
-            </select>
-            <Button
-              type="button"
-              onClick={handleOpenSpawnModal}
-              variant="ghost"
-              size="icon"
-              class="h-9 w-9 hover:bg-primary/10 hover:text-primary"
-            >
-              <FiPlus size={18} />
-            </Button>
+              <select
+                class="select select-xs h-8 bg-background/60 border-border/50"
+                value={permissionMode()}
+                onChange={(e) =>
+                  handlePermissionModeChange(
+                    e.currentTarget.value as
+                      | "AlwaysAsk"
+                      | "AcceptEdits"
+                      | "Plan"
+                      | "AutoApprove",
+                  )
+                }
+                title="Permission mode"
+              >
+                <option value="AlwaysAsk">Always ask</option>
+                <option value="AcceptEdits">Accept edits</option>
+                <option value="Plan">Plan (read-only)</option>
+                <option value="AutoApprove">Auto approve</option>
+              </select>
+              <Button
+                type="button"
+                onClick={handleOpenSpawnModal}
+                variant="ghost"
+                size="icon"
+                class="h-9 w-9 hover:bg-primary/10 hover:text-primary"
+              >
+                <FiPlus size={18} />
+              </Button>
+            </Show>
           </div>
         </div>
 
         {/* Messages Area */}
         <div
           ref={setScrollEl}
-          class="flex-1 overflow-y-auto px-4 py-6 scroll-smooth overflow-x-hidden"
+          class="flex-1 overflow-y-auto px-4 py-6 scroll-smooth overflow-x-hidden scrollbar-hide"
         >
           <Show
             when={messages().length === 0 && pendingPermissions().length === 0}
           >
             <div class="flex flex-col items-center text-center justify-center h-full8">
               <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-5 shadow-lg shadow-primary/10">
-                <div class="text-4xl">{getAgentIcon()}</div>
+                <div class="text-2xl scale-200">{getAgentIcon()}</div>
               </div>
               <h3 class="text-xl font-semibold mb-2 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
                 Ready to assist

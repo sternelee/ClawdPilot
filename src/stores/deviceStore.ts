@@ -17,7 +17,13 @@ export interface DeviceCapabilities {
 function detectPlatform(): DeviceCapabilities["platform"] {
   try {
     const os = osType();
-    if (os === "android" || os === "ios" || os === "windows" || os === "macos" || os === "linux") {
+    if (
+      os === "android" ||
+      os === "ios" ||
+      os === "windows" ||
+      os === "macos" ||
+      os === "linux"
+    ) {
       return os;
     }
   } catch (error) {
@@ -44,7 +50,8 @@ function getScreenSize(): DeviceCapabilities["screenSize"] {
 function detectCapabilities(): DeviceCapabilities {
   const platform = detectPlatform();
   const screenWidth = window.screen.width;
-  const isMobile = platform === "android" || platform === "ios" || screenWidth <= 768;
+  const isMobile =
+    platform === "android" || platform === "ios" || screenWidth <= 768;
   const isTablet = isMobile && screenWidth >= 768;
   const isDesktop = !isMobile;
 
@@ -63,9 +70,8 @@ function detectCapabilities(): DeviceCapabilities {
 }
 
 // 全局设备信息状态
-const [deviceCapabilities, setDeviceCapabilities] = createSignal<DeviceCapabilities>(
-  detectCapabilities()
-);
+const [deviceCapabilities, setDeviceCapabilities] =
+  createSignal<DeviceCapabilities>(detectCapabilities());
 
 // 导出只读的 getter
 export function getDeviceCapabilities(): DeviceCapabilities {
@@ -88,7 +94,10 @@ export function initializeDeviceDetection(): void {
   document.documentElement.classList.toggle("mobile", capabilities.isMobile);
   document.documentElement.classList.toggle("tablet", capabilities.isTablet);
   document.documentElement.classList.toggle("desktop", capabilities.isDesktop);
-  document.documentElement.classList.toggle("touch", capabilities.supportsTouch);
+  document.documentElement.classList.toggle(
+    "touch",
+    capabilities.supportsTouch,
+  );
   document.documentElement.classList.add(`screen-${capabilities.screenSize}`);
   document.documentElement.classList.add(`platform-${capabilities.platform}`);
 }

@@ -12,7 +12,13 @@ import {
   createMemo,
   type Component,
 } from "solid-js";
-import { FiPlus, FiX, FiRefreshCw, FiClock } from "solid-icons/fi";
+import {
+  FiPlus,
+  FiX,
+  FiRefreshCw,
+  FiClock,
+  FiMoreVertical,
+} from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { chatStore } from "../stores/chatStore";
@@ -20,6 +26,7 @@ import { notificationStore } from "../stores/notificationStore";
 import { isMobile } from "../stores/deviceStore";
 import type { AgentType, AgentSessionMetadata } from "../stores/sessionStore";
 import { Button } from "./ui/primitives";
+import { Dropdown } from "./ui/Dropdown";
 
 const getAgentIcon = (agentType: AgentType) => {
   const normalizedType = agentType?.toLowerCase() || "";
@@ -66,14 +73,40 @@ interface SessionItemProps {
   session: ReturnType<typeof sessionStore.getSession>;
   isActive: boolean;
   onClick: () => void;
-  onClose: (e: Event) => void;
+  onClose: () => void;
   onSpawnRemoteSession?: () => void;
-  onToggleHistory?: (e: Event) => void;
+  onToggleHistory?: () => void;
   historyOpen?: boolean;
   historyDisabled?: boolean;
 }
 
 const SessionItem: Component<SessionItemProps> = (props) => {
+  const mobileSessionActions = () => [
+    {
+      id: "history",
+      label: props.historyOpen ? "Hide history" : "Show history",
+      disabled: props.historyDisabled,
+      icon: FiClock,
+    },
+    { id: "divider", label: "", divider: true },
+    {
+      id: "close",
+      label: "Close session",
+      danger: true,
+      icon: FiX,
+    },
+  ];
+
+  const handleMobileAction = (value: string) => {
+    if (value === "history") {
+      props.onToggleHistory?.();
+      return;
+    }
+    if (value === "close") {
+      props.onClose();
+    }
+  };
+
   return (
     <div
       role="button"
@@ -128,36 +161,65 @@ const SessionItem: Component<SessionItemProps> = (props) => {
 
       {/* Status Indicator */}
       <div
-        class={`w-2 h-2 rounded-full ${props.session?.active !== false ? "bg-green-500/80" : "bg-muted"}`}
+        class={`w-2 h-2 rounded-full hidden ${props.session?.active !== false ? "bg-green-500/80" : "bg-muted"}`}
       />
 
       {/* Close Button */}
       <div class="flex items-center gap-1">
-        <Show when={props.onToggleHistory}>
+        <Show
+          when={!isMobile()}
+          fallback={
+            <div onClick={(e) => e.stopPropagation()}>
+              <Dropdown
+                class="min-w-0"
+                options={mobileSessionActions()}
+                value=""
+                onChange={handleMobileAction}
+                trigger={
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-square"
+                    title="Session actions"
+                  >
+                    <FiMoreVertical size={12} />
+                  </button>
+                }
+              />
+            </div>
+          }
+        >
+          <Show when={props.onToggleHistory}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              class={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150
+                ${props.isActive ? "hover:bg-primary/20" : "hover:bg-muted"}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onToggleHistory?.();
+              }}
+              title={props.historyOpen ? "Hide history" : "Show history"}
+              disabled={props.historyDisabled}
+            >
+              <FiClock size={14} />
+            </Button>
+          </Show>
           <Button
             type="button"
             variant="ghost"
             size="xs"
-            class={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150
+            class={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 -mr-1
               ${props.isActive ? "hover:bg-primary/20" : "hover:bg-muted"}`}
-            onClick={props.onToggleHistory}
-            title={props.historyOpen ? "Hide history" : "Show history"}
-            disabled={props.historyDisabled}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onClose();
+            }}
+            title="Close session"
           >
-            <FiClock size={14} />
+            <FiX size={14} />
           </Button>
         </Show>
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          class={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 -mr-1
-            ${props.isActive ? "hover:bg-primary/20" : "hover:bg-muted"}`}
-          onClick={props.onClose}
-          title="Close session"
-        >
-          <FiX size={14} />
-        </Button>
       </div>
     </div>
   );
@@ -273,8 +335,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     }
   };
 
-  const handleCloseSession = (e: Event, sessionId: string) => {
-    e.stopPropagation();
+  const handleCloseSession = (sessionId: string) => {
     const session = sessionStore.getSession(sessionId);
     if (session?.mode === "local") {
       // Stop local agent (mobile uses mobile_stop_agent)
@@ -357,9 +418,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
   const handleToggleHistory = async (
     session: AgentSessionMetadata,
-    e: Event,
+    e?: Event,
   ) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     setHistoryExpanded((prev) => ({
       ...prev,
       [session.sessionId]: !prev[session.sessionId],
@@ -479,9 +540,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                       onClick={() =>
                         sessionStore.setActiveSession(session.sessionId)
                       }
-                      onClose={(e) => handleCloseSession(e, session.sessionId)}
+                      onClose={() => handleCloseSession(session.sessionId)}
                       onSpawnRemoteSession={handleSpawnRemoteSession}
-                      onToggleHistory={(e) => handleToggleHistory(session, e)}
+                      onToggleHistory={() => void handleToggleHistory(session)}
                       historyOpen={isExpanded()}
                       historyDisabled={!canShowHistory()}
                     />
