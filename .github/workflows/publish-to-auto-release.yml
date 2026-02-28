@@ -22,25 +22,25 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: cli
-            asset_name: clawdchat-linux-amd64
+            asset_name: clawdchat_cli-linux-amd64
 
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: cli
-            asset_name: clawdchat-darwin-amd64
+            asset_name: clawdchat_cli-darwin-amd64
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: cli
-            asset_name: clawdchat-darwin-arm64
+            asset_name: clawdchat_cli-darwin-arm64
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: cli.exe
-            asset_name: clawdchat-windows-amd64
+            asset_name: clawdchat_cli-windows-amd64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             artifact_name: cli.exe
-            asset_name: clawdchat-windows-arm64
+            asset_name: clawdchat_cli-windows-arm64
 
     steps:
       - name: Checkout code
@@ -196,8 +196,8 @@ jobs:
           body: |
             ## CLI Downloads
 
-            - Linux AMD64: `clawdchat-linux-amd64.tar.gz`
-            - macOS AMD64: `clawdchat-darwin-amd64.tar.gz`
-            - macOS ARM64: `clawdchat-darwin-arm64.tar.gz`
-            - Windows AMD64: `clawdchat-windows-amd64.zip`
-            - Windows ARM64: `clawdchat-windows-arm64.zip`
+            - Linux AMD64: `clawdchat_cli-linux-amd64.tar.gz`
+            - macOS AMD64: `clawdchat_cli-darwin-amd64.tar.gz`
+            - macOS ARM64: `clawdchat_cli-darwin-arm64.tar.gz`
+            - Windows AMD64: `clawdchat_cli-windows-amd64.zip`
+            - Windows ARM64: `clawdchat_cli-windows-arm64.zip`
