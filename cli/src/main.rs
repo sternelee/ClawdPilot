@@ -314,11 +314,24 @@ fn daemonize() -> Result<()> {
                 }
                 0 => {
                     // 最终的守护进程子进程
-                    // 关闭标准输入、输出、错误
+                    // 关闭标准输入、输出、错误并重定向到 /dev/null
                     unsafe {
                         libc::close(libc::STDIN_FILENO);
                         libc::close(libc::STDOUT_FILENO);
                         libc::close(libc::STDERR_FILENO);
+
+                        // 打开 /dev/null 并重定向到标准输入、输出、错误
+                        // 这确保后续的 I/O 操作不会失败
+                        let devnull =
+                            libc::open(b"/dev/null\0".as_ptr() as *const i8, libc::O_RDWR);
+                        if devnull >= 0 {
+                            libc::dup2(devnull, libc::STDIN_FILENO);
+                            libc::dup2(devnull, libc::STDOUT_FILENO);
+                            libc::dup2(devnull, libc::STDERR_FILENO);
+                            if devnull > libc::STDERR_FILENO {
+                                libc::close(devnull);
+                            }
+                        }
                     }
                 }
                 _ => {
@@ -344,6 +357,11 @@ fn daemonize() -> Result<()> {
 }
 
 /// Setup logging for daemon process (reconfigure after fork)
+///
+/// Note: After fork, the subscriber from parent process is invalid.
+/// We use try_init() to safely handle the case where logging might already
+/// be initialized (though in normal daemon flow, the parent's subscriber
+/// should be invalid after fork).
 fn setup_daemon_logging() -> Result<()> {
     // 重新创建日志目录和文件
     std::fs::create_dir_all("logs").ok();
@@ -354,7 +372,12 @@ fn setup_daemon_logging() -> Result<()> {
         .with_ansi(false)
         .with_filter(EnvFilter::new("info"));
 
-    tracing_subscriber::registry().with(file_layer).init();
+    // Use try_init() to avoid panic if subscriber already exists
+    // This is safe because after fork, the parent's subscriber state is invalid
+    tracing_subscriber::registry()
+        .with(file_layer)
+        .try_init()
+        .map_err(|e| anyhow::anyhow!("Failed to initialize daemon logging: {}", e))?;
 
     Ok(())
 }

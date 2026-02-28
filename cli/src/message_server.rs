@@ -1584,8 +1584,16 @@ impl TcpDataMessageHandler {
                                         "Failed to forward TCP data to local service {}: {}",
                                         connection_id, e
                                     );
-                                    // 连接可能已经断开，移除流对象但保留统计信息
-                                    conn_info.stream = None;
+                                    // 连接已断开，移除整个条目以防止内存泄漏
+                                    // 需要先释放锁，然后重新获取来删除条目
+                                    drop(connections);
+                                    let mut connections =
+                                        internal_session.connections.write().await;
+                                    connections.remove(connection_id);
+                                    debug!(
+                                        "Cleaned up TCP connection entry due to write error: {}",
+                                        connection_id
+                                    );
                                 }
                             }
                         } else {
@@ -1704,6 +1712,15 @@ impl TcpDataMessageHandler {
                                                         );
                                                     }
 
+                                                    // 清理连接条目，防止内存泄漏
+                                                    let mut conn_map =
+                                                        tcp_connections_clone.write().await;
+                                                    conn_map.remove(&connection_id_clone);
+                                                    debug!(
+                                                        "Cleaned up TCP connection entry: {}",
+                                                        connection_id_clone
+                                                    );
+
                                                     break;
                                                 }
                                                 Ok(n) => {
@@ -1745,6 +1762,16 @@ impl TcpDataMessageHandler {
                                                 }
                                                 Err(e) => {
                                                     error!("Error reading from TCP: {}", e);
+
+                                                    // 清理连接条目，防止内存泄漏
+                                                    let mut conn_map =
+                                                        tcp_connections_clone.write().await;
+                                                    conn_map.remove(&connection_id_clone);
+                                                    debug!(
+                                                        "Cleaned up TCP connection entry due to error: {}",
+                                                        connection_id_clone
+                                                    );
+
                                                     break;
                                                 }
                                             }
@@ -1767,11 +1794,15 @@ impl TcpDataMessageHandler {
                         session_id, connection_id
                     );
                     let mut connections = internal_session.connections.write().await;
-                    if let Some(conn_info) = connections.get_mut(connection_id) {
+                    if let Some(mut conn_info) = connections.remove(connection_id) {
                         // 关闭 TCP 流
                         if let Some(mut stream) = conn_info.stream.take() {
                             let _ = stream.shutdown().await;
                         }
+                        debug!(
+                            "Cleaned up TCP connection entry on close request: {}",
+                            connection_id
+                        );
                     }
                 }
                 shared::message_protocol::TcpDataType::Error => {

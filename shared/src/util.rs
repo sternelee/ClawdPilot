@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,6 +17,64 @@ pub struct FileBrowserEntry {
     pub path: String,
     pub is_dir: bool,
     pub size: u64,
+}
+
+/// Validate a path to prevent directory traversal attacks.
+/// Returns an error if the path contains suspicious components.
+fn validate_path(path: &Path) -> Result<PathBuf, String> {
+    let mut normalized = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                // Reject paths containing ".." to prevent directory traversal
+                return Err(format!("Path traversal not allowed: {}", path.display()));
+            }
+            Component::Normal(part) => {
+                // Check for null bytes which could be used for path injection
+                let part_str = part.to_string_lossy();
+                if part_str.contains('\0') {
+                    return Err(format!("Invalid path component: null byte detected"));
+                }
+                normalized.push(component);
+            }
+            Component::RootDir | Component::Prefix(_) | Component::CurDir => {
+                normalized.push(component);
+            }
+        }
+    }
+
+    Ok(normalized)
+}
+
+/// Validate a file name to prevent command injection.
+/// Returns an error if the file name contains dangerous characters.
+fn validate_filename(filename: &str) -> Result<(), String> {
+    // Reject empty filenames
+    if filename.is_empty() {
+        return Err("Filename cannot be empty".to_string());
+    }
+
+    // Reject filenames with null bytes
+    if filename.contains('\0') {
+        return Err("Filename contains null byte".to_string());
+    }
+
+    // Reject filenames that look like command injection attempts
+    // These characters could be interpreted by shells or cause issues
+    let dangerous_chars = ['|', '&', ';', '<', '>', '$', '`', '\\', '\n', '\r'];
+    for ch in dangerous_chars {
+        if filename.contains(ch) {
+            return Err(format!("Filename contains invalid character: {:?}", ch));
+        }
+    }
+
+    // Reject filenames starting with a dash (could be interpreted as flags)
+    if filename.starts_with('-') {
+        return Err(format!("Filename cannot start with a dash: {}", filename));
+    }
+
+    Ok(())
 }
 
 /// Expand ~ to home directory
@@ -149,9 +207,13 @@ pub fn file_browser_read(path: &str) -> Result<String, String> {
 
 pub fn git_status(path: &str) -> Result<String, String> {
     let normalized = normalize_path(path);
+
+    // Validate path to prevent directory traversal
+    let validated = validate_path(&normalized)?;
+
     let output = Command::new("git")
         .args(["status", "--porcelain"])
-        .current_dir(&normalized)
+        .current_dir(&validated)
         .output()
         .map_err(|e| format!("Failed to execute git status: {}", e))?;
 
@@ -164,10 +226,17 @@ pub fn git_status(path: &str) -> Result<String, String> {
 
 pub fn git_diff(path: &str, file: &str) -> Result<String, String> {
     let normalized = normalize_path(path);
+
+    // Validate path to prevent directory traversal
+    let validated = validate_path(&normalized)?;
+
+    // Validate filename to prevent command injection
+    validate_filename(file)?;
+
     let run_diff = |args: &[&str]| -> Result<(bool, String, String), String> {
         let output = Command::new("git")
             .args(args)
-            .current_dir(&normalized)
+            .current_dir(&validated)
             .output()
             .map_err(|e| format!("Failed to execute git diff: {}", e))?;
 

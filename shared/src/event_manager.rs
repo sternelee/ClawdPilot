@@ -291,13 +291,15 @@ pub struct CommunicationManager {
     message_converter: Arc<MessageToEventConverter>,
     _incoming_message_tx: mpsc::UnboundedSender<Message>, // Kept for potential future use
     outgoing_message_tx: mpsc::UnboundedSender<Message>,
+    /// Receiver for outgoing messages (stored for potential future use)
+    outgoing_message_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<Message>>>>,
     node_id: String,
 }
 
 impl CommunicationManager {
     pub fn new(node_id: String) -> Self {
         let (incoming_message_tx, _) = mpsc::unbounded_channel();
-        let (outgoing_message_tx, _) = mpsc::unbounded_channel();
+        let (outgoing_message_tx, outgoing_message_rx) = mpsc::unbounded_channel();
 
         let event_manager = Arc::new(EventManager::new());
         let message_converter = Arc::new(MessageToEventConverter::new(
@@ -311,6 +313,7 @@ impl CommunicationManager {
             message_converter,
             _incoming_message_tx: incoming_message_tx,
             outgoing_message_tx,
+            outgoing_message_rx: Arc::new(RwLock::new(Some(outgoing_message_rx))),
             node_id,
         }
     }
@@ -392,16 +395,22 @@ impl CommunicationManager {
         Ok(response)
     }
 
-    /// 获取传入消息接收器
-    pub fn get_incoming_message_receiver(&self) -> mpsc::UnboundedReceiver<Message> {
-        let (_, rx) = mpsc::unbounded_channel();
-        rx // Note: 这里需要重构以支持多个接收器
+    /// 获取传出消息接收器
+    ///
+    /// 注意：此方法只能调用一次，接收器会被移出。
+    /// 如果需要多个接收器，请考虑使用 broadcast channel。
+    pub fn get_outgoing_message_receiver(&self) -> Option<mpsc::UnboundedReceiver<Message>> {
+        let mut rx_lock = self.outgoing_message_rx.blocking_write();
+        rx_lock.take()
     }
 
-    /// 获取传出消息接收器
-    pub fn get_outgoing_message_receiver(&self) -> mpsc::UnboundedReceiver<Message> {
-        let (_, rx) = mpsc::unbounded_channel();
-        rx // Note: 这里需要重构以支持多个接收器
+    /// 获取传入消息接收器
+    ///
+    /// 注意：当前实现中传入消息直接由 receive_incoming_message 处理，
+    /// 此方法返回 None，因为传入消息通道未实现。
+    /// 如需监听传入消息，请注册事件监听器。
+    pub fn get_incoming_message_receiver(&self) -> Option<mpsc::UnboundedReceiver<Message>> {
+        None
     }
 
     /// 获取事件管理器
