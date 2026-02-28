@@ -14,7 +14,6 @@
     "os:default",
     "core:default",
     "dialog:default",
-    "dialog:allow-open",
-    "shell:default"
+    "dialog:allow-open"
   ]
 }
