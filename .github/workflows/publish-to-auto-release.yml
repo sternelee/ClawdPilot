@@ -269,7 +269,7 @@ jobs:
             lower_name="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
             if [[ "$lower_name" == *"arm64"* || "$lower_name" == *"aarch64"* ]]; then
               cp "$apk" "dist/android/aarch64/clawdchat_android-aarch64.apk"
-            elif [[ "$lower_name" == *"armeabi-v7a"* || "$lower_name" == *"armv7"* ]]; then
+            elif [[ "$lower_name" == *"armeabi-v7a"* || "$lower_name" == *"armv7"* || "$lower_name" == *"-arm-"* ]]; then
               cp "$apk" "dist/android/armv7/clawdchat_android-armv7.apk"
             elif [[ "$lower_name" == *"x86_64"* ]]; then
               continue
@@ -279,6 +279,8 @@ jobs:
           done < <(find app/gen/android/app/build/outputs/apk -type f -name "*.apk" -print0)
 
           find app/gen/android/app/build/outputs/bundle -type f -name "*.aab" -exec cp {} dist/android/aab/ \;
+
+          ls -lahR dist/android
 
           test -f dist/android/aarch64/clawdchat_android-aarch64.apk
           test -f dist/android/armv7/clawdchat_android-armv7.apk
@@ -318,7 +320,7 @@ jobs:
 
   release:
     name: Publish Release Assets
-    if: ${{ needs.build-cli.result == 'success' && needs.build-tauri.result == 'success' && (needs.build-android.result == 'success' || needs.build-android.result == 'skipped') }}
+    if: ${{ always() && needs.build-cli.result != 'cancelled' && needs.build-tauri.result != 'cancelled' && needs.build-android.result != 'cancelled' }}
     needs:
       - build-cli
       - build-tauri
@@ -331,6 +333,7 @@ jobs:
 
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           pattern: clawdchat_cli-*
           merge-multiple: false
@@ -350,6 +353,7 @@ jobs:
       - name: Create archives for CLI artifacts
         shell: bash
         run: |
+          shopt -s nullglob
           cd dist
           for dir in */; do
             dir_name="${dir%/}"
@@ -363,9 +367,16 @@ jobs:
           done
 
       - name: Generate checksums
+        shell: bash
         run: |
+          shopt -s nullglob
           cd dist
-          sha256sum *.tar.gz *.zip > checksums.txt
+          files=( *.tar.gz *.zip )
+          if [ ${#files[@]} -gt 0 ]; then
+            sha256sum "${files[@]}" > checksums.txt
+          else
+            : > checksums.txt
+          fi
 
       - name: Upload CLI archives to release
         uses: softprops/action-gh-release@v2
@@ -380,6 +391,7 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           generate_release_notes: true
+          fail_on_unmatched_files: false
           append_body: true
           body: |
             ## CLI Downloads
