@@ -1,5 +1,5 @@
 /**
- * localStorage utilities for ClawdChat tickets
+ * localStorage utilities for ClawdPilot tickets
  */
 
 const STORAGE_KEY_LAST_TICKET = "clawdchat_last_ticket";

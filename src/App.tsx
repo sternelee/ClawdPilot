@@ -1,5 +1,5 @@
 /**
- * ClawdChat App
+ * ClawdPilot App
  *
  * Main application entry point - AI Agent P2P Remote Management
  * Multi-session management with SolidJS + Solid UI tokens

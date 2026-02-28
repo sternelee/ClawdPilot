@@ -1,10 +1,10 @@
-# ClawdChat
+# ClawdPilot
 
 [English](./README.md) | [中文](./README_cn.md)
 
 A multi-agent local/remote management platform.
 
-ClawdChat provides a unified session management experience for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, OpenClaw) across local and remote modes.
+ClawdPilot provides a unified session management experience for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, OpenClaw) across local and remote modes.
 
 ## Core Capabilities
 
@@ -18,7 +18,7 @@ ClawdChat provides a unified session management experience for running and contr
 
 ## Repository Layout
 
-- `cli/`: Rust CLI (`clawdchat`) host entry
+- `cli/`: Rust CLI (`clawdpilot`) host entry
 - `app/`: Tauri backend (Rust)
 - `shared/`: Shared networking/protocol library (Rust)
 - `src/`: SolidJS frontend (chat, sessions, permissions, tools)
@@ -94,7 +94,7 @@ git push origin v0.5.0
 Workflow: `.github/workflows/publish-to-auto-release.yml`
 
 - App packaging via official `tauri-apps/tauri-action`
-- CLI artifacts published as `clawdchat_cli-*`
+- CLI artifacts published as `clawdpilot_cli-*`
 
 ### Android Signing Secrets (GitHub Actions)
 

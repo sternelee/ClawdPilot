@@ -174,7 +174,7 @@ export const settingsStore = {
 export const translations = {
   en: {
     // UI Labels
-    "app.title": "ClawdChat - P2P Agent",
+    "app.title": "ClawdPilot - P2P Agent",
     "connection.title": "Agent Connection",
     "settings.title": "Settings",
     "hosts.title": "Hosts",
@@ -237,7 +237,7 @@ export const translations = {
   },
   "zh-CN": {
     // UI Labels
-    "app.title": "ClawdChat - P2P 终端",
+    "app.title": "ClawdPilot - P2P 终端",
     "connection.title": "终端连接",
     "settings.title": "设置",
     "hosts.title": "主机",
