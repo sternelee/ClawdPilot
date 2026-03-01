@@ -10,6 +10,7 @@ import {
   For,
   createSignal,
   createMemo,
+  createEffect,
   type Component,
 } from "solid-js";
 import {
@@ -23,6 +24,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { sessionStore } from "../stores/sessionStore";
 import { chatStore } from "../stores/chatStore";
 import { notificationStore } from "../stores/notificationStore";
+import { sessionEventRouter } from "../stores/sessionEventRouter";
 import { isMobile } from "../stores/deviceStore";
 import type { AgentType, AgentSessionMetadata } from "../stores/sessionStore";
 import { Button } from "./ui/primitives";
@@ -72,6 +74,7 @@ const getAgentIcon = (agentType: AgentType) => {
 interface SessionItemProps {
   session: ReturnType<typeof sessionStore.getSession>;
   isActive: boolean;
+  hasUnread?: boolean;
   onClick: () => void;
   onClose: () => void;
   onSpawnRemoteSession?: () => void;
@@ -160,9 +163,9 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       </div>
 
       {/* Status Indicator */}
-      <div
-        class={`w-2 h-2 rounded-full hidden ${props.session?.active !== false ? "bg-green-500/80" : "bg-muted"}`}
-      />
+      <Show when={props.hasUnread && !props.isActive}>
+        <div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+      </Show>
 
       {/* Close Button */}
       <div class="flex items-center gap-1">
@@ -243,6 +246,40 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const sessions = createMemo(() => sessionStore.getSessions());
   const activeSession = createMemo(() => sessionStore.getActiveSession());
   const activeSessions = createMemo(() => sessionStore.getActiveSessions());
+
+  // Track sessions with unread messages
+  const [unreadSessions, setUnreadSessions] = createSignal<Set<string>>(
+    new Set()
+  );
+
+  // Set up unread change listener
+  onMount(() => {
+    sessionEventRouter.setOnUnreadChange((sessionId, hasUnread) => {
+      setUnreadSessions((prev) => {
+        const next = new Set(prev);
+        if (hasUnread) {
+          next.add(sessionId);
+        } else {
+          next.delete(sessionId);
+        }
+        return next;
+      });
+    });
+  });
+
+  // Clear unread when active session changes
+  createEffect(() => {
+    const active = activeSession();
+    if (active) {
+      sessionEventRouter.setActiveSession(active.sessionId);
+      sessionEventRouter.clearUnread(active.sessionId);
+      setUnreadSessions((prev) => {
+        const next = new Set(prev);
+        next.delete(active.sessionId);
+        return next;
+      });
+    }
+  });
 
   const [historyExpanded, setHistoryExpanded] = createSignal<
     Record<string, boolean>
@@ -534,6 +571,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                       isActive={
                         session.sessionId === activeSession()?.sessionId
                       }
+                      hasUnread={unreadSessions().has(session.sessionId)}
                       onClick={() =>
                         sessionStore.setActiveSession(session.sessionId)
                       }

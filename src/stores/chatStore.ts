@@ -66,6 +66,8 @@ interface ChatState {
   activeSession: string | null
   toolStatus: Record<string, Record<string, ToolCall>>
   attachments: Record<string, Attachment[]>
+  // Unread message counts per session (for sidebar notification)
+  unreadCounts: Record<string, number>
 }
 
 const initialState: ChatState = {
@@ -75,6 +77,7 @@ const initialState: ChatState = {
   activeSession: null,
   toolStatus: {},
   attachments: {},
+  unreadCounts: {},
 }
 
 export const createChatStore = () => {
@@ -278,6 +281,42 @@ export const createChatStore = () => {
     setState('activeSession', sessionId)
   }
 
+  // ========================================================================
+  // Unread Count Operations
+  // ========================================================================
+
+  const getUnreadCount = (sessionId: string): number => {
+    return state.unreadCounts[sessionId] || 0
+  }
+
+  const hasUnread = (sessionId: string): boolean => {
+    return (state.unreadCounts[sessionId] || 0) > 0
+  }
+
+  const incrementUnread = (sessionId: string) => {
+    setState(
+      produce((s: ChatState) => {
+        s.unreadCounts[sessionId] = (s.unreadCounts[sessionId] || 0) + 1
+      }),
+    )
+  }
+
+  const markAsRead = (sessionId: string) => {
+    setState(
+      produce((s: ChatState) => {
+        s.unreadCounts[sessionId] = 0
+      }),
+    )
+  }
+
+  const clearUnread = (sessionId: string) => {
+    setState(
+      produce((s: ChatState) => {
+        delete s.unreadCounts[sessionId]
+      }),
+    )
+  }
+
   return {
     // State
     state,
@@ -311,6 +350,13 @@ export const createChatStore = () => {
 
     // Active Session
     setActiveSession,
+
+    // Unread Counts
+    getUnreadCount,
+    hasUnread,
+    incrementUnread,
+    markAsRead,
+    clearUnread,
   }
 }
 

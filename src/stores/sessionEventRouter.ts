@@ -5,6 +5,7 @@
  * - Single global listener per event type (not per ChatView)
  * - Routes events to correct session handlers by sessionId
  * - Supports concurrent sessions with independent streaming states
+ * - Tracks unread state for non-active sessions
  */
 
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
@@ -27,6 +28,14 @@ export interface StreamingState {
   startedAt: number | null;
 }
 
+// Event types that should trigger unread notification
+const MESSAGE_EVENT_TYPES = new Set([
+  "text_delta",
+  "response",
+  "turn_started",
+  "TurnStarted",
+]);
+
 // ============================================================================
 // Session Event Router
 // ============================================================================
@@ -38,12 +47,21 @@ class SessionEventRouter {
   // sessionId -> streaming state
   private streamingStates = new Map<string, StreamingState>();
 
+  // sessionId -> has unread messages
+  private unreadSessions = new Set<string>();
+
+  // Callback when session has unread change
+  private onUnreadChange: ((sessionId: string, hasUnread: boolean) => void) | null = null;
+
   // Global unlisten functions
   private unlistenFns: UnlistenFn[] = [];
 
   // Initialization state
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+
+  // Current active session ID (set externally)
+  private activeSessionId: string | null = null;
 
   /**
    * Initialize global event listeners (called once)
@@ -84,6 +102,15 @@ class SessionEventRouter {
     // Update streaming state
     this.updateStreamingState(sessionId, type, event);
 
+    // Track unread for non-active sessions on message events
+    if (
+      this.activeSessionId &&
+      sessionId !== this.activeSessionId &&
+      MESSAGE_EVENT_TYPES.has(type)
+    ) {
+      this.markUnread(sessionId);
+    }
+
     // Get handlers for this session
     const sessionHandlers = this.handlers.get(sessionId);
     if (!sessionHandlers || sessionHandlers.size === 0) {
@@ -103,6 +130,16 @@ class SessionEventRouter {
         );
       }
     });
+  }
+
+  /**
+   * Mark session as having unread messages
+   */
+  private markUnread(sessionId: string): void {
+    if (!this.unreadSessions.has(sessionId)) {
+      this.unreadSessions.add(sessionId);
+      this.onUnreadChange?.(sessionId, true);
+    }
   }
 
   /**
@@ -206,6 +243,54 @@ class SessionEventRouter {
       }
     }
     return streaming;
+  }
+
+  // ========================================================================
+  // Unread Management
+  // ========================================================================
+
+  /**
+   * Set the currently active session
+   * This session will not receive unread notifications
+   */
+  setActiveSession(sessionId: string | null): void {
+    this.activeSessionId = sessionId;
+    // Clear unread for the newly active session
+    if (sessionId && this.unreadSessions.has(sessionId)) {
+      this.unreadSessions.delete(sessionId);
+      this.onUnreadChange?.(sessionId, false);
+    }
+  }
+
+  /**
+   * Check if a session has unread messages
+   */
+  hasUnread(sessionId: string): boolean {
+    return this.unreadSessions.has(sessionId);
+  }
+
+  /**
+   * Get all sessions with unread messages
+   */
+  getUnreadSessions(): string[] {
+    return Array.from(this.unreadSessions);
+  }
+
+  /**
+   * Clear unread state for a session
+   */
+  clearUnread(sessionId: string): void {
+    if (this.unreadSessions.has(sessionId)) {
+      this.unreadSessions.delete(sessionId);
+      this.onUnreadChange?.(sessionId, false);
+    }
+  }
+
+  /**
+   * Set callback for unread state changes
+   */
+  setOnUnreadChange(callback: (sessionId: string, hasUnread: boolean) => void): void {
+    this.onUnreadChange = callback;
   }
 
   /**
