@@ -6,6 +6,7 @@
  * - Markdown support indicator
  * - Keyboard shortcuts
  * - Loading states
+ * - Tool buttons (Permission, Git, File browser)
  */
 
 import {
@@ -17,12 +18,23 @@ import {
 } from "solid-js";
 import { cn } from "~/lib/utils";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FiSend, FiPlus, FiCommand, FiX } from "solid-icons/fi";
+import {
+  FiSend,
+  FiPlus,
+  FiCommand,
+  FiX,
+  FiFolder,
+  FiGitBranch,
+  FiShield,
+} from "solid-icons/fi";
 import { FaSolidStopCircle } from "solid-icons/fa";
 
 // ============================================================================
 // Types
 // ============================================================================
+
+export type PermissionMode = "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove";
+export type RightPanelView = "none" | "file" | "git";
 
 export interface ChatInputProps {
   value: string;
@@ -36,6 +48,12 @@ export interface ChatInputProps {
   isStreaming?: boolean;
   maxHeight?: number;
   class?: string;
+  // Tool buttons
+  permissionMode?: PermissionMode;
+  onPermissionModeChange?: (mode: PermissionMode) => void;
+  rightPanelView?: RightPanelView;
+  onToggleFileBrowser?: () => void;
+  onToggleGitPanel?: () => void;
 }
 
 // ============================================================================
@@ -202,19 +220,82 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         </div>
       </Show>
 
-      {/* Footer */}
-      <div class="flex items-center justify-between px-2 text-[10px] text-muted-foreground/40">
-        <div class="flex items-center gap-4">
-          <span class="flex items-center gap-1.5">
-            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">↵</kbd> send
-          </span>
-          <span class="flex items-center gap-1">
-            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">⇧</kbd>+
-            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">↵</kbd> new
-            line
-          </span>
+      {/* Tool Bar */}
+      <div class="flex items-center justify-between px-1">
+        <div class="flex items-center gap-1">
+          {/* Permission Mode Dropdown */}
+          <div class="relative">
+            <select
+              class="select select-xs h-7 bg-muted/50 border-border/40 text-xs pr-6 appearance-none cursor-pointer hover:bg-muted transition-colors"
+              value={props.permissionMode || "AlwaysAsk"}
+              onChange={(e) =>
+                props.onPermissionModeChange?.(
+                  e.currentTarget.value as PermissionMode
+                )
+              }
+              title="Permission mode"
+            >
+              <option value="AlwaysAsk">Ask</option>
+              <option value="AcceptEdits">Edit</option>
+              <option value="Plan">Plan</option>
+              <option value="AutoApprove">Auto</option>
+            </select>
+            <FiShield
+              size={10}
+              class="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none"
+            />
+          </div>
+
+          {/* Divider */}
+          <div class="w-px h-5 bg-border/50 mx-1" />
+
+          {/* File Browser Button */}
+          <button
+            type="button"
+            class={cn(
+              "btn btn-ghost btn-xs h-7 px-2 gap-1 text-xs transition-all",
+              props.rightPanelView === "file"
+                ? "bg-primary/15 text-primary hover:bg-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+            onClick={props.onToggleFileBrowser}
+            title="Toggle file browser"
+            disabled={props.disabled}
+          >
+            <FiFolder size={14} />
+            <span class="hidden sm:inline">Files</span>
+          </button>
+
+          {/* Git Panel Button */}
+          <button
+            type="button"
+            class={cn(
+              "btn btn-ghost btn-xs h-7 px-2 gap-1 text-xs transition-all",
+              props.rightPanelView === "git"
+                ? "bg-primary/15 text-primary hover:bg-primary/20"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+            onClick={props.onToggleGitPanel}
+            title="Toggle git panel"
+            disabled={props.disabled}
+          >
+            <FiGitBranch size={14} />
+            <span class="hidden sm:inline">Git</span>
+          </button>
         </div>
-        <span class="opacity-60">Markdown supported</span>
+
+        {/* Right side: Keyboard hints */}
+        <div class="flex items-center gap-3 text-[10px] text-muted-foreground/40">
+          <span class="hidden sm:flex items-center gap-1">
+            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">↵</kbd>
+            <span>send</span>
+          </span>
+          <span class="hidden sm:flex items-center gap-1">
+            <kbd class="kbd kbd-xs bg-muted/50 border-border/30">⇧↵</kbd>
+            <span>new line</span>
+          </span>
+          <span class="opacity-60">Markdown</span>
+        </div>
       </div>
     </div>
   );

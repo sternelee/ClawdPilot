@@ -19,11 +19,9 @@ import { createClipboard } from "@solid-primitives/clipboard";
 import {
   FiUser,
   FiTerminal,
-  FiPlus,
   FiCheck,
   FiAlertTriangle,
   FiCopy,
-  FiMoreVertical,
   FiFolder,
   FiGitBranch,
   FiX,
@@ -39,7 +37,6 @@ import type { ChatMessage } from "../stores/chatStore";
 import { Dialog } from "./ui/dialog";
 import { PermissionList } from "./ui/PermissionCard";
 import { Button } from "./ui/primitives";
-import { Dropdown } from "./ui/Dropdown";
 import { SolidMarkdown } from "solid-markdown";
 import Prism from "prismjs";
 import "prismjs/components/prism-clike";
@@ -153,7 +150,8 @@ const escapeHtml = (input: string): string =>
   input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const highlightCode = (code: string, language: string): string => {
-  const lang = prismLanguageMap[language.toLowerCase()] || language.toLowerCase();
+  const lang =
+    prismLanguageMap[language.toLowerCase()] || language.toLowerCase();
   const grammar = Prism.languages[lang];
   if (grammar) {
     try {
@@ -1428,18 +1426,6 @@ export function ChatView(props: ChatViewProps) {
       }
     };
 
-    const handleOpenSpawnModal = () => {
-      const s = session();
-      if (s?.mode === "remote") {
-        // Open modal in remote mode with current connection selected
-        const controlId = s.controlSessionId || s.sessionId;
-        sessionStore.openNewSessionModal("remote", controlId);
-      } else {
-        // Open modal in local mode
-        sessionStore.openNewSessionModal("local");
-      }
-    };
-
     const upsertToolMessage = (toolId: string, content: string) => {
       const existingId = toolMessageIds.get(toolId);
       if (existingId) {
@@ -1484,68 +1470,6 @@ export function ChatView(props: ChatViewProps) {
       } catch (error) {
         console.error("Failed to set permission mode:", error);
         notificationStore.error("Failed to set permission mode", "Error");
-      }
-    };
-
-    const mobileHeaderOptions = () => [
-      {
-        id: "menu",
-        label: "Actions",
-        disabled: true,
-      },
-      { id: "divider-1", label: "", divider: true },
-      {
-        id: "panel:file",
-        label: "File Browser",
-      },
-      {
-        id: "panel:git",
-        label: "Git Changes",
-      },
-      { id: "divider-1b", label: "", divider: true },
-      {
-        id: "perm:AlwaysAsk",
-        label: "Always ask",
-      },
-      {
-        id: "perm:AcceptEdits",
-        label: "Accept edits",
-      },
-      {
-        id: "perm:Plan",
-        label: "Plan (read-only)",
-      },
-      {
-        id: "perm:AutoApprove",
-        label: "Auto approve",
-      },
-      { id: "divider-2", label: "", divider: true },
-      {
-        id: "action:new-session",
-        label: "New session",
-      },
-    ];
-
-    const handleMobileHeaderAction = (value: string) => {
-      if (value.startsWith("perm:")) {
-        const mode = value.replace("perm:", "") as
-          | "AlwaysAsk"
-          | "AcceptEdits"
-          | "Plan"
-          | "AutoApprove";
-        void handlePermissionModeChange(mode);
-        return;
-      }
-      if (value === "action:new-session") {
-        handleOpenSpawnModal();
-        return;
-      }
-      if (value === "panel:file") {
-        setRightPanelView("file");
-        return;
-      }
-      if (value === "panel:git") {
-        setRightPanelView("git");
       }
     };
 
@@ -1624,80 +1548,6 @@ export function ChatView(props: ChatViewProps) {
                       </span>
                     </div>
                   </div>
-                </div>
-              </div>
-              <div class="flex items-center gap-1.5 md:gap-2">
-                <div class="hidden md:flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant={rightPanelView() === "file" ? "default" : "ghost"}
-                    size="sm"
-                    class="h-8 px-2.5"
-                    onClick={() => toggleRightPanel("file")}
-                    title="Toggle file browser"
-                  >
-                    <FiFolder size={14} />
-                    <span class="ml-1 text-xs">Files</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={rightPanelView() === "git" ? "default" : "ghost"}
-                    size="sm"
-                    class="h-8 px-2.5"
-                    onClick={() => toggleRightPanel("git")}
-                    title="Toggle git panel"
-                  >
-                    <FiGitBranch size={14} />
-                    <span class="ml-1 text-xs">Git</span>
-                  </Button>
-                </div>
-                <div class="md:hidden">
-                  <Dropdown
-                    class="min-w-0"
-                    options={mobileHeaderOptions()}
-                    value={`perm:${permissionMode()}`}
-                    onChange={handleMobileHeaderAction}
-                    compact
-                    trigger={
-                      <button
-                        type="button"
-                        class="btn btn-ghost btn-xs btn-square h-8"
-                        title="Chat actions"
-                      >
-                        <FiMoreVertical size={12} />
-                      </button>
-                    }
-                  />
-                </div>
-                <div class="hidden md:flex items-center gap-2">
-                  <select
-                    class="select select-xs h-8 bg-background/60 border-border/50"
-                    value={permissionMode()}
-                    onChange={(e) =>
-                      handlePermissionModeChange(
-                        e.currentTarget.value as
-                          | "AlwaysAsk"
-                          | "AcceptEdits"
-                          | "Plan"
-                          | "AutoApprove",
-                      )
-                    }
-                    title="Permission mode"
-                  >
-                    <option value="AlwaysAsk">Always ask</option>
-                    <option value="AcceptEdits">Accept edits</option>
-                    <option value="Plan">Plan (read-only)</option>
-                    <option value="AutoApprove">Auto approve</option>
-                  </select>
-                  <Button
-                    type="button"
-                    onClick={handleOpenSpawnModal}
-                    variant="ghost"
-                    size="icon"
-                    class="h-9 w-9 hover:bg-primary/10 hover:text-primary"
-                  >
-                    <FiPlus size={18} />
-                  </Button>
                 </div>
               </div>
             </div>
@@ -1821,7 +1671,7 @@ export function ChatView(props: ChatViewProps) {
                   setIsScrolledToBottom(true);
                   scrollToBottom("smooth");
                 }}
-                class="fixed bottom-24 right-6 z-10 h-8 w-8 bg-background shadow-lg"
+                class="fixed bottom-30 right-6 z-10 h-8 w-8 bg-background shadow-lg"
                 size="icon"
                 variant="ghost"
                 aria-label="Scroll to bottom"
@@ -1873,6 +1723,11 @@ export function ChatView(props: ChatViewProps) {
                   })}
                 isStreaming={isStreaming()}
                 disabled={!isActive()}
+                permissionMode={permissionMode()}
+                onPermissionModeChange={handlePermissionModeChange}
+                rightPanelView={rightPanelView()}
+                onToggleFileBrowser={() => toggleRightPanel("file")}
+                onToggleGitPanel={() => toggleRightPanel("git")}
               />
             </Show>
           </div>
