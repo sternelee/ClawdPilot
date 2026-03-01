@@ -948,29 +948,20 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         )
     })?;
 
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| {
-            let _ = child.start_kill();
-            anyhow::anyhow!("Failed to capture ACP agent stdin")
-        })?;
+    let stdin = child.stdin.take().ok_or_else(|| {
+        let _ = child.start_kill();
+        anyhow::anyhow!("Failed to capture ACP agent stdin")
+    })?;
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| {
-            let _ = child.start_kill();
-            anyhow::anyhow!("Failed to capture ACP agent stdout")
-        })?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        let _ = child.start_kill();
+        anyhow::anyhow!("Failed to capture ACP agent stdout")
+    })?;
 
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| {
-            let _ = child.start_kill();
-            anyhow::anyhow!("Failed to capture ACP agent stderr")
-        })?;
+    let stderr = child.stderr.take().ok_or_else(|| {
+        let _ = child.start_kill();
+        anyhow::anyhow!("Failed to capture ACP agent stderr")
+    })?;
 
     let active_turn = Arc::new(RwLock::new(None::<String>));
     let tool_name_map = Arc::new(Mutex::new(HashMap::<String, String>::new()));
