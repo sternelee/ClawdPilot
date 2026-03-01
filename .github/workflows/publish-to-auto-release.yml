@@ -401,3 +401,20 @@ jobs:
             - macOS ARM64: `clawdpilot_cli-darwin-arm64.tar.gz`
             - Windows AMD64: `clawdpilot_cli-windows-amd64.zip`
             - Windows ARM64: `clawdpilot_cli-windows-arm64.zip`
+
+      - name: Upload to public mirror repository
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: sternelee/clawdpilot-releases
+          token: ${{ secrets.PUBLIC_REPO_PAT }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+            dist/android/**/*.apk
+            dist/android/**/*.aab
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
