@@ -1658,7 +1658,7 @@ export function ChatView(props: ChatViewProps) {
                 <FiX size={12} />
               </Button>
             </div>
-            <div class="flex-1 overflow-auto">
+            <div class="flex-1 overflow-auto scrollbar-thin">
               <Show when={rightPanelView() === "file"}>
                 <FileBrowserView
                   class="h-full"

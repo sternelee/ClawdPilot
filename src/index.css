@@ -34,8 +34,9 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    -webkit-appearance: none;
+    width: 5px !important;
+    height: 5px !important;
   }
 
   .scrollbar-thin::-webkit-scrollbar-track {
@@ -45,6 +46,7 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: rgb(212 212 216 / 0.5);
     border-radius: 3px;
+    border: none;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
@@ -108,29 +110,29 @@ textarea:focus {
   }
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+*::-webkit-scrollbar {
+  -webkit-appearance: none;
+  width: 5px !important;
+  height: 5px !important;
 }
 
-::-webkit-scrollbar-track {
+*::-webkit-scrollbar-track {
   background: oklch(var(--muted));
   border-radius: 5px;
 }
 
-::-webkit-scrollbar-thumb {
-  border-radius: 5px;
+*::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
   background: oklch(var(--border));
-  border: 2px solid oklch(var(--muted));
-  background-clip: content-box;
+  border: none;
 }
 
-::-webkit-scrollbar-thumb:hover {
+*::-webkit-scrollbar-thumb:hover {
   background: oklch(var(--muted-foreground));
-  border: 2px solid oklch(var(--muted));
+  border: none;
 }
 
-::-webkit-scrollbar-corner {
+*::-webkit-scrollbar-corner {
   display: none;
 }
 

@@ -363,7 +363,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           </div>
 
           {/* Breadcrumb */}
-          <div class="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
+          <div class="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto scrollbar-thin">
             <For each={pathSegments()}>
               {(segment, i) => (
                 <>
@@ -452,7 +452,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
 
         {/* File List View */}
         <Show when={!state.isLoading && state.viewMode === "list"}>
-          <div class="overflow-x-auto">
+          <div class="overflow-x-auto scrollbar-thin">
             <table class="min-w-full text-left text-xs">
               <thead class="border-b border-border text-muted-foreground/70">
                 <tr>
@@ -572,7 +572,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
                 {state.viewingFile?.path}
               </h3>
             </div>
-            <div class="flex-1 overflow-auto rounded-sm bg-muted p-4">
+            <div class="flex-1 overflow-auto scrollbar-thin rounded-sm bg-muted p-4">
               <pre class="file-preview-prism scrollbar-thin text-xs leading-5">
                 <code
                   class={`language-${viewingLanguage()} font-mono`}
