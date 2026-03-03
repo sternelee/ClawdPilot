@@ -7,6 +7,7 @@
 
 import {
   Show,
+  createEffect,
   createMemo,
   For,
   type Component,
@@ -179,6 +180,22 @@ export const NewSessionModal: Component = () => {
     sessionStore.state.newSessionMode === "local" ||
     (sessionStore.state.newSessionMode === "remote" &&
       sessionStore.state.targetControlSessionId);
+
+  createEffect(() => {
+    if (!isMobile() || !sessionStore.state.isNewSessionModalOpen) return;
+
+    if (sessionStore.state.newSessionMode !== "remote") {
+      sessionStore.setNewSessionMode("remote");
+      sessionStore.setConnectionError(null);
+    }
+
+    if (!sessionStore.state.targetControlSessionId) {
+      const connections = remoteConnections();
+      if (connections.length > 0) {
+        sessionStore.setTargetControlSessionId(connections[0].sessionId);
+      }
+    }
+  });
 
   const agentArgsConfig = createMemo(() => {
     const agent = sessionStore.state.newSessionAgent;

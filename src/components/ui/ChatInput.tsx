@@ -138,7 +138,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex flex-col gap-2 px-4 pt-3 pb-1 bg-background/80 backdrop-blur-md",
+        "flex flex-col gap-2 px-4 py-3 bg-background/80 backdrop-blur-md sticky bottom-0",
         focused() && "bg-background",
         props.class,
       )}
@@ -409,7 +409,7 @@ export const CommandPalette: Component<CommandPaletteProps> = (props) => {
           </div>
 
           {/* Command List */}
-          <div class="max-h-[300px] overflow-y-auto p-2">
+          <div class="max-h-75 overflow-y-auto p-2">
             <Show
               when={filteredItems().length > 0}
               fallback={

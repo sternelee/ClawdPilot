@@ -196,7 +196,7 @@ export const AppLayout: Component = () => {
   };
 
   return (
-    <div class="flex h-screen bg-muted overflow-hidden">
+    <div class="flex h-screen min-h-0 bg-muted overflow-hidden">
       {/* Command Palette */}
       <CommandPalette
         open={commandPaletteOpen()}
@@ -210,7 +210,7 @@ export const AppLayout: Component = () => {
         onClose={() => setShortcutsDialogOpen(false)}
       />
       <Show when={sessionStore.state.isHistoryLoading}>
-        <div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div class="fixed inset-0 z-[60px] flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div class="rounded-2xl bg-card/90 border border-border/60 px-6 py-5 shadow-2xl">
             <SpinnerWithLabel
               label="Loading history…"
@@ -235,7 +235,7 @@ export const AppLayout: Component = () => {
         onToggle={() => setSidebarOpen(!sidebarOpen())}
       />
       {/* Main Content */}
-      <main class="flex-1 flex flex-col min-w-0 lg:ml-0">
+      <main class="flex-1 flex min-h-0 flex-col min-w-0 lg:ml-0">
         <Show
           when={activeSession()}
           fallback={

@@ -184,6 +184,7 @@ textarea:focus {
     user-select: text;
   }
 
+  #app,
   #root {
     height: 100vh;
     height: var(--viewport-height, 100vh); /* Use CSS variable */
@@ -194,29 +195,46 @@ textarea:focus {
   }
 
   /* Keyboard-aware root adjustments */
-  .keyboard-visible #root {
+  .mobile.keyboard-visible #app,
+  .mobile.keyboard-visible #root,
+  .platform-android.keyboard-visible #app,
+  .platform-android.keyboard-visible #root,
+  .platform-ios.keyboard-visible #app,
+  .platform-ios.keyboard-visible #root {
     height: var(--effective-viewport-height, 100vh);
   }
 
   /* Enhanced dynamic viewport support */
   @supports (height: 100dvh) {
+    #app,
     #root {
       height: 100dvh;
     }
 
-    .keyboard-visible #root {
+    .mobile.keyboard-visible #app,
+    .mobile.keyboard-visible #root,
+    .platform-android.keyboard-visible #app,
+    .platform-android.keyboard-visible #root,
+    .platform-ios.keyboard-visible #app,
+    .platform-ios.keyboard-visible #root {
       height: calc(100dvh - var(--keyboard-height, 0px));
     }
   }
 
   /* iOS Safari specialized handling */
   @supports (-webkit-touch-callout: none) {
+    #app,
     #root {
       height: -webkit-fill-available;
       min-height: -webkit-fill-available;
     }
 
-    .keyboard-visible #root {
+    .mobile.keyboard-visible #app,
+    .mobile.keyboard-visible #root,
+    .platform-android.keyboard-visible #app,
+    .platform-android.keyboard-visible #root,
+    .platform-ios.keyboard-visible #app,
+    .platform-ios.keyboard-visible #root {
       height: calc(-webkit-fill-available - var(--keyboard-height, 0px));
       min-height: calc(-webkit-fill-available - var(--keyboard-height, 0px));
     }

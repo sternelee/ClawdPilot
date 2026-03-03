@@ -21,6 +21,8 @@ import {
   FiTerminal,
   FiCheck,
   FiAlertTriangle,
+  FiChevronDown,
+  FiChevronRight,
   FiCopy,
   FiFolder,
   FiGitBranch,
@@ -444,7 +446,9 @@ function parseSystemMessage(content: string): ParsedSystemMessage {
 }
 
 function SystemMessageCard(props: { content: string }) {
+  const [isDetailsExpanded, setIsDetailsExpanded] = createSignal(false);
   const parsed = () => parseSystemMessage(props.content);
+  const isToolDetails = () => parsed().kind === "tool" && !!parsed().details;
 
   const statusClass = () => {
     switch (parsed().status) {
@@ -485,9 +489,35 @@ function SystemMessageCard(props: { content: string }) {
         </div>
       </div>
       <Show when={parsed().details}>
-        <pre class="mt-2 rounded-md border border-black/10 bg-background/70 p-2 text-xs leading-relaxed whitespace-pre-wrap break-all">
-          {parsed().details}
-        </pre>
+        <Show
+          when={isToolDetails()}
+          fallback={
+            <pre class="mt-2 rounded-md border border-black/10 bg-background/70 p-2 text-xs leading-relaxed whitespace-pre-wrap break-all">
+              {parsed().details}
+            </pre>
+          }
+        >
+          <div class="mt-2 rounded-md border border-black/10 bg-background/70 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setIsDetailsExpanded(!isDetailsExpanded())}
+              class="w-full flex items-center justify-between gap-2 px-2 py-1.5 text-xs text-left hover:bg-muted/60 transition-colors"
+            >
+              <span class="font-medium opacity-90">Details</span>
+              <Show
+                when={isDetailsExpanded()}
+                fallback={<FiChevronRight size={14} />}
+              >
+                <FiChevronDown size={14} />
+              </Show>
+            </button>
+            <Show when={isDetailsExpanded()}>
+              <pre class="border-t border-black/10 p-2 text-xs leading-relaxed whitespace-pre-wrap break-all">
+                {parsed().details}
+              </pre>
+            </Show>
+          </div>
+        </Show>
       </Show>
     </div>
   );

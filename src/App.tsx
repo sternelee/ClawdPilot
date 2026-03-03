@@ -21,6 +21,7 @@ import { ZeroclawConfigModal } from "./components/ZeroclawConfigModal";
 import { sessionStore } from "./stores/sessionStore";
 import { notificationStore } from "./stores/notificationStore";
 import { initializeDeviceDetection } from "./stores/deviceStore";
+import { initializeMobileUtils } from "./utils/mobile";
 
 // Types
 import type { AgentType } from "./stores/sessionStore";
@@ -49,6 +50,9 @@ export default function App() {
   onMount(() => {
     // Initialize device detection for mobile support
     initializeDeviceDetection();
+    if (isMobilePlatform()) {
+      initializeMobileUtils();
+    }
     // Set mobile padding after initialization
     setMobilePadding(isMobilePlatform());
     // Listen for agent session creation events
