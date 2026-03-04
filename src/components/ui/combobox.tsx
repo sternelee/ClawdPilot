@@ -1,5 +1,5 @@
 import type { JSX, ValidComponent, Component } from "solid-js";
-import { Show, splitProps, For } from "solid-js";
+import { Show, splitProps, createSignal, createEffect } from "solid-js";
 
 import * as ComboboxPrimitive from "@kobalte/core/combobox";
 import type { PolymorphicProps } from "@kobalte/core/polymorphic";
@@ -12,7 +12,7 @@ type ComboboxItem = {
   label?: string;
 };
 
-// Simple native input + datalist combo for backward compatibility
+// Kobalte combobox wrapper for backward compatibility
 type LegacyComboboxProps = {
   value?: string;
   onChange?: (value: string) => void;
@@ -32,36 +32,112 @@ const LegacyCombobox: Component<LegacyComboboxProps> = (props) => {
     "placeholder",
   ]);
 
-  const handleInput = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    local.onInputChange?.(target.value);
-  };
+  const [isOpen, setIsOpen] = createSignal(false);
+  const [isFocused, setIsFocused] = createSignal(false);
+  const [suppressAutoOpen, setSuppressAutoOpen] = createSignal(false);
+  const hasExactOptionMatch = (value: string) =>
+    (local.items || []).some((item) => item.value === value);
 
-  const handleChange = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    local.onChange?.(target.value);
-  };
+  createEffect(() => {
+    const hasItems = (local.items?.length || 0) > 0;
+    const input = local.value || "";
+    const hasInput = input.trim().length > 0;
+    const exactMatch = hasExactOptionMatch(input);
+
+    if (exactMatch) {
+      setIsOpen(false);
+      return;
+    }
+
+    if (isFocused() && hasInput && hasItems && !suppressAutoOpen()) {
+      setIsOpen(true);
+    }
+  });
 
   return (
-    <div class={cn("relative", local.class)}>
-      <input
-        type="text"
-        list="combobox-options"
-        value={local.value}
-        onInput={handleInput}
-        onChange={handleChange}
-        placeholder={local.placeholder}
-        class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
-        {...rest}
-      />
-      <datalist id="combobox-options">
-        <For each={local.items}>
-          {(item) => (
-            <option value={item.value}>{item.label || item.value}</option>
-          )}
-        </For>
-      </datalist>
-    </div>
+    <ComboboxPrimitive.Root
+      class={cn("relative", local.class)}
+      options={local.items || []}
+      optionValue="value"
+      optionLabel={(option) => option.value}
+      optionTextValue={(option) => option.value}
+      open={isOpen()}
+      defaultFilter="contains"
+      triggerMode="input"
+      onOpenChange={(open) => setIsOpen(open)}
+      onInputChange={(value) => {
+        const exactMatch = hasExactOptionMatch(value);
+        setSuppressAutoOpen(exactMatch);
+        local.onInputChange?.(value);
+        if (exactMatch) {
+          setIsOpen(false);
+          return;
+        }
+        if (value.trim().length > 0) {
+          setIsOpen(true);
+        }
+      }}
+      onChange={(value) => {
+        const next = value?.value || "";
+        setSuppressAutoOpen(true);
+        local.onInputChange?.(next);
+        local.onChange?.(next);
+        setIsOpen(false);
+      }}
+      itemComponent={(props) => (
+        <ComboboxPrimitive.Item
+          item={props.item}
+          class="relative flex cursor-default select-none items-center justify-between rounded-sm px-2 py-1.5 text-sm outline-none data-[disabled]:pointer-events-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:opacity-50"
+        >
+          <ComboboxPrimitive.ItemLabel>
+            {props.item.rawValue.label || props.item.rawValue.value}
+          </ComboboxPrimitive.ItemLabel>
+        </ComboboxPrimitive.Item>
+      )}
+    >
+      <ComboboxPrimitive.HiddenSelect />
+      <ComboboxPrimitive.Control class="flex h-10 items-center rounded-md border border-input bg-transparent px-3">
+        <ComboboxPrimitive.Input
+          placeholder={local.placeholder}
+          onInput={(e) => local.onChange?.(e.currentTarget.value)}
+          onFocus={() => {
+            setIsFocused(true);
+            const input = local.value || "";
+            if (
+              (local.items?.length || 0) > 0 &&
+              !hasExactOptionMatch(input)
+            ) {
+              setIsOpen(true);
+            }
+          }}
+          onBlur={() => setIsFocused(false)}
+          class="flex size-full rounded-md bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          {...rest}
+        />
+        <ComboboxPrimitive.Trigger class="size-4 opacity-50">
+          <ComboboxPrimitive.Icon>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="size-4"
+            >
+              <path d="M8 9l4 -4l4 4" />
+              <path d="M16 15l-4 4l-4 -4" />
+            </svg>
+          </ComboboxPrimitive.Icon>
+        </ComboboxPrimitive.Trigger>
+      </ComboboxPrimitive.Control>
+      <ComboboxPrimitive.Portal>
+        <ComboboxPrimitive.Content class="relative z-[1000] min-w-32 max-h-[min(40vh,18rem)] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-base-100 text-popover-foreground shadow-lg animate-in fade-in-80">
+          <ComboboxPrimitive.Listbox class="m-0 p-1" />
+        </ComboboxPrimitive.Content>
+      </ComboboxPrimitive.Portal>
+    </ComboboxPrimitive.Root>
   );
 };
 
@@ -237,7 +313,7 @@ const ComboboxContent = <T extends ValidComponent = "div">(
     <ComboboxPrimitive.Portal>
       <ComboboxPrimitive.Content
         class={cn(
-          "relative z-50 min-w-32 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-80",
+          "relative z-[1000] min-w-32 max-h-[min(40vh,18rem)] overflow-y-auto overflow-x-hidden rounded-md border border-border bg-base-100 text-popover-foreground shadow-lg animate-in fade-in-80",
           local.class,
         )}
         {...others}

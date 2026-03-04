@@ -119,9 +119,10 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   });
 
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Submit on Enter (without Shift)
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Send on Shift+Enter, keep Enter as newline
+    if (e.key === "Enter" && e.shiftKey) {
       e.preventDefault();
+      if ((e as KeyboardEvent & { isComposing?: boolean }).isComposing) return;
       if (props.isStreaming && props.onInterrupt) {
         props.onInterrupt();
       } else if (props.value.trim()) {
@@ -138,7 +139,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex flex-col gap-2 px-4 py-3 bg-background/80 backdrop-blur-md sticky bottom-0",
+        "flex flex-col gap-1.5 px-3 sm:px-4 py-2 sm:py-3 bg-background/80 backdrop-blur-md sticky bottom-0",
         focused() && "bg-background",
         props.class,
       )}
@@ -153,7 +154,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         )}
       >
         {/* Top Row: Textarea + Send Button */}
-        <div class="flex items-end gap-2 p-2 pb-1">
+        <div class="flex items-end gap-1.5 sm:gap-2 p-1.5 sm:p-2 pb-1">
           {/* Attach Button */}
           <button
             type="button"
@@ -174,7 +175,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={props.placeholder || "Type your message..."}
-            class="flex-1 px-3 py-2 bg-transparent border-none outline-none resize-none text-sm max-h-[200px] min-h-[24px] leading-relaxed placeholder:text-muted-foreground/40 scrollbar-hide"
+            class="flex-1 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-transparent border-none outline-none resize-none text-[13px] sm:text-sm max-h-[200px] min-h-[22px] leading-5 sm:leading-relaxed placeholder:text-muted-foreground/40 scrollbar-hide"
             disabled={props.disabled}
             rows={1}
           />
@@ -263,11 +264,11 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           <div class="flex items-center gap-2 text-[10px] text-muted-foreground/40">
             <span class="hidden sm:flex items-center gap-0.5">
               <kbd class="kbd kbd-xs bg-muted/40 border-border/20">↵</kbd>
-              <span>send</span>
+              <span>line</span>
             </span>
             <span class="hidden sm:flex items-center gap-0.5">
               <kbd class="kbd kbd-xs bg-muted/40 border-border/20">⇧↵</kbd>
-              <span>line</span>
+              <span>send</span>
             </span>
           </div>
 

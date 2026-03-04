@@ -39,8 +39,8 @@ const shortcuts: KeyboardShortcut[] = [
   { key: "Esc", description: "Close dialogs", category: "Global" },
 
   // Chat
-  { key: "Enter", description: "Send message", category: "Chat" },
-  { key: "Shift + Enter", description: "New line", category: "Chat" },
+  { key: "Enter", description: "New line", category: "Chat" },
+  { key: "Shift + Enter", description: "Send message", category: "Chat" },
   { key: "↑ / ↓", description: "Navigate history", category: "Chat" },
 
   // Navigation

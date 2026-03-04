@@ -449,6 +449,8 @@ function SystemMessageCard(props: { content: string }) {
   const [isDetailsExpanded, setIsDetailsExpanded] = createSignal(false);
   const parsed = () => parseSystemMessage(props.content);
   const isToolDetails = () => parsed().kind === "tool" && !!parsed().details;
+  const normalizedSubtitle = () => (parsed().subtitle || "").replace(/\\n/g, "\n");
+  const normalizedDetails = () => (parsed().details || "").replace(/\\n/g, "\n");
 
   const statusClass = () => {
     switch (parsed().status) {
@@ -482,8 +484,8 @@ function SystemMessageCard(props: { content: string }) {
           </div>
           <div class="font-medium break-words">{parsed().title}</div>
           <Show when={parsed().subtitle}>
-            <div class="text-xs opacity-90 break-words">
-              {parsed().subtitle}
+            <div class="text-[11px] sm:text-xs opacity-90 whitespace-pre-wrap break-words leading-4 sm:leading-5">
+              {normalizedSubtitle()}
             </div>
           </Show>
         </div>
@@ -492,8 +494,8 @@ function SystemMessageCard(props: { content: string }) {
         <Show
           when={isToolDetails()}
           fallback={
-            <pre class="mt-2 rounded-md border border-black/10 bg-background/70 p-2 text-xs leading-relaxed whitespace-pre-wrap break-all">
-              {parsed().details}
+            <pre class="mt-2 rounded-md border border-black/10 bg-background/70 p-2 text-[11px] sm:text-xs leading-5 sm:leading-relaxed whitespace-pre-wrap break-all">
+              {normalizedDetails()}
             </pre>
           }
         >
@@ -512,8 +514,8 @@ function SystemMessageCard(props: { content: string }) {
               </Show>
             </button>
             <Show when={isDetailsExpanded()}>
-              <pre class="border-t border-black/10 p-2 text-xs leading-relaxed whitespace-pre-wrap break-all">
-                {parsed().details}
+              <pre class="border-t border-black/10 p-2 text-[11px] sm:text-xs leading-5 sm:leading-relaxed whitespace-pre-wrap break-all">
+                {normalizedDetails()}
               </pre>
             </Show>
           </div>
@@ -597,7 +599,7 @@ function MessageBubble(props: { message: ChatMessage }) {
         <Show
           when={isSystem()}
           fallback={
-            <div class="prose prose-sm wrap-break-words text-sm max-w-none leading-6">
+            <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6">
               <SolidMarkdown
                 children={props.message.content}
                 components={{

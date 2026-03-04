@@ -11,6 +11,7 @@
 import { createStore, produce } from "solid-js/store";
 import { invoke } from "@tauri-apps/api/core";
 import { notificationStore } from "./notificationStore";
+import { getLastTicket, saveTicket } from "../utils/localStorage";
 
 // ============================================================================
 // Types
@@ -152,7 +153,7 @@ const initialState: SessionState = {
   newSessionAgent: "claude",
   newSessionPath: "",
   newSessionArgs: "",
-  sessionTicket: "",
+  sessionTicket: getLastTicket() || "",
   targetControlSessionId: null,
 
   zeroClawProvider: "ollama",
@@ -288,6 +289,9 @@ export const createSessionStore = () => {
 
   const setSessionTicket = (ticket: string) => {
     setState("sessionTicket", ticket);
+    if (ticket.trim()) {
+      saveTicket(ticket);
+    }
   };
 
   const setConnectionError = (error: string | null) => {

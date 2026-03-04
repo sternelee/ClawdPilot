@@ -49,6 +49,8 @@ interface RemoteDirEntry {
 
 export const NewSessionModal: Component = () => {
   const [dirEntries, setDirEntries] = createSignal<DirEntry[]>([]);
+  const [rawDirEntries, setRawDirEntries] = createSignal<DirEntry[]>([]);
+  const [listedDirectory, setListedDirectory] = createSignal<string>("");
   const [currentRequestId, setCurrentRequestId] = createSignal<string | null>(
     null,
   );
@@ -80,7 +82,14 @@ export const NewSessionModal: Component = () => {
             is_dir: true,
           }))
           .filter((e) => e.name && !e.name.startsWith("."));
-        setDirEntries(dirs);
+        setRawDirEntries(dirs);
+
+        const query = getPathQueryParts(sessionStore.state.newSessionPath);
+        const filtered =
+          query && query.dirToList === listedDirectory()
+            ? filterDirEntriesByPartial(dirs, query.partialName)
+            : dirs;
+        setDirEntries(filtered);
       },
     );
 
@@ -105,25 +114,24 @@ export const NewSessionModal: Component = () => {
   });
 
   const loadDirectory = async (path: string) => {
-    // If path doesn't end with /, get the parent directory to list completions
-    let dirToList: string;
-    let partialName = "";
-
-    if (path.endsWith("/")) {
-      // Full path with trailing slash - list directly
-      dirToList = path;
-    } else {
-      // Partial path - extract parent directory and partial name
-      const lastSlashIndex = path.lastIndexOf("/");
-      if (lastSlashIndex === -1) {
-        // No slash found - list current directory with partial filter
-        dirToList = ".";
-        partialName = path;
-      } else {
-        dirToList = path.slice(0, lastSlashIndex + 1) || "/";
-        partialName = path.slice(lastSlashIndex + 1);
-      }
+    const query = getPathQueryParts(path);
+    if (!query) {
+      setDirEntries([]);
+      setRawDirEntries([]);
+      setListedDirectory("");
+      return;
     }
+
+    const { dirToList, partialName } = query;
+    const shouldReuseCurrentList =
+      listedDirectory() === dirToList && rawDirEntries().length > 0;
+
+    if (shouldReuseCurrentList) {
+      setDirEntries(filterDirEntriesByPartial(rawDirEntries(), partialName));
+      return;
+    }
+
+    setListedDirectory(dirToList);
 
     // Check if we have an active remote session
     const targetSessionId = sessionStore.state.targetControlSessionId || null;
@@ -153,19 +161,34 @@ export const NewSessionModal: Component = () => {
         const entries = await invoke<DirEntry[]>("list_directory", {
           path: dirToList,
         });
-        // Filter directories by partial name if provided
-        const filtered = entries.filter(
-          (e) =>
-            e.is_dir &&
-            (!partialName ||
-              e.name.toLowerCase().includes(partialName.toLowerCase())),
-        );
+        const dirs = entries.filter((e) => e.is_dir && !e.name.startsWith("."));
+        const filtered = filterDirEntriesByPartial(dirs, partialName);
+        setRawDirEntries(dirs);
         setDirEntries(filtered);
       } catch (err) {
         console.error("Failed to list directory:", err);
+        setRawDirEntries([]);
         setDirEntries([]);
       }
     }
+  };
+
+  const getPathQueryParts = (path: string) => {
+    // Only start directory suggestions once user starts typing nested paths.
+    if (!path.includes("/")) {
+      return null;
+    }
+
+    const lastSlashIndex = path.lastIndexOf("/");
+    const dirToList = path.slice(0, lastSlashIndex + 1) || "/";
+    const partialName = path.slice(lastSlashIndex + 1);
+    return { dirToList, partialName };
+  };
+
+  const filterDirEntriesByPartial = (entries: DirEntry[], partialName: string) => {
+    const keyword = partialName.trim().toLowerCase();
+    if (!keyword) return entries;
+    return entries.filter((e) => e.name.toLowerCase().includes(keyword));
   };
 
   const remoteConnections = createMemo(() =>
@@ -194,6 +217,13 @@ export const NewSessionModal: Component = () => {
       if (connections.length > 0) {
         sessionStore.setTargetControlSessionId(connections[0].sessionId);
       }
+    }
+  });
+
+  createEffect(() => {
+    if (!sessionStore.state.isNewSessionModalOpen) return;
+    if (!sessionStore.state.newSessionPath.trim()) {
+      sessionStore.setNewSessionPath("~");
     }
   });
 
@@ -466,32 +496,21 @@ export const NewSessionModal: Component = () => {
               <Combobox
                 value={sessionStore.state.newSessionPath}
                 onChange={(value) => {
-                  // Remove trailing slash if present
-                  const cleanPath = value.endsWith("/")
-                    ? value.slice(0, -1)
-                    : value;
-                  sessionStore.setNewSessionPath(cleanPath);
-                  setDirEntries([]);
+                  sessionStore.setNewSessionPath(value);
                 }}
                 onInputChange={(value) => {
                   sessionStore.setNewSessionPath(value);
-                  if (value.endsWith("/")) {
+                  if (value.includes("/")) {
                     loadDirectory(value);
+                  } else {
+                    setDirEntries([]);
+                    setRawDirEntries([]);
+                    setListedDirectory("");
                   }
                 }}
                 items={dirEntries().map((e) => {
-                  // Build the path: if current input ends with /, add to it; otherwise handle partial paths
-                  const basePath = sessionStore.state.newSessionPath.endsWith(
-                    "/",
-                  )
-                    ? sessionStore.state.newSessionPath
-                    : sessionStore.state.newSessionPath.includes("/")
-                      ? sessionStore.state.newSessionPath.slice(
-                          0,
-                          sessionStore.state.newSessionPath.lastIndexOf("/") +
-                            1,
-                        )
-                      : "";
+                  const query = getPathQueryParts(sessionStore.state.newSessionPath);
+                  const basePath = query?.dirToList || "";
                   return {
                     value: basePath + e.name,
                     label: e.name,
@@ -543,7 +562,6 @@ export const NewSessionModal: Component = () => {
               onClick={() => {
                 sessionStore.closeNewSessionModal();
                 sessionStore.setConnectionError(null);
-                sessionStore.setSessionTicket("");
                 sessionStore.setNewSessionArgs("");
               }}
             >

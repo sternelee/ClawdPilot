@@ -73,6 +73,8 @@ const statusConfig = {
   },
 };
 
+const normalizeMultiline = (text: string) => text.replace(/\\n/g, "\n");
+
 export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
   const [isExpanded, setIsExpanded] = createSignal(props.expanded ?? false);
   const [copied, setCopied] = createSignal(false);
@@ -93,11 +95,12 @@ export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
   };
 
   const formatOutput = (output: string) => {
+    const normalized = normalizeMultiline(output);
     // Truncate long outputs
-    if (output.length > 500) {
-      return output.slice(0, 500) + "\n... (truncated)";
+    if (normalized.length > 500) {
+      return normalized.slice(0, 500) + "\n... (truncated)";
     }
-    return output;
+    return normalized;
   };
 
   return (
@@ -245,7 +248,7 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
         <Show when={isExpanded()}>
           <div class="px-3 py-2 border-t border-info/20">
             <pre class="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
-              {props.thinking}
+              {normalizeMultiline(props.thinking || "")}
             </pre>
           </div>
         </Show>

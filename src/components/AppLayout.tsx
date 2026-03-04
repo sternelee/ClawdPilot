@@ -196,7 +196,7 @@ export const AppLayout: Component = () => {
   };
 
   return (
-    <div class="flex h-screen min-h-0 bg-muted overflow-hidden">
+    <div class="flex h-screen min-h-0 bg-muted overflow-hidden max-md:text-sm max-md:leading-5">
       {/* Command Palette */}
       <CommandPalette
         open={commandPaletteOpen()}
