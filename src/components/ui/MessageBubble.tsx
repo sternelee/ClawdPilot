@@ -15,7 +15,6 @@ import {
 } from "solid-js";
 import { createClipboard } from "@solid-primitives/clipboard";
 import {
-  FiUser,
   FiTerminal,
   FiCopy,
   FiCheck,
@@ -23,6 +22,46 @@ import {
 import { SolidMarkdown } from "solid-markdown";
 import type { ChatMessage, ToolCall } from "~/stores/chatStore";
 import { ToolCallList, ReasoningBlock, TerminalOutput } from "./EnhancedMessageComponents";
+
+// ============================================================================
+// Code Block with Copy Button (inspired by hapi)
+// ============================================================================
+
+interface CodeBlockProps {
+  code: string;
+  language?: string;
+}
+
+const CodeBlockWithCopy: Component<CodeBlockProps> = (props) => {
+  const [copied, setCopied] = createSignal(false);
+  const [, , write] = createClipboard();
+
+  const handleCopy = () => {
+    write(props.code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div class="relative min-w-0 max-w-full">
+      <button
+        type="button"
+        onClick={handleCopy}
+        class="absolute right-1.5 top-1.5 rounded p-1 text-muted-foreground hover:bg-base-200 hover:text-foreground transition-colors z-10"
+        title="Copy code"
+      >
+        <Show when={copied()} fallback={<FiCopy size={14} />}>
+          <FiCheck size={14} class="text-success" />
+        </Show>
+      </button>
+      <div class="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-base-300">
+        <pre class="m-0 w-max min-w-full p-2 pr-8 text-xs font-mono">
+          <code class="block">{props.code}</code>
+        </pre>
+      </div>
+    </div>
+  );
+};
 
 // ============================================================================
 // Types
@@ -47,38 +86,29 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (props) 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return (
-    <div class="flex flex-col gap-1.5 items-end">
-      {/* Avatar and metadata */}
-      <div class="flex items-center gap-2 text-[11px] text-muted-foreground/70 px-1">
-        <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-primary/30 bg-primary/15 text-primary">
-          <FiUser size={13} />
-        </div>
-        <span class="font-medium tracking-wide uppercase text-[10px] opacity-80">
-          You
-        </span>
-        <span class="opacity-30">•</span>
-        <time class="opacity-60">
-          {new Date(props.timestamp || Date.now()).toLocaleTimeString()}
-        </time>
-        <button
-          type="button"
-          onClick={handleCopy}
-          class="ml-1 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center"
-          title="Copy message"
-        >
-          <Show when={copied()} fallback={<FiCopy size={14} />}>
-            <FiCheck size={16} />
-          </Show>
-        </button>
-      </div>
+  // hapi-style: user bubble aligned right with dark background
+  const bubbleClass = "w-fit max-w-[92%] ml-auto rounded-xl bg-base-300 px-3 py-2 text-foreground shadow-sm";
 
-      {/* Message bubble */}
-      <div class="w-full max-w-[min(92vw,54rem)] rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-3">
-        <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6">
-          <SolidMarkdown
-            children={props.content}
-          />
+  return (
+    <div class="flex flex-col gap-1.5 items-end group/bubble">
+      {/* Message bubble - hapi style */}
+      <div class={bubbleClass}>
+        <div class="flex items-end gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6">
+              <SolidMarkdown children={props.content} />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            class="shrink-0 self-end pb-0.5 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center"
+            title="Copy message"
+          >
+            <Show when={copied()} fallback={<FiCopy size={14} />}>
+              <FiCheck size={14} class="text-success" />
+            </Show>
+          </button>
         </div>
       </div>
     </div>
@@ -157,12 +187,8 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                     </code>
                   );
                 }
-                // For code blocks, return simple pre/code structure
-                return (
-                  <pre class="bg-base-300 rounded-lg p-3 overflow-x-auto text-xs">
-                    <code>{codeString}</code>
-                  </pre>
-                );
+                // Use CodeBlock with copy button
+                return <CodeBlockWithCopy code={codeString} language={match[1]} />;
               },
             }}
           />
