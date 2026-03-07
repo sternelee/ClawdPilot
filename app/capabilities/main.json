@@ -10,7 +10,15 @@
     "clipboard-manager:default",
     "http:default",
     "fs:default",
-    "os:default"
+    "os:default",
+    "clipboard-manager:allow-write-text",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/**"
+        }
+      ]
+    }
   ]
 }
-

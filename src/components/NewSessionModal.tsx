@@ -24,6 +24,8 @@ import {
   requestPermissions,
   scan,
 } from "@tauri-apps/plugin-barcode-scanner";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { sessionStore, AgentType } from "../stores/sessionStore";
 import { isMobile } from "../stores/deviceStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -144,7 +146,8 @@ export const NewSessionModal: Component = () => {
     if (isRemote) {
       // Use P2P to list remote directory
       // Use controlSessionId (session_xxx) not agent ID (agent_xxx)
-      const controlSessionId = remoteSession?.controlSessionId || targetSessionId;
+      const controlSessionId =
+        remoteSession?.controlSessionId || targetSessionId;
       try {
         const requestId = await invoke<string>("list_remote_directory", {
           sessionId: controlSessionId,
@@ -430,8 +433,40 @@ export const NewSessionModal: Component = () => {
                 }}
               />
               <p class="text-xs text-muted-foreground">
-                Run `cli` to get a session ticket
+                Run `clawdpilot --daemon` to get a session ticket
               </p>
+            </div>
+
+            {/* Install CLI Help */}
+            <div class="mb-4 p-3 bg-muted rounded-lg">
+              <p class="text-sm text-muted-foreground mb-2">
+                Need to install CLI on your computer?
+              </p>
+              <div class="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  class="flex-1"
+                  onClick={() => {
+                    openUrl("https://github.com/sternelee/riterm#install-cli");
+                  }}
+                >
+                  View Guide
+                </Button>
+                <Button
+                  type="button"
+                  variant="default"
+                  class="flex-1"
+                  onClick={async () => {
+                    await writeText(
+                      "curl -fsSL https://raw.githubusercontent.com/sternelee/riterm/main/install.sh | sh",
+                    );
+                  }}
+                >
+                  Copy Install Command
+                </Button>
+              </div>
             </div>
 
             <Show when={sessionStore.state.connectionError}>

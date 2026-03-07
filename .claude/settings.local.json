@@ -72,7 +72,10 @@
       "mcp__context7__resolve-library-id",
       "mcp__context7__query-docs",
       "mcp__web-search-prime__webSearchPrime",
-      "WebFetch(domain:v2.tauri.app)"
+      "WebFetch(domain:v2.tauri.app)",
+      "Bash(sh:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm tsc:*)"
     ],
     "deny": []
   },

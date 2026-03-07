@@ -38,6 +38,17 @@ ClawdPilot provides a unified session management experience for running and cont
 pnpm install
 ```
 
+### Install CLI
+
+The CLI runs on your computer to host remote sessions. Install via:
+
+```bash
+# Quick install (macOS/Linux)
+curl -fsSL https://raw.githubusercontent.com/sternelee/riterm/main/install.sh | sh
+
+# Or manually download from GitHub Releases
+```
+
 ### Development
 
 ```bash
