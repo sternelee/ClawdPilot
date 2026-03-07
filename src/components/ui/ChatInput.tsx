@@ -25,6 +25,8 @@ import {
   FiX,
   FiFolder,
   FiGitBranch,
+  FiSettings,
+  FiCheck,
 } from "solid-icons/fi";
 import { FaSolidStopCircle } from "solid-icons/fa";
 
@@ -66,6 +68,18 @@ export interface ChatInputProps {
 export const ChatInput: Component<ChatInputProps> = (props) => {
   let textareaRef: HTMLTextAreaElement | undefined;
   const [focused, setFocused] = createSignal(false);
+  const [showSettings, setShowSettings] = createSignal(false);
+
+  const permissionOptions: {
+    value: PermissionMode;
+    label: string;
+    description: string;
+  }[] = [
+    { value: "AlwaysAsk", label: "Ask", description: "Approve each action" },
+    { value: "AcceptEdits", label: "Edit", description: "Allow file edits" },
+    { value: "Plan", label: "Plan", description: "Auto-approve planning" },
+    { value: "AutoApprove", label: "Auto", description: "Approve all actions" },
+  ];
 
   // Handle file selection
   const handleAttach = async () => {
@@ -203,27 +217,61 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         {/* Bottom Toolbar */}
         <div class="flex items-center px-3 pb-1 gap-2">
           <div class="flex items-center gap-0.5">
-            {/* Permission Mode Dropdown */}
-            <div class="relative flex items-center">
-              <select
-                class="select select-xs h-6 bg-muted/40 border-border/30 text-[11px] pr-5 appearance-none cursor-pointer hover:bg-muted/60 transition-colors rounded-md"
-                value={props.permissionMode || "AlwaysAsk"}
-                onChange={(e) =>
-                  props.onPermissionModeChange?.(
-                    e.currentTarget.value as PermissionMode,
-                  )
-                }
-                title="Permission mode"
+            {/* Settings Button with Permission Dropdown */}
+            <div class="relative">
+              <button
+                type="button"
+                class={cn(
+                  "btn btn-ghost btn-xs h-6 min-h-0 px-2 gap-1 text-[11px] transition-all rounded-md",
+                  showSettings()
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/50",
+                )}
+                onClick={() => setShowSettings(!showSettings())}
+                title="Settings"
               >
-                <option value="AlwaysAsk">Ask</option>
-                <option value="AcceptEdits">Edit</option>
-                <option value="Plan">Plan</option>
-                <option value="AutoApprove">Auto</option>
-              </select>
-            </div>
+                <FiSettings class="size-4 sm:size-4" />
+                <span class="hidden sm:inline">Settings</span>
+              </button>
 
-            {/* Divider */}
-            <div class="w-px h-4 bg-border/40 mx-1.5" />
+              {/* Settings Dropdown */}
+              <Show when={showSettings()}>
+                <div class="absolute bottom-full left-0 mb-2 w-48 bg-base-300 rounded-lg border border-border shadow-xl z-50 overflow-hidden">
+                  <div class="px-3 py-2 border-b border-border">
+                    <div class="text-xs font-medium text-muted-foreground">
+                      Permission Mode
+                    </div>
+                  </div>
+                  <div class="p-1">
+                    {permissionOptions.map((option) => (
+                      <button
+                        type="button"
+                        class={cn(
+                          "w-full flex items-center gap-2 px-2 py-1.5 text-left text-sm rounded-md transition-colors",
+                          props.permissionMode === option.value
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-muted",
+                        )}
+                        onClick={() => {
+                          props.onPermissionModeChange?.(option.value);
+                          setShowSettings(false);
+                        }}
+                      >
+                        <div class="flex-1 min-w-0">
+                          <div class="font-medium">{option.label}</div>
+                          <div class="text-xs text-muted-foreground truncate">
+                            {option.description}
+                          </div>
+                        </div>
+                        <Show when={props.permissionMode === option.value}>
+                          <FiCheck size={14} class="text-primary shrink-0" />
+                        </Show>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </Show>
+            </div>
 
             {/* File Browser Button */}
             <button
@@ -238,7 +286,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               title="Toggle file browser"
               disabled={props.disabled}
             >
-              <FiFolder size={12} />
+              <FiFolder class="size-4 sm:size-4" />
               <span class="hidden sm:inline">Files</span>
             </button>
 
@@ -255,7 +303,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               title="Toggle git panel"
               disabled={props.disabled}
             >
-              <FiGitBranch size={12} />
+              <FiGitBranch class="size-4 sm:size-4" />
               <span class="hidden sm:inline">Git</span>
             </button>
           </div>
@@ -286,15 +334,23 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               !props.isStreaming && (!props.value.trim() || props.disabled)
             }
             class={cn(
-              "shrink-0 ml-auto inline-flex justify-center items-center p-1 rounded-xl transition-all duration-300 shadow-lg mb-0.5",
+              "shrink-0 ml-auto inline-flex justify-center items-center rounded-xl transition-all duration-300 mb-0.5",
               props.isStreaming
-                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
-                : "bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none",
+                ? "bg-destructive/90 hover:bg-destructive text-white p-2"
+                : "bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed",
             )}
             title={props.isStreaming ? "Stop generation" : "Send message"}
           >
-            <Show when={props.isStreaming} fallback={<FiSend size={18} />}>
-              <FaSolidStopCircle size={24} color="red" />
+            <Show
+              when={props.isStreaming}
+              fallback={
+                <div class="flex items-center gap-1.5 px-1.5 py-0.5">
+                  <FiSend class="size-5 sm:size-4 text-white" />
+                  <span class="text-xs font-medium hidden sm:inline">Send</span>
+                </div>
+              }
+            >
+              <FaSolidStopCircle size={20} />
             </Show>
           </button>
         </div>

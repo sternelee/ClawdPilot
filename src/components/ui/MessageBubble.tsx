@@ -8,20 +8,16 @@
  * - SystemMessage: System notifications and tool outputs
  */
 
-import {
-  type Component,
-  Show,
-  createSignal,
-} from "solid-js";
+import { type Component, Show, createSignal } from "solid-js";
 import { createClipboard } from "@solid-primitives/clipboard";
-import {
-  FiTerminal,
-  FiCopy,
-  FiCheck,
-} from "solid-icons/fi";
+import { FiTerminal, FiCopy, FiCheck } from "solid-icons/fi";
 import { SolidMarkdown } from "solid-markdown";
 import type { ChatMessage, ToolCall } from "~/stores/chatStore";
-import { ToolCallList, ReasoningBlock, TerminalOutput } from "./EnhancedMessageComponents";
+import {
+  ToolCallList,
+  ReasoningBlock,
+  TerminalOutput,
+} from "./EnhancedMessageComponents";
 
 // ============================================================================
 // Code Block with Copy Button (inspired by hapi)
@@ -76,7 +72,9 @@ export interface MessageBubbleProps {
 // User Message Component
 // ============================================================================
 
-const UserMessage: Component<{ content: string; timestamp?: number }> = (props) => {
+const UserMessage: Component<{ content: string; timestamp?: number }> = (
+  props,
+) => {
   const [, , write] = createClipboard();
   const [copied, setCopied] = createSignal(false);
 
@@ -87,7 +85,8 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (props) 
   };
 
   // hapi-style: user bubble aligned right with dark background
-  const bubbleClass = "w-fit max-w-[92%] ml-auto rounded-xl bg-base-300 px-3 py-2 text-foreground shadow-sm";
+  const bubbleClass =
+    "w-fit max-w-[92%] ml-auto rounded-xl bg-base-300 px-3 py-2 text-foreground shadow-sm";
 
   return (
     <div class="flex flex-col gap-1.5 items-end group/bubble">
@@ -102,7 +101,7 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (props) 
           <button
             type="button"
             onClick={handleCopy}
-            class="shrink-0 self-end pb-0.5 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center"
+            class="shrink-0 self-end pb-0.5 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center hidden"
             title="Copy message"
           >
             <Show when={copied()} fallback={<FiCopy size={14} />}>
@@ -140,7 +139,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   return (
     <div class="flex flex-col gap-1.5 items-start group/bubble">
       {/* Avatar and metadata */}
-      <div class="flex items-center gap-2 text-[11px] text-muted-foreground/70 px-1">
+      <div class="flex items-center gap-2 text-[11px] text-muted-foreground/70 px-1 hidden">
         <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-muted/70 text-muted-foreground">
           <FiTerminal size={13} />
         </div>
@@ -168,7 +167,10 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
         {/* Thinking/Reasoning */}
         <Show when={props.thinking}>
           <div class="mb-3 pb-3 border-b border-border/50">
-            <ReasoningBlock thinking={props.thinking} isStreaming={props.isStreaming} />
+            <ReasoningBlock
+              thinking={props.thinking}
+              isStreaming={props.isStreaming}
+            />
           </div>
         </Show>
 
@@ -188,7 +190,9 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                   );
                 }
                 // Use CodeBlock with copy button
-                return <CodeBlockWithCopy code={codeString} language={match[1]} />;
+                return (
+                  <CodeBlockWithCopy code={codeString} language={match[1]} />
+                );
               },
             }}
           />
@@ -272,7 +276,9 @@ const SystemMessageContent: Component<{ content: string }> = (props) => {
     }
 
     // Command patterns
-    const cmdMatch = content.match(/(Command completed|Command failed|Command output): (.+)/s);
+    const cmdMatch = content.match(
+      /(Command completed|Command failed|Command output): (.+)/s,
+    );
     if (cmdMatch) {
       return {
         type: "command",
@@ -307,12 +313,20 @@ const SystemMessageContent: Component<{ content: string }> = (props) => {
             fallback={
               <TerminalOutput
                 output={parsed().command || ""}
-                exitCode={parsed().status === "completed" ? 0 : parsed().status === "failed" ? 1 : undefined}
+                exitCode={
+                  parsed().status === "completed"
+                    ? 0
+                    : parsed().status === "failed"
+                      ? 1
+                      : undefined
+                }
               />
             }
           >
             <div class="text-sm">
-              <span class="font-mono text-xs text-info">[{parsed().toolName}]</span>
+              <span class="font-mono text-xs text-info">
+                [{parsed().toolName}]
+              </span>
               <Show when={parsed().output}>
                 <pre class="mt-2 text-xs text-muted-foreground whitespace-pre-wrap">
                   {parsed().output}
