@@ -334,10 +334,8 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               !props.isStreaming && (!props.value.trim() || props.disabled)
             }
             class={cn(
-              "shrink-0 ml-auto inline-flex justify-center items-center rounded-xl transition-all duration-300 mb-0.5",
-              props.isStreaming
-                ? "bg-destructive/90 hover:bg-destructive text-white p-2"
-                : "bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed",
+              "btn btn-sm shrink-0 ml-auto inline-flex justify-center items-center rounded-xl transition-all duration-300 mb-0.5",
+              props.isStreaming ? "p-2" : "disabled:cursor-not-allowed",
             )}
             title={props.isStreaming ? "Stop generation" : "Send message"}
           >
@@ -345,12 +343,14 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               when={props.isStreaming}
               fallback={
                 <div class="flex items-center gap-1.5 px-1.5 py-0.5">
-                  <FiSend class="size-5 sm:size-4 text-white" />
-                  <span class="text-xs font-medium hidden sm:inline">Send</span>
+                  <FiSend class="size-5 text-white" />
+                  <span class="text-sm font-medium text-white hidden sm:inline">
+                    Send
+                  </span>
                 </div>
               }
             >
-              <FaSolidStopCircle size={20} />
+              <FaSolidStopCircle size={24} />
             </Show>
           </button>
         </div>

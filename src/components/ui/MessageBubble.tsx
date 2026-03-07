@@ -75,15 +75,6 @@ export interface MessageBubbleProps {
 const UserMessage: Component<{ content: string; timestamp?: number }> = (
   props,
 ) => {
-  const [, , write] = createClipboard();
-  const [copied, setCopied] = createSignal(false);
-
-  const handleCopy = () => {
-    write(props.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   // hapi-style: user bubble aligned right with dark background
   const bubbleClass =
     "w-fit max-w-[92%] ml-auto rounded-xl bg-base-300 px-3 py-2 text-foreground shadow-sm";
@@ -98,16 +89,6 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (
               <SolidMarkdown children={props.content} />
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleCopy}
-            class="shrink-0 self-end pb-0.5 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center hidden"
-            title="Copy message"
-          >
-            <Show when={copied()} fallback={<FiCopy size={14} />}>
-              <FiCheck size={14} class="text-success" />
-            </Show>
-          </button>
         </div>
       </div>
     </div>
@@ -127,41 +108,8 @@ interface AssistantMessageProps {
 }
 
 const AssistantMessage: Component<AssistantMessageProps> = (props) => {
-  const [, , write] = createClipboard();
-  const [copied, setCopied] = createSignal(false);
-
-  const handleCopy = () => {
-    write(props.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
     <div class="flex flex-col gap-1.5 items-start group/bubble">
-      {/* Avatar and metadata */}
-      <div class="flex items-center gap-2 text-[11px] text-muted-foreground/70 px-1 hidden">
-        <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-muted/70 text-muted-foreground">
-          <FiTerminal size={13} />
-        </div>
-        <span class="font-medium tracking-wide uppercase text-[10px] opacity-80">
-          Assistant
-        </span>
-        <span class="opacity-30">•</span>
-        <time class="opacity-60">
-          {new Date(props.timestamp || Date.now()).toLocaleTimeString()}
-        </time>
-        <button
-          type="button"
-          onClick={handleCopy}
-          class="ml-1 p-1 rounded-md hover:bg-muted opacity-0 group-hover/bubble:opacity-100 transition-opacity inline-flex items-center justify-center"
-          title="Copy message"
-        >
-          <Show when={copied()} fallback={<FiCopy size={14} />}>
-            <FiCheck size={16} />
-          </Show>
-        </button>
-      </div>
-
       {/* Message bubble */}
       <div class="w-full max-w-[min(92vw,54rem)] rounded-xl border border-border/60 bg-muted/50 px-3.5 py-3">
         {/* Thinking/Reasoning */}
@@ -221,20 +169,6 @@ interface SystemMessageProps {
 const SystemMessage: Component<SystemMessageProps> = (props) => {
   return (
     <div class="flex flex-col gap-1.5 items-start opacity-80">
-      {/* Metadata */}
-      <div class="flex items-center gap-2 text-[11px] text-muted-foreground/70 px-1">
-        <div class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground">
-          <FiTerminal size={13} />
-        </div>
-        <span class="font-medium tracking-wide uppercase text-[10px] opacity-80">
-          System
-        </span>
-        <span class="opacity-30">•</span>
-        <time class="opacity-60">
-          {new Date(props.timestamp || Date.now()).toLocaleTimeString()}
-        </time>
-      </div>
-
       {/* Message content */}
       <div class="w-full max-w-[min(92vw,54rem)] rounded-xl border border-border/70 bg-background/80 px-3.5 py-3">
         <SystemMessageContent content={props.content} />
