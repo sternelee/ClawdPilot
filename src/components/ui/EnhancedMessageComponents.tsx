@@ -213,7 +213,7 @@ export interface ReasoningBlockProps {
 }
 
 export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
-  const [isExpanded, setIsExpanded] = createSignal(false);
+  const [isExpanded, setIsExpanded] = createSignal(true);
 
   return (
     <Show when={props.thinking}>

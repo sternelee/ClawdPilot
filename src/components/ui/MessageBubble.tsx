@@ -116,7 +116,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
         <Show when={props.thinking}>
           <div class="mb-3 pb-3 border-b border-border/50">
             <ReasoningBlock
-              thinking={props.thinking}
+              thinking={props.content}
               isStreaming={props.isStreaming}
             />
           </div>
@@ -125,7 +125,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
         {/* Content */}
         <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6">
           <SolidMarkdown
-            children={props.content}
+            children={props.thinking ? undefined : props.content}
             components={{
               code({ inline, class: className, children, ...codeProps }) {
                 const match = /language-(\w+)/.exec(className || "");
@@ -282,6 +282,8 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   const message = () => props.message;
   const isUser = () => message().role === "user";
   const isSystem = () => message().role === "system";
+
+  console.log("message:", message());
 
   return (
     <Show
