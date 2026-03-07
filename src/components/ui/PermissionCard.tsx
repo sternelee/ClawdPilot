@@ -309,3 +309,58 @@ export const PermissionMessage: Component<PermissionMessageProps> = (props) => {
     </div>
   );
 };
+
+// ============================================================================
+// User Question Message (inline selection)
+// ============================================================================
+
+export interface UserQuestionMessageProps {
+  question: string;
+  options: string[];
+  questionId: string;
+  disabled?: boolean;
+  onSelect: (option: string) => void;
+}
+
+export const UserQuestionMessage: Component<UserQuestionMessageProps> = (props) => {
+  return (
+    <div class="rounded-xl border border-info/50 bg-info/10 px-4 py-3">
+      {/* Header */}
+      <div class="flex items-center gap-2 mb-3">
+        <div class="p-1.5 rounded-lg bg-info/20 text-info">
+          <FiLoader size={16} />
+        </div>
+        <div class="font-medium text-sm">Question</div>
+      </div>
+
+      {/* Question */}
+      <div class="mb-3 text-sm text-muted-foreground">
+        <SolidMarkdown children={props.question} />
+      </div>
+
+      {/* Options */}
+      <Show when={!props.disabled}>
+        <div class="flex flex-col gap-2">
+          {props.options.map((option, index) => (
+            <Button
+              variant="outline"
+              size="sm"
+              class="w-full justify-start text-left"
+              onClick={() => props.onSelect(option)}
+            >
+              <span class="mr-2 text-muted-foreground">{String.fromCharCode(65 + index)}.</span>
+              {option}
+            </Button>
+          ))}
+        </div>
+      </Show>
+
+      <Show when={props.disabled}>
+        <div class="flex items-center justify-center py-2 text-muted-foreground">
+          <FiLoader size={16} class="animate-spin mr-2" />
+          <span class="text-sm">Waiting for response...</span>
+        </div>
+      </Show>
+    </div>
+  );
+};

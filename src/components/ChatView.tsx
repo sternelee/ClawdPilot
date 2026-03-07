@@ -31,7 +31,7 @@ import {
 import { isMobile } from "../stores/deviceStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
-import { PermissionMessage } from "./ui/PermissionCard";
+import { PermissionMessage, UserQuestionMessage } from "./ui/PermissionCard";
 import { Button } from "./ui/primitives";
 import { MessageBubble } from "./ui/MessageBubble";
 import { ChatInput } from "./ui/ChatInput";
@@ -70,6 +70,10 @@ interface ParsedEvent {
   requestedAt?: number;
   toolParams?: unknown;
   description?: string;
+  // User Question
+  question?: string;
+  options?: string[];
+  questionId?: string;
   // Usage
   inputTokens?: number;
   outputTokens?: number;
@@ -226,6 +230,8 @@ export function ChatView(props: ChatViewProps) {
     const messages = () => chatStore.getMessages(props.sessionId);
     const pendingPermissions = () =>
       chatStore.getPendingPermissions(props.sessionId);
+    const pendingQuestions = () =>
+      chatStore.getPendingQuestions(props.sessionId);
 
     const [inputValue, setInputValue] = createSignal("");
     const [scrollEl, setScrollEl] = createSignal<HTMLElement>();
@@ -451,6 +457,20 @@ export function ChatView(props: ChatViewProps) {
               });
             }
           }
+          break;
+        }
+
+        case "user_question": {
+          const questionText = parsed.question || "Please select an option";
+          const questionOptions = parsed.options || [];
+          const questionId = parsed.questionId || parsed.requestId || crypto.randomUUID();
+
+          chatStore.addUserQuestion(props.sessionId, {
+            sessionId: props.sessionId,
+            id: questionId,
+            question: questionText,
+            options: questionOptions,
+          });
           break;
         }
 
@@ -1150,6 +1170,29 @@ export function ChatView(props: ChatViewProps) {
                       }}
                       onDeny={() => {
                         handlePermissionResponse(permission.request_id, "denied");
+                      }}
+                    />
+                  )}
+                </For>
+
+                {/* Pending User Questions */}
+                <For each={pendingQuestions()}>
+                  {(question) => (
+                    <UserQuestionMessage
+                      question={question.question}
+                      options={question.options}
+                      questionId={question.id}
+                      disabled={!isActive() || question.status === 'answered'}
+                      onSelect={(option) => {
+                        chatStore.answerQuestion(props.sessionId, question.id, option);
+                        // Send the answer back to the agent
+                        // For now, just clear the question - backend should handle sending response
+                        chatStore.clearQuestion(props.sessionId, question.id);
+                        // Add user response as a message
+                        chatStore.addMessage(props.sessionId, {
+                          role: "user",
+                          content: option,
+                        });
                       }}
                     />
                   )}

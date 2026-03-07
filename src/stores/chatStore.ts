@@ -55,6 +55,17 @@ export interface PermissionRequest {
   response?: 'approved' | 'approved_for_session' | 'denied' | 'abort'
 }
 
+// User question - when agent asks user to select from options
+export interface UserQuestion {
+  id: string
+  sessionId: string
+  question: string
+  options: string[]
+  selectedIndex?: number
+  requestedAt: number
+  status: 'pending' | 'answered'
+}
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -62,6 +73,7 @@ export interface PermissionRequest {
 interface ChatState {
   messages: Record<string, ChatMessage[]>
   pendingPermissions: Record<string, PermissionRequest[]>
+  pendingQuestions: Record<string, UserQuestion[]>
   inputValues: Record<string, string>
   activeSession: string | null
   toolStatus: Record<string, Record<string, ToolCall>>
@@ -73,6 +85,7 @@ interface ChatState {
 const initialState: ChatState = {
   messages: {},
   pendingPermissions: {},
+  pendingQuestions: {},
   inputValues: {},
   activeSession: null,
   toolStatus: {},
@@ -194,6 +207,62 @@ export const createChatStore = () => {
         const permissions = s.pendingPermissions[sessionId]
         if (!permissions) return
         s.pendingPermissions[sessionId] = permissions.filter((p) => p.id !== permissionId)
+      }),
+    )
+  }
+
+  // ========================================================================
+  // User Question Operations
+  // ========================================================================
+
+  const getPendingQuestions = (sessionId: string): UserQuestion[] => {
+    return state.pendingQuestions[sessionId] || []
+  }
+
+  const addUserQuestion = (
+    sessionId: string,
+    question: { id?: string; sessionId: string; question: string; options: string[] },
+  ) => {
+    const id = question.id || crypto.randomUUID()
+    const userQuestion: UserQuestion = {
+      ...question,
+      id,
+      requestedAt: Date.now(),
+      status: 'pending',
+    }
+
+    setState(
+      produce((s: ChatState) => {
+        if (!s.pendingQuestions[sessionId]) {
+          s.pendingQuestions[sessionId] = []
+        }
+        s.pendingQuestions[sessionId]!.push(userQuestion)
+      }),
+    )
+
+    return id
+  }
+
+  const answerQuestion = (sessionId: string, questionId: string, answer: string) => {
+    setState(
+      produce((s: ChatState) => {
+        const questions = s.pendingQuestions[sessionId]
+        if (!questions) return
+        const question = questions.find((q) => q.id === questionId)
+        if (question) {
+          question.status = 'answered'
+          question.selectedIndex = question.options.indexOf(answer)
+        }
+      }),
+    )
+  }
+
+  const clearQuestion = (sessionId: string, questionId: string) => {
+    setState(
+      produce((s: ChatState) => {
+        const questions = s.pendingQuestions[sessionId]
+        if (!questions) return
+        s.pendingQuestions[sessionId] = questions.filter((q) => q.id !== questionId)
       }),
     )
   }
@@ -333,6 +402,12 @@ export const createChatStore = () => {
     setPendingPermissions,
     respondToPermission,
     clearPermission,
+
+    // User Questions
+    getPendingQuestions,
+    addUserQuestion,
+    answerQuestion,
+    clearQuestion,
 
     // Input
     getInputValue,
