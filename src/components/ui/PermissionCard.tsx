@@ -1,6 +1,8 @@
-import { createMemo, Show } from "solid-js";
+import { createMemo, Show, type Component } from "solid-js";
 import { Card, CardContent, CardHeader } from "./Card";
 import { Button } from "./primitives";
+import { FiShield, FiCheck, FiX, FiLoader } from "solid-icons/fi";
+import { SolidMarkdown } from "solid-markdown";
 
 // Types matching Rust backend
 type PermissionMode = "AlwaysAsk" | "AcceptEdits" | "AutoApprove" | "Plan";
@@ -200,3 +202,110 @@ export function PermissionList(props: PermissionListProps) {
     </div>
   );
 }
+
+// ============================================================================
+// Permission Message (inline in message list)
+// ============================================================================
+
+export interface PermissionMessageProps {
+  toolName: string;
+  toolParams?: unknown;
+  message?: string;
+  requestId: string;
+  permissionMode: PermissionMode;
+  disabled?: boolean;
+  onApprove: (decision?: ApprovalDecision) => void;
+  onDeny: () => void;
+}
+
+export const PermissionMessage: Component<PermissionMessageProps> = (props) => {
+  const formatToolInput = (input: unknown): string => {
+    if (!input) return "";
+    if (typeof input === "string") return input;
+    try {
+      return JSON.stringify(input, null, 2);
+    } catch {
+      return String(input);
+    }
+  };
+
+  const showAllowForSession = createMemo(() => {
+    const hideForTools = ["Edit", "MultiEdit", "Write", "NotebookEdit", "exit_plan_mode", "ExitPlanMode"];
+    return !hideForTools.includes(props.toolName) && props.permissionMode !== "AutoApprove";
+  });
+
+  return (
+    <div class="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-3">
+      {/* Header */}
+      <div class="flex items-center gap-2 mb-3">
+        <div class="p-1.5 rounded-lg bg-amber-500/20 text-amber-600">
+          <FiShield size={16} />
+        </div>
+        <div class="flex-1">
+          <div class="font-medium text-sm">Permission Required</div>
+          <div class="text-xs text-muted-foreground">{props.toolName}</div>
+        </div>
+      </div>
+
+      {/* Message/Description */}
+      <Show when={props.message}>
+        <div class="mb-3 text-sm text-muted-foreground">
+          <SolidMarkdown children={props.message} />
+        </div>
+      </Show>
+
+      {/* Tool Parameters */}
+      <Show when={props.toolParams}>
+        <div class="mb-3">
+          <div class="text-xs font-medium text-muted-foreground mb-1">Parameters</div>
+          <pre class="overflow-x-auto rounded bg-base-300 p-2 text-xs font-mono max-h-32">
+            {formatToolInput(props.toolParams)}
+          </pre>
+        </div>
+      </Show>
+
+      {/* Action Buttons */}
+      <Show when={!props.disabled}>
+        <div class="flex flex-wrap gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            class="flex-1"
+            onClick={() => props.onApprove("Approved")}
+          >
+            <FiCheck size={14} class="mr-1" />
+            Allow
+          </Button>
+
+          <Show when={showAllowForSession()}>
+            <Button
+              variant="outline"
+              size="sm"
+              class="flex-1"
+              onClick={() => props.onApprove("ApprovedForSession")}
+            >
+              Allow for Session
+            </Button>
+          </Show>
+
+          <Button
+            variant="destructive"
+            size="sm"
+            class="flex-1"
+            onClick={props.onDeny}
+          >
+            <FiX size={14} class="mr-1" />
+            Deny
+          </Button>
+        </div>
+      </Show>
+
+      <Show when={props.disabled}>
+        <div class="flex items-center justify-center py-2 text-muted-foreground">
+          <FiLoader size={16} class="animate-spin mr-2" />
+          <span class="text-sm">Waiting...</span>
+        </div>
+      </Show>
+    </div>
+  );
+};

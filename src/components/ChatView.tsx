@@ -31,8 +31,7 @@ import {
 import { isMobile } from "../stores/deviceStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
-import { Dialog } from "./ui/dialog";
-import { PermissionList } from "./ui/PermissionCard";
+import { PermissionMessage } from "./ui/PermissionCard";
 import { Button } from "./ui/primitives";
 import { MessageBubble } from "./ui/MessageBubble";
 import { ChatInput } from "./ui/ChatInput";
@@ -1124,34 +1123,6 @@ export function ChatView(props: ChatViewProps) {
                 </div>
               </Show>
 
-              <Dialog
-                open={pendingPermissionsForModal().length > 0}
-                onClose={() => undefined}
-                contentClass="max-w-xl"
-              >
-                <h3 class="font-bold text-lg flex items-center gap-2">
-                  <FiAlertTriangle size={18} />
-                  Permission Required
-                </h3>
-                <div class="mt-4">
-                  <PermissionList
-                    permissions={pendingPermissionsForModal()}
-                    disabled={!isActive()}
-                    permissionMode={permissionMode()}
-                    onApprove={(requestId, decision) => {
-                      const response =
-                        decision === "ApprovedForSession"
-                          ? "approved_for_session"
-                          : "approved";
-                      handlePermissionResponse(requestId, response);
-                    }}
-                    onDeny={(requestId) => {
-                      handlePermissionResponse(requestId, "denied");
-                    }}
-                  />
-                </div>
-              </Dialog>
-
               {/* Messages */}
               <div class="space-y-6 mb-4">
                 <TransitionGroup name="message">
@@ -1159,6 +1130,30 @@ export function ChatView(props: ChatViewProps) {
                     {(message) => <MessageBubble message={message} />}
                   </For>
                 </TransitionGroup>
+
+                {/* Pending Permission Requests (inline) */}
+                <For each={pendingPermissionsForModal()}>
+                  {(permission) => (
+                    <PermissionMessage
+                      toolName={permission.tool_name}
+                      toolParams={permission.tool_params}
+                      message={permission.message}
+                      requestId={permission.request_id}
+                      permissionMode={permissionMode()}
+                      disabled={!isActive()}
+                      onApprove={(decision) => {
+                        const response =
+                          decision === "ApprovedForSession"
+                            ? "approved_for_session"
+                            : "approved";
+                        handlePermissionResponse(permission.request_id, response);
+                      }}
+                      onDeny={() => {
+                        handlePermissionResponse(permission.request_id, "denied");
+                      }}
+                    />
+                  )}
+                </For>
               </div>
             </div>
 
