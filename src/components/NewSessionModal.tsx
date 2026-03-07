@@ -143,9 +143,11 @@ export const NewSessionModal: Component = () => {
 
     if (isRemote) {
       // Use P2P to list remote directory
+      // Use controlSessionId (session_xxx) not agent ID (agent_xxx)
+      const controlSessionId = remoteSession?.controlSessionId || targetSessionId;
       try {
         const requestId = await invoke<string>("list_remote_directory", {
-          sessionId: targetSessionId || remoteSession.sessionId,
+          sessionId: controlSessionId,
           path: dirToList,
         });
         setCurrentRequestId(requestId);

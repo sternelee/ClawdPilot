@@ -10,7 +10,7 @@
 
 import { type Component, Show, createSignal } from "solid-js";
 import { createClipboard } from "@solid-primitives/clipboard";
-import { FiTerminal, FiCopy, FiCheck } from "solid-icons/fi";
+import { FiCopy, FiCheck } from "solid-icons/fi";
 import { SolidMarkdown } from "solid-markdown";
 import type { ChatMessage, ToolCall } from "~/stores/chatStore";
 import {
