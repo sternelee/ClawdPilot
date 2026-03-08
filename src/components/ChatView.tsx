@@ -775,15 +775,34 @@ export function ChatView(props: ChatViewProps) {
       if (textarea) textarea.style.height = "auto";
 
       if (content.startsWith("/")) {
+        // Slash commands - send directly to agent based on session mode
+        chatStore.addMessage(sessionId, {
+          role: "user",
+          content,
+        });
         try {
-          await invoke("send_slash_command", {
-            sessionId,
-            command: content,
-          });
-          chatStore.addMessage(sessionId, {
-            role: "system",
-            content: `Command sent: ${content}`,
-          });
+          if (props.sessionMode === "local") {
+            // Local agent - use local_send_agent_message
+            if (isMobile()) {
+              await invoke("mobile_send_agent_message", {
+                sessionId,
+                content,
+                attachments: [] as string[],
+              });
+            } else {
+              await invoke("local_send_agent_message", {
+                sessionId,
+                content,
+                attachments: [] as string[],
+              });
+            }
+          } else {
+            // Remote agent - use send_slash_command
+            await invoke("send_slash_command", {
+              sessionId,
+              command: content,
+            });
+          }
         } catch (error) {
           const errorMsg =
             error instanceof Error ? error.message : "Failed to send command";
