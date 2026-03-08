@@ -1,7 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
 
-mod command_router;
 mod message_server;
 mod shell;
 use message_server::CliMessageServer;

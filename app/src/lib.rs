@@ -1801,6 +1801,7 @@ async fn send_tcp_data(
 // ============================================================================
 
 /// Send a slash command to an AI agent session
+/// Commands are forwarded directly to the agent (ACP) for processing
 #[tauri::command(rename_all = "camelCase")]
 async fn send_slash_command(
     session_id: String,
@@ -1815,107 +1816,33 @@ async fn send_slash_command(
             .clone()
     };
 
-    // Parse the command to determine if it's a builtin or passthrough
-    let (command_type, raw_command) = if command.starts_with('/') {
-        let parts: Vec<&str> = command.trim().split_whitespace().collect();
-        let cmd = parts.first().copied().unwrap_or("");
+    // Forward slash commands directly to the agent as input
+    // The agent (ACP) will handle command parsing
+    let control_message = ClawdChatMessage::new(
+        shared::MessageType::AgentControl,
+        "app".to_string(),
+        shared::MessagePayload::AgentControl(shared::AgentControlMessage {
+            session_id: session_id.clone(),
+            action: AgentControlAction::SendInput {
+                content: command,
+                attachments: vec![],
+            },
+            request_id: None,
+        }),
+    )
+    .requires_response();
 
-        // Check if it's a ClawdChat builtin command
-        match cmd {
-            "/list" => {
-                // This is handled by a different flow - send as passthrough for now
-                ("passthrough", command.as_str())
-            }
-            "/spawn" => {
-                // Extract parameters and send a RemoteSpawn message
-                if parts.len() >= 3 {
-                    let agent_type_str = parts.get(1).copied().unwrap_or("claude");
-                    let project_path = parts.get(2).copied().unwrap_or(".");
-                    let agent_type = match agent_type_str {
-                        "claude" | "claudecode" => AgentType::ClaudeCode,
-                        "opencode" | "open" => AgentType::OpenCode,
-                        "codex" => AgentType::Codex,
-                        "gemini" => AgentType::Gemini,
-                        _ => AgentType::ClaudeCode,
-                    };
-
-                    let args = if parts.len() > 3 {
-                        parts[3..].iter().map(|s| s.to_string()).collect()
-                    } else {
-                        vec![]
-                    };
-
-                    // Create RemoteSpawn message
-                    let spawn_message = ClawdChatMessage::new(
-                        shared::MessageType::RemoteSpawn,
-                        "app".to_string(),
-                        shared::MessagePayload::RemoteSpawn(shared::RemoteSpawnMessage {
-                            action: shared::RemoteSpawnAction::SpawnSession {
-                                session_id: session_id.clone(),
-                                agent_type,
-                                project_path: project_path.to_string(),
-                                args,
-                            },
-                            request_id: None,
-                        }),
-                    )
-                    .requires_response();
-
-                    send_message_via_client(
-                        &state,
-                        &session.connection_id,
-                        spawn_message,
-                        "remote spawn",
-                    )
-                    .await?;
-                    return Ok("spawn_request_sent".to_string());
-                }
-                ("passthrough", command.as_str())
-            }
-            "/stop" => {
-                // Stop session command
-                if parts.len() >= 2 {
-                    let target_session_id = parts.get(1).copied().unwrap_or(&session_id.as_str());
-                    disconnect_session(target_session_id.to_string(), state).await?;
-                    return Ok("session_stopped".to_string());
-                }
-                ("passthrough", command.as_str())
-            }
-            _ => ("passthrough", command.as_str()),
-        }
-    } else {
-        ("passthrough", command.as_str())
-    };
-
-    match command_type {
-        "passthrough" => {
-            // Send as AgentControl::SendInput
-            let control_message = ClawdChatMessage::new(
-                shared::MessageType::AgentControl,
-                "app".to_string(),
-                shared::MessagePayload::AgentControl(shared::AgentControlMessage {
-                    session_id: session_id.clone(),
-                    action: AgentControlAction::SendInput {
-                        content: raw_command.to_string(),
-                        attachments: vec![],
-                    },
-                    request_id: None,
-                }),
-            )
-            .requires_response();
-
-            send_message_via_client(
-                &state,
-                &session.connection_id,
-                control_message,
-                "agent command",
-            )
-            .await?;
-            Ok("command_sent".to_string())
-        }
-        _ => Ok("unknown_command".to_string()),
-    }
+    send_message_via_client(
+        &state,
+        &session.connection_id,
+        control_message,
+        "agent command",
+    )
+    .await?;
+    Ok("command_sent".to_string())
 }
+
+// ============================================================================
 
 /// Spawn a remote AI agent session
 #[tauri::command(rename_all = "camelCase")]
