@@ -19,18 +19,10 @@ import { ChatView } from "./ChatView";
 import { sessionStore } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
 import { Button } from "./ui/primitives";
-import { CommandPalette, type CommandItem } from "./ui/ChatInput";
 import { KeyboardShortcutsDialog } from "./ui/KeyboardShortcuts";
 import { SpinnerWithLabel } from "./ui/Spinner";
 import { ThemeSwitcher } from "./ui/ThemeSwitcher";
-import {
-  FiPlus,
-  FiSettings,
-  FiMoon,
-  FiSidebar,
-  FiHome,
-  FiHelpCircle,
-} from "solid-icons/fi";
+import { FiPlus } from "solid-icons/fi";
 
 // ============================================================================
 // Icons
@@ -60,65 +52,7 @@ const MenuIcon: Component = () => (
 
 export const AppLayout: Component = () => {
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
-  const [commandPaletteOpen, setCommandPaletteOpen] = createSignal(false);
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = createSignal(false);
-
-  // Define command palette commands
-  const commands: CommandItem[] = [
-    {
-      id: "new-session",
-      label: "New Session",
-      description: "Start a new AI agent session",
-      icon: FiPlus,
-      action: () => {
-        // TODO: Open new session modal
-        notificationStore.info("New session", "Coming soon");
-      },
-    },
-    {
-      id: "toggle-sidebar",
-      label: "Toggle Sidebar",
-      description: "Show or hide the session sidebar",
-      icon: FiSidebar,
-      action: () => setSidebarOpen((prev) => !prev),
-    },
-    {
-      id: "go-home",
-      label: "Go to Home",
-      description: "Return to home screen",
-      icon: FiHome,
-      action: () => {
-        // TODO: Navigate to home
-      },
-    },
-    {
-      id: "toggle-theme",
-      label: "Toggle Theme",
-      description: "Switch between light and dark mode",
-      icon: FiMoon,
-      action: () => {
-        // TODO: Toggle theme
-      },
-    },
-    {
-      id: "settings",
-      label: "Settings",
-      description: "Open application settings",
-      icon: FiSettings,
-      action: () => {
-        // TODO: Open settings
-      },
-    },
-    {
-      id: "keyboard-shortcuts",
-      label: "Keyboard Shortcuts",
-      description: "View all keyboard shortcuts",
-      icon: FiHelpCircle,
-      action: () => {
-        setShortcutsDialogOpen(true);
-      },
-    },
-  ];
 
   // Keyboard shortcuts
   onMount(() => {
@@ -134,12 +68,6 @@ export const AppLayout: Component = () => {
       // Press 'b' to toggle sidebar
       if (e.key === "b" || e.key === "B") {
         setSidebarOpen((prev) => !prev);
-      }
-
-      // Press Ctrl/Cmd + K to open command palette
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        setCommandPaletteOpen((prev) => !prev);
       }
 
       // Press ? to show keyboard shortcuts
@@ -197,13 +125,6 @@ export const AppLayout: Component = () => {
 
   return (
     <div class="flex h-screen min-h-0 bg-muted overflow-hidden max-md:text-sm max-md:leading-5">
-      {/* Command Palette */}
-      <CommandPalette
-        open={commandPaletteOpen()}
-        onClose={() => setCommandPaletteOpen(false)}
-        items={commands}
-        placeholder="Type a command..."
-      />
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={shortcutsDialogOpen()}

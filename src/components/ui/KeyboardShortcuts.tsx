@@ -33,7 +33,6 @@ export interface KeyboardShortcutsDialogProps {
 
 const shortcuts: KeyboardShortcut[] = [
   // Global
-  { key: "⌘ K", description: "Open command palette", category: "Global" },
   { key: "⌘ B", description: "Toggle sidebar", category: "Global" },
   { key: "?", description: "Show keyboard shortcuts", category: "Global" },
   { key: "Esc", description: "Close dialogs", category: "Global" },
