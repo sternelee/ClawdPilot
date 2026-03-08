@@ -1246,6 +1246,7 @@ export function ChatView(props: ChatViewProps) {
                 onSubmit={handleSend}
                 onInterrupt={handleAbort}
                 onAttach={handleAttachFiles}
+                agentType={props.agentType}
                 attachments={chatStore
                   .getAttachments(props.sessionId)
                   .map((a) => {
