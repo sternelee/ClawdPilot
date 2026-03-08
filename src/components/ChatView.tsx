@@ -617,29 +617,6 @@ export function ChatView(props: ChatViewProps) {
       const routerState = sessionEventRouter.getStreamingState(props.sessionId);
       setIsStreaming(routerState.isStreaming);
 
-      // For remote sessions: load local history and request message sync for reconnection recovery
-      if (props.sessionMode === "remote") {
-        try {
-          // Load locally cached messages first
-          const localHistory = await sessionEventRouter.loadSessionHistory(
-            props.sessionId,
-          );
-          if (localHistory.length > 0) {
-            console.log(
-              `[ChatView] Loaded ${localHistory.length} messages from local history for session ${props.sessionId}`,
-            );
-          }
-
-          // Request message sync from CLI to get any missed messages
-          await sessionEventRouter.requestMessageSync(props.sessionId);
-        } catch (error) {
-          console.error(
-            `[ChatView] Failed to load history or request sync:`,
-            error,
-          );
-        }
-      }
-
       onCleanup(() => {
         unsubscribe();
       });

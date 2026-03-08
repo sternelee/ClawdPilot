@@ -92,7 +92,6 @@ Central `Message` struct with `MessageType` discriminator:
 - `AgentPermission` - Permission requests/responses
 - `AgentControl` - Control messages (interrupt, shutdown)
 - `AgentMetadata` - State updates
-- `MessageSync` - Reconnection message sync (stores/replays missed messages)
 - `FileBrowser`, `GitStatus`, `RemoteSpawn`, `Notification`, `SlashCommand`, etc.
 
 Serialized with bincode. `MessageHandler` trait for extensible dispatch.
@@ -108,12 +107,7 @@ The `shared/src/agent/` module manages AI agent subprocesses via two session pro
 
 ### Message Sync (Reconnection Support)
 
-The `shared/src/message_sync.rs` and `shared/src/message_store.rs` modules handle message persistence for reconnection:
-
-- **MessageStore**: JSONL-based storage at `~/.riterm/messages/<session_id>.jsonl`
-- **MessageSyncService**: Persists outgoing messages with sequence numbers, replays missed messages on reconnect
-
-Flow: CLI Host persists messages before sending → App tracks last received sequence → On reconnect, App sends sync request with last sequence → CLI returns missed messages.
+Session recovery uses ACP's built-in `resume_session()` feature. No custom message persistence required.
 
 ## Supported AI Agents
 
@@ -347,16 +341,6 @@ cargo test -- --nocapture
 cargo test -p cli -- --nocapture
 ```
 
-### Message Sync Testing
-
-```bash
-# Test MessageStore (JSONL persistence)
-cargo test -p shared message_store
-
-# Test MessageSyncService (reconnection sync)
-cargo test -p shared message_sync
-```
-
 ## Linting & Formatting
 
 ```bash
@@ -416,8 +400,6 @@ idevicesyslog | grep ClawdPilot
 | File | Purpose |
 |------|---------|
 | `shared/src/message_protocol.rs` | Central message protocol definition |
-| `shared/src/message_sync.rs` | Reconnection message sync service |
-| `shared/src/message_store.rs` | JSONL message persistence for reconnection |
 | `shared/src/agent/mod.rs` | AgentManager routing logic and SessionKind enum |
 | `shared/src/agent/factory.rs` | Agent session factory |
 | `shared/src/agent/acp.rs` | ACP session implementation |

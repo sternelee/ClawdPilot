@@ -29,7 +29,7 @@ use shared::AgentManager;
 use shared::{
     AgentControlAction, AgentPermissionMode, AgentPermissionResponse, AgentType,
     CommunicationManager, DirEntry, Event, EventListener, EventType, FileBrowserAction,
-    FileBrowserEntry, Message as ClawdChatMessage, MessageBuilder, MessagePayload, MessageStore,
+    FileBrowserEntry, Message as ClawdChatMessage, MessageBuilder, MessagePayload,
     QuicMessageClientHandle, TcpDataType, TcpForwardingAction, TcpForwardingType,
 };
 
@@ -136,28 +136,10 @@ pub struct AppState {
     // Local agent manager for in-app agent sessions (desktop only)
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     agent_manager: Arc<RwLock<Option<Arc<AgentManager>>>>,
-    // Message store for persisting received messages (reconnection recovery)
-    message_store: RwLock<Option<Arc<MessageStore>>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        // Initialize message store in data directory
-        let message_store = dirs::data_local_dir()
-            .or_else(|| dirs::data_dir())
-            .map(|dir| dir.join("ClawdPilot").join("messages"))
-            .and_then(|dir| {
-                std::fs::create_dir_all(&dir).ok()?;
-                MessageStore::new(dir).ok()
-            })
-            .map(Arc::new);
-
-        if message_store.is_none() {
-            tracing::warn!("Failed to initialize message store for app");
-        } else {
-            tracing::info!("Message store initialized successfully");
-        }
-
         Self {
             sessions: RwLock::new(HashMap::new()),
             communication_manager: RwLock::new(None),
@@ -166,7 +148,6 @@ impl Default for AppState {
             tcp_forwarding_manager: Arc::new(tokio::sync::Mutex::new(TcpForwardingManager::new())),
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             agent_manager: Arc::new(RwLock::new(None)),
-            message_store: RwLock::new(message_store),
         }
     }
 }
@@ -982,30 +963,6 @@ async fn connect_to_peer(
                                         );
                                     }
                                 }
-                                MessagePayload::MessageSync(sync_msg) => {
-                                    // Handle message sync for reconnection recovery
-                                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                                    tracing::info!(
-                                        "Received MessageSync for session: {:?}",
-                                        sync_msg.action
-                                    );
-
-                                    match &sync_msg.action {
-                                        shared::MessageSyncAction::SyncResponse { session_id, messages } => {
-                                            // Emit sync response to frontend (global event, payload contains sessionId)
-                                            let _ = app_handle_clone.emit(
-                                                "message-sync",
-                                                &serde_json::json!({
-                                                    "sessionId": session_id,
-                                                    "messages": messages,
-                                                })
-                                            );
-                                        }
-                                        _ => {
-                                            tracing::warn!("Unknown MessageSync action: {:?}", sync_msg.action);
-                                        }
-                                    }
-                                }
                                 MessagePayload::TcpForwarding(tcp_msg) => {
                                     // Handle TCP forwarding messages
                                     #[cfg(debug_assertions)]
@@ -1623,163 +1580,6 @@ async fn hide_panel(app_handle: tauri::AppHandle) -> Result<(), String> {
         panel.hide();
     }
     Ok(())
-}
-
-// === Message Sync Commands (断线重连）===
-
-/// Request message sync for reconnection recovery
-#[tauri::command(rename_all = "camelCase")]
-async fn request_message_sync(
-    session_id: String,
-    last_sequence: u64,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let session = {
-        let sessions = state.sessions.read().await;
-        sessions
-            .get(&session_id)
-            .cloned()
-            .ok_or("Session not found")?
-    };
-
-    let sync_message =
-        MessageBuilder::sync_request("app".to_string(), session_id.clone(), last_sequence);
-
-    let connection_id = session.connection_id;
-
-    let quic_client = {
-        let client_guard = state.quic_client.read().await;
-        match client_guard.as_ref() {
-            Some(c) => c.clone(),
-            None => return Err("QUIC client not initialized".to_string()),
-        }
-    };
-
-    if let Err(e) = quic_client
-        .send_message_to_server(&connection_id, sync_message)
-        .await
-    {
-        return Err(format!("Failed to send sync request: {}", e));
-    }
-
-    tracing::info!(
-        "Sent message sync request: session={}, last_seq={}",
-        session_id,
-        last_sequence
-    );
-
-    Ok(())
-}
-
-// === Message Persistence Commands (App-side message store) ===
-
-/// Persist a received message to local storage
-#[tauri::command(rename_all = "camelCase")]
-async fn persist_message(
-    session_id: String,
-    message_data: String,
-    state: State<'_, AppState>,
-) -> Result<u64, String> {
-    let message_store = {
-        let store_guard = state.message_store.read().await;
-        store_guard.clone()
-    };
-
-    let store = message_store.ok_or("Message store not initialized")?;
-
-    store
-        .append_message(&session_id, &message_data)
-        .await
-        .map_err(|e| format!("Failed to persist message: {}", e))
-}
-
-/// Load all stored messages for a session
-#[tauri::command(rename_all = "camelCase")]
-async fn load_stored_messages(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<Vec<StoredMessageEntry>, String> {
-    let message_store = {
-        let store_guard = state.message_store.read().await;
-        store_guard.clone()
-    };
-
-    let store = message_store.ok_or("Message store not initialized")?;
-
-    // Use u64::MAX to get all messages
-    let entries = store
-        .get_messages_since(&session_id, u64::MAX)
-        .await
-        .map_err(|e| format!("Failed to load messages: {}", e))?;
-
-    Ok(entries
-        .into_iter()
-        .map(|e| StoredMessageEntry {
-            sequence: e.sequence,
-            timestamp: e.timestamp,
-            message_data: e.message_data,
-        })
-        .collect())
-}
-
-/// Get stored message statistics for a session
-#[tauri::command(rename_all = "camelCase")]
-async fn get_message_store_stats(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<MessageStoreStatsResponse, String> {
-    let message_store = {
-        let store_guard = state.message_store.read().await;
-        store_guard.clone()
-    };
-
-    let store = message_store.ok_or("Message store not initialized")?;
-
-    let stats = store
-        .get_stats(&session_id)
-        .await
-        .map_err(|e| format!("Failed to get stats: {}", e))?;
-
-    Ok(MessageStoreStatsResponse {
-        total_messages: stats.total_messages,
-        max_sequence: stats.max_sequence,
-        total_bytes: stats.total_bytes,
-    })
-}
-
-/// Clear stored messages for a session
-#[tauri::command(rename_all = "camelCase")]
-async fn clear_stored_messages(
-    session_id: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
-    let message_store = {
-        let store_guard = state.message_store.read().await;
-        store_guard.clone()
-    };
-
-    let store = message_store.ok_or("Message store not initialized")?;
-
-    store
-        .clear_session(&session_id)
-        .await
-        .map_err(|e| format!("Failed to clear messages: {}", e))
-}
-
-/// Stored message entry for frontend
-#[derive(Serialize)]
-struct StoredMessageEntry {
-    sequence: u64,
-    timestamp: u64,
-    message_data: String,
-}
-
-/// Message store statistics for frontend
-#[derive(Serialize)]
-struct MessageStoreStatsResponse {
-    total_messages: usize,
-    max_sequence: u64,
-    total_bytes: usize,
 }
 
 // === TCP Forwarding Management Commands ===
@@ -3101,13 +2901,6 @@ pub fn run() {
             show_panel,
             #[cfg(target_os = "macos")]
             hide_panel,
-            // Message Sync Commands
-            request_message_sync,
-            // Message Persistence Commands
-            persist_message,
-            load_stored_messages,
-            get_message_store_stats,
-            clear_stored_messages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
