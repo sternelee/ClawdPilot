@@ -18,26 +18,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Cargo Workspace Structure
 
-| Crate | Purpose |
-|-------|---------|
-| **cli/** | CLI binary — `clawdpilot host` subcommand only |
-| **shared/** | P2P networking, message protocol, QUIC server, event manager, agent protocols |
-| **app/** | Tauri 2 desktop+mobile backend — Tauri commands, P2P client, TCP forwarding |
-| **browser/** | WebAssembly browser client |
+| Crate | Edition | Purpose |
+|-------|---------|---------|
+| **cli/** | 2024 | CLI binary — `clawdpilot host` subcommand only |
+| **shared/** | 2024 | P2P networking, message protocol, QUIC server, event manager, agent protocols |
+| **app/** | 2024 | Tauri 2 desktop+mobile backend — Tauri commands, P2P client, TCP forwarding |
+| **browser/** | 2021 | WebAssembly browser client |
 
-### Session Storage
-
-Persistent session storage uses SQLite:
-- **Location**: `~/.riterm/sessions.db` (macOS/Linux)
-- **Module**: `shared/src/session_store/sqlite.rs`
-- **Schema**: Auto-migrated via `rusqlite_migration`
+The `web/` directory is a separate Cloudflare Workers web application with its own pnpm workspace (not part of the Cargo workspace).
 
 ### Data Directories
 
 | Path | Purpose |
 |------|---------|
-| `~/.riterm/sessions.db` | Session persistence (SQLite) |
-| `~/.riterm/messages/` | Message sync storage (JSONL files for reconnection) |
 | `~/.config/clawdpilot/agents.json` | Agent command overrides |
 | `./clawdchat_secret_key` | CLI P2P secret key (in working directory) |
 | `./logs/clawdpilot-cli.log` | CLI logs (in working directory) |
@@ -51,22 +44,22 @@ Override agent commands/args/env in `~/.config/clawdpilot/agents.json` (or `~/.c
   "agents": {
     "claude": { "command": "claude-agent-acp", "args": [], "env": {} },
     "codex": { "command": "codex-acp", "args": [], "env": {} },
-    "gemini": { "command": "gemini", "args": ["--stdio"], "env": { "GEMINI_API_KEY": "..." } }
+    "gemini": { "command": "gemini", "args": ["--experimental-acp"], "env": { "GEMINI_API_KEY": "..." } }
   }
 }
 ```
 
-### Frontend Structure
+If an agent binary is not found at session start, `AgentManager` attempts auto-install via `pnpm`, `npm`, `bun`, or `yarn` (see `try_install_package` in `shared/src/agent/mod.rs`).
 
-| Directory | Purpose |
-|-----------|---------|
-| **src/** | SolidJS frontend (Vite + vite-plugin-solid + TailwindCSS v4 + DaisyUI) |
-| **src/stores/** | State management (sessionStore, chatStore, settingsStore, deviceStore, fileBrowserStore, gitStore, notificationStore, sessionEventRouter) |
-| **src/components/ui/** | Reusable UI primitives (Accordion, Avatar, Card, Dropdown, Tabs, Toast, Tooltip, MessageList, ChatInput, PermissionCard, etc.) |
-| **src/components/** | UI components (ChatView, SessionSidebar, NewSessionModal, FileBrowserView, GitDiffView, SettingsModal, etc.) |
-| **src/hooks/** | Custom SolidJS hooks |
-| **src/utils/** | Utility functions |
-| **plugins/** | Custom Vite plugins (e.g., `fix-cjs-modules.ts` for solid-markdown) |
+### Frontend Stack
+
+- **SolidJS** with Vite + vite-plugin-solid
+- **Tailwind CSS v4** via `@tailwindcss/vite` plugin
+- **@kobalte/core** — headless UI primitives (Accordion, Dialog, Combobox, etc.)
+- **tailwindcss-animate** — animation utilities
+- Design system uses HSL CSS variables (ShadCN/Kobalte-style, configured in `tailwind.config.js`)
+- Path alias: `~` → `./src/` (configured in `vite.config.ts` and `tsconfig.json`)
+- Custom `fix-cjs-modules` Vite plugin in `plugins/fix-cjs-modules.ts` for solid-markdown CJS compatibility
 
 ### Message Flow
 
@@ -83,6 +76,35 @@ The `sessionEventRouter.ts` provides centralized event management for concurrent
 - Routes events to correct session handlers by sessionId
 - Tracks streaming state and unread indicators per session
 - Active session is exempt from unread notifications
+- `removeSession()` cleans up handler sets and streaming state to prevent memory leaks
+
+### QUIC Connection Health & Auto-Reconnect
+
+The `QuicMessageClientHandle` implements connection health monitoring for mobile stability:
+
+- **Health monitor** (`start_health_monitor`): 15-second heartbeat probes via bi-directional QUIC streams. After 2 consecutive failures, triggers reconnection.
+- **Auto-reconnect** (`attempt_reconnect`): Exponential backoff (2^n * 2s, capped at 30s). Broadcasts synthetic heartbeat messages with status `"reconnecting"` / `"connected"` through the existing `broadcast::channel`.
+- **Connection state flow**: `connected` → `connection_lost` → `reconnecting` → `connected` (or back to `connection_lost`). States are signaled via `MessageBuilder::heartbeat("system", 0, status)`.
+- **Lock-free sends**: `send_message_to_server` reads from `server_connections: Arc<RwLock<...>>` directly, bypassing the client `Mutex`. I/O happens outside any lock.
+- **Bounded reads**: All stream reads use 16 MiB cap + 30s timeout (prevents OOM from malformed peers).
+- **Mobile keys**: Mobile platforms use persistent secret keys stored in `app_data_dir/clawdchat_app_secret_key` for session resumption across app restarts.
+- **Endpoint readiness**: `endpoint.online().await` is called after endpoint creation to ensure relay registration and NAT traversal are complete before connecting.
+
+### Connection State (Frontend)
+
+```
+ConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error"
+```
+
+- Backend emits `"connection-state-changed"` Tauri events with `{ sessionId, state }` payload
+- `sessionStore` manages state transitions; `App.tsx` listens and updates UI
+- `handleRemoteConnect` guards against duplicate concurrent calls via `isConnecting` check
+
+### Session Cleanup
+
+- **Server-side** (`QuicMessageServer`): `cleanup_inactive_connections()` removes connections idle beyond a timeout. `shutdown()` gracefully closes all connections with `connection.close()` before dropping.
+- **Client-side** (`app/src/lib.rs`): Background cleanup task runs every 5 minutes, evicts sessions with no activity for 30+ minutes via `CancellationToken`.
+- **Frontend**: `sessionStore.removeSession()` calls `sessionEventRouter.removeSession()` to clean up handler maps and streaming state.
 
 ### Message Protocol (`shared/src/message_protocol.rs`)
 
@@ -105,9 +127,7 @@ The `shared/src/agent/` module manages AI agent subprocesses via two session pro
 
 `AgentManager` routes to the correct protocol based on `AgentType`. Both implement a common interface: `send_message`, `interrupt`, `subscribe`, `get_pending_permissions`, `respond_to_permission`, `shutdown`.
 
-### Message Sync (Reconnection Support)
-
-Session recovery uses ACP's built-in `resume_session()` feature. No custom message persistence required.
+Session recovery uses ACP's built-in `resume_session()` feature.
 
 ## Supported AI Agents
 
@@ -124,53 +144,26 @@ Session recovery uses ACP's built-in `resume_session()` feature. No custom messa
 ### Frontend Development
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Frontend dev server (Vite, localhost:1420)
-pnpm dev
-
-# Full Tauri app with hot reload
-pnpm tauri:dev
-
-# Build frontend → dist/
-pnpm build
-
-# Build Tauri app bundle
-pnpm tauri:build
-
-# TypeScript type checking
-pnpm tsc
+pnpm install              # Install dependencies
+pnpm dev                  # Frontend dev server (Vite, localhost:1420)
+pnpm tauri:dev            # Full Tauri app with hot reload
+pnpm build                # Build frontend → dist/
+pnpm tauri:build          # Build Tauri app bundle
+pnpm tsc                  # TypeScript type checking
 ```
 
 ### Rust Development
 
 ```bash
-# Build CLI binary (release)
-cargo build -p cli --release
-# Output: target/release/cli
+cargo build -p cli --release    # Build CLI binary → target/release/cli
+./target/release/cli host       # Run CLI (prints QR code for mobile connection)
 
-# Run CLI
-./target/release/cli host
-
-# The host server prints a QR code and connection ticket for mobile app to scan
-# Logs to: ./logs/clawdpilot-cli.log
-# Secret key stored at: ./clawdchat_secret_key (in CLI directory)
-# Default bind address: 0.0.0.0:61103
-
-# Rust checks
-cargo check
-cargo test --workspace
-cargo fmt --all
-cargo clippy --workspace -- -D warnings
-
-# Test a single crate
-cargo test -p cli
-cargo test -p shared
-cargo test -p app
-
-# Run tests with output
-cargo test --workspace -- --nocapture
+cargo check                             # Quick compilation check
+cargo test --workspace                  # Run all tests
+cargo test -p cli <test_name>           # Single test in a crate
+cargo test --workspace -- --nocapture   # Tests with stdout
+cargo fmt --all                         # Format
+cargo clippy --workspace -- -D warnings # Lint (strict)
 ```
 
 ### Mobile Development
@@ -178,37 +171,39 @@ cargo test --workspace -- --nocapture
 Mobile builds use the `mobile` feature on the `shared` crate to exclude desktop-only agent dependencies (agent-client-protocol, portable-pty, etc.).
 
 ```bash
-# Android development
-pnpm tauri:android:dev
-
-# Android build
-pnpm tauri:android:build
-
-# iOS development (macOS only)
-pnpm tauri:ios:dev
-
-# iOS build (macOS only)
-pnpm tauri:ios:build
+pnpm tauri:android:dev    # Android development
+pnpm tauri:android:build  # Android build
+pnpm tauri:ios:dev        # iOS development (macOS only)
+pnpm tauri:ios:build      # iOS build (macOS only)
 ```
 
 ### WASM Development
 
 ```bash
-# Build browser WASM client
 cd browser && wasm-pack build --target web
 ```
 
 ## Key Crate Dependencies
 
 - **iroh** 0.95 + **iroh-tickets** — P2P with QUIC and NAT traversal
-- **agent-client-protocol** 0.9.4 — ACP for external agents
+- **agent-client-protocol** — ACP for external agents
 - **tauri** 2 — cross-platform desktop/mobile
 - **bincode** — network serialization
 - **chacha20poly1305** — E2E encryption
+- **tokio-util** — `CancellationToken` for task lifecycle (included in `mobile` feature)
+- **tauri-nspanel** — macOS floating panel support (macOS-only dependency)
 
-## Crate Patch Note
+### Crate Patches
 
-`Cargo.toml` patches `tokio-tungstenite` and `tungstenite` with OpenAI forks (used by WebSocket gateway support).
+`Cargo.toml` patches these crates from forks:
+- `tokio-tungstenite` and `tungstenite` — OpenAI forks (WebSocket gateway support)
+- `agent-client-protocol-schema` — forked to handle nullable `used` field in `UsageUpdate`
+
+### Build Profiles
+
+- `release` — LTO enabled, stripped symbols, single codegen unit
+- `production` — inherits `release` + `panic = "abort"`
+- `release-logging` feature flag (in `cli` and `app`) — enables tracing in release builds
 
 ## Frontend Development Patterns
 
@@ -216,7 +211,6 @@ cd browser && wasm-pack build --target web
 
 - Use Solid reactive primitives (`createSignal`, `createMemo`, `createResource`)
 - Avoid React patterns like `useEffect` or prop drilling where stores are better
-- Path alias: `~` → `./src/` (configured in `vite.config.ts` and `tsconfig.json`)
 
 ### Example Component Pattern
 
@@ -231,11 +225,13 @@ export function MyComponent(props: Props) {
   const [active, setActive] = createSignal(false);
 
   return (
-    <div class="card bg-base-100 shadow-xl">
-      <div class="card-body">
-        <h2 class="card-title">{props.title}</h2>
+    <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+      <div class="p-6">
+        <h2 class="text-lg font-semibold">{props.title}</h2>
         <Show when={active()}>
-          <div class="badge badge-primary">Active</div>
+          <span class="inline-flex items-center rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-primary-foreground">
+            Active
+          </span>
         </Show>
       </div>
     </div>
@@ -243,16 +239,12 @@ export function MyComponent(props: Props) {
 }
 ```
 
-### Vite Custom Plugin
-
-The project uses a custom `fix-cjs-modules` plugin in `plugins/fix-cjs-modules.ts` to handle CJS dependencies from `solid-markdown`. This plugin ensures proper module resolution during the build process.
-
 ### Styling
 
 - Tailwind CSS v4 via `@tailwindcss/vite` plugin (see `vite.config.ts`)
-- Base configuration in `tailwind.config.js` for DaisyUI integration
+- Design tokens via HSL CSS variables (`--primary`, `--background`, `--border`, etc.) in `tailwind.config.js`
+- Dark mode uses Kobalte's `data-kb-theme="dark"` attribute
 - Prefer utility classes; avoid `@apply`
-- Use the existing font stacks
 
 ## Rust Code Style (Edition 2024)
 
@@ -276,12 +268,14 @@ The project uses a custom `fix-cjs-modules` plugin in `plugins/fix-cjs-modules.t
 
 - Use `Arc<Mutex<T>>` or `Arc<RwLock<T>>` for shared mutable state
 - Prefer coarse-grained locking with clear ownership boundaries
+- For hot-path fields updated on every event (e.g., `last_activity: Instant`), use `std::sync::Mutex` instead of `tokio::sync::RwLock` to avoid async overhead
+- Promote frequently-accessed fields out of a wrapping `Mutex` into their own `Arc<RwLock<T>>` for lock-free reads (see `QuicMessageClientHandle`)
 
 ### Imports Order
 
 1. `std` / `core`
 2. External crates (`anyhow`, `tokio`, `tracing`)
-3. Workspace crates (`shared`, `clawdchat_*`)
+3. Workspace crates (`shared`)
 4. `crate::` (local modules)
 
 ### Naming
@@ -305,95 +299,33 @@ The project uses a custom `fix-cjs-modules` plugin in `plugins/fix-cjs-modules.t
 5. Add Tauri command handling in `app/src/lib.rs`
 6. Update frontend stores (`sessionStore.ts`) and `ChatView.tsx`
 
-## Adding a Slash Command
-
-Slash commands in the CLI are routed via `cli/src/command_router.rs`. Built-in commands are defined in `CLAWDCHAT_BUILTIN_COMMANDS` and agent-specific commands in agent-specific constants.
-
-1. Add to appropriate command list in `cli/src/command_router.rs`
-2. If builtin: implement handler in `cli/src/message_server.rs`
-3. Otherwise: passthrough to the agent
-
-## Testing
-
-### Rust Tests
-
-```bash
-# Run all tests
-cargo test --workspace
-
-# Single test (CLI)
-cargo test -p cli <test_name>
-
-# Single test (Shared)
-cargo test -p shared <test_name>
-
-# Single test (App)
-cargo test -p app <test_name>
-
-# Show stdout
-cargo test -- --nocapture
-```
-
-### CLI-specific Testing
-
-```bash
-# Test CLI ticket generation and P2P connection flow
-cargo test -p cli -- --nocapture
-```
-
 ## Linting & Formatting
 
 ```bash
-# Rust formatting and lint
-cargo fmt --all -- --check  # Verify formatting
-cargo clippy --workspace -- -D warnings  # Lint (strict)
-
-# Frontend type check
-pnpm tsc
-
-# Frontend formatting (optional)
-pnpm exec prettier --write "src/**/*.{ts,tsx}"
+cargo fmt --all -- --check                          # Verify Rust formatting
+cargo clippy --workspace -- -D warnings             # Rust lint (strict)
+pnpm tsc                                            # Frontend type check
+pnpm exec prettier --write "src/**/*.{ts,tsx}"      # Frontend formatting
 ```
 
 ## Debugging
 
-### CLI Debugging
-
 ```bash
-# Debug build
-cargo build -p cli
-
-# Run with logging
+# CLI with debug logging
 RUST_LOG=debug ./target/debug/cli host
 
-# Use temporary key (no persistence)
-./target/release/cli host --temp-key
+# CLI flags
+./target/release/cli host --temp-key   # Temporary key (no persistence)
+./target/release/cli host --daemon     # Background mode after printing QR
 
-# Daemon mode (run in background after printing QR)
-./target/release/cli host --daemon
-```
-
-### App Debugging
-
-```bash
-# Development mode with detailed logs
+# Tauri app with debug logging
 RUST_LOG=debug pnpm tauri:dev
 
-# Check app logs
-# Windows: %APPDATA%\ClawdPilot\logs\
+# App log locations
 # macOS: ~/Library/Logs/ClawdPilot/
 # Linux: ~/.local/share/ClawdPilot/logs/
-
-# iOS debugging (macOS only)
-idevicesyslog | grep ClawdPilot
+# Windows: %APPDATA%\ClawdPilot\logs\
 ```
-
-## Session Lifecycle
-
-1. App sends `CreateSession` -> CLI responds `{session_id}`
-2. App starts `start_session_listener`
-3. P2P client connects -> App opens QUIC stream
-4. Data is forwarded bidirectionally (App <-> CLI <-> PTY)
 
 ## Key Files
 
@@ -401,27 +333,21 @@ idevicesyslog | grep ClawdPilot
 |------|---------|
 | `shared/src/message_protocol.rs` | Central message protocol definition |
 | `shared/src/agent/mod.rs` | AgentManager routing logic and SessionKind enum |
-| `shared/src/agent/factory.rs` | Agent session factory |
+| `shared/src/agent/factory.rs` | Agent session factory (command resolution, auto-install) |
 | `shared/src/agent/acp.rs` | ACP session implementation |
 | `shared/src/agent/openclaw_ws.rs` | OpenClaw WebSocket session |
-| `cli/src/command_router.rs` | Slash command routing |
-| `cli/src/message_server.rs` | Message handling |
+| `shared/src/agent/session.rs` | Agent session trait and process state |
+| `shared/src/event_manager.rs` | Event manager for inter-component communication |
+| `shared/src/quic_server.rs` | QUIC/iroh P2P server |
 | `cli/src/main.rs` | CLI entry point (host subcommand) |
+| `cli/src/message_server.rs` | CLI message handling and slash commands |
 | `app/src/lib.rs` | Tauri commands and P2P client |
 | `src/components/ChatView.tsx` | Main chat interface |
 | `src/components/ui/ChatInput.tsx` | Chat input with tool buttons and file attachment |
 | `src/stores/sessionStore.ts` | Session state management |
 | `src/stores/chatStore.ts` | Messages and permissions |
-| `src/stores/fileBrowserStore.ts` | File browser state |
-| `src/stores/gitStore.ts` | Git status and diff state |
 | `src/stores/sessionEventRouter.ts` | Multi-session event routing and unread tracking |
 
 ## Package Manager
 
 **pnpm v10+** (lockfileVersion 9.0 in `pnpm-lock.yaml`)
-
-## Notes
-
-- Cursor rules exist at `web/.cursorrules` for SolidJS + Tailwind CSS patterns
-- No `.github/copilot-instructions.md` present in this repo
-- The project uses a comprehensive CI/CD pipeline for multi-platform builds
