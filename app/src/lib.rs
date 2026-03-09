@@ -10,7 +10,7 @@ use tauri::{Emitter, State};
 use tauri_plugin_notification::NotificationExt;
 use tokio::sync::{RwLock, broadcast};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[cfg(target_os = "macos")]
@@ -2641,11 +2641,12 @@ async fn local_load_agent_history(
         .clone();
 
     let session_id = if let Some(target_session_id) = target_session_id.clone() {
+        let history_id = history_session_id.clone();
         manager
             .start_session_from_history_with_id(
                 target_session_id.clone(),
                 agent_type,
-                history_session_id,
+                history_id,
                 None,
                 extra_args.unwrap_or_default(),
                 working_dir,
@@ -2657,10 +2658,11 @@ async fn local_load_agent_history(
             .map_err(|e| format!("Failed to load agent history: {}", e))?;
         target_session_id
     } else {
+        let history_id = history_session_id.clone();
         manager
             .start_session_from_history(
                 agent_type,
-                history_session_id,
+                history_id,
                 None,
                 extra_args.unwrap_or_default(),
                 working_dir,
@@ -2671,6 +2673,33 @@ async fn local_load_agent_history(
             .await
             .map_err(|e| format!("Failed to load agent history: {}", e))?
     };
+
+    // For Codex, load history from JSONL files since ACP adapter doesn't support resume_session
+    if agent_type == AgentType::Codex {
+        info!("[Codex] Loading session history from JSONL files");
+        let history_id = history_session_id.clone();
+        match shared::agent::load_codex_session_history(&history_id).await {
+            Ok(messages) => {
+                info!("[Codex] Loaded {} history messages", messages.len());
+                for msg in messages {
+                    // Send each message as a text_delta event to the frontend
+                    let event_payload = serde_json::json!({
+                        "type": "text_delta",
+                        "content": msg.content,
+                    });
+                    let frontend_event = serde_json::json!({
+                        "sessionId": session_id.clone(),
+                        "turnId": uuid::Uuid::new_v4().to_string(),
+                        "event": event_payload,
+                    });
+                    let _ = app_handle.emit("local-agent-event", &frontend_event);
+                }
+            }
+            Err(e) => {
+                warn!("[Codex] Failed to load history: {}", e);
+            }
+        }
+    }
 
     let buffered_events = manager.drain_event_buffer(&session_id).await;
     for event in buffered_events {

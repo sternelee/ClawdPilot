@@ -863,6 +863,129 @@ pub async fn list_agent_history(
     result
 }
 
+/// Load Codex session messages from the JSONL file in ~/.codex/sessions/
+/// Codex ACP adapter doesn't support resume_session, so we read the session file directly.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CodexHistoryMessage {
+    pub role: String,
+    pub content: String,
+    pub timestamp: i64,
+}
+
+pub async fn load_codex_session_history(
+    session_id: &str,
+) -> Result<Vec<CodexHistoryMessage>> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    let sessions_dir = format!("{}/.codex/sessions", home);
+
+    info!("[Codex history] Searching for session {} in {}", session_id, sessions_dir);
+
+    // Search for the JSONL file matching the session ID
+    let session_dir = std::path::Path::new(&sessions_dir);
+    if !session_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    // Find the JSONL file containing our session
+    let mut matching_file: Option<std::path::PathBuf> = None;
+    let entries = std::fs::read_dir(session_dir)
+        .map_err(|e| anyhow::anyhow!("Failed to read sessions directory: {}", e))?;
+
+    for year_entry in entries.flatten() {
+        let year_path = year_entry.path();
+        if !year_path.is_dir() {
+            continue;
+        }
+
+        let month_entries = std::fs::read_dir(&year_path).ok();
+        for month_entry in month_entries.into_iter().flatten().flatten() {
+            let day_path = month_entry.path();
+            if !day_path.is_dir() {
+                continue;
+            }
+
+            if let Ok(files) = std::fs::read_dir(&day_path) {
+                for file in files.flatten() {
+                    let file_name = file.file_name().to_string_lossy().to_string();
+                    if file_name.ends_with(".jsonl") && file_name.contains(session_id) {
+                        matching_file = Some(file.path());
+                        break;
+                    }
+                }
+            }
+            if matching_file.is_some() {
+                break;
+            }
+        }
+        if matching_file.is_some() {
+            break;
+        }
+    }
+
+    let file_path = match matching_file {
+        Some(p) => p,
+        None => {
+            warn!("[Codex history] Session file not found for {}", session_id);
+            return Ok(Vec::new());
+        }
+    };
+
+    info!("[Codex history] Loading from {:?}", file_path);
+
+    // Read and parse the JSONL file
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read session file: {}", e))?;
+
+    let mut messages = Vec::new();
+
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Parse the JSON line
+        let json: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let entry_type = json.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        let payload = json.get("payload");
+
+        match entry_type {
+            "response_item" => {
+                if let Some(p) = payload {
+                    let role = p.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                    let content = p.get("content").and_then(|v| v.as_array());
+
+                    if let Some(contents) = content {
+                        for item in contents {
+                            if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                                // Create appropriate message based on role
+                                let msg = CodexHistoryMessage {
+                                    role: if role == "developer" { "assistant".to_string() } else { role.to_string() },
+                                    content: text.to_string(),
+                                    timestamp: std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs() as i64,
+                                };
+                                messages.push(msg);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                // Skip other types for now
+            }
+        }
+    }
+
+    info!("[Codex history] Loaded {} messages from session {}", messages.len(), session_id);
+    Ok(messages)
+}
+
 /// Resolve a command name to its full path by searching common directories.
 /// Returns the original command if no full path is found (will rely on PATH).
 pub(super) fn resolve_command_path(command: &str) -> String {
