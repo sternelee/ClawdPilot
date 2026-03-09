@@ -27,6 +27,7 @@ mobile = [
   "dirs",
   "libc",
   "gethostname",
+  "tokio-util",
 ]
 
 [dependencies]

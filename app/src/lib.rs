@@ -158,7 +158,7 @@ pub struct ConnectionSession {
     pub id: String,
     pub connection_id: String,
     pub node_id: String,
-    pub last_activity: Arc<RwLock<Instant>>,
+    pub last_activity: Arc<std::sync::Mutex<Instant>>,
     pub cancellation_token: CancellationToken,
     pub event_count: Arc<std::sync::atomic::AtomicUsize>,
     // Note: message_receiver is not included here as it can't be cloned
@@ -178,7 +178,7 @@ struct PendingPermissionDto {
 pub struct AppEventListener {
     app_handle: tauri::AppHandle,
     session_id: String,
-    last_activity: Arc<RwLock<Instant>>,
+    last_activity: Arc<std::sync::Mutex<Instant>>,
     event_count: Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -186,7 +186,7 @@ impl AppEventListener {
     pub fn new(
         app_handle: tauri::AppHandle,
         session_id: String,
-        last_activity: Arc<RwLock<Instant>>,
+        last_activity: Arc<std::sync::Mutex<Instant>>,
         event_count: Arc<std::sync::atomic::AtomicUsize>,
     ) -> Self {
         Self {
@@ -203,7 +203,7 @@ impl EventListener for AppEventListener {
     async fn handle_event(&self, event: &Event) -> anyhow::Result<()> {
         // Update activity tracking
         {
-            let mut activity = self.last_activity.write().await;
+            let mut activity = self.last_activity.lock().unwrap();
             *activity = std::time::Instant::now();
         }
 
@@ -358,11 +358,27 @@ async fn initialize_network_with_relay_internal(
 
     // Handle secret key storage differently for mobile platforms
     let secret_key_path = if cfg!(mobile) {
-        // On mobile platforms, use None to generate temporary keys
-        // This avoids file system permission issues and is appropriate for mobile apps
-        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-        tracing::info!("🔑 Using temporary secret key for mobile platform (no persistent storage)");
-        None
+        // 移动端使用持久化密钥以支持重连和会话恢复
+        match app_handle {
+            Some(handle) => {
+                let app_data_dir = handle
+                    .path()
+                    .app_data_dir()
+                    .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+                std::fs::create_dir_all(&app_data_dir)
+                    .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+                let path = app_data_dir.join("clawdchat_app_secret_key");
+                info!(
+                    "🔑 Using persistent secret key for mobile: {:?}",
+                    path
+                );
+                Some(path)
+            }
+            None => {
+                tracing::info!("🔑 Using temporary secret key for mobile (no app handle)");
+                None
+            }
+        }
     } else {
         // On desktop platforms, use persistent secret key storage
         // Use Tauri's app data directory instead of current_dir() to avoid read-only filesystem errors
@@ -421,7 +437,9 @@ async fn initialize_network_with_relay_internal(
     }
 
     // Start cleanup task if not already running
-    start_cleanup_task(state).await;
+    if let Some(handle) = app_handle {
+        start_cleanup_task(state, handle.clone()).await;
+    }
 
     Ok(node_id)
 }
@@ -498,7 +516,7 @@ async fn connect_to_peer(
             if session.node_id == node_id_str {
                 // Update last activity for the existing session
                 {
-                    let mut last_activity = session.last_activity.write().await;
+                    let mut last_activity = session.last_activity.lock().unwrap();
                     *last_activity = Instant::now();
                 }
                 tracing::info!(
@@ -564,7 +582,7 @@ async fn connect_to_peer(
             }
 
             // Get message receiver
-            let receiver = quic_client.get_message_receiver().await;
+            let receiver = quic_client.get_message_receiver();
 
             // Establish actual QUIC connection using full NodeAddr (supports direct addresses and relay)
             let connection_id = match quic_client
@@ -598,7 +616,7 @@ async fn connect_to_peer(
         id: session_id.clone(),
         connection_id: connection_id.clone(),
         node_id: node_id_str.clone(),
-        last_activity: Arc::new(RwLock::new(Instant::now())),
+        last_activity: Arc::new(std::sync::Mutex::new(Instant::now())),
         cancellation_token: cancellation_token.clone(),
         event_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
     };
@@ -658,7 +676,7 @@ async fn connect_to_peer(
                         Ok(message) => {
                             // Update activity tracking
                             {
-                                let mut activity = last_activity_receiver.write().await;
+                                let mut activity = last_activity_receiver.lock().unwrap();
                                 *activity = Instant::now();
                             }
 
@@ -676,6 +694,51 @@ async fn connect_to_peer(
                             #[cfg(debug_assertions)]
                             tracing::debug!("Received message for session {}: type={:?}",
                                 session_id_clone, message.message_type);
+
+                            // 拦截健康监控发出的连接状态信号
+                            if let MessagePayload::Heartbeat(hb) = &message.payload {
+                                if message.sender_id == "system" {
+                                    match hb.status.as_str() {
+                                        "connection_lost" => {
+                                            tracing::info!("Connection lost for session {}", session_id_clone);
+                                            let _ = app_handle_clone.emit(
+                                                "peer-disconnected",
+                                                serde_json::json!({ "sessionId": session_id_clone }),
+                                            );
+                                            let _ = app_handle_clone.emit(
+                                                "connection-state-changed",
+                                                serde_json::json!({
+                                                    "sessionId": session_id_clone,
+                                                    "state": "disconnected"
+                                                }),
+                                            );
+                                            continue;
+                                        }
+                                        "reconnecting" => {
+                                            let _ = app_handle_clone.emit(
+                                                "connection-state-changed",
+                                                serde_json::json!({
+                                                    "sessionId": session_id_clone,
+                                                    "state": "reconnecting"
+                                                }),
+                                            );
+                                            continue;
+                                        }
+                                        "connected" => {
+                                            tracing::info!("Connection restored for session {}", session_id_clone);
+                                            let _ = app_handle_clone.emit(
+                                                "connection-state-changed",
+                                                serde_json::json!({
+                                                    "sessionId": session_id_clone,
+                                                    "state": "connected"
+                                                }),
+                                            );
+                                            continue;
+                                        }
+                                        _ => {} // 普通心跳，继续处理
+                                    }
+                                }
+                            }
 
                             // Convert message to event and emit to frontend
                             match &message.payload {
@@ -1043,8 +1106,12 @@ async fn connect_to_peer(
                             }
                         }
                         Err(_) => {
-                            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
                             tracing::info!("Message receiver closed for session: {}", session_id_clone);
+                            // 通知前端连接断开
+                            let _ = app_handle_clone.emit(
+                                "peer-disconnected",
+                                serde_json::json!({ "sessionId": session_id_clone }),
+                            );
                             break;
                         }
                     }
@@ -1300,7 +1367,7 @@ async fn send_message_via_client_with_response(
         return Err("QUIC client not available".to_string());
     };
 
-    let mut receiver = quic_client.get_message_receiver().await;
+    let mut receiver = quic_client.get_message_receiver();
 
     quic_client
         .send_message_to_server(connection_id, message)
@@ -1516,7 +1583,7 @@ async fn ensure_quic_client_initialized(
 }
 
 /// Start background cleanup task for session management
-async fn start_cleanup_task(state: &State<'_, AppState>) {
+async fn start_cleanup_task(state: &State<'_, AppState>, app_handle: tauri::AppHandle) {
     let cleanup_guard = state.cleanup_token.read().await;
 
     // Don't start multiple cleanup tasks
@@ -1536,6 +1603,51 @@ async fn start_cleanup_task(state: &State<'_, AppState>) {
         "Starting session cleanup task with interval: {}s",
         CLEANUP_INTERVAL_SECS
     );
+
+    let cleanup_token = token;
+    tokio::spawn(async move {
+        let interval = std::time::Duration::from_secs(CLEANUP_INTERVAL_SECS);
+        let stale_timeout = std::time::Duration::from_secs(1800); // 30 minutes
+
+        loop {
+            tokio::select! {
+                _ = cleanup_token.cancelled() => {
+                    tracing::info!("Session cleanup task cancelled");
+                    break;
+                }
+                _ = tokio::time::sleep(interval) => {
+                    let app_state = app_handle.state::<AppState>();
+                    let now = std::time::Instant::now();
+                    let mut stale_ids = Vec::new();
+
+                    {
+                        let sessions = app_state.sessions.read().await;
+                        for (id, session) in sessions.iter() {
+                            let last = *session.last_activity.lock().unwrap();
+                            if now.duration_since(last) > stale_timeout {
+                                tracing::info!(
+                                    "Session {} idle for {:?}, marking stale",
+                                    id, now.duration_since(last)
+                                );
+                                stale_ids.push(id.clone());
+                            }
+                        }
+                    }
+
+                    if !stale_ids.is_empty() {
+                        tracing::info!("Cleaning up {} stale sessions", stale_ids.len());
+                        let mut sessions = app_state.sessions.write().await;
+                        for id in &stale_ids {
+                            if let Some(session) = sessions.remove(id) {
+                                session.cancellation_token.cancel();
+                                tracing::info!("Cleaned up stale session: {}", id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[tauri::command]

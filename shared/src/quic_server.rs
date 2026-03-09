@@ -198,6 +198,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock, broadcast, mpsc};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 /// ALPN协议标识符
@@ -480,8 +481,13 @@ impl QuicMessageServer {
         communication_manager: Arc<CommunicationManager>,
         tcp_stream_handler: Arc<RwLock<Option<TcpStreamHandler>>>,
     ) -> Result<()> {
-        // 执行握手
-        let connection = incoming.await?;
+        // 执行握手（30s超时，防止慢连接或恶意对端长期占用资源）
+        let connection = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            incoming,
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("Incoming connection handshake timed out after 30s"))??;
         let remote_endpoint_id = connection.remote_id();
         let endpoint_addr = format!("{:?}", remote_endpoint_id);
 
@@ -806,45 +812,46 @@ impl QuicMessageServer {
     ///
     /// 当发送失败时，会自动清理断开的连接。客户端重连后可以恢复接收消息。
     pub async fn broadcast_message(&self, message: Message) -> Result<()> {
-        let connections = self.connections.read().await;
-        #[cfg(debug_assertions)]
-        debug!("Broadcasting message to {} connections", connections.len());
+        // 先收集所有连接的快照（避免在发送时持有锁）
+        let connection_snapshots: Vec<(String, EndpointId, iroh::endpoint::Connection)> = {
+            let connections = self.connections.read().await;
+            #[cfg(debug_assertions)]
+            debug!("Broadcasting message to {} connections", connections.len());
+            connections
+                .iter()
+                .map(|(id, c)| (id.clone(), c.node_id.clone(), c.connection.clone()))
+                .collect()
+        };
 
-        // 收集发送失败的节点ID
-        let mut failed_node_ids: Vec<EndpointId> = Vec::new();
+        // 无锁发送
+        let mut failed_node_ids: Vec<(String, EndpointId)> = Vec::new();
 
-        for connection in connections.values() {
-            if let Err(e) = self
-                .send_message_to_node(&connection.node_id, message.clone())
-                .await
-            {
-                error!(
-                    "Failed to send message to node {:?}: {}",
-                    connection.node_id, e
-                );
-                failed_node_ids.push(connection.node_id.clone());
+        for (conn_id, node_id, connection) in &connection_snapshots {
+            match connection.open_bi().await {
+                Ok((mut send_stream, _recv_stream)) => {
+                    if let Err(e) = Self::send_message(&mut send_stream, &message).await {
+                        error!("Failed to send message to node {:?}: {}", node_id, e);
+                        failed_node_ids.push((conn_id.clone(), node_id.clone()));
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to open stream to node {:?}: {}", node_id, e);
+                    failed_node_ids.push((conn_id.clone(), node_id.clone()));
+                }
             }
         }
-
-        // 释放读锁
-        drop(connections);
 
         // 清理发送失败的连接
         if !failed_node_ids.is_empty() {
             let mut connections = self.connections.write().await;
-            for node_id in failed_node_ids {
-                // 找到并移除断开的连接
-                if let Some((conn_id, _)) = connections.iter().find(|(_, c)| c.node_id == node_id) {
-                    let conn_id = conn_id.clone();
-                    if let Some(conn) = connections.remove(&conn_id) {
-                        info!(
-                            "🔌 Auto cleanup disconnected node: {:?} (connection: {})",
-                            node_id, conn_id
-                        );
-                        // 尝试关闭连接（可能已经断开，忽略错误）
-                        conn.connection
-                            .close(0u32.into(), b"Send failed, auto cleanup");
-                    }
+            for (conn_id, node_id) in failed_node_ids {
+                if let Some(conn) = connections.remove(&conn_id) {
+                    info!(
+                        "Auto cleanup disconnected node: {:?} (connection: {})",
+                        node_id, conn_id
+                    );
+                    conn.connection
+                        .close(0u32.into(), b"Send failed, auto cleanup");
                 }
             }
         }
@@ -1059,10 +1066,13 @@ impl QuicMessageServer {
         // 发送关闭信号
         let _ = self.shutdown_tx.send(()).await;
 
-        // 关闭所有连接
+        // 优雅关闭所有连接（通知对端），然后清除
         {
             let mut connections = self.connections.write().await;
-            connections.clear();
+            for (conn_id, conn) in connections.drain() {
+                info!("Closing connection {} during shutdown", conn_id);
+                conn.connection.close(0u32.into(), b"Server shutdown");
+            }
         }
 
         Ok(())
@@ -1080,10 +1090,25 @@ pub struct QuicMessageClient {
     message_tx: broadcast::Sender<Message>,
 }
 
+/// 重连参数，用于自动恢复连接
+#[derive(Clone)]
+struct ConnectionParams {
+    node_addr: EndpointAddr,
+    connection_id: String,
+}
+
 /// QUIC消息客户端的线程安全包装器
 #[derive(Clone)]
 pub struct QuicMessageClientHandle {
     client: Arc<Mutex<QuicMessageClient>>,
+    /// 从 client 克隆，用于无锁发送消息
+    server_connections: Arc<RwLock<HashMap<String, iroh::endpoint::Connection>>>,
+    message_tx: broadcast::Sender<Message>,
+    endpoint: Arc<Endpoint>,
+    /// 重连参数
+    connection_params: Arc<RwLock<Option<ConnectionParams>>>,
+    /// 健康监控取消令牌
+    health_cancel: CancellationToken,
 }
 
 impl QuicMessageClient {
@@ -1106,25 +1131,24 @@ impl QuicMessageClient {
         // 加载或生成SecretKey
         let secret_key = QuicMessageServer::load_or_generate_secret_key(secret_key_path).await?;
 
-        let endpoint = if let Some(relay) = relay_url {
-            let _relay_url: url::Url = relay.parse()?;
-            Endpoint::builder()
-                .secret_key(secret_key)
-                .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
-                .discovery(DnsDiscovery::n0_dns())
-                .bind()
-                .await?
-        } else {
-            Endpoint::builder()
-                .secret_key(secret_key)
-                .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
-                .discovery(DnsDiscovery::n0_dns())
-                .bind()
-                .await?
-        };
+        if let Some(ref relay) = relay_url {
+            info!("Custom relay URL provided: {} (using default relay discovery)", relay);
+        }
+
+        let endpoint = Endpoint::builder()
+            .secret_key(secret_key)
+            .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
+            .discovery(DnsDiscovery::n0_dns())
+            .bind()
+            .await?;
 
         let node_id = endpoint.id();
         info!("QUIC client node ID: {:?}", node_id);
+
+        // 等待 endpoint 完成 relay 注册，确保 NAT 穿透就绪（移动端尤其重要）
+        info!("Waiting for client endpoint to come online...");
+        endpoint.online().await;
+        info!("Client endpoint is online");
 
         // 创建消息广播通道
         let (message_tx, message_rx) = broadcast::channel(1000);
@@ -1216,6 +1240,7 @@ impl QuicMessageClient {
         let connection_for_task = connection.clone();
         let message_tx = self.message_tx.clone();
         let connection_id_clone = connection_id.clone();
+        let server_connections_clone = self.server_connections.clone();
 
         tokio::spawn(async move {
             info!(
@@ -1246,7 +1271,19 @@ impl QuicMessageClient {
                         });
                     }
                     Err(e) => {
-                        debug!("Connection {} closed: {}", connection_id_clone, e);
+                        info!("Connection {} lost: {}", connection_id_clone, e);
+                        // 清理僵死连接
+                        {
+                            let mut conns = server_connections_clone.write().await;
+                            conns.remove(&connection_id_clone);
+                        }
+                        // 通过 broadcast 通知连接断开
+                        let lost_msg = MessageBuilder::heartbeat(
+                            "system".to_string(),
+                            0,
+                            "connection_lost".to_string(),
+                        );
+                        let _ = message_tx.send(lost_msg);
                         break;
                     }
                 }
@@ -1277,23 +1314,29 @@ impl QuicMessageClient {
             send_stream.write_all(&data).await?;
             send_stream.finish()?;
 
-            // 如果消息需要响应，等待读取响应
+            // 如果消息需要响应，等待读取响应（带超时）
             if message.requires_response {
                 debug!("Waiting for response to message: {}", message.id);
                 let mut response_data = Vec::new();
-                loop {
-                    let mut buffer = vec![0u8; 8192];
-                    match recv_stream.read(&mut buffer).await {
-                        Ok(Some(n)) => {
-                            response_data.extend_from_slice(&buffer[..n]);
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(30),
+                    async {
+                        loop {
+                            let mut buffer = vec![0u8; 8192];
+                            match recv_stream.read(&mut buffer).await {
+                                Ok(Some(n)) => {
+                                    response_data.extend_from_slice(&buffer[..n]);
+                                }
+                                Ok(None) => break,
+                                Err(e) => {
+                                    error!("Error reading response: {}", e);
+                                    break;
+                                }
+                            }
                         }
-                        Ok(None) => break,
-                        Err(e) => {
-                            error!("Error reading response: {}", e);
-                            break;
-                        }
-                    }
-                }
+                    },
+                )
+                .await;
 
                 if !response_data.is_empty() {
                     match MessageSerializer::deserialize_from_network(&response_data) {
@@ -1405,9 +1448,16 @@ impl QuicMessageClient {
     ) -> Result<()> {
         debug!("Handling incoming stream for connection: {}", connection_id);
 
-        // 读取所有数据
-        match recv_stream.read_to_end(usize::MAX).await {
-            Ok(data) => {
+        // 读取所有数据（有界 + 超时）
+        const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
+        let read_result = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            recv_stream.read_to_end(MAX_MESSAGE_SIZE),
+        )
+        .await;
+
+        match read_result {
+            Ok(Ok(data)) => {
                 debug!(
                     "Received {} bytes for connection: {}",
                     data.len(),
@@ -1441,12 +1491,19 @@ impl QuicMessageClient {
                     }
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 error!(
                     "Failed to read data for connection {}: {}",
                     connection_id, e
                 );
                 return Err(e.into());
+            }
+            Err(_) => {
+                error!(
+                    "Timeout reading incoming stream for connection: {}",
+                    connection_id
+                );
+                return Err(anyhow::anyhow!("Stream read timeout"));
             }
         }
 
@@ -1475,8 +1532,16 @@ impl QuicMessageClientHandle {
             secret_key_path,
         )
         .await?;
+        let server_connections = client.server_connections.clone();
+        let message_tx = client.message_tx.clone();
+        let endpoint = client.endpoint.clone();
         Ok(Self {
             client: Arc::new(Mutex::new(client)),
+            server_connections,
+            message_tx,
+            endpoint,
+            connection_params: Arc::new(RwLock::new(None)),
+            health_cancel: CancellationToken::new(),
         })
     }
 
@@ -1498,10 +1563,23 @@ impl QuicMessageClientHandle {
         &self,
         node_addr: &EndpointAddr,
     ) -> Result<String> {
-        let mut client = self.client.lock().await;
-        client
-            .connect_to_server_with_full_node_addr(node_addr)
-            .await
+        let connection_id = {
+            let mut client = self.client.lock().await;
+            client
+                .connect_to_server_with_full_node_addr(node_addr)
+                .await?
+        };
+        // 保存重连参数
+        {
+            let mut params = self.connection_params.write().await;
+            *params = Some(ConnectionParams {
+                node_addr: node_addr.clone(),
+                connection_id: connection_id.clone(),
+            });
+        }
+        // 启动健康监控
+        self.start_health_monitor();
+        Ok(connection_id)
     }
 
     /// 使用 EndpointId 连接到服务器（别名，保持向后兼容）
@@ -1515,24 +1593,58 @@ impl QuicMessageClientHandle {
 
     /// 断开与服务器的连接
     pub async fn disconnect_from_server(&self, connection_id: &str) -> Result<()> {
+        // 停止健康监控
+        self.health_cancel.cancel();
         let mut client = self.client.lock().await;
         client.disconnect_from_server(connection_id).await
     }
 
-    /// 发送消息到服务器
+    /// 发送消息到服务器（无锁发送，不阻塞其他操作）
     pub async fn send_message_to_server(
         &self,
         connection_id: &str,
         message: Message,
     ) -> Result<()> {
-        let mut client = self.client.lock().await;
-        client.send_message_to_server(connection_id, message).await
+        // 直接从 server_connections 获取连接，无需锁 client
+        let connection = {
+            let conns = self.server_connections.read().await;
+            conns
+                .get(connection_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
+        };
+
+        let (mut send_stream, mut recv_stream) = connection.open_bi().await?;
+        let data = MessageSerializer::serialize_for_network(&message)?;
+        send_stream.write_all(&data).await?;
+        send_stream.finish()?;
+
+        if message.requires_response {
+            let mut response_data = Vec::new();
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+                loop {
+                    let mut buffer = vec![0u8; 8192];
+                    match recv_stream.read(&mut buffer).await {
+                        Ok(Some(n)) => response_data.extend_from_slice(&buffer[..n]),
+                        Ok(None) => break,
+                        Err(_) => break,
+                    }
+                }
+            })
+            .await;
+
+            if !response_data.is_empty()
+                && let Ok(response) = MessageSerializer::deserialize_from_network(&response_data)
+            {
+                let _ = self.message_tx.send(response);
+            }
+        }
+        Ok(())
     }
 
     /// 获取消息接收器
-    pub async fn get_message_receiver(&self) -> broadcast::Receiver<Message> {
-        let client = self.client.lock().await;
-        client.get_message_receiver()
+    pub fn get_message_receiver(&self) -> broadcast::Receiver<Message> {
+        self.message_tx.subscribe()
     }
 
     /// 打开到远程服务器的 TCP 转发流（用于 App 端的 connect-tcp 模式）
@@ -1542,11 +1654,225 @@ impl QuicMessageClientHandle {
         session_id: &str,
     ) -> Result<(iroh::endpoint::SendStream, iroh::endpoint::RecvStream)> {
         let client = self.client.lock().await;
-        client.open_tcp_stream(remote_endpoint_id, session_id).await
+        client
+            .open_tcp_stream(remote_endpoint_id, session_id)
+            .await
     }
 
-    // Note: get_active_connections_count and list_active_connections are not available in QuicMessageClient
-    // They belong to QuicMessageServer. We'll implement them here if needed in the future.
+    /// 启动连接健康监控：定期心跳探测，检测断连后自动重连
+    fn start_health_monitor(&self) {
+        // 取消旧的监控
+        self.health_cancel.cancel();
+
+        let server_connections = self.server_connections.clone();
+        let connection_params = self.connection_params.clone();
+        let endpoint = self.endpoint.clone();
+        let message_tx = self.message_tx.clone();
+        // 为新的监控创建 child token
+        let health_cancel = self.health_cancel.child_token();
+
+        tokio::spawn(async move {
+            let mut heartbeat_seq: u64 = 0;
+            let mut consecutive_failures: u32 = 0;
+            let heartbeat_interval = std::time::Duration::from_secs(15);
+            let heartbeat_timeout = std::time::Duration::from_secs(10);
+
+            loop {
+                tokio::select! {
+                    _ = health_cancel.cancelled() => {
+                        info!("Health monitor cancelled");
+                        break;
+                    }
+                    _ = tokio::time::sleep(heartbeat_interval) => {
+                        let params = connection_params.read().await.clone();
+                        let Some(params) = params else { continue; };
+
+                        // 获取当前连接
+                        let connection = {
+                            let conns = server_connections.read().await;
+                            conns.get(&params.connection_id).cloned()
+                        };
+
+                        match connection {
+                            Some(conn) => {
+                                // 发送心跳探测
+                                let mut heartbeat = MessageBuilder::heartbeat(
+                                    "health_monitor".to_string(),
+                                    heartbeat_seq,
+                                    "ping".to_string(),
+                                );
+                                heartbeat.requires_response = true;
+
+                                match Self::send_heartbeat_probe(&conn, &heartbeat, heartbeat_timeout).await {
+                                    Ok(_) => {
+                                        heartbeat_seq += 1;
+                                        if consecutive_failures > 0 {
+                                            info!("Heartbeat recovered after {} failures", consecutive_failures);
+                                        }
+                                        consecutive_failures = 0;
+                                    }
+                                    Err(e) => {
+                                        consecutive_failures += 1;
+                                        warn!("Heartbeat {} failed (attempt {}): {}",
+                                            heartbeat_seq, consecutive_failures, e);
+
+                                        if consecutive_failures >= 2 {
+                                            info!("Connection dead after {} failures, reconnecting",
+                                                consecutive_failures);
+                                            // 清理僵死连接
+                                            {
+                                                let mut conns = server_connections.write().await;
+                                                conns.remove(&params.connection_id);
+                                            }
+                                            let lost = MessageBuilder::heartbeat(
+                                                "system".to_string(), 0,
+                                                "connection_lost".to_string(),
+                                            );
+                                            let _ = message_tx.send(lost);
+
+                                            // 尝试重连
+                                            Self::attempt_reconnect(
+                                                &endpoint, &server_connections,
+                                                &connection_params, &message_tx,
+                                                &mut consecutive_failures,
+                                            ).await;
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                // 连接不在 map 中，尝试重连
+                                consecutive_failures += 1;
+                                info!("Connection missing, attempting reconnect (attempt {})", consecutive_failures);
+                                Self::attempt_reconnect(
+                                    &endpoint, &server_connections,
+                                    &connection_params, &message_tx,
+                                    &mut consecutive_failures,
+                                ).await;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// 发送心跳探测并等待响应
+    async fn send_heartbeat_probe(
+        connection: &iroh::endpoint::Connection,
+        heartbeat: &Message,
+        timeout: std::time::Duration,
+    ) -> Result<()> {
+        tokio::time::timeout(timeout, async {
+            let (mut send, mut recv) = connection.open_bi().await?;
+            let data = MessageSerializer::serialize_for_network(heartbeat)?;
+            send.write_all(&data).await?;
+            send.finish()?;
+            let _ = recv.read_to_end(64 * 1024).await?;
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        .map_err(|_| anyhow::anyhow!("Heartbeat timeout"))??;
+        Ok(())
+    }
+
+    /// 指数退避自动重连
+    async fn attempt_reconnect(
+        endpoint: &Arc<Endpoint>,
+        server_connections: &Arc<RwLock<HashMap<String, iroh::endpoint::Connection>>>,
+        connection_params: &Arc<RwLock<Option<ConnectionParams>>>,
+        message_tx: &broadcast::Sender<Message>,
+        consecutive_failures: &mut u32,
+    ) {
+        let params = connection_params.read().await.clone();
+        let Some(params) = params else { return; };
+
+        // 指数退避: 2s, 4s, 8s, 16s, 30s (cap)
+        let delay_secs = (2u64 << (*consecutive_failures).min(4)).min(30);
+        let delay = std::time::Duration::from_secs(delay_secs);
+        info!("Reconnecting in {:?}...", delay);
+
+        // 广播 reconnecting 状态
+        let reconnecting = MessageBuilder::heartbeat(
+            "system".to_string(),
+            0,
+            "reconnecting".to_string(),
+        );
+        let _ = message_tx.send(reconnecting);
+
+        tokio::time::sleep(delay).await;
+
+        // 尝试连接，带 30 秒超时
+        let connect_result = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            endpoint.connect(params.node_addr.clone(), QUIC_MESSAGE_ALPN),
+        )
+        .await;
+
+        match connect_result {
+            Ok(Ok(new_connection)) => {
+                info!("Reconnected successfully");
+                *consecutive_failures = 0;
+
+                // 用相同 connection_id 存储新连接
+                {
+                    let mut conns = server_connections.write().await;
+                    conns.insert(params.connection_id.clone(), new_connection.clone());
+                }
+
+                // 广播 connected 状态
+                let connected = MessageBuilder::heartbeat(
+                    "system".to_string(),
+                    0,
+                    "connected".to_string(),
+                );
+                let _ = message_tx.send(connected);
+
+                // 为新连接启动 receiver task
+                let tx = message_tx.clone();
+                let cid = params.connection_id.clone();
+                let conns = server_connections.clone();
+                tokio::spawn(async move {
+                    loop {
+                        match new_connection.accept_bi().await {
+                            Ok((_send, recv)) => {
+                                let tx = tx.clone();
+                                let cid = cid.clone();
+                                tokio::spawn(async move {
+                                    if let Err(e) =
+                                        QuicMessageClient::handle_incoming_stream(recv, tx, cid)
+                                            .await
+                                    {
+                                        error!("Stream error after reconnect: {}", e);
+                                    }
+                                });
+                            }
+                            Err(e) => {
+                                info!("Reconnected connection lost: {}", e);
+                                let mut c = conns.write().await;
+                                c.remove(&cid);
+                                let lost = MessageBuilder::heartbeat(
+                                    "system".to_string(),
+                                    0,
+                                    "connection_lost".to_string(),
+                                );
+                                let _ = tx.send(lost);
+                                break;
+                            }
+                        }
+                    }
+                });
+            }
+            Ok(Err(e)) => {
+                warn!("Reconnect failed: {}", e);
+                *consecutive_failures += 1;
+            }
+            Err(_) => {
+                warn!("Reconnect timed out");
+                *consecutive_failures += 1;
+            }
+        }
+    }
 }
 
 /// 消息处理器示例

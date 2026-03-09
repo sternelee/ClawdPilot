@@ -11,6 +11,7 @@
 import { createStore, produce } from "solid-js/store";
 import { invoke } from "@tauri-apps/api/core";
 import { notificationStore } from "./notificationStore";
+import { sessionEventRouter } from "./sessionEventRouter";
 import { getLastTicket, saveTicket } from "../utils/localStorage";
 
 // ============================================================================
@@ -99,6 +100,7 @@ export type ConnectionState =
   | "disconnected"
   | "connecting"
   | "connected"
+  | "reconnecting"
   | "error";
 
 // ============================================================================
@@ -229,6 +231,9 @@ export const createSessionStore = () => {
   };
 
   const removeSession = (sessionId: string) => {
+    // Clean up event router state to prevent memory leaks
+    sessionEventRouter.removeSession(sessionId);
+
     setState(
       produce((s: SessionState) => {
         delete s.sessions[sessionId];
@@ -419,6 +424,9 @@ export const createSessionStore = () => {
   };
 
   const handleRemoteConnect = async () => {
+    // Guard against duplicate concurrent connect calls
+    if (state.isConnecting) return;
+
     const ticket = state.sessionTicket.trim();
     if (!ticket) {
       setConnectionError("Please enter a session ticket");
@@ -427,6 +435,7 @@ export const createSessionStore = () => {
 
     setConnecting(true);
     setConnectionError(null);
+    setConnectionState("connecting");
 
     try {
       await initializeNetwork();
@@ -435,6 +444,8 @@ export const createSessionStore = () => {
       const connectionSessionId = await invoke<string>("connect_to_host", {
         sessionTicket: ticket,
       });
+
+      setConnectionState("connected");
 
       // Set as target control session to show agent config in modal
       setTargetControlSessionId(connectionSessionId);
@@ -457,6 +468,7 @@ export const createSessionStore = () => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       setConnectionError(errorMessage);
+      setConnectionState("error");
       notificationStore.error(`Connection failed: ${errorMessage}`, "Error");
     } finally {
       setConnecting(false);

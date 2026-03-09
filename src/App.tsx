@@ -123,6 +123,7 @@ export default function App() {
         const payload = event.payload as { sessionId: string };
         console.log("Peer disconnected event:", payload);
 
+        sessionStore.setConnectionState("disconnected");
         const disconnectedControlId = payload.sessionId;
 
         // Find all agent sessions that depend on this control session
@@ -149,10 +150,38 @@ export default function App() {
       },
     );
 
+    // Listen for connection state changes (reconnecting, restored, etc.)
+    const unlistenConnectionState = await listen(
+      "connection-state-changed",
+      (event) => {
+        const payload = event.payload as { sessionId: string; state: string };
+
+        if (payload.state === "reconnecting") {
+          sessionStore.setConnectionState("reconnecting");
+        } else if (payload.state === "connected") {
+          sessionStore.setConnectionState("connected");
+          // 重连成功后恢复相关 session 为 active
+          const sessions = sessionStore.getSessions();
+          sessions.forEach((session) => {
+            if (
+              session.controlSessionId === payload.sessionId &&
+              !session.active
+            ) {
+              sessionStore.updateSession(session.sessionId, { active: true });
+            }
+          });
+          notificationStore.success("Connection restored", "Connection");
+        } else if (payload.state === "disconnected") {
+          sessionStore.setConnectionState("disconnected");
+        }
+      },
+    );
+
     // Cleanup on unmount
     onCleanup(() => {
       unlistenAgentCreated();
       unlistenPeerDisconnected();
+      unlistenConnectionState();
     });
   };
 

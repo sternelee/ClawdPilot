@@ -189,7 +189,8 @@ class SessionEventRouter {
    * Returns unsubscribe function
    */
   subscribe(sessionId: string, handler: SessionEventHandler): () => void {
-    // Ensure initialized
+    // Ensure initialized (fire-and-forget is safe: initPromise deduplicates,
+    // and late listeners will catch subsequent events)
     this.initialize().catch((err) => {
       console.error("[SessionEventRouter] Failed to initialize:", err);
     });
@@ -218,6 +219,16 @@ class SessionEventRouter {
         `[SessionEventRouter] Unsubscribed from session ${sessionId}`,
       );
     };
+  }
+
+  /**
+   * Remove all state for a session (call when session is destroyed)
+   * Prevents memory leaks from orphaned handler sets and streaming state
+   */
+  removeSession(sessionId: string): void {
+    this.handlers.delete(sessionId);
+    this.streamingStates.delete(sessionId);
+    this.unreadSessions.delete(sessionId);
   }
 
   /**
