@@ -53,12 +53,12 @@ Prereqs: Rust stable, Node.js 20+, pnpm 10+.
 
 ### Styling (TailwindCSS v4 + DaisyUI)
 
-- Utility-first CSS approach; avoid `@apply` directive.
-- Use TailwindCSS classes directly in components.
-- Use `cn()` utility from `~/lib/utils` for conditional classes.
+- Utility-first CSS approach; use TailwindCSS classes directly in components (avoid `@apply` in component inline styles).
+- Use `@apply` directive in CSS files (`/src/index.css`) for reusable global styles and utilities with `@layer` directives.
+- Use `cn()` utility from `~/lib/utils` for conditional class merging with `clsx` and `tailwind-merge`.
 - Responsive design with mobile-first approach.
-- Dark mode via `[data-kb-theme="dark"]` variant and `.dark &`.
-- Global styles in `/src/styles.css` with `@layer` directives.
+- Dark mode via DaisyUI themes with `[data-theme]` attribute; default: `sunset` (light), `dark` (prefers-color-scheme).
+- Component styles: prefer Tailwind classes over custom CSS; use Tailwind's `@layer` for custom utilities.
 
 ### Components & Patterns
 
@@ -67,6 +67,37 @@ Prereqs: Rust stable, Node.js 20+, pnpm 10+.
 - Type-safe context with `createContext` from SolidJS.
 - Proper typing for event handlers (e.g., `KeyboardEvent`, `MouseEvent`).
 - Implement proper cleanup with `onCleanup()`.
+
+#### Component Structure
+
+- Organize files with comment sections: Types, Variant Classes, Component
+- Define prop interfaces explicitly with optional properties marked `?`
+- Use `Component<T>` type from `solid-js` for functional components
+- Import organization: SolidJS imports, external libraries, local components/stores/utils
+- Example structure:
+
+```tsx
+// ============================================================================
+// Types
+// ============================================================================
+export interface CardProps {
+  /* ... */
+}
+
+// ============================================================================
+// Variant Classes
+// ============================================================================
+const variantClasses = {
+  /* ... */
+};
+
+// ============================================================================
+// Component
+// ============================================================================
+export const Card: Component<CardProps> = (props) => {
+  /* ... */
+};
+```
 
 ## Lint & Format Commands
 

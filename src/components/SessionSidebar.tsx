@@ -406,27 +406,44 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   });
 
   const loadHistoryForSession = async (session: AgentSessionMetadata) => {
-    if (isMobile() || session.mode !== "local") {
-      setHistoryEntriesBySession((prev) => ({
-        ...prev,
-        [session.sessionId]: [],
-      }));
-      return;
-    }
     setHistoryLoadingBySession((prev) => ({
       ...prev,
       [session.sessionId]: true,
     }));
+
     try {
       const projectPath =
         session.projectPath || sessionStore.state.newSessionPath || ".";
-      const entries = await invoke<AgentHistoryEntry[]>(
-        "local_list_agent_history",
-        {
-          agentTypeStr: session.agentType,
-          projectPath,
-        },
-      );
+      let entries: AgentHistoryEntry[];
+
+      if (session.mode === "local") {
+        entries = await invoke<AgentHistoryEntry[]>(
+          "local_list_agent_history",
+          {
+            agentTypeStr: session.agentType,
+            projectPath,
+          },
+        );
+      } else if (session.controlSessionId) {
+        const response = await invoke<string>("send_agent_control", {
+          connectionSessionId: session.controlSessionId,
+          agentSessionId: session.sessionId,
+          actionStr: "list_history",
+          actionParams: {
+            agentType: session.agentType,
+            projectPath,
+          },
+        });
+        const parsed = JSON.parse(response);
+        if (parsed.success && parsed.data?.type === "history_list") {
+          entries = parsed.data.entries;
+        } else {
+          throw new Error(parsed.message || "Failed to load history");
+        }
+      } else {
+        throw new Error("Remote session without control session");
+      }
+
       setHistoryEntriesBySession((prev) => ({
         ...prev,
         [session.sessionId]: entries,
@@ -470,22 +487,52 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         sessionStore.state.newSessionPath ||
         ".";
       chatStore.clearMessages(session.sessionId);
-      const sessionId = await invoke<string>("local_load_agent_history", {
-        agentTypeStr: session.agentType,
-        historySessionId: entry.session_id,
-        projectPath,
-        resume: false,
-        extraArgs: [],
-        targetSessionId: session.sessionId,
-      });
 
-      sessionStore.updateSession(sessionId, {
-        projectPath,
-        currentDir: projectPath,
-        startedAt: Date.now(),
-        active: true,
-      });
-      sessionStore.setActiveSession(sessionId);
+      if (session.mode === "local") {
+        const sessionId = await invoke<string>("local_load_agent_history", {
+          agentTypeStr: session.agentType,
+          historySessionId: entry.session_id,
+          projectPath,
+          resume: false,
+          extraArgs: [],
+          targetSessionId: session.sessionId,
+        });
+
+        sessionStore.updateSession(sessionId, {
+          projectPath,
+          currentDir: projectPath,
+          startedAt: Date.now(),
+          active: true,
+        });
+        sessionStore.setActiveSession(sessionId);
+      } else if (session.controlSessionId) {
+        const response = await invoke<string>("send_agent_control", {
+          connectionSessionId: session.controlSessionId,
+          agentSessionId: session.sessionId,
+          actionStr: "load_history",
+          actionParams: {
+            agentType: session.agentType,
+            historySessionId: entry.session_id,
+            projectPath,
+            targetSessionId: session.sessionId,
+          },
+        });
+        const parsed = JSON.parse(response);
+        if (!parsed.success || parsed.data?.type !== "session_loaded") {
+          throw new Error(parsed.message || "Failed to load history session");
+        }
+
+        sessionStore.updateSession(session.sessionId, {
+          projectPath,
+          currentDir: projectPath,
+          startedAt: Date.now(),
+          active: true,
+        });
+        sessionStore.setActiveSession(session.sessionId);
+      } else {
+        throw new Error("Remote session without control session");
+      }
+
       notificationStore.success("History session loaded", "History");
     } catch (error) {
       console.error("Failed to load history session:", error);
@@ -554,7 +601,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                   historyEntriesBySession()[session.sessionId] || [];
                 const isLoading = () =>
                   historyLoadingBySession()[session.sessionId] || false;
-                const canShowHistory = () => session.mode === "local";
+                const canShowHistory = () => true;
 
                 return (
                   <>

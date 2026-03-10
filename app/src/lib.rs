@@ -1985,6 +1985,104 @@ async fn send_slash_command(
     Ok("command_sent".to_string())
 }
 
+/// Send agent control message to remote session
+#[tauri::command(rename_all = "camelCase")]
+async fn send_agent_control(
+    connection_session_id: String,
+    agent_session_id: String,
+    action_str: String,
+    action_params: Option<serde_json::Value>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&connection_session_id)
+            .ok_or_else(|| format!("Connection session not found: {}", connection_session_id))?
+            .clone()
+    };
+
+    let action: AgentControlAction = match action_str.as_str() {
+        "list_history" => {
+            let params = action_params
+                .ok_or_else(|| "Missing params for list_history".to_string())?;
+            AgentControlAction::ListHistory {
+                agent_type: params["agentType"]
+                    .as_str()
+                    .ok_or_else(|| "Missing agentType".to_string())?
+                    .to_string(),
+                project_path: params["projectPath"]
+                    .as_str()
+                    .ok_or_else(|| "Missing projectPath".to_string())?
+                    .to_string(),
+            }
+        }
+        "load_history" => {
+            let params = action_params
+                .ok_or_else(|| "Missing params for load_history".to_string())?;
+            AgentControlAction::LoadHistory {
+                agent_type: params["agentType"]
+                    .as_str()
+                    .ok_or_else(|| "Missing agentType".to_string())?
+                    .to_string(),
+                history_session_id: params["historySessionId"]
+                    .as_str()
+                    .ok_or_else(|| "Missing historySessionId".to_string())?
+                    .to_string(),
+                project_path: params["projectPath"]
+                    .as_str()
+                    .ok_or_else(|| "Missing projectPath".to_string())?
+                    .to_string(),
+                target_session_id: params["targetSessionId"]
+                    .as_str()
+                    .ok_or_else(|| "Missing targetSessionId".to_string())?
+                    .to_string(),
+            }
+        }
+        _ => {
+            return Err(format!("Unsupported agent control action: {}", action_str));
+        }
+    };
+
+    let req_id = uuid::Uuid::new_v4().to_string();
+
+    let control_message = ClawdChatMessage::new(
+        shared::MessageType::AgentControl,
+        "app".to_string(),
+        shared::MessagePayload::AgentControl(shared::AgentControlMessage {
+            session_id: agent_session_id.clone(),
+            action: action.clone(),
+            request_id: Some(req_id.clone()),
+        }),
+    );
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        control_message,
+        &req_id,
+        "agent control",
+        30,
+    )
+    .await?;
+
+    if response.success {
+        if let Some(data) = response.data {
+            Ok(data)
+        } else {
+            Ok(serde_json::json!({
+                "success": true,
+                "data": null
+            }).to_string())
+        }
+    } else {
+        Ok(serde_json::json!({
+            "success": false,
+            "message": response.message
+        }).to_string())
+    }
+}
+
 // ============================================================================
 
 /// Spawn a remote AI agent session
@@ -3106,8 +3204,6 @@ pub fn run() {
             install_acp_package_remote,
             // Local Agent Commands (desktop only)
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            install_acp_package_local,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_start_agent,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_send_agent_message,
@@ -3125,6 +3221,8 @@ pub fn run() {
             local_load_agent_history,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             get_permission_mode,
+            // Remote Agent Control Commands
+            send_agent_control,
             // macOS Panel Commands
             #[cfg(target_os = "macos")]
             show_panel,

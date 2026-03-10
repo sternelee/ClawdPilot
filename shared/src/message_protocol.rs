@@ -673,6 +673,18 @@ pub enum AgentControlAction {
     SendInterrupt,
     /// 获取 Agent 状态
     GetStatus,
+    /// List agent history sessions
+    ListHistory {
+        agent_type: String,
+        project_path: String,
+    },
+    /// Load an agent history session
+    LoadHistory {
+        agent_type: String,
+        history_session_id: String,
+        project_path: String,
+        target_session_id: String,
+    },
 }
 
 /// Permission modes for agent tool approval

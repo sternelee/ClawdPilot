@@ -6,7 +6,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shared::{
-    AgentControlAction, AgentPermissionMode, AgentSessionAction, AgentSessionMetadata, AgentType,
+    AgentControlAction, AgentHistoryEntry, AgentPermissionMode, AgentSessionAction, AgentSessionMetadata, AgentType,
     AvailableTools, CommunicationManager, FileBrowserAction, GitAction, Message, MessageBuilder,
     MessageHandler, MessagePayload, MessageType, NotificationData, NotificationType, OSInfo,
     PackageManager, QuicMessageServer, QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage,
@@ -2575,14 +2575,66 @@ impl AgentControlMessageHandler {
 
         let req_id = request_id.unwrap_or_else(|| Uuid::new_v4().to_string());
 
-        let result = match &action {
+        let result: Result<serde_json::Value> = match &action {
+            AgentControlAction::ListHistory {
+                agent_type,
+                project_path,
+            } => {
+                let agent_type = parse_agent_type(agent_type)?;
+                let working_dir = expand_path(project_path);
+                let home_dir = std::env::var("HOME").ok();
+
+                let history_entries = self
+                    .agent_manager
+                    .list_agent_history(agent_type, working_dir, home_dir)
+                    .await?;
+
+                Ok(serde_json::json!({
+                    "type": "history_list",
+                    "entries": history_entries,
+                }))
+            }
+            AgentControlAction::LoadHistory {
+                agent_type,
+                history_session_id,
+                project_path,
+                target_session_id,
+            } => {
+                let agent_type = parse_agent_type(agent_type)?;
+                let working_dir = expand_path(project_path);
+
+                let launch_config = shared::AgentFactory::get_acp_launch(agent_type);
+                let new_session_id = self
+                    .agent_manager
+                    .start_session_from_history_with_id(
+                        target_session_id.clone(),
+                        agent_type,
+                        history_session_id.clone(),
+                        None,
+                        vec![],
+                        working_dir,
+                        None,
+                        "remote".to_string(),
+                        false,
+                    )
+                    .await?;
+
+                Ok(serde_json::json!({
+                    "type": "session_loaded",
+                    "session_id": new_session_id,
+                }))
+            }
             AgentControlAction::SendInput {
                 content,
                 attachments,
             } => {
                 self.agent_manager
                     .send_message(&session_id, content.clone(), attachments.clone())
-                    .await
+                    .await?;
+                Ok(serde_json::json!({
+                    "type": "success",
+                    "action": "send_input",
+                }))
             }
             AgentControlAction::SetPermissionMode { mode } => {
                 let permission_mode = match mode {
@@ -2593,72 +2645,71 @@ impl AgentControlMessageHandler {
                 };
                 self.agent_manager
                     .set_permission_mode(&session_id, permission_mode)
-                    .await
+                    .await?;
+                Ok(serde_json::json!({
+                    "type": "success",
+                    "action": "set_permission_mode",
+                }))
             }
             AgentControlAction::GetPermissionMode => {
                 let mode = self.agent_manager.get_permission_mode(&session_id).await;
-                let response = match mode {
-                    Ok(mode) => {
-                        let mode_str = match mode {
-                            shared::agent::PermissionMode::AlwaysAsk => "AlwaysAsk",
-                            shared::agent::PermissionMode::AcceptEdits => "AcceptEdits",
-                            shared::agent::PermissionMode::AutoApprove => "AutoApprove",
-                            shared::agent::PermissionMode::Plan => "Plan",
-                        };
-                        let response_data = serde_json::json!({
-                            "permission_mode": mode_str,
-                        });
-                        MessageBuilder::response(
-                            "cli".to_string(),
-                            req_id,
-                            true,
-                            Some(response_data),
-                            None,
-                        )
+                let permission_mode = match mode {
+                    Ok(mode) => match mode {
+                        shared::agent::PermissionMode::AlwaysAsk => AgentPermissionMode::AlwaysAsk,
+                        shared::agent::PermissionMode::AcceptEdits => AgentPermissionMode::AcceptEdits,
+                        shared::agent::PermissionMode::AutoApprove => AgentPermissionMode::AutoApprove,
+                        shared::agent::PermissionMode::Plan => AgentPermissionMode::Plan,
+                    },
+                    Err(e) => {
+                        return Err(e);
                     }
-                    Err(e) => MessageBuilder::error(
-                        "cli".to_string(),
-                        500,
-                        format!("Failed to get permission mode: {}", e),
-                        None,
-                    ),
                 };
-                return Ok(Some(response));
+                Ok(serde_json::json!({
+                    "type": "permission_mode",
+                    "mode": permission_mode,
+                }))
             }
             AgentControlAction::SendInterrupt => {
-                self.agent_manager.interrupt_session(&session_id).await
+                self.agent_manager.interrupt_session(&session_id).await?;
+                Ok(serde_json::json!({
+                    "type": "success",
+                    "action": "send_interrupt",
+                }))
             }
-            AgentControlAction::Terminate => self.agent_manager.stop_session(&session_id).await,
+            AgentControlAction::Terminate => {
+                self.agent_manager.stop_session(&session_id).await?;
+                Ok(serde_json::json!({
+                    "type": "success",
+                    "action": "terminate",
+                }))
+            }
             AgentControlAction::Pause
             | AgentControlAction::Resume
             | AgentControlAction::GetStatus => {
                 // These actions are not directly supported by the new API
-                Ok(())
+                Ok(serde_json::json!({
+                    "type": "not_implemented",
+                    "action": format!("{:?}", action),
+                }))
             }
         };
 
         match result {
-            Ok(()) => {
-                let response_data = serde_json::json!({
-                    "session_id": session_id,
-                    "action": format!("{:?}", action),
-                    "status": "success",
-                });
-
+            Ok(data) => {
                 Ok(Some(MessageBuilder::response(
                     "cli".to_string(),
                     req_id,
                     true,
-                    Some(response_data),
+                    Some(data),
                     None,
                 )))
             }
             Err(e) => {
-                tracing::error!("Failed to send control to agent {}: {}", session_id, e);
+                tracing::error!("Failed to handle control action: {}", e);
                 Ok(Some(MessageBuilder::error(
                     "cli".to_string(),
                     500,
-                    format!("Failed to control agent {}: {}", session_id, e),
+                    format!("Failed to handle control action: {}", e),
                     None,
                 )))
             }
@@ -2862,4 +2913,28 @@ mod tests {
 
         println!("✅ Event forwarder implementation verified");
     }
+}
+
+fn parse_agent_type(agent_type_str: &str) -> Result<AgentType> {
+    match agent_type_str {
+        "claude" | "claudecode" | "claude-code" => Ok(AgentType::ClaudeCode),
+        "opencode" | "open" | "openai" => Ok(AgentType::OpenCode),
+        "codex" => Ok(AgentType::Codex),
+        "gemini" | "gemini-cli" => Ok(AgentType::Gemini),
+        "openclaw" | "open-claw" => Ok(AgentType::OpenClaw),
+        _ => Err(anyhow::anyhow!("Unknown agent type: {}", agent_type_str)),
+    }
+}
+
+fn expand_path(path: &str) -> PathBuf {
+    if path.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(format!("{}{}", home, &path[1..]));
+        }
+    } else if path == "~" {
+        if let Ok(home) = std::env::var("HOME") {
+            return PathBuf::from(home);
+        }
+    }
+    PathBuf::from(path)
 }
