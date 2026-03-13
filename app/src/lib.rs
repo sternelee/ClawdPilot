@@ -2051,7 +2051,8 @@ async fn send_agent_control(
             action: action.clone(),
             request_id: Some(req_id.clone()),
         }),
-    );
+    )
+    .requires_response();
 
     let response = send_message_via_client_with_response(
         &state,

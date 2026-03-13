@@ -757,7 +757,11 @@ impl QuicMessageServer {
     ) -> Result<()> {
         let data = MessageSerializer::serialize_for_network(message)?;
         send_stream.write_all(&data).await?;
-        send_stream.finish()?;
+        // finish() may fail if the peer has already closed their receive side.
+        // This is not necessarily an error - the data may have been received.
+        if let Err(e) = send_stream.finish() {
+            debug!("Stream finish returned error (may be expected): {}", e);
+        }
         Ok(())
     }
 
