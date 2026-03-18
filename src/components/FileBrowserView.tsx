@@ -10,6 +10,7 @@ import {
   Show,
   createEffect,
   createMemo,
+  createSignal,
   onMount,
 } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
@@ -150,10 +151,15 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     viewFile,
     closeFile,
     setViewMode,
+    clearOpenRequest,
     getDirectories,
     getFiles,
   } = fileBrowserStore;
   let lastRootPath: string | null = null;
+  let filePreviewContainerRef: HTMLDivElement | undefined;
+  const [targetLine, setTargetLine] = createSignal<number | undefined>(
+    undefined,
+  );
 
   const rootPath = createMemo(() => {
     const raw = (props.projectPath || ".").trim();
@@ -200,7 +206,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
   };
 
   // Load file content
-  const loadFile = async (path: string) => {
+  const loadFile = async (path: string, jumpToLine?: number) => {
     setLoading(true);
     setError(null);
 
@@ -212,6 +218,15 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
       }>("file_browser_read", { path });
       if (response?.success) {
         viewFile(path, response.content || "");
+        if (
+          typeof jumpToLine === "number" &&
+          Number.isFinite(jumpToLine) &&
+          jumpToLine > 0
+        ) {
+          setTargetLine(Math.floor(jumpToLine));
+        } else {
+          setTargetLine(undefined);
+        }
       } else {
         throw new Error(response?.error || "Failed to read file");
       }
@@ -269,6 +284,41 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
       lastRootPath = nextRoot;
       loadDirectory(nextRoot);
     }
+  });
+
+  createEffect(() => {
+    const req = state.openRequest;
+    if (!req) return;
+
+    const openRequestedFile = async () => {
+      const normalizedPath = req.path;
+      const lastSlash = normalizedPath.lastIndexOf("/");
+      const parentPath =
+        lastSlash > 0
+          ? normalizedPath.slice(0, lastSlash)
+          : normalizedPath.startsWith("/")
+            ? "/"
+            : ".";
+      try {
+        await loadDirectory(parentPath);
+        await loadFile(normalizedPath, req.line);
+      } finally {
+        clearOpenRequest();
+      }
+    };
+
+    void openRequestedFile();
+  });
+
+  createEffect(() => {
+    const line = targetLine();
+    if (!state.viewingFile || !line || !filePreviewContainerRef) return;
+    const lineHeight = 20;
+    const top = Math.max((line - 1) * lineHeight - 80, 0);
+    filePreviewContainerRef.scrollTo({
+      top,
+      behavior: "smooth",
+    });
   });
 
   // Format file size
@@ -572,7 +622,10 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
                 {state.viewingFile?.path}
               </h3>
             </div>
-            <div class="flex-1 overflow-auto scrollbar-thin rounded-sm bg-muted p-4">
+            <div
+              ref={filePreviewContainerRef}
+              class="flex-1 overflow-auto scrollbar-thin rounded-sm bg-muted p-4"
+            >
               <pre class="file-preview-prism scrollbar-thin text-xs leading-5">
                 <code
                   class={`language-${viewingLanguage()} font-mono`}

@@ -64,7 +64,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio};
 use std::sync::Arc;
 use std::thread;
@@ -74,6 +74,7 @@ use crate::message_protocol::AgentType;
 use agent_client_protocol as acp;
 use agent_client_protocol::Agent;
 use anyhow::{Context, Result, anyhow};
+use base64::Engine;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
@@ -302,6 +303,7 @@ pub enum AcpSessionStartMode {
 
 impl AcpStreamingSession {
     /// Create a new ACP streaming session with default retry configuration
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn(
         session_id: String,
         agent_type: AgentType,
@@ -310,6 +312,7 @@ impl AcpStreamingSession {
         env: HashMap<String, String>,
         working_dir: PathBuf,
         home_dir: Option<String>,
+        mcp_servers: Option<serde_json::Value>,
     ) -> Result<Self> {
         Self::spawn_with_start_mode(
             session_id,
@@ -319,6 +322,7 @@ impl AcpStreamingSession {
             env,
             working_dir,
             home_dir,
+            mcp_servers,
             AcpSessionStartMode::New,
             RetryConfig::default(),
         )
@@ -326,6 +330,7 @@ impl AcpStreamingSession {
     }
 
     /// Create a new ACP streaming session with custom retry configuration
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn_with_start_mode(
         session_id: String,
         agent_type: AgentType,
@@ -334,6 +339,7 @@ impl AcpStreamingSession {
         env: HashMap<String, String>,
         working_dir: PathBuf,
         home_dir: Option<String>,
+        mcp_servers: Option<serde_json::Value>,
         start_mode: AcpSessionStartMode,
         retry_config: RetryConfig,
     ) -> Result<Self> {
@@ -382,6 +388,7 @@ impl AcpStreamingSession {
                         env,
                         working_dir,
                         home_dir,
+                        mcp_servers,
                         start_mode,
                         event_sender: runtime_event_sender,
                         event_buffer: runtime_event_buffer,
@@ -603,6 +610,7 @@ struct AcpRuntimeParams {
     env: HashMap<String, String>,
     working_dir: PathBuf,
     home_dir: Option<String>,
+    mcp_servers: Option<serde_json::Value>,
     start_mode: AcpSessionStartMode,
     event_sender: broadcast::Sender<AgentTurnEvent>,
     event_buffer: Arc<Mutex<VecDeque<AgentTurnEvent>>>,
@@ -1195,6 +1203,20 @@ pub(super) fn resolve_command_path(command: &str) -> String {
     command.to_string()
 }
 
+fn parse_mcp_servers(value: Option<serde_json::Value>) -> Vec<acp::McpServer> {
+    let Some(value) = value else {
+        return Vec::new();
+    };
+
+    match serde_json::from_value::<Vec<acp::McpServer>>(value) {
+        Ok(servers) => servers,
+        Err(err) => {
+            warn!("Invalid MCP server config, ignoring: {}", err);
+            Vec::new()
+        }
+    }
+}
+
 async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
     info!(
         "Starting ACP runtime for session {} ({:?}) with command: {} {:?}",
@@ -1360,6 +1382,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
         .session_capabilities
         .resume
         .is_some();
+    let mcp_servers = parse_mcp_servers(params.mcp_servers.clone());
 
     let acp_session_id = match &params.start_mode {
         AcpSessionStartMode::New => {
@@ -1368,7 +1391,10 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                 format!("create ACP session for {}", params.session_id),
                 || async {
                     connection
-                        .new_session(acp::NewSessionRequest::new(params.working_dir.clone()))
+                        .new_session(
+                            acp::NewSessionRequest::new(params.working_dir.clone())
+                                .mcp_servers(mcp_servers.clone()),
+                        )
                         .await
                 },
             )
@@ -1480,6 +1506,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
 
     run_command_loop(
         params.session_id.clone(),
+        params.working_dir.clone(),
         connection,
         acp_session_id,
         active_turn,
@@ -1567,8 +1594,149 @@ where
     ))
 }
 
+fn normalize_path(path: &str, working_dir: &Path) -> Option<PathBuf> {
+    if path.trim().is_empty() {
+        return None;
+    }
+    let expanded = if path.starts_with("~/") {
+        std::env::var("HOME")
+            .ok()
+            .map(|home| format!("{}{}", home, &path[1..]))
+            .unwrap_or_else(|| path.to_string())
+    } else {
+        path.to_string()
+    };
+    let path_buf = PathBuf::from(expanded);
+    if path_buf.is_absolute() {
+        Some(path_buf)
+    } else {
+        Some(working_dir.join(path_buf))
+    }
+}
+
+fn is_image_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "tiff" | "svg"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn guess_mime_type(path: &Path) -> String {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        "tiff" => "image/tiff",
+        "svg" => "image/svg+xml",
+        "md" => "text/markdown",
+        "json" => "application/json",
+        "rs" => "text/rust",
+        "ts" => "text/typescript",
+        "tsx" => "text/tsx",
+        "js" => "text/javascript",
+        "jsx" => "text/jsx",
+        "py" => "text/x-python",
+        "toml" => "application/toml",
+        "yaml" | "yml" => "application/yaml",
+        "txt" => "text/plain",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
+fn extract_mention_paths(text: &str, working_dir: &Path) -> Vec<PathBuf> {
+    let mut mentions = Vec::new();
+    for token in text.split_whitespace() {
+        if !token.starts_with('@') || token.len() < 2 {
+            continue;
+        }
+        let raw = token.trim_start_matches('@').trim_matches(|c: char| {
+            c == ')' || c == '(' || c == '[' || c == ']' || c == ',' || c == '"' || c == '\''
+        });
+        if let Some(path) = normalize_path(raw, working_dir) {
+            if path.exists() {
+                mentions.push(path);
+            }
+        }
+    }
+    mentions
+}
+
+fn add_resource_block_from_path(blocks: &mut Vec<acp::ContentBlock>, path: &Path) {
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return;
+    };
+    let uri = format!("file://{}", path.display());
+    let mime_type = guess_mime_type(path);
+    if let Ok(content) = std::fs::read_to_string(path) {
+        let text_resource =
+            acp::TextResourceContents::new(content, uri.clone()).mime_type(Some(mime_type));
+        blocks.push(acp::ContentBlock::Resource(acp::EmbeddedResource::new(
+            acp::EmbeddedResourceResource::TextResourceContents(text_resource),
+        )));
+    } else {
+        blocks.push(acp::ContentBlock::ResourceLink(
+            acp::ResourceLink::new(name.to_string(), uri).mime_type(Some(mime_type)),
+        ));
+    }
+}
+
+fn add_image_block_from_path(blocks: &mut Vec<acp::ContentBlock>, path: &Path) {
+    let Ok(bytes) = std::fs::read(path) else {
+        return;
+    };
+    let mime_type = guess_mime_type(path);
+    let base64_data = base64::engine::general_purpose::STANDARD.encode(bytes);
+    let uri = Some(format!("file://{}", path.display()));
+    blocks.push(acp::ContentBlock::Image(
+        acp::ImageContent::new(base64_data, mime_type).uri(uri),
+    ));
+}
+
+fn build_prompt_blocks(
+    text: String,
+    attachments: Vec<String>,
+    working_dir: &Path,
+) -> Vec<acp::ContentBlock> {
+    let mut blocks = vec![acp::ContentBlock::from(text.clone())];
+
+    for mention in extract_mention_paths(&text, working_dir) {
+        add_resource_block_from_path(&mut blocks, &mention);
+    }
+
+    for attachment in attachments {
+        let Some(path) = normalize_path(&attachment, working_dir) else {
+            continue;
+        };
+        if !path.exists() {
+            continue;
+        }
+        if is_image_path(&path) {
+            add_image_block_from_path(&mut blocks, &path);
+        } else {
+            add_resource_block_from_path(&mut blocks, &path);
+        }
+    }
+
+    blocks
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn run_command_loop(
     session_id: String,
+    working_dir: PathBuf,
     connection: Arc<tokio::sync::Mutex<acp::ClientSideConnection>>,
     acp_session_id: acp::SessionId,
     active_turn: Arc<RwLock<Option<String>>>,
@@ -1625,20 +1793,23 @@ async fn run_command_loop(
                 let retry_config = retry_config.clone();
                 let session_id = session_id.clone();
                 let active_turn = active_turn.clone();
+                let working_dir = working_dir.clone();
 
                 tokio::task::spawn_local(async move {
+                    let prompt_blocks =
+                        build_prompt_blocks(text.clone(), attachments.clone(), &working_dir);
                     let result = with_retry(
                         retry_config,
                         format!("prompt for session {}", session_id),
                         || {
                             let connection = connection.clone();
                             let acp_session_id = acp_session_id.clone();
-                            let text = text.clone();
+                            let prompt_blocks = prompt_blocks.clone();
                             async move {
                                 let conn = connection.lock().await;
                                 conn.prompt(acp::PromptRequest::new(
                                     acp_session_id,
-                                    vec![acp::ContentBlock::from(text)],
+                                    prompt_blocks,
                                 ))
                                 .await
                             }
@@ -1959,6 +2130,35 @@ impl AcpClientHandler {
             .await;
         }
 
+        let has_following = update
+            .fields
+            .locations
+            .as_ref()
+            .map(|locs| !locs.is_empty())
+            .unwrap_or(false);
+        let has_content = update
+            .fields
+            .content
+            .as_ref()
+            .map(|c| !c.is_empty())
+            .unwrap_or(false);
+
+        if has_following || has_content {
+            self.emit_event(AgentEvent::Raw {
+                session_id: self.session_id.clone(),
+                agent: self.agent_type,
+                data: serde_json::json!({
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": tool_id.clone(),
+                    "title": tool_name.clone(),
+                    "status": update.fields.status,
+                    "locations": update.fields.locations,
+                    "content": update.fields.content,
+                }),
+            })
+            .await;
+        }
+
         if let Some(status) = update.fields.status {
             match status {
                 acp::ToolCallStatus::Pending | acp::ToolCallStatus::InProgress => {
@@ -2149,6 +2349,22 @@ impl acp::Client for AcpClientHandler {
                     input: tool_call.raw_input.clone(),
                 })
                 .await;
+
+                if !tool_call.locations.is_empty() || !tool_call.content.is_empty() {
+                    self.emit_event(AgentEvent::Raw {
+                        session_id: self.session_id.clone(),
+                        agent: self.agent_type,
+                        data: serde_json::json!({
+                            "sessionUpdate": "tool_call",
+                            "toolCallId": tool_id,
+                            "title": tool_call.title.clone(),
+                            "status": tool_call.status,
+                            "locations": tool_call.locations.clone(),
+                            "content": tool_call.content.clone(),
+                        }),
+                    })
+                    .await;
+                }
 
                 match tool_call.status {
                     acp::ToolCallStatus::Pending | acp::ToolCallStatus::InProgress => {

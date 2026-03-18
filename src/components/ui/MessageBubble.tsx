@@ -8,11 +8,11 @@
  * - SystemMessage: System notifications and tool outputs
  */
 
-import { type Component, Show, createMemo, createSignal } from "solid-js";
+import { type Component, For, Show, createMemo, createSignal } from "solid-js";
 import { createClipboard } from "@solid-primitives/clipboard";
 import { FiCopy, FiCheck, FiMoreVertical } from "solid-icons/fi";
 import { SolidMarkdown } from "solid-markdown";
-import type { ChatMessage, ToolCall } from "~/stores/chatStore";
+import type { ChatMessage, SystemCard, ToolCall } from "~/stores/chatStore";
 import { isMobile } from "~/stores/deviceStore";
 import { HapticFeedback } from "~/utils/mobile";
 import {
@@ -70,6 +70,14 @@ export interface MessageBubbleProps {
   class?: string;
   onQuote?: (content: string) => void;
   onResend?: (content: string) => void;
+  onToggleFileBrowser?: () => void;
+  onSyncTodoList?: (content: string) => void;
+  onOpenFileLocation?: (path: string, line?: number) => void;
+  onApplyEditReview?: (path: string, action: "accept" | "reject") => void;
+  onTerminalAction?: (
+    terminalId: string,
+    action: "attach" | "stop" | "status",
+  ) => void;
 }
 
 // ============================================================================
@@ -165,7 +173,17 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
 
 interface SystemMessageProps {
   content: string;
+  systemCard?: SystemCard;
   timestamp?: number;
+  onQuote?: (content: string) => void;
+  onToggleFileBrowser?: () => void;
+  onSyncTodoList?: (content: string) => void;
+  onOpenFileLocation?: (path: string, line?: number) => void;
+  onApplyEditReview?: (path: string, action: "accept" | "reject") => void;
+  onTerminalAction?: (
+    terminalId: string,
+    action: "attach" | "stop" | "status",
+  ) => void;
 }
 
 const SystemMessage: Component<SystemMessageProps> = (props) => {
@@ -173,7 +191,16 @@ const SystemMessage: Component<SystemMessageProps> = (props) => {
     <div class="flex flex-col gap-1.5 items-start opacity-80">
       {/* Message content */}
       <div class="w-full max-w-[min(92vw,54rem)] rounded-xl border border-border/70 bg-background/80 px-3.5 py-3">
-        <SystemMessageContent content={props.content} />
+        <SystemMessageContent
+          content={props.content}
+          systemCard={props.systemCard}
+          onQuote={props.onQuote}
+          onToggleFileBrowser={props.onToggleFileBrowser}
+          onSyncTodoList={props.onSyncTodoList}
+          onOpenFileLocation={props.onOpenFileLocation}
+          onApplyEditReview={props.onApplyEditReview}
+          onTerminalAction={props.onTerminalAction}
+        />
       </div>
     </div>
   );
@@ -183,7 +210,256 @@ const SystemMessage: Component<SystemMessageProps> = (props) => {
 // System Message Content Parser
 // ============================================================================
 
-const SystemMessageContent: Component<{ content: string }> = (props) => {
+const SystemMessageContent: Component<{
+  content: string;
+  systemCard?: SystemCard;
+  onQuote?: (content: string) => void;
+  onToggleFileBrowser?: () => void;
+  onSyncTodoList?: (content: string) => void;
+  onOpenFileLocation?: (path: string, line?: number) => void;
+  onApplyEditReview?: (path: string, action: "accept" | "reject") => void;
+  onTerminalAction?: (
+    terminalId: string,
+    action: "attach" | "stop" | "status",
+  ) => void;
+}> = (props) => {
+  const [todoStates, setTodoStates] = createSignal<Record<number, boolean>>({});
+  const [showDiff, setShowDiff] = createSignal(false);
+  const [, , write] = createClipboard();
+
+  const copyText = async (text: string) => {
+    try {
+      await write(text);
+    } catch {
+      // ignore clipboard failures
+    }
+  };
+
+  const renderSystemCard = () => {
+    const card = props.systemCard;
+    if (!card) return null;
+
+    if (card.type === "following") {
+      return (
+        <div class="space-y-2">
+          <div class="text-xs font-semibold uppercase tracking-wide text-info">
+            Following
+          </div>
+          <For each={card.locations}>
+            {(loc) => (
+              <div class="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-2.5 py-2">
+                <button
+                  type="button"
+                  class="flex-1 text-left text-xs sm:text-sm font-mono hover:text-primary"
+                  onClick={() => {
+                    if (props.onOpenFileLocation) {
+                      props.onOpenFileLocation(loc.path, loc.line);
+                    } else {
+                      props.onQuote?.(`@${loc.path}${loc.line ? `:${loc.line}` : ""}`);
+                    }
+                  }}
+                >
+                  {loc.path}
+                  <Show when={loc.line !== undefined}>
+                    <span class="ml-1 text-muted-foreground">:{loc.line}</span>
+                  </Show>
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  onClick={() =>
+                    copyText(`${loc.path}${loc.line ? `:${loc.line}` : ""}`)
+                  }
+                >
+                  Copy
+                </button>
+              </div>
+            )}
+          </For>
+          <button
+            type="button"
+            class="btn btn-outline btn-xs"
+            onClick={() => props.onToggleFileBrowser?.()}
+          >
+            Open File Panel
+          </button>
+        </div>
+      );
+    }
+
+    if (card.type === "edit_review") {
+      const diffText = `--- old\n+++ new\n-${card.oldText}\n+${card.newText}`;
+      return (
+        <div class="space-y-2">
+          <div class="text-xs font-semibold uppercase tracking-wide text-warning">
+            Edit Review
+          </div>
+          <div class="rounded-lg border border-warning/30 bg-warning/10 px-2.5 py-2 text-xs sm:text-sm font-mono">
+            {card.path}
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onClick={() => setShowDiff((v) => !v)}
+            >
+              {showDiff() ? "Hide Diff" : "Show Diff"}
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onClick={() => copyText(diffText)}
+            >
+              Copy Diff
+            </button>
+            <Show when={props.onApplyEditReview}>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onClick={() => props.onApplyEditReview?.(card.path, "accept")}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onClick={() => props.onApplyEditReview?.(card.path, "reject")}
+              >
+                Reject
+              </button>
+            </Show>
+          </div>
+          <Show when={showDiff()}>
+            <div class="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-base-300">
+              <pre class="m-0 w-max min-w-full p-2 text-xs font-mono">
+                <code class="block whitespace-pre-wrap break-all">{diffText}</code>
+              </pre>
+            </div>
+          </Show>
+        </div>
+      );
+    }
+
+    if (card.type === "todo_list") {
+      const syncTodoToAgent = () => {
+        const current = todoStates();
+        const lines = card.entries.map((entry, idx) => {
+          const checked =
+            current[idx] !== undefined
+              ? current[idx]
+              : entry.status === "completed";
+          return `- [${checked ? "x" : " "}] ${entry.content}`;
+        });
+        props.onSyncTodoList?.(`TODO update:\n${lines.join("\n")}`);
+      };
+
+      return (
+        <div class="space-y-2">
+          <div class="text-xs font-semibold uppercase tracking-wide text-success">
+            TODO List
+          </div>
+          <div class="space-y-1">
+            <For each={card.entries}>
+              {(entry, index) => {
+                const initialDone = entry.status === "completed";
+                const checked = () =>
+                  todoStates()[index()] !== undefined
+                    ? todoStates()[index()]!
+                    : initialDone;
+                return (
+                  <label class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/40 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-xs"
+                      checked={checked()}
+                      onChange={(e) =>
+                        setTodoStates((prev) => ({
+                          ...prev,
+                          [index()]: e.currentTarget.checked,
+                        }))
+                      }
+                    />
+                    <span
+                      class={`text-xs sm:text-sm ${checked() ? "line-through text-muted-foreground" : ""}`}
+                    >
+                      {entry.content}
+                    </span>
+                  </label>
+                );
+              }}
+            </For>
+          </div>
+          <Show when={props.onSyncTodoList}>
+            <button
+              type="button"
+              class="btn btn-outline btn-xs"
+              onClick={syncTodoToAgent}
+            >
+              Sync to Agent
+            </button>
+          </Show>
+        </div>
+      );
+    }
+
+    if (card.type === "terminal") {
+      return (
+        <div class="space-y-2">
+          <div class="text-xs font-semibold uppercase tracking-wide text-primary">
+            Terminal
+          </div>
+          <div class="rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-2 text-xs sm:text-sm">
+            <div class="font-mono break-all">{card.terminalId || "unknown"}</div>
+            <div class="mt-1 text-muted-foreground">
+              {card.mode || "interactive/background"} {card.status ? `· ${card.status}` : ""}
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onClick={() => copyText(card.terminalId)}
+            >
+              Copy ID
+            </button>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              onClick={() => props.onQuote?.(`terminal:${card.terminalId}`)}
+            >
+              Insert To Input
+            </button>
+            <Show when={props.onTerminalAction}>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onClick={() => props.onTerminalAction?.(card.terminalId, "attach")}
+              >
+                Attach
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onClick={() => props.onTerminalAction?.(card.terminalId, "status")}
+              >
+                Status
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                onClick={() => props.onTerminalAction?.(card.terminalId, "stop")}
+              >
+                Stop
+              </button>
+            </Show>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   // Check if it's a terminal output format
   const isTerminalOutput = () => {
     const content = props.content;
@@ -228,50 +504,57 @@ const SystemMessageContent: Component<{ content: string }> = (props) => {
 
   return (
     <Show
-      when={isTerminalOutput()}
+      when={props.systemCard}
       fallback={
-        <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6 text-muted-foreground selectable">
-          <SolidMarkdown children={props.content} />
-        </div>
-      }
-    >
-      <Show
-        when={parseTerminalOutput()}
-        fallback={
-          <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6 text-muted-foreground selectable">
-            <SolidMarkdown children={props.content} />
-          </div>
-        }
-      >
-        {(parsed) => (
+        <Show
+          when={isTerminalOutput()}
+          fallback={
+            <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6 text-muted-foreground selectable">
+              <SolidMarkdown children={props.content} />
+            </div>
+          }
+        >
           <Show
-            when={parsed().type === "tool"}
+            when={parseTerminalOutput()}
             fallback={
-              <TerminalOutput
-                output={parsed().command || ""}
-                exitCode={
-                  parsed().status === "completed"
-                    ? 0
-                    : parsed().status === "failed"
-                      ? 1
-                      : undefined
-                }
-              />
+              <div class="prose prose-sm wrap-break-words text-[13px] sm:text-sm max-w-none leading-5 sm:leading-6 text-muted-foreground selectable">
+                <SolidMarkdown children={props.content} />
+              </div>
             }
           >
-            <div class="text-sm">
-              <span class="font-mono text-xs text-info">
-                [{parsed().toolName}]
-              </span>
-              <Show when={parsed().output}>
-                <pre class="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-all">
-                  {parsed().output}
-                </pre>
+            {(parsed) => (
+              <Show
+                when={parsed().type === "tool"}
+                fallback={
+                  <TerminalOutput
+                    output={parsed().command || ""}
+                    exitCode={
+                      parsed().status === "completed"
+                        ? 0
+                        : parsed().status === "failed"
+                          ? 1
+                          : undefined
+                    }
+                  />
+                }
+              >
+                <div class="text-sm">
+                  <span class="font-mono text-xs text-info">
+                    [{parsed().toolName}]
+                  </span>
+                  <Show when={parsed().output}>
+                    <pre class="mt-2 text-xs text-muted-foreground whitespace-pre-wrap break-all">
+                      {parsed().output}
+                    </pre>
+                  </Show>
+                </div>
               </Show>
-            </div>
+            )}
           </Show>
-        )}
-      </Show>
+        </Show>
+      }
+    >
+      {renderSystemCard()}
     </Show>
   );
 };
@@ -363,7 +646,14 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
           >
             <SystemMessage
               content={message().content}
+              systemCard={message().systemCard}
               timestamp={message().timestamp}
+              onQuote={props.onQuote}
+              onToggleFileBrowser={props.onToggleFileBrowser}
+              onSyncTodoList={props.onSyncTodoList}
+              onOpenFileLocation={props.onOpenFileLocation}
+              onApplyEditReview={props.onApplyEditReview}
+              onTerminalAction={props.onTerminalAction}
             />
           </Show>
         }

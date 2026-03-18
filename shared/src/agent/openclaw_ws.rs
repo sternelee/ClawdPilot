@@ -615,7 +615,10 @@ impl OpenClawGatewayManager {
         );
 
         // Store run_id to session key mapping
-        self.run_to_session.write().await.insert(turn_id.clone(), session_key.to_string());
+        self.run_to_session
+            .write()
+            .await
+            .insert(turn_id.clone(), session_key.to_string());
 
         {
             let mut states = self.session_states.write().await;
@@ -1179,7 +1182,11 @@ async fn handle_gateway_message(
                     let error = payload
                         .and_then(|p| p.get("message"))
                         .and_then(|v| v.as_str())
-                        .or_else(|| payload.and_then(|p| p.get("error")).and_then(|v| v.as_str()))
+                        .or_else(|| {
+                            payload
+                                .and_then(|p| p.get("error"))
+                                .and_then(|v| v.as_str())
+                        })
                         .unwrap_or("OpenClaw request failed")
                         .to_string();
                     emit_event(
@@ -1194,7 +1201,10 @@ async fn handle_gateway_message(
                     clear_session_state(&runtime_state.session_states, &session_id).await;
                 } else {
                     // status is "accepted" or other, wait for events
-                    info!("[OpenClaw] Agent request accepted, waiting for events (turn_id: {})", turn_id);
+                    info!(
+                        "[OpenClaw] Agent request accepted, waiting for events (turn_id: {})",
+                        turn_id
+                    );
                     return; // Don't clear session state yet
                 }
             } else {
@@ -1222,11 +1232,17 @@ async fn handle_gateway_message(
 
             let mut turn_id = extract_turn_id(payload).unwrap_or_default();
             let session_id_from_payload = extract_session_key(payload);
-            
+
             let session_id = if let Some(sid) = session_id_from_payload {
                 sid
             } else if !turn_id.is_empty() {
-                runtime_state.run_to_session.read().await.get(&turn_id).cloned().unwrap_or_else(|| "default".to_string())
+                runtime_state
+                    .run_to_session
+                    .read()
+                    .await
+                    .get(&turn_id)
+                    .cloned()
+                    .unwrap_or_else(|| "default".to_string())
             } else {
                 "default".to_string()
             };
@@ -1278,9 +1294,15 @@ async fn handle_gateway_message(
                                 write_last_content(
                                     &runtime_state.session_states,
                                     &session_id,
-                                    if !cumulative.is_empty() { cumulative } else {
+                                    if !cumulative.is_empty() {
+                                        cumulative
+                                    } else {
                                         // If we only have delta, we should ideally accumulate it in last_content
-                                        let prev = read_last_content(&runtime_state.session_states, &session_id).await;
+                                        let prev = read_last_content(
+                                            &runtime_state.session_states,
+                                            &session_id,
+                                        )
+                                        .await;
                                         format!("{}{}", prev, raw_delta)
                                     },
                                     &turn_id,
@@ -1295,8 +1317,12 @@ async fn handle_gateway_message(
                                 .unwrap_or_default();
 
                             if phase == "start" {
-                                set_session_turn(&runtime_state.session_states, &session_id, &turn_id)
-                                    .await;
+                                set_session_turn(
+                                    &runtime_state.session_states,
+                                    &session_id,
+                                    &turn_id,
+                                )
+                                .await;
                                 emit_event(
                                     event_sender,
                                     &turn_id,
@@ -1314,14 +1340,17 @@ async fn handle_gateway_message(
                                         result: payload.cloned(),
                                     },
                                 );
-                                clear_session_state(&runtime_state.session_states, &session_id).await;
+                                clear_session_state(&runtime_state.session_states, &session_id)
+                                    .await;
                             }
                         }
                         "error" | "failed" | "cancelled" => {
                             let error = data
                                 .and_then(|d| d.get("message"))
                                 .and_then(|v| v.as_str())
-                                .or_else(|| data.and_then(|d| d.get("error")).and_then(|v| v.as_str()))
+                                .or_else(|| {
+                                    data.and_then(|d| d.get("error")).and_then(|v| v.as_str())
+                                })
                                 .unwrap_or("OpenClaw run failed")
                                 .to_string();
                             emit_event(
@@ -1337,7 +1366,10 @@ async fn handle_gateway_message(
                         }
                         _ => {
                             // Handle usage and cost in metadata if available
-                            if let Some(meta) = data.and_then(|d| d.get("meta")).or_else(|| payload.and_then(|p| p.get("meta"))) {
+                            if let Some(meta) = data
+                                .and_then(|d| d.get("meta"))
+                                .or_else(|| payload.and_then(|p| p.get("meta")))
+                            {
                                 emit_usage_update(event_sender, &session_id, meta);
                             }
                         }
@@ -1748,4 +1780,3 @@ fn extract_text_from_payload(payload: &serde_json::Value) -> Option<String> {
                 .map(ToOwned::to_owned)
         })
 }
-

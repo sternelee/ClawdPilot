@@ -59,6 +59,12 @@ export interface ChatInputProps {
   rightPanelView?: RightPanelView;
   onToggleFileBrowser?: () => void;
   onToggleGitPanel?: () => void;
+  mentionSuggestions?: { name: string; path: string }[];
+  onSelectMention?: (path: string) => void;
+  onDismissMentions?: () => void;
+  slashSuggestions?: { name: string; description?: string }[];
+  onSelectSlash?: (name: string) => void;
+  onDismissSlash?: () => void;
 }
 
 // ============================================================================
@@ -73,9 +79,18 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   const [toolbarTouchStartY, setToolbarTouchStartY] = createSignal<
     number | null
   >(null);
+  const [activeMentionIndex, setActiveMentionIndex] = createSignal(0);
+  const [activeSlashIndex, setActiveSlashIndex] = createSignal(0);
   const mobile = () => isMobile();
   const isStreamingNow = () => !!props.isStreaming;
   const showAdvancedTools = () => !isStreamingNow();
+  const mentionSuggestions = () => props.mentionSuggestions ?? [];
+  const hasMentionSuggestions = () => mentionSuggestions().length > 0;
+  const slashSuggestions = () => props.slashSuggestions ?? [];
+  const hasSlashSuggestions = () => slashSuggestions().length > 0;
+  const showMentionSuggestions = () =>
+    hasMentionSuggestions() && !hasSlashSuggestions();
+  const showSlashSuggestions = () => hasSlashSuggestions();
 
   const permissionOptions: {
     value: PermissionMode;
@@ -140,6 +155,61 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   });
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (showSlashSuggestions()) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveSlashIndex((prev) =>
+          Math.min(prev + 1, slashSuggestions().length - 1),
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveSlashIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        const item = slashSuggestions()[activeSlashIndex()];
+        if (item) {
+          props.onSelectSlash?.(item.name);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        props.onDismissSlash?.();
+        return;
+      }
+    }
+    if (showMentionSuggestions()) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveMentionIndex((prev) =>
+          Math.min(prev + 1, mentionSuggestions().length - 1),
+        );
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveMentionIndex((prev) => Math.max(prev - 1, 0));
+        return;
+      }
+      if (e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        const item = mentionSuggestions()[activeMentionIndex()];
+        if (item) {
+          props.onSelectMention?.(item.path);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        props.onDismissMentions?.();
+        return;
+      }
+    }
+
     const shouldSend =
       e.key === "Enter" && (e.shiftKey || e.metaKey || e.ctrlKey);
     // Send on Shift/Cmd/Ctrl+Enter, keep Enter as newline
@@ -168,6 +238,16 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
     }
   });
 
+  createEffect(() => {
+    mentionSuggestions();
+    setActiveMentionIndex(0);
+  });
+
+  createEffect(() => {
+    slashSuggestions();
+    setActiveSlashIndex(0);
+  });
+
   return (
     <div
       class={cn(
@@ -179,12 +259,57 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
       {/* Input Container with Toolbar Inside */}
       <div
         class={cn(
-          "flex flex-col rounded-2xl border-2 bg-muted/30 transition-all duration-300",
+          "relative flex flex-col rounded-2xl border-2 bg-muted/30 transition-all duration-300",
           focused()
             ? "border-primary/50 shadow-xl shadow-primary/5 bg-background"
             : "border-border/60 hover:border-muted-foreground/20 hover:bg-muted/50",
         )}
       >
+        <Show when={showMentionSuggestions()}>
+          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.375rem)] z-40 rounded-xl border border-border/50 bg-base-300/95 shadow-lg max-h-[7.5rem] sm:max-h-[13rem] overflow-y-auto">
+            {mentionSuggestions().map((item, index) => (
+              <button
+                type="button"
+                class={cn(
+                  "w-full px-3 py-2 text-left text-xs sm:text-sm transition-colors min-h-10 sm:min-h-11",
+                  index === activeMentionIndex()
+                    ? "bg-primary/15 text-primary"
+                    : "hover:bg-muted/60",
+                )}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => props.onSelectMention?.(item.path)}
+              >
+                <span class="font-medium">{item.path}</span>
+              </button>
+            ))}
+          </div>
+        </Show>
+
+        <Show when={showSlashSuggestions()}>
+          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.375rem)] z-40 rounded-xl border border-border/50 bg-base-300/95 shadow-lg max-h-[7.5rem] sm:max-h-[13rem] overflow-y-auto">
+            {slashSuggestions().map((item, index) => (
+              <button
+                type="button"
+                class={cn(
+                  "w-full px-3 py-2 text-left transition-colors",
+                  index === activeSlashIndex()
+                    ? "bg-primary/15 text-primary"
+                    : "hover:bg-muted/60",
+                )}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => props.onSelectSlash?.(item.name)}
+              >
+                <div class="text-xs sm:text-sm font-medium">/{item.name}</div>
+                <Show when={item.description}>
+                  <div class="mt-0.5 text-[11px] sm:text-xs text-muted-foreground line-clamp-2">
+                    {item.description}
+                  </div>
+                </Show>
+              </button>
+            ))}
+          </div>
+        </Show>
+
         {/* Top Row: Textarea + Send Button */}
         <div class="flex items-end gap-1.5 sm:gap-2 p-1.5 sm:p-2 pb-1">
           {/* Attach Button */}

@@ -657,6 +657,23 @@ export const NewSessionModal: Component = () => {
                 </p>
               </div>
             </Show>
+
+            <div class="mb-4 space-y-2">
+              <Label for="mcp-servers">MCP Servers (Optional JSON)</Label>
+              <Textarea
+                id="mcp-servers"
+                class="h-24 font-mono text-xs"
+                placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
+                value={sessionStore.state.newSessionMcpServers}
+                onInput={(e) => {
+                  sessionStore.setNewSessionMcpServers(e.currentTarget.value);
+                }}
+              />
+              <p class="text-xs text-muted-foreground">
+                ACP `mcpServers` JSON array. Leave empty to disable client MCP
+                servers.
+              </p>
+            </div>
           </Show>
 
           <div class="mt-8 flex justify-end gap-2">
@@ -667,6 +684,7 @@ export const NewSessionModal: Component = () => {
                 sessionStore.closeNewSessionModal();
                 sessionStore.setConnectionError(null);
                 sessionStore.setNewSessionArgs("");
+                sessionStore.setNewSessionMcpServers("");
               }}
             >
               Cancel

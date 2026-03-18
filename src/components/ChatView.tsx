@@ -25,8 +25,11 @@ import {
 } from "../stores/sessionEventRouter";
 import { isMobile } from "../stores/deviceStore";
 import type { ChatMessage } from "../stores/chatStore";
+import type { SlashCommandItem } from "../stores/chatStore";
+import type { SystemCard } from "../stores/chatStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
+import { fileBrowserStore } from "../stores/fileBrowserStore";
 import { PermissionMessage, UserQuestionMessage } from "./ui/PermissionCard";
 import { Button } from "./ui/primitives";
 import { MessageBubble } from "./ui/MessageBubble";
@@ -220,6 +223,22 @@ interface ChatViewProps {
   onToggleGitPanel?: () => void;
 }
 
+interface MentionCandidate {
+  name: string;
+  path: string;
+}
+
+const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
+  { name: "compact", description: "Clear history but keep a summary in context" },
+  { name: "context", description: "Show current context usage" },
+  { name: "init", description: "Initialize a CLAUDE.md file" },
+  { name: "debug", description: "Read session debug log" },
+  { name: "review", description: "Review a pull request" },
+  { name: "security-review", description: "Run security review on pending changes" },
+  { name: "pr-comments", description: "Get comments from a GitHub pull request" },
+  { name: "insights", description: "Generate session insights report" },
+];
+
 type RightPanelView = "none" | "file" | "git";
 
 interface VirtualMessageRowProps {
@@ -227,6 +246,14 @@ interface VirtualMessageRowProps {
   message: ChatMessage;
   onQuote?: (content: string) => void;
   onResend?: (content: string) => void;
+  onToggleFileBrowser?: () => void;
+  onSyncTodoList?: (content: string) => void;
+  onOpenFileLocation?: (path: string, line?: number) => void;
+  onApplyEditReview?: (path: string, action: "accept" | "reject") => void;
+  onTerminalAction?: (
+    terminalId: string,
+    action: "attach" | "stop" | "status",
+  ) => void;
 }
 
 const VirtualMessageRow = (props: VirtualMessageRowProps) => {
@@ -235,6 +262,11 @@ const VirtualMessageRow = (props: VirtualMessageRowProps) => {
       message={props.message}
       onQuote={props.onQuote}
       onResend={props.onResend}
+      onToggleFileBrowser={props.onToggleFileBrowser}
+      onSyncTodoList={props.onSyncTodoList}
+      onOpenFileLocation={props.onOpenFileLocation}
+      onApplyEditReview={props.onApplyEditReview}
+      onTerminalAction={props.onTerminalAction}
       class="pb-4"
     />
   );
@@ -264,6 +296,12 @@ export function ChatView(props: ChatViewProps) {
     const [permissionMode, setPermissionMode] = createSignal<
       "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove"
     >("AlwaysAsk");
+    const [mentionSuggestions, setMentionSuggestions] = createSignal<
+      MentionCandidate[]
+    >([]);
+    const [slashSuggestions, setSlashSuggestions] = createSignal<
+      SlashCommandItem[]
+    >([]);
     // Use props if provided, otherwise use internal state
     const [internalRightPanelView, setInternalRightPanelView] =
       createSignal<RightPanelView>("none");
@@ -271,6 +309,7 @@ export function ChatView(props: ChatViewProps) {
       props.rightPanelView ?? internalRightPanelView();
     const toolMessageIds = new Map<string, string>();
     let scrollRafId: number | undefined;
+    let mentionDebounceTimer: number | undefined;
     let lastScrollOffset = 0;
     const pendingPermissionsForModal = () =>
       pendingPermissions().map((permission) => ({
@@ -310,6 +349,164 @@ export function ChatView(props: ChatViewProps) {
         setUnseenMessageCount(0);
       } else if (userMovedViewport) {
         setShouldAutoFollow(false);
+      }
+    };
+
+    const pushSystem = (content: string) => {
+      if (!content.trim()) return;
+      chatStore.addMessage(props.sessionId, {
+        role: "system",
+        content,
+      });
+    };
+
+    const pushSystemCard = (content: string, systemCard: SystemCard) => {
+      chatStore.addMessage(props.sessionId, {
+        role: "system",
+        content,
+        systemCard,
+      });
+    };
+
+    const getActiveMentionToken = (
+      text: string,
+    ): { start: number; token: string } | null => {
+      const match = text.match(/(^|\s)(@[^\s@]*)$/);
+      if (!match || !match[2]) return null;
+      const token = match[2];
+      const start = text.length - token.length;
+      return { start, token };
+    };
+
+    const clearMentionSuggestions = () => {
+      setMentionSuggestions([]);
+    };
+
+    const applyMentionSelection = (path: string) => {
+      const current = inputValue();
+      const active = getActiveMentionToken(current);
+      if (!active) return;
+      const replacement = `@${path} `;
+      setInputValue(
+        `${current.slice(0, active.start)}${replacement}${current.slice(active.start + active.token.length)}`,
+      );
+      clearMentionSuggestions();
+    };
+
+    const renderToolContent = (contentItem: Record<string, unknown>) => {
+      const contentType = String(contentItem.type || "");
+      if (contentType === "diff") {
+        const path = String(contentItem.path || "");
+        const oldText = String(contentItem.oldText || "");
+        const newText = String(contentItem.newText || "");
+        pushSystem(
+          `[Edit Review] ${path}\n\`\`\`diff\n--- old\n+++ new\n-${oldText}\n+${newText}\n\`\`\``,
+        );
+        return;
+      }
+
+      if (contentType === "terminal") {
+        const terminalId = String(contentItem.terminalId || "");
+        pushSystem(`[Terminal] Interactive/background terminal: ${terminalId}`);
+        return;
+      }
+
+      if (contentType === "content") {
+        const nested = contentItem.content as Record<string, unknown> | undefined;
+        if (!nested) return;
+        if (nested.type === "image") {
+          const mimeType = String(nested.mimeType || "image/png");
+          const data = String(nested.data || "");
+          if (data) {
+            pushSystem(`![tool-image](data:${mimeType};base64,${data})`);
+          }
+          return;
+        }
+        if (nested.type === "text") {
+          const text = String(nested.text || "");
+          pushSystem(text);
+        }
+      }
+    };
+
+    const handleAcpRawEvent = (rawPayload: unknown) => {
+      const raw = rawPayload as Record<string, unknown> | undefined;
+      if (!raw || typeof raw !== "object") return;
+      const updateType = String(raw.sessionUpdate || raw.type || "");
+
+      if (updateType === "plan") {
+        const entries = Array.isArray(raw.entries)
+          ? (raw.entries as Array<Record<string, unknown>>)
+          : [];
+        if (entries.length === 0) return;
+        pushSystemCard("[TODO]", {
+          type: "todo_list",
+          entries: entries.map((entry) => ({
+            status: String(entry.status || "pending"),
+            content: String(entry.content || ""),
+          })),
+        });
+        return;
+      }
+
+      if (updateType === "available_commands_update") {
+        const rawCommands = raw.availableCommands ?? raw.available_commands;
+        const commands = Array.isArray(rawCommands)
+          ? (rawCommands as Array<Record<string, unknown>>)
+          : [];
+        const parsedCommands = commands
+          .map((cmd) => ({
+            name: String(cmd.name || "").trim(),
+            description: String(cmd.description || "").trim(),
+          }))
+          .filter((cmd) => cmd.name.length > 0);
+        chatStore.setSlashCommands(props.sessionId, parsedCommands);
+        setSlashSuggestions([]);
+        return;
+      }
+
+      if (updateType === "tool_call" || updateType === "tool_call_update") {
+        const locations = Array.isArray(raw.locations)
+          ? (raw.locations as Array<Record<string, unknown>>)
+          : [];
+        if (locations.length > 0) {
+          pushSystemCard("[Following]", {
+            type: "following",
+            locations: locations
+              .map((loc) => ({
+                path: String(loc.path || ""),
+                line: typeof loc.line === "number" ? (loc.line as number) : undefined,
+              }))
+              .filter((loc) => !!loc.path),
+          });
+        }
+
+        const content = Array.isArray(raw.content)
+          ? (raw.content as Array<Record<string, unknown>>)
+          : [];
+        for (const item of content) {
+          const itemType = String(item.type || "");
+          if (itemType === "diff") {
+            pushSystemCard("[Edit Review]", {
+              type: "edit_review",
+              path: String(item.path || ""),
+              oldText: String(item.oldText || ""),
+              newText: String(item.newText || ""),
+            });
+            continue;
+          }
+          if (itemType === "terminal") {
+            pushSystemCard("[Terminal]", {
+              type: "terminal",
+              terminalId: String(item.terminalId || ""),
+              title: String(item.title || ""),
+              mode: String(item.mode || ""),
+              status: String(item.status || ""),
+            });
+            continue;
+          }
+          renderToolContent(item);
+        }
       }
     };
 
@@ -644,6 +841,10 @@ export function ChatView(props: ChatViewProps) {
           // No action needed for display - just suppress the unknown event log
           break;
 
+        case "raw":
+          handleAcpRawEvent(parsed.data);
+          break;
+
         default:
           console.log("[ChatView] Unknown event type:", eventType, parsed);
       }
@@ -661,6 +862,9 @@ export function ChatView(props: ChatViewProps) {
       setIsStreaming(routerState.isStreaming);
 
       onCleanup(() => {
+        if (mentionDebounceTimer !== undefined) {
+          clearTimeout(mentionDebounceTimer);
+        }
         if (scrollRafId !== undefined) {
           cancelAnimationFrame(scrollRafId);
         }
@@ -675,6 +879,71 @@ export function ChatView(props: ChatViewProps) {
         const routerState = sessionEventRouter.getStreamingState(sid);
         setIsStreaming(routerState.isStreaming);
       }
+    });
+
+    createEffect(() => {
+      const text = inputValue();
+      const mention = getActiveMentionToken(text);
+      const activeSession = session();
+      const basePath = activeSession?.projectPath || props.projectPath || "";
+
+      if (!mention || !basePath || !isActive()) {
+        clearMentionSuggestions();
+        return;
+      }
+
+      if (props.sessionMode === "remote" && !activeSession?.controlSessionId) {
+        clearMentionSuggestions();
+        return;
+      }
+
+      if (mentionDebounceTimer !== undefined) {
+        clearTimeout(mentionDebounceTimer);
+      }
+
+      mentionDebounceTimer = window.setTimeout(async () => {
+        try {
+          const query = mention.token.slice(1);
+          const data =
+            props.sessionMode === "remote"
+              ? await invoke<MentionCandidate[]>("list_remote_mention_candidates", {
+                  sessionId: activeSession?.controlSessionId || "",
+                  basePath,
+                  query,
+                  limit: 20,
+                })
+              : await invoke<MentionCandidate[]>("list_mention_candidates", {
+                  basePath,
+                  query,
+                  limit: 20,
+                });
+          setMentionSuggestions(data);
+        } catch (error) {
+          console.error("Failed to load mention suggestions:", error);
+          clearMentionSuggestions();
+        }
+      }, 120);
+    });
+
+    createEffect(() => {
+      const raw = inputValue();
+      const match = raw.match(/^\/([^\s]*)$/);
+      if (!match) {
+        setSlashSuggestions([]);
+        return;
+      }
+      const keyword = match[1].toLowerCase();
+      const sessionCommands = chatStore.getSlashCommands(props.sessionId);
+      const all =
+        sessionCommands.length > 0 ? sessionCommands : DEFAULT_SLASH_COMMANDS;
+      if (all.length === 0) {
+        setSlashSuggestions([]);
+        return;
+      }
+      const filtered = all.filter((cmd) =>
+        cmd.name.toLowerCase().includes(keyword),
+      );
+      setSlashSuggestions(filtered.slice(0, 20));
     });
 
     // Load pending permissions for local sessions (restore after reload)
@@ -781,6 +1050,109 @@ export function ChatView(props: ChatViewProps) {
       }
     };
 
+    const dispatchMessageToAgent = async (
+      sessionId: string,
+      content: string,
+      attachments: string[],
+    ) => {
+      if (props.sessionMode === "local") {
+        if (isMobile()) {
+          await invoke("mobile_send_agent_message", {
+            sessionId,
+            content,
+            attachments,
+          });
+        } else {
+          await invoke("local_send_agent_message", {
+            sessionId,
+            content,
+            attachments,
+          });
+        }
+      } else {
+        const controlSessionId = sessionStore.getSession(sessionId)?.controlSessionId;
+        await invoke("send_agent_message", {
+          sessionId,
+          content,
+          controlSessionId,
+          attachments,
+        });
+      }
+    };
+
+    const handleSyncTodoList = async (content: string) => {
+      const sessionId = props.sessionId;
+      if (!sessionId || !content.trim() || isStreaming()) return;
+
+      setIsStreaming(true);
+      setShouldAutoFollow(true);
+      chatStore.addMessage(sessionId, {
+        role: "user",
+        content,
+      });
+
+      try {
+        await dispatchMessageToAgent(sessionId, content, []);
+        props.onSendMessage?.(content);
+      } catch (error) {
+        const errorMsg =
+          error instanceof Error
+            ? error.message
+            : props.sessionMode === "remote"
+              ? "Failed to sync TODO list to remote agent"
+              : "Failed to sync TODO list to local agent";
+        notificationStore.error(errorMsg, "TODO Sync Error");
+        chatStore.addMessage(sessionId, {
+          role: "system",
+          content: `Error: ${errorMsg}`,
+        });
+        setIsStreaming(false);
+      }
+    };
+
+    const handleSelectSlash = (name: string) => {
+      if (!name.trim()) return;
+      const commandText = `/${name} `;
+      setInputValue(commandText);
+      setSlashSuggestions([]);
+    };
+
+    const handleApplyEditReview = async (
+      path: string,
+      action: "accept" | "reject",
+    ) => {
+      const content =
+        action === "accept"
+          ? `Please apply the proposed edit review changes for \`${path}\`.`
+          : `Please discard/revert the proposed edit review changes for \`${path}\` and explain the reason.`;
+      await handleSyncTodoList(content);
+    };
+
+    const handleTerminalAction = async (
+      terminalId: string,
+      action: "attach" | "stop" | "status",
+    ) => {
+      if (!terminalId) return;
+      const content =
+        action === "attach"
+          ? `Attach to terminal ${terminalId} and continue running commands in that terminal.`
+          : action === "stop"
+            ? `Stop terminal ${terminalId} and summarize final output.`
+            : `Check terminal ${terminalId} status and latest output.`;
+      await handleSyncTodoList(content);
+    };
+
+    const handleOpenFileLocation = (path: string, line?: number) => {
+      if (!path) return;
+      toggleRightPanel("file");
+      const activeSession = session();
+      const basePath = activeSession?.projectPath || props.projectPath || ".";
+      const normalizedPath = path.startsWith("/")
+        ? path
+        : `${basePath.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+      fileBrowserStore.requestOpenFile(normalizedPath, line);
+    };
+
     const handleSend = async () => {
       const sessionId = props.sessionId;
       console.log(
@@ -799,6 +1171,7 @@ export function ChatView(props: ChatViewProps) {
       }
 
       setInputValue("");
+      setSlashSuggestions([]);
       setIsStreaming(true);
       setShouldAutoFollow(true);
 
@@ -870,20 +1243,7 @@ export function ChatView(props: ChatViewProps) {
             content,
           });
           try {
-            // On mobile, use mobile-specific command
-            if (isMobile()) {
-              await invoke("mobile_send_agent_message", {
-                sessionId,
-                content,
-                attachments: attachmentPaths,
-              });
-            } else {
-              await invoke("local_send_agent_message", {
-                sessionId,
-                content,
-                attachments: attachmentPaths,
-              });
-            }
+            await dispatchMessageToAgent(sessionId, content, attachmentPaths);
             console.log("[ChatView] Message sent successfully");
           } catch (error) {
             console.error("[ChatView] Failed to send message:", error);
@@ -910,14 +1270,7 @@ export function ChatView(props: ChatViewProps) {
             content,
           });
           try {
-            const controlSessionId =
-              sessionStore.getSession(sessionId)?.controlSessionId;
-            await invoke("send_agent_message", {
-              sessionId,
-              content,
-              controlSessionId,
-              attachments: attachmentPaths,
-            });
+            await dispatchMessageToAgent(sessionId, content, attachmentPaths);
             console.log("[ChatView] Remote message sent successfully");
           } catch (error) {
             console.error("[ChatView] Failed to send remote message:", error);
@@ -1256,6 +1609,11 @@ export function ChatView(props: ChatViewProps) {
                         message={message}
                         onQuote={handleQuoteMessage}
                         onResend={handleResendMessage}
+                        onToggleFileBrowser={() => toggleRightPanel("file")}
+                        onSyncTodoList={handleSyncTodoList}
+                        onOpenFileLocation={handleOpenFileLocation}
+                        onApplyEditReview={handleApplyEditReview}
+                        onTerminalAction={handleTerminalAction}
                       />
                     )}
                   </Virtualizer>
@@ -1381,7 +1739,15 @@ export function ChatView(props: ChatViewProps) {
             >
               <ChatInput
                 value={inputValue()}
-                onInput={setInputValue}
+                onInput={(value) => {
+                  setInputValue(value);
+                  if (!value.includes("@")) {
+                    clearMentionSuggestions();
+                  }
+                  if (!value.startsWith("/")) {
+                    setSlashSuggestions([]);
+                  }
+                }}
                 onSubmit={handleSend}
                 onInterrupt={handleAbort}
                 onAttach={handleAttachFiles}
@@ -1401,6 +1767,12 @@ export function ChatView(props: ChatViewProps) {
                 rightPanelView={rightPanelView()}
                 onToggleFileBrowser={() => toggleRightPanel("file")}
                 onToggleGitPanel={() => toggleRightPanel("git")}
+                mentionSuggestions={mentionSuggestions()}
+                onSelectMention={applyMentionSelection}
+                onDismissMentions={clearMentionSuggestions}
+                slashSuggestions={slashSuggestions()}
+                onSelectSlash={handleSelectSlash}
+                onDismissSlash={() => setSlashSuggestions([])}
               />
             </Show>
           </div>

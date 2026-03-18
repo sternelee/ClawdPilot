@@ -578,6 +578,11 @@ pub enum AgentMessageContent {
         level: NotificationLevel,
         message: String,
     },
+    /// 原始事件（用于透传 ACP 扩展能力）
+    RawEvent {
+        event_type: String,
+        data: serde_json::Value,
+    },
 }
 
 /// 工具调用状态
@@ -811,6 +816,12 @@ pub struct FileBrowserMessage {
 pub enum FileBrowserAction {
     /// 列出目录内容
     ListDirectory { path: String },
+    /// 列出 @mention 文件候选
+    ListMentionCandidates {
+        base_path: String,
+        query: String,
+        limit: Option<usize>,
+    },
     /// 读取文件内容
     ReadFile { path: String },
     /// 写入文件
@@ -856,6 +867,9 @@ pub enum RemoteSpawnAction {
         agent_type: AgentType,
         project_path: String,
         args: Vec<String>,
+        /// Optional MCP server configuration in ACP JSON format
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mcp_servers: Option<serde_json::Value>,
     },
     /// 列出远程 CLI 已创建的 agent 会话
     ListSessions,

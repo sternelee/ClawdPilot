@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
@@ -17,6 +18,13 @@ pub struct FileBrowserEntry {
     pub path: String,
     pub is_dir: bool,
     pub size: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MentionCandidate {
+    pub name: String,
+    pub path: String,
 }
 
 /// Validate a path to prevent directory traversal attacks.
@@ -99,6 +107,148 @@ fn normalize_path(path: &str) -> PathBuf {
             .unwrap_or_else(|_| PathBuf::from("."))
             .join(expanded)
     }
+}
+
+fn score_mention_candidate(candidate: &str, needle: &str) -> i32 {
+    let c = candidate.to_lowercase();
+    let n = needle.to_lowercase();
+    if c == n {
+        return 0;
+    }
+    if c.starts_with(&n) {
+        return 1;
+    }
+    if c.contains(&n) {
+        return 2;
+    }
+    3
+}
+
+fn parse_mention_query(query: &str) -> (String, String) {
+    let clean = query.trim().trim_start_matches('@');
+    if clean.is_empty() {
+        return ("".to_string(), "".to_string());
+    }
+    if let Some(idx) = clean.rfind('/') {
+        let dir = clean[..idx].to_string();
+        let needle = clean[idx + 1..].to_string();
+        (dir, needle)
+    } else {
+        ("".to_string(), clean.to_string())
+    }
+}
+
+fn should_skip_name(name: &OsStr) -> bool {
+    let name = name.to_string_lossy();
+    name == ".git" || name == "node_modules" || name == "target"
+}
+
+fn fallback_collect_files(dir: &Path, max_results: usize) -> Vec<PathBuf> {
+    use ignore::WalkBuilder;
+
+    let mut out = Vec::new();
+    let mut builder = WalkBuilder::new(dir);
+    builder
+        .hidden(false)
+        .ignore(true)
+        .git_ignore(true)
+        .git_exclude(true)
+        .parents(true)
+        .max_depth(Some(8));
+
+    let walker = builder.build();
+    for entry in walker.flatten() {
+        if out.len() >= max_results {
+            break;
+        }
+        let path = entry.path();
+        if let Some(name) = path.file_name() {
+            if should_skip_name(name) {
+                continue;
+            }
+        }
+        if path.is_file() {
+            out.push(path.to_path_buf());
+        }
+    }
+
+    out
+}
+
+pub fn list_mention_candidates(
+    base_path: &str,
+    query: &str,
+    limit: Option<usize>,
+) -> Result<Vec<MentionCandidate>, String> {
+    let limit = limit.unwrap_or(20).clamp(1, 200);
+    let base = normalize_path(base_path);
+
+    if !base.exists() || !base.is_dir() {
+        return Err(format!("Base path is invalid: {}", base.display()));
+    }
+
+    let (dir_hint, needle) = parse_mention_query(query);
+    let search_root = if dir_hint.is_empty() {
+        base.clone()
+    } else {
+        base.join(dir_hint)
+    };
+
+    if !search_root.exists() || !search_root.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let rg_output = Command::new("rg")
+        .args([
+            "--files",
+            "--hidden",
+            "--glob",
+            "!**/.git",
+            "--glob",
+            "!**/node_modules",
+            "--glob",
+            "!**/target",
+        ])
+        .current_dir(&search_root)
+        .output();
+
+    let files: Vec<PathBuf> = match rg_output {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| search_root.join(line))
+            .collect(),
+        _ => fallback_collect_files(&search_root, limit * 8),
+    };
+
+    let needle_lc = needle.to_lowercase();
+    let mut candidates: Vec<MentionCandidate> = files
+        .into_iter()
+        .filter_map(|path| {
+            let rel = path.strip_prefix(&base).ok()?.to_string_lossy().to_string();
+            let name = path.file_name()?.to_string_lossy().to_string();
+            if needle_lc.is_empty() {
+                return Some(MentionCandidate { name, path: rel });
+            }
+            let rel_lc = rel.to_lowercase();
+            let name_lc = name.to_lowercase();
+            if rel_lc.contains(&needle_lc) || name_lc.contains(&needle_lc) {
+                Some(MentionCandidate { name, path: rel })
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        let sa = score_mention_candidate(&a.path, &needle);
+        let sb = score_mention_candidate(&b.path, &needle);
+        sa.cmp(&sb)
+            .then_with(|| a.path.len().cmp(&b.path.len()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    candidates.truncate(limit);
+    Ok(candidates)
 }
 
 pub fn list_directory(path: &str) -> Result<Vec<DirEntry>, String> {

@@ -195,6 +195,7 @@ impl AgentManager {
     ///
     /// # Returns
     /// Session ID if successful, error otherwise
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_session(
         &self,
         agent_type: AgentType,
@@ -202,6 +203,7 @@ impl AgentManager {
         extra_args: Vec<String>,
         working_dir: PathBuf,
         home_dir: Option<String>,
+        mcp_servers: Option<serde_json::Value>,
         _source: String,
     ) -> Result<String> {
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -212,6 +214,7 @@ impl AgentManager {
             extra_args,
             working_dir,
             home_dir,
+            mcp_servers,
             _source,
         )
         .await?;
@@ -221,6 +224,7 @@ impl AgentManager {
     /// Start an agent session with specific session ID
     ///
     /// For all external agents, this creates an ACP-based session.
+    #[allow(clippy::too_many_arguments)]
     pub async fn start_session_with_id(
         &self,
         session_id: String,
@@ -229,6 +233,7 @@ impl AgentManager {
         extra_args: Vec<String>,
         working_dir: PathBuf,
         home_dir: Option<String>,
+        mcp_servers: Option<serde_json::Value>,
         _source: String,
     ) -> Result<()> {
         info!("Starting {:?} session with ID: {}", agent_type, session_id);
@@ -415,6 +420,7 @@ impl AgentManager {
                 launch_config.env,
                 working_dir.clone(),
                 home_dir,
+                mcp_servers,
             )
             .await
             .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?;
@@ -576,6 +582,7 @@ impl AgentManager {
             launch_config.env,
             working_dir.clone(),
             home_dir,
+            None,
             start_mode,
             acp::RetryConfig::default(),
         )

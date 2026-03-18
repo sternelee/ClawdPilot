@@ -6,13 +6,12 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shared::{
-    AgentControlAction, AgentHistoryEntry, AgentPermissionMode, AgentSessionAction,
-    AgentSessionMetadata, AgentType, AvailableTools, CommunicationManager, FileBrowserAction,
-    GitAction, Message, MessageBuilder, MessageHandler, MessagePayload, MessageType,
-    NotificationData, NotificationType, OSInfo, PackageManager, QuicMessageServer,
-    QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage, ShellInfo, SystemAction,
-    SystemInfo, SystemInfoAction, TcpDataType, TcpForwardingAction, TcpForwardingType,
-    TcpStreamHandler, Tool, UserInfo,
+    AgentControlAction, AgentPermissionMode, AgentSessionAction, AgentSessionMetadata, AgentType,
+    AvailableTools, CommunicationManager, FileBrowserAction, GitAction, Message, MessageBuilder,
+    MessageHandler, MessagePayload, MessageType, NotificationData, NotificationType, OSInfo,
+    PackageManager, QuicMessageServer, QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage,
+    ShellInfo, SystemAction, SystemInfo, SystemInfoAction, TcpDataType, TcpForwardingAction,
+    TcpForwardingType, TcpStreamHandler, Tool, UserInfo,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -2002,6 +2001,25 @@ impl FileBrowserMessageHandler {
             ))),
         }
     }
+
+    async fn handle_list_mention_candidates(
+        &self,
+        base_path: String,
+        query: String,
+        limit: Option<usize>,
+        request_id: Option<String>,
+    ) -> Result<Option<Message>> {
+        let candidates = shared::list_mention_candidates(&base_path, &query, limit)
+            .map_err(|e| anyhow::anyhow!("Failed to list mention candidates: {}", e))?;
+        let candidates_json = serde_json::to_value(candidates)?;
+        Ok(Some(MessageBuilder::response(
+            "cli".to_string(),
+            request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+            true,
+            Some(serde_json::json!({ "candidates": candidates_json })),
+            None,
+        )))
+    }
 }
 
 #[async_trait::async_trait]
@@ -2012,6 +2030,19 @@ impl MessageHandler for FileBrowserMessageHandler {
                 FileBrowserAction::ListDirectory { path } => {
                     self.handle_list_directory(path.clone(), fb.request_id.clone())
                         .await
+                }
+                FileBrowserAction::ListMentionCandidates {
+                    base_path,
+                    query,
+                    limit,
+                } => {
+                    self.handle_list_mention_candidates(
+                        base_path.clone(),
+                        query.clone(),
+                        *limit,
+                        fb.request_id.clone(),
+                    )
+                    .await
                 }
                 FileBrowserAction::ReadFile { path } => self.handle_read_file(path.clone()).await,
                 _ => Ok(None),
@@ -2295,6 +2326,7 @@ impl RemoteSpawnMessageHandler {
         agent_type: AgentType,
         project_path: String,
         args: Vec<String>,
+        mcp_servers: Option<serde_json::Value>,
         request_id: Option<String>,
     ) -> Result<Option<Message>> {
         tracing::info!(
@@ -2335,6 +2367,7 @@ impl RemoteSpawnMessageHandler {
                 args.clone(),
                 working_dir,
                 None,
+                mcp_servers,
                 "remote".to_string(),
             )
             .await
@@ -2428,12 +2461,14 @@ impl MessageHandler for RemoteSpawnMessageHandler {
                     agent_type,
                     project_path,
                     args,
+                    mcp_servers,
                 } => {
                     self.handle_spawn_session(
                         session_id.clone(),
                         agent_type.clone(),
                         project_path.clone(),
                         args.clone(),
+                        mcp_servers.clone(),
                         spawn_msg.request_id.clone(),
                     )
                     .await
@@ -2604,7 +2639,6 @@ impl AgentControlMessageHandler {
                 let agent_type = parse_agent_type(agent_type)?;
                 let working_dir = expand_path(project_path);
 
-                let launch_config = shared::AgentFactory::get_acp_launch(agent_type);
                 let new_session_id = self
                     .agent_manager
                     .start_session_from_history_with_id(

@@ -332,9 +332,9 @@ pub fn event_to_agent_message_content(
         },
 
         // Raw events - pass through as system notification
-        AgentEvent::Raw { data, .. } => AgentMessageContent::SystemNotification {
-            level: NotificationLevel::Info,
-            message: data.to_string(),
+        AgentEvent::Raw { data, .. } => AgentMessageContent::RawEvent {
+            event_type: "raw".to_string(),
+            data: data.clone(),
         },
 
         // Progress updates

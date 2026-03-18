@@ -30,6 +30,12 @@ export interface FileContent {
   content: string
 }
 
+export interface FileOpenRequest {
+  path: string
+  line?: number
+  nonce: number
+}
+
 export type NavigationAction =
   | { type: 'navigate'; path: string }
   | { type: 'back' }
@@ -63,6 +69,9 @@ interface FileBrowserState {
 
   // View mode
   viewMode: 'list' | 'grid'
+
+  // External open-file requests (e.g. following card click)
+  openRequest: FileOpenRequest | null
 }
 
 const initialState: FileBrowserState = {
@@ -76,6 +85,7 @@ const initialState: FileBrowserState = {
   error: null,
   selectedPath: null,
   viewMode: 'list',
+  openRequest: null,
 }
 
 export const createFileBrowserStore = () => {
@@ -179,6 +189,19 @@ export const createFileBrowserStore = () => {
     setState('viewMode', mode)
   }
 
+  const requestOpenFile = (path: string, line?: number) => {
+    setState(
+      produce((s: FileBrowserState) => {
+        const nonce = (s.openRequest?.nonce ?? 0) + 1
+        s.openRequest = { path, line, nonce }
+      }),
+    )
+  }
+
+  const clearOpenRequest = () => {
+    setState('openRequest', null)
+  }
+
   // ========================================================================
   // Derived State
   // ========================================================================
@@ -228,6 +251,8 @@ export const createFileBrowserStore = () => {
 
     // View Mode
     setViewMode,
+    requestOpenFile,
+    clearOpenRequest,
 
     // Derived
     canGoBack,

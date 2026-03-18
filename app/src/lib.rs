@@ -30,8 +30,9 @@ use shared::AgentManager;
 use shared::{
     AgentControlAction, AgentPermissionMode, AgentPermissionResponse, AgentType,
     CommunicationManager, DirEntry, Event, EventListener, EventType, FileBrowserAction,
-    FileBrowserEntry, Message as ClawdChatMessage, MessageBuilder, MessagePayload,
-    QuicMessageClientHandle, SystemAction, TcpDataType, TcpForwardingAction, TcpForwardingType,
+    FileBrowserEntry, MentionCandidate, Message as ClawdChatMessage, MessageBuilder,
+    MessagePayload, QuicMessageClientHandle, SystemAction, TcpDataType, TcpForwardingAction,
+    TcpForwardingType,
 };
 
 use crate::tcp_forwarding::TcpForwardingManager;
@@ -1008,6 +1009,14 @@ async fn connect_to_peer(
                                             "type": "turn_error",
                                             "error": error,
                                         }),
+                                        shared::message_protocol::AgentMessageContent::RawEvent {
+                                            event_type,
+                                            data,
+                                        } => serde_json::json!({
+                                            "sessionId": agent_msg.session_id,
+                                            "type": event_type,
+                                            "data": data,
+                                        }),
                                     };
 
                                     // Emit agent message event to frontend
@@ -1479,6 +1488,15 @@ async fn list_directory(path: String) -> Result<Vec<DirEntry>, String> {
     shared::list_directory(&path)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn list_mention_candidates(
+    base_path: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<MentionCandidate>, String> {
+    shared::list_mention_candidates(&base_path, &query, limit)
+}
+
 #[tauri::command]
 async fn file_browser_list(path: String) -> FileBrowserListResponse {
     match shared::file_browser_list(&path) {
@@ -1685,6 +1703,65 @@ async fn list_remote_directory(
 
     // Return the request_id so frontend can match the response
     Ok(request_id)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn list_remote_mention_candidates(
+    session_id: String,
+    base_path: String,
+    query: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<MentionCandidate>, String> {
+    let session = {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or("Session not found")?
+    };
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let action = FileBrowserAction::ListMentionCandidates {
+        base_path,
+        query,
+        limit,
+    };
+    let message = MessageBuilder::file_browser(
+        "clawdchat_app".to_string(),
+        action,
+        Some(request_id.clone()),
+    )
+    .with_session(session_id);
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        message,
+        &request_id,
+        "list mention candidates",
+        10,
+    )
+    .await?;
+
+    if !response.success {
+        return Err(response
+            .message
+            .unwrap_or_else(|| "Failed to list mention candidates".to_string()));
+    }
+
+    let data = response
+        .data
+        .ok_or_else(|| "Missing mention candidates response data".to_string())?;
+    let payload: serde_json::Value =
+        serde_json::from_str(&data).map_err(|e| format!("Invalid response data: {}", e))?;
+
+    let value = payload
+        .get("candidates")
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(Vec::new()));
+    serde_json::from_value::<Vec<MentionCandidate>>(value)
+        .map_err(|e| format!("Invalid mention candidates payload: {}", e))
 }
 
 #[tauri::command]
@@ -2092,6 +2169,7 @@ async fn remote_spawn_session(
     agent_type: String,
     project_path: String,
     args: Vec<String>,
+    mcp_servers: Option<serde_json::Value>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     let session = {
@@ -2136,6 +2214,7 @@ async fn remote_spawn_session(
                 agent_type,
                 project_path: project_path,
                 args,
+                mcp_servers,
             },
             request_id: None,
         }),
@@ -2516,6 +2595,7 @@ async fn local_start_agent(
     project_path: String,
     session_id: Option<String>,
     extra_args: Option<Vec<String>>,
+    mcp_servers: Option<serde_json::Value>,
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
@@ -2606,6 +2686,7 @@ async fn local_start_agent(
             extra_args.unwrap_or_default(), // extra_args
             working_dir,                    // working_dir
             None,                           // home_dir
+            mcp_servers,                    // mcp_servers
             "local".to_string(),            // source
         )
         .await
@@ -2692,6 +2773,30 @@ async fn local_abort_agent_action(
         .interrupt_session(&session_id)
         .await
         .map_err(|e| format!("Failed to interrupt local agent: {}", e))
+}
+
+/// Stop a local agent session (backward-compatible command used by sidebar)
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command(rename_all = "camelCase")]
+async fn local_stop_agent(session_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    match manager.stop_session(&session_id).await {
+        Ok(()) => Ok(()),
+        Err(stop_err) => manager
+            .force_stop_session(&session_id)
+            .await
+            .map_err(|force_err| {
+                format!(
+                    "Failed to stop local agent (graceful: {}; force: {})",
+                    stop_err, force_err
+                )
+            }),
+    }
 }
 
 /// List all active local agent sessions
@@ -3179,11 +3284,13 @@ pub fn run() {
             get_node_info,
             parse_session_ticket,
             list_directory,
+            list_mention_candidates,
             file_browser_list,
             file_browser_read,
             git_status,
             git_diff,
             list_remote_directory, // List remote directory via P2P
+            list_remote_mention_candidates,
             // TCP Forwarding Management
             create_tcp_forwarding_session,
             list_tcp_forwarding_sessions,
@@ -3202,6 +3309,8 @@ pub fn run() {
             set_permission_mode,
             // ACP Package Installation
             install_acp_package_remote,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            install_acp_package_local,
             // Local Agent Commands (desktop only)
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_start_agent,
@@ -3209,6 +3318,8 @@ pub fn run() {
             local_send_agent_message,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_abort_agent_action,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            local_stop_agent,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_respond_to_agent_permission,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]

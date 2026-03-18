@@ -119,6 +119,7 @@ interface SessionState {
   newSessionAgent: AgentType;
   newSessionPath: string;
   newSessionArgs: string;
+  newSessionMcpServers: string;
   sessionTicket: string;
   targetControlSessionId: string | null;
 
@@ -152,6 +153,7 @@ const initialState: SessionState = {
   newSessionAgent: "claude",
   newSessionPath: "",
   newSessionArgs: "",
+  newSessionMcpServers: "",
   sessionTicket: getLastTicket() || "",
   targetControlSessionId: null,
 
@@ -287,6 +289,10 @@ export const createSessionStore = () => {
 
   const setNewSessionArgs = (args: string) => {
     setState("newSessionArgs", args);
+  };
+
+  const setNewSessionMcpServers = (json: string) => {
+    setState("newSessionMcpServers", json);
   };
 
   const setSessionTicket = (ticket: string) => {
@@ -507,6 +513,26 @@ export const createSessionStore = () => {
     return matches.map((arg) => arg.replace(/^\"|\"$/g, ""));
   };
 
+  const parseMcpServers = (): unknown | undefined => {
+    const raw = state.newSessionMcpServers.trim();
+    if (!raw) return undefined;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        notificationStore.error(
+          "MCP Servers must be a JSON array",
+          "Invalid MCP Config",
+        );
+        return undefined;
+      }
+      return parsed;
+    } catch {
+      notificationStore.error("MCP Servers JSON is invalid", "Invalid MCP Config");
+      return undefined;
+    }
+  };
+
   const handleRemoteSpawn = async () => {
     const controlSessionId = state.targetControlSessionId;
     if (!controlSessionId) {
@@ -522,11 +548,13 @@ export const createSessionStore = () => {
     setStartingAgent(true);
 
     try {
+      const mcpServers = parseMcpServers();
       await invoke("remote_spawn_session", {
         connectionSessionId: controlSessionId,
         agentType: state.newSessionAgent,
         projectPath: state.newSessionPath,
         args: buildExtraArgs(),
+        mcpServers,
       });
 
       notificationStore.success(
@@ -536,6 +564,7 @@ export const createSessionStore = () => {
       closeNewSessionModal();
       setNewSessionPath("");
       setNewSessionArgs("");
+      setNewSessionMcpServers("");
     } catch (error) {
       console.error(
         "[handleRemoteSpawn] Failed to spawn remote session:",
@@ -564,6 +593,7 @@ export const createSessionStore = () => {
 
     try {
       const extraArgs = buildExtraArgs();
+      const mcpServers = parseMcpServers();
 
       let sessionId: string;
 
@@ -573,6 +603,7 @@ export const createSessionStore = () => {
         projectPath: state.newSessionPath,
         sessionId: undefined,
         extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
+        mcpServers,
       });
 
       const newSession: AgentSessionMetadata = {
@@ -595,6 +626,7 @@ export const createSessionStore = () => {
       closeNewSessionModal();
       setNewSessionPath("");
       setNewSessionArgs("");
+      setNewSessionMcpServers("");
     } catch (error) {
       console.error(
         "[handleCreateSession] Failed to start local agent:",
@@ -657,6 +689,7 @@ export const createSessionStore = () => {
     setNewSessionAgent,
     setNewSessionPath,
     setNewSessionArgs,
+    setNewSessionMcpServers,
     setSessionTicket,
     setConnectionError,
     setConnecting,

@@ -16,6 +16,44 @@ import { createStore, produce } from 'solid-js/store'
 
 export type MessageRole = 'user' | 'assistant' | 'system'
 
+export interface FollowingLocation {
+  path: string
+  line?: number
+}
+
+export interface TodoEntry {
+  content: string
+  status: string
+}
+
+export interface SlashCommandItem {
+  name: string
+  description?: string
+}
+
+export type SystemCard =
+  | {
+      type: 'following'
+      locations: FollowingLocation[]
+    }
+  | {
+      type: 'edit_review'
+      path: string
+      oldText: string
+      newText: string
+    }
+  | {
+      type: 'todo_list'
+      entries: TodoEntry[]
+    }
+  | {
+      type: 'terminal'
+      terminalId: string
+      title?: string
+      mode?: string
+      status?: string
+    }
+
 export interface ChatMessage {
   id: string
   role: MessageRole
@@ -25,6 +63,7 @@ export interface ChatMessage {
   messageId?: string
   toolCalls?: ToolCall[]
   attachments?: Attachment[]
+  systemCard?: SystemCard
 }
 
 export interface ToolCall {
@@ -80,6 +119,8 @@ interface ChatState {
   attachments: Record<string, Attachment[]>
   // Unread message counts per session (for sidebar notification)
   unreadCounts: Record<string, number>
+  // Per-session custom slash commands from agent runtime updates
+  slashCommands: Record<string, SlashCommandItem[]>
 }
 
 const initialState: ChatState = {
@@ -91,6 +132,7 @@ const initialState: ChatState = {
   toolStatus: {},
   attachments: {},
   unreadCounts: {},
+  slashCommands: {},
 }
 
 export const createChatStore = () => {
@@ -386,6 +428,30 @@ export const createChatStore = () => {
     )
   }
 
+  // ========================================================================
+  // Slash Commands
+  // ========================================================================
+
+  const getSlashCommands = (sessionId: string): SlashCommandItem[] => {
+    return state.slashCommands[sessionId] || []
+  }
+
+  const setSlashCommands = (sessionId: string, commands: SlashCommandItem[]) => {
+    setState(
+      produce((s: ChatState) => {
+        s.slashCommands[sessionId] = commands
+      }),
+    )
+  }
+
+  const clearSlashCommands = (sessionId: string) => {
+    setState(
+      produce((s: ChatState) => {
+        delete s.slashCommands[sessionId]
+      }),
+    )
+  }
+
   return {
     // State
     state,
@@ -432,6 +498,11 @@ export const createChatStore = () => {
     incrementUnread,
     markAsRead,
     clearUnread,
+
+    // Slash Commands
+    getSlashCommands,
+    setSlashCommands,
+    clearSlashCommands,
   }
 }
 
