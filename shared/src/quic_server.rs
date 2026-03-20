@@ -652,97 +652,166 @@ impl QuicMessageServer {
         mut send_stream: iroh::endpoint::SendStream,
         mut recv_stream: iroh::endpoint::RecvStream,
         communication_manager: Arc<CommunicationManager>,
-        _connection_id: String,
+        connection_id: String,
         initial_data: Vec<u8>,
     ) -> Result<()> {
         let mut buffer = vec![0u8; 8192];
-
-        // 首先处理初始数据
+        // 累积缓冲区：支持半包/粘包
         let mut pending_data = initial_data;
+        debug!(
+            "message-stream start: connection_id={}, initial_data_len={}",
+            connection_id,
+            pending_data.len()
+        );
 
         loop {
-            // 如果有待处理的数据，先处理它
-            let data = if !pending_data.is_empty() {
-                // 尝试读取更多数据来组成完整的消息
-                match recv_stream.read(&mut buffer).await {
-                    Ok(Some(n)) => {
-                        pending_data.extend_from_slice(&buffer[..n]);
-                        std::mem::take(&mut pending_data)
-                    }
-                    Ok(None) => {
-                        // 流关闭，尝试处理剩余数据
-                        if pending_data.is_empty() {
-                            break;
-                        }
-                        std::mem::take(&mut pending_data)
-                    }
-                    Err(e) => {
-                        error!("Error reading from stream: {}", e);
-                        break;
-                    }
-                }
-            } else {
-                // 正常读取
-                match recv_stream.read(&mut buffer).await {
-                    Ok(Some(n)) => buffer[..n].to_vec(),
-                    Ok(None) => {
-                        debug!("Stream closed by peer");
-                        break;
-                    }
-                    Err(e) => {
-                        error!("Error reading from stream: {}", e);
-                        break;
-                    }
-                }
-            };
+            // 尽可能解析 pending_data 里的完整帧：[len:4be][payload:len]
+            while pending_data.len() >= 4 {
+                let length = u32::from_be_bytes([
+                    pending_data[0],
+                    pending_data[1],
+                    pending_data[2],
+                    pending_data[3],
+                ]) as usize;
 
-            // 尝试反序列化消息
-            match MessageSerializer::deserialize_from_network(&data) {
-                Ok(message) => {
-                    info!(
-                        "📨 Received message: type={:?}, sender={}, requires_response={}",
-                        message.message_type, message.sender_id, message.requires_response
-                    );
+                if pending_data.len() < 4 + length {
+                    // 半包，继续读取
+                    break;
+                }
 
-                    // 处理传入消息
-                    match communication_manager
-                        .receive_incoming_message(message.clone())
-                        .await
-                    {
-                        Ok(Some(response)) => {
-                            // 处理器返回了响应，发送它
-                            info!("📤 Sending handler-generated response");
-                            if let Err(e) = Self::send_message(&mut send_stream, &response).await {
-                                error!("Failed to send response: {}", e);
-                            }
-                        }
-                        Ok(None) => {
-                            info!("✅ Message processed, no response needed");
-                            // 处理成功但没有响应，如果需要则发送默认响应
-                            if message.requires_response {
-                                let response = Self::create_default_response(&message);
+                let message_bytes = pending_data[4..4 + length].to_vec();
+                pending_data.drain(..4 + length);
+
+                match Message::from_bytes(&message_bytes) {
+                    Ok(message) => {
+                        info!(
+                            "📨 Received message: connection_id={}, type={:?}, sender={}, requires_response={}, frame_len={}",
+                            connection_id,
+                            message.message_type,
+                            message.sender_id,
+                            message.requires_response,
+                            message_bytes.len()
+                        );
+
+                        // 处理传入消息
+                        match communication_manager
+                            .receive_incoming_message(message.clone())
+                            .await
+                        {
+                            Ok(Some(response)) => {
+                                // 处理器返回了响应，发送它
+                                info!("📤 Sending handler-generated response");
                                 if let Err(e) =
                                     Self::send_message(&mut send_stream, &response).await
                                 {
-                                    error!("Failed to send default response: {}", e);
+                                    error!("Failed to send response: {}", e);
+                                }
+                            }
+                            Ok(None) => {
+                                info!("✅ Message processed, no response needed");
+                                // 处理成功但没有响应，如果需要则发送默认响应
+                                if message.requires_response {
+                                    let response = Self::create_default_response(&message);
+                                    if let Err(e) =
+                                        Self::send_message(&mut send_stream, &response).await
+                                    {
+                                        error!("Failed to send default response: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to process incoming message: {}", e);
+                                // 发送错误响应
+                                let error_response = message
+                                    .create_error_response(format!("Failed to process message: {}", e));
+                                if let Err(e) =
+                                    Self::send_message(&mut send_stream, &error_response).await
+                                {
+                                    error!("Failed to send error response: {}", e);
                                 }
                             }
                         }
-                        Err(e) => {
-                            error!("Failed to process incoming message: {}", e);
-                            // 发送错误响应
-                            let error_response = message
-                                .create_error_response(format!("Failed to process message: {}", e));
-                            if let Err(e) =
-                                Self::send_message(&mut send_stream, &error_response).await
-                            {
-                                error!("Failed to send error response: {}", e);
+                    }
+                    Err(e) => {
+                        let preview = message_bytes
+                            .iter()
+                            .take(24)
+                            .map(|b| format!("{:02x}", b))
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        // Best-effort frame introspection for protocol mismatch diagnostics.
+                        let mut parsed_id: Option<String> = None;
+                        let mut parsed_type_tag: Option<u32> = None;
+                        if message_bytes.len() >= 8 {
+                            let id_len = u64::from_le_bytes([
+                                message_bytes[0],
+                                message_bytes[1],
+                                message_bytes[2],
+                                message_bytes[3],
+                                message_bytes[4],
+                                message_bytes[5],
+                                message_bytes[6],
+                                message_bytes[7],
+                            ]) as usize;
+                            if message_bytes.len() >= 8 + id_len {
+                                parsed_id = std::str::from_utf8(&message_bytes[8..8 + id_len])
+                                    .ok()
+                                    .map(|s| s.to_string());
+                                if message_bytes.len() >= 8 + id_len + 4 {
+                                    parsed_type_tag = Some(u32::from_le_bytes([
+                                        message_bytes[8 + id_len],
+                                        message_bytes[8 + id_len + 1],
+                                        message_bytes[8 + id_len + 2],
+                                        message_bytes[8 + id_len + 3],
+                                    ]));
+                                }
                             }
+                        }
+                        error!(
+                            "Failed to deserialize message: connection_id={}, frame_len={}, parsed_id={:?}, parsed_type_tag={:?}, error={}",
+                            connection_id,
+                            message_bytes.len(),
+                            parsed_id,
+                            parsed_type_tag,
+                            e
+                        );
+
+                        // Try to parse the message with more context
+                        if parsed_type_tag == Some(14) { // RemoteSpawn
+                            error!(
+                                "RemoteSpawn deserialization failed. This is likely a bincode schema mismatch. \
+                                Expected fields: id(36), sender_id(3), session_id(45), project_path(12), args(0), mcp_servers(None), request_id(36)"
+                            );
                         }
                     }
                 }
+            }
+
+            match recv_stream.read(&mut buffer).await {
+                Ok(Some(n)) => {
+                    pending_data.extend_from_slice(&buffer[..n]);
+                    debug!(
+                        "message-stream read: connection_id={}, read_bytes={}, buffered_bytes={}",
+                        connection_id,
+                        n,
+                        pending_data.len()
+                    );
+                }
+                Ok(None) => {
+                    if !pending_data.is_empty() {
+                        warn!(
+                            "Stream closed with incomplete message data: connection_id={}, buffered_bytes={}",
+                            connection_id,
+                            pending_data.len()
+                        );
+                    } else {
+                        debug!("Stream closed by peer: connection_id={}", connection_id);
+                    }
+                    break;
+                }
                 Err(e) => {
-                    error!("Failed to deserialize message: {}", e);
+                    error!("Error reading from stream: {}", e);
+                    break;
                 }
             }
         }
@@ -1315,6 +1384,14 @@ impl QuicMessageClient {
 
             // 发送消息
             let data = MessageSerializer::serialize_for_network(&message)?;
+            debug!(
+                "send_message_to_server(mut): connection_id={}, message_id={}, message_type={:?}, requires_response={}, wire_len={}",
+                connection_id,
+                message.id,
+                message.message_type,
+                message.requires_response,
+                data.len()
+            );
             send_stream.write_all(&data).await?;
             send_stream.finish()?;
 
@@ -1484,9 +1561,18 @@ impl QuicMessageClient {
                         }
                     }
                     Err(e) => {
+                        let preview = data
+                            .iter()
+                            .take(24)
+                            .map(|b| format!("{:02x}", b))
+                            .collect::<Vec<_>>()
+                            .join(" ");
                         error!(
-                            "Failed to deserialize message for connection {}: {}",
-                            connection_id, e
+                            "Failed to deserialize message for connection {}: data_len={}, data_hex=[{}], error={}",
+                            connection_id,
+                            data.len(),
+                            preview,
+                            e
                         );
                         return Err(e);
                     }
@@ -1513,6 +1599,111 @@ impl QuicMessageClient {
 }
 
 impl QuicMessageClientHandle {
+    async fn send_message_internal(
+        &self,
+        connection_id: &str,
+        message: Message,
+        broadcast_response: bool,
+    ) -> Result<Option<Message>> {
+        let connection = {
+            let conns = self.server_connections.read().await;
+            conns
+                .get(connection_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
+        };
+
+        let (mut send_stream, mut recv_stream) = connection.open_bi().await?;
+        let data = MessageSerializer::serialize_for_network(&message)?;
+        debug!(
+            "send_message_to_server(handle): connection_id={}, message_id={}, message_type={:?}, requires_response={}, wire_len={}",
+            connection_id,
+            message.id,
+            message.message_type,
+            message.requires_response,
+            data.len()
+        );
+        send_stream.write_all(&data).await?;
+        send_stream.finish()?;
+
+        if !message.requires_response {
+            return Ok(None);
+        }
+
+        let mut response_data = Vec::new();
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            loop {
+                let mut buffer = vec![0u8; 8192];
+                match recv_stream.read(&mut buffer).await {
+                    Ok(Some(n)) => response_data.extend_from_slice(&buffer[..n]),
+                    Ok(None) => break,
+                    Err(e) => {
+                        error!(
+                            "send_message_to_server(handle) read response error: connection_id={}, message_id={}, error={}",
+                            connection_id,
+                            message.id,
+                            e
+                        );
+                        break;
+                    }
+                }
+            }
+        })
+        .await;
+
+        if response_data.is_empty() {
+            warn!(
+                "send_message_to_server(handle) response stream closed without data: connection_id={}, message_id={}, message_type={:?}",
+                connection_id,
+                message.id,
+                message.message_type
+            );
+            return Ok(None);
+        }
+
+        match MessageSerializer::deserialize_from_network(&response_data) {
+            Ok(response) => {
+                if let MessagePayload::Response(resp) = &response.payload {
+                    info!(
+                        "send_message_to_server(handle) received response: connection_id={}, request_id={}, success={}",
+                        connection_id,
+                        resp.request_id,
+                        resp.success
+                    );
+                } else {
+                    info!(
+                        "send_message_to_server(handle) received non-response payload: connection_id={}, message_type={:?}",
+                        connection_id,
+                        response.message_type
+                    );
+                }
+
+                if broadcast_response {
+                    let _ = self.message_tx.send(response.clone());
+                }
+
+                Ok(Some(response))
+            }
+            Err(e) => {
+                let preview = response_data
+                    .iter()
+                    .take(24)
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                error!(
+                    "send_message_to_server(handle) failed to deserialize direct response: connection_id={}, message_id={}, data_len={}, data_hex=[{}], error={}",
+                    connection_id,
+                    message.id,
+                    response_data.len(),
+                    preview,
+                    e
+                );
+                Err(e)
+            }
+        }
+    }
+
     /// 创建新的QUIC消息客户端句柄
     pub async fn new(
         relay_url: Option<String>,
@@ -1606,41 +1797,18 @@ impl QuicMessageClientHandle {
         connection_id: &str,
         message: Message,
     ) -> Result<()> {
-        // 直接从 server_connections 获取连接，无需锁 client
-        let connection = {
-            let conns = self.server_connections.read().await;
-            conns
-                .get(connection_id)
-                .cloned()
-                .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
-        };
-
-        let (mut send_stream, mut recv_stream) = connection.open_bi().await?;
-        let data = MessageSerializer::serialize_for_network(&message)?;
-        send_stream.write_all(&data).await?;
-        send_stream.finish()?;
-
-        if message.requires_response {
-            let mut response_data = Vec::new();
-            let _ = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-                loop {
-                    let mut buffer = vec![0u8; 8192];
-                    match recv_stream.read(&mut buffer).await {
-                        Ok(Some(n)) => response_data.extend_from_slice(&buffer[..n]),
-                        Ok(None) => break,
-                        Err(_) => break,
-                    }
-                }
-            })
-            .await;
-
-            if !response_data.is_empty()
-                && let Ok(response) = MessageSerializer::deserialize_from_network(&response_data)
-            {
-                let _ = self.message_tx.send(response);
-            }
-        }
+        let _ = self
+            .send_message_internal(connection_id, message, true)
+            .await?;
         Ok(())
+    }
+
+    pub async fn send_message_to_server_with_response(
+        &self,
+        connection_id: &str,
+        message: Message,
+    ) -> Result<Option<Message>> {
+        self.send_message_internal(connection_id, message, false).await
     }
 
     /// 获取消息接收器
@@ -1701,6 +1869,13 @@ impl QuicMessageClientHandle {
                                     "ping".to_string(),
                                 );
                                 heartbeat.requires_response = true;
+                                info!(
+                                    "health probe send: connection_id={}, seq={}, message_id={}, wire_sender={}",
+                                    params.connection_id,
+                                    heartbeat_seq,
+                                    heartbeat.id,
+                                    heartbeat.sender_id
+                                );
 
                                 match Self::send_heartbeat_probe(&conn, &heartbeat, heartbeat_timeout).await {
                                     Ok(_) => {

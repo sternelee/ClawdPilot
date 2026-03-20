@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @plugin "daisyui" {
   themes:
+    light --default,
     sunset --default,
     dark --prefersdark,
     dracula,
@@ -17,53 +18,16 @@
 @layer base {
   * {
     @apply border-base-content/20;
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
   }
   body {
     @apply bg-base-100 text-base-content;
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
-  }
-}
-
-/* Scrollbar utilities */
-@layer utilities {
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(212 212 216 / 0.5) transparent;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar {
-    -webkit-appearance: none;
-    width: 5px !important;
-    height: 5px !important;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgb(212 212 216 / 0.5);
-    border-radius: 3px;
-    border: none;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(161 161 170 / 0.7);
-  }
-
-  /* Dark mode support */
-  .dark .scrollbar-thin {
-    scrollbar-color: rgb(63 63 70 / 0.5) transparent;
-  }
-
-  .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgb(63 63 70 / 0.5);
-  }
-
-  .dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(82 82 91 / 0.7);
   }
 }
 
@@ -108,38 +72,6 @@ textarea:focus {
   .container {
     @apply px-4;
   }
-}
-
-*::-webkit-scrollbar {
-  -webkit-appearance: none;
-  width: 5px !important;
-  height: 5px !important;
-}
-
-*::-webkit-scrollbar-track {
-  background: oklch(var(--muted));
-  border-radius: 5px;
-}
-
-*::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: oklch(var(--border));
-  border: none;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: oklch(var(--muted-foreground));
-  border: none;
-}
-
-*::-webkit-scrollbar-corner {
-  display: none;
-}
-
-/* Firefox scrollbar */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: oklch(var(--border)) oklch(var(--muted));
 }
 
 @layer base {
@@ -1155,16 +1087,6 @@ textarea:focus {
 
 .shortcut-bar button:active {
   transform: scale(0.92);
-}
-
-/* Hide scrollbar but keep functionality */
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
 }
 
 /* Smooth scroll for mobile tabs */

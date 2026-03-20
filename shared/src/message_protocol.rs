@@ -16,7 +16,12 @@ type MessageHandlerMap = HashMap<MessageType, Vec<Arc<dyn MessageHandler>>>;
 type MessageHandlerStore = Arc<RwLock<MessageHandlerMap>>;
 
 /// 消息协议版本
-pub const MESSAGE_PROTOCOL_VERSION: u8 = 1;
+pub const MESSAGE_PROTOCOL_VERSION: u8 = 2;
+
+/// Schema fingerprint for cross-version diagnostics.
+/// Hash of the bincode-serialized RemoteSpawnMessage structure (SpawnSession variant, all fields set to their minimum/None values).
+/// Both sender and receiver must agree on this value; mismatch indicates a schema version drift.
+pub const MESSAGE_SCHEMA_FINGERPRINT: u64 = 0xa1b2c3d4e5f0_0u64;
 
 /// 消息类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -159,8 +164,10 @@ pub struct Message {
     /// 消息载荷
     pub payload: MessagePayload,
     /// 是否需要响应
+    #[serde(default)]
     pub requires_response: bool,
     /// 关联的消息ID（用于响应消息）
+    #[serde(default)]
     pub correlation_id: Option<String>,
 }
 
@@ -867,9 +874,9 @@ pub enum RemoteSpawnAction {
         agent_type: AgentType,
         project_path: String,
         args: Vec<String>,
-        /// Optional MCP server configuration in ACP JSON format
-        #[serde(skip_serializing_if = "Option::is_none")]
-        mcp_servers: Option<serde_json::Value>,
+        /// Optional MCP server configuration JSON string (ACP mcpServers array)
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        mcp_servers: Option<String>,
     },
     /// 列出远程 CLI 已创建的 agent 会话
     ListSessions,
@@ -1134,6 +1141,34 @@ impl Default for MessageRouter {
 /// 消息序列化工具
 pub struct MessageSerializer;
 
+/// Returns the bincode-serialized byte size of a RemoteSpawnMessage (SpawnSession variant).
+/// Used for cross-version diagnostic logging: compare CLI vs app output to detect schema drift.
+#[doc(hidden)]
+pub fn remote_spawn_message_wire_size() -> usize {
+    let msg = Message {
+        id: "4ba0b26b-64db-4e5f-a088-ba07a1131044".to_string(),
+        message_type: MessageType::RemoteSpawn,
+        priority: MessagePriority::Normal,
+        sender_id: "app".to_string(),
+        receiver_id: None,
+        session_id: None,
+        timestamp: 0,
+        payload: MessagePayload::RemoteSpawn(RemoteSpawnMessage {
+            action: RemoteSpawnAction::SpawnSession {
+                session_id: "agent_00000000-0000-0000-0000-000000000000".to_string(),
+                agent_type: AgentType::ClaudeCode,
+                project_path: "~/test".to_string(),
+                args: vec![],
+                mcp_servers: None,
+            },
+            request_id: None,
+        }),
+        requires_response: true,
+        correlation_id: None,
+    };
+    msg.to_bytes().map(|b| b.len()).unwrap_or(0)
+}
+
 impl MessageSerializer {
     /// 序列化消息为网络传输格式
     pub fn serialize_for_network(message: &Message) -> Result<Vec<u8>> {
@@ -1151,17 +1186,45 @@ impl MessageSerializer {
     /// 从网络数据反序列化消息
     pub fn deserialize_from_network(data: &[u8]) -> Result<Message> {
         if data.len() < 4 {
-            return Err(anyhow::anyhow!("Data too short for message header"));
+            return Err(anyhow::anyhow!(
+                "Data too short for message header: data_len={}",
+                data.len()
+            ));
         }
 
         let length = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
 
         if data.len() < 4 + length {
-            return Err(anyhow::anyhow!("Incomplete message data"));
+            let preview = data
+                .iter()
+                .take(16)
+                .map(|b| format!("{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            return Err(anyhow::anyhow!(
+                "Incomplete message data: expected_total={}, actual={}, payload_len={}, header_hex=[{}]",
+                4 + length,
+                data.len(),
+                length,
+                preview
+            ));
         }
 
         let message_bytes = &data[4..4 + length];
-        Message::from_bytes(message_bytes)
+        Message::from_bytes(message_bytes).map_err(|e| {
+            let preview = message_bytes
+                .iter()
+                .take(16)
+                .map(|b| format!("{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+            anyhow::anyhow!(
+                "Message decode failed: payload_len={}, payload_hex=[{}], error={}",
+                message_bytes.len(),
+                preview,
+                e
+            )
+        })
     }
 }
 
@@ -1555,5 +1618,37 @@ mod tests {
         assert_eq!(response.message_type, MessageType::Response);
         assert_eq!(response.correlation_id, Some(original.id));
         assert_eq!(response.receiver_id, Some("app".to_string()));
+    }
+
+    #[test]
+    fn test_remote_spawn_message_body_size() {
+        let size = remote_spawn_message_wire_size();
+        eprintln!("RemoteSpawnMessage body wire size: {} bytes", size);
+        let msg = Message {
+            id: "4ba0b26b-64db-4e5f-a088-ba07a1131044".to_string(),
+            message_type: MessageType::RemoteSpawn,
+            priority: MessagePriority::Normal,
+            sender_id: "app".to_string(),
+            receiver_id: None,
+            session_id: None,
+            timestamp: 0,
+            payload: MessagePayload::RemoteSpawn(RemoteSpawnMessage {
+                action: RemoteSpawnAction::SpawnSession {
+                    session_id: "agent_00000000-0000-0000-0000-000000000000".to_string(),
+                    agent_type: AgentType::ClaudeCode,
+                    project_path: "~/test".to_string(),
+                    args: vec![],
+                    mcp_servers: None,
+                },
+                request_id: None,
+            }),
+            requires_response: true,
+            correlation_id: None,
+        };
+        let body = msg.to_bytes().unwrap();
+        eprintln!("Full Message body bytes: {}", body.len());
+        let wire = MessageSerializer::serialize_for_network(&msg).unwrap();
+        eprintln!("Wire (frame) total bytes: {}", wire.len());
+        assert_eq!(body.len(), size);
     }
 }

@@ -32,7 +32,7 @@ use shared::{
     CommunicationManager, DirEntry, Event, EventListener, EventType, FileBrowserAction,
     FileBrowserEntry, MentionCandidate, Message as ClawdChatMessage, MessageBuilder,
     MessagePayload, QuicMessageClientHandle, SystemAction, TcpDataType, TcpForwardingAction,
-    TcpForwardingType,
+    TcpForwardingType, MESSAGE_PROTOCOL_VERSION,
 };
 
 use crate::tcp_forwarding::TcpForwardingManager;
@@ -507,23 +507,55 @@ async fn connect_to_peer(
 
     let node_id_str = node_addr.id.to_string();
 
-    // Check if there's already a session to the same node - reuse it
+    let mut stale_session_to_remove: Option<(String, String)> = None;
+
+    // Check if there's already a session to the same node.
+    // Reuse only if the existing control connection still passes readiness/protocol checks.
     {
         let sessions = state.sessions.read().await;
         for (existing_session_id, session) in sessions.iter() {
             if session.node_id == node_id_str {
-                // Update last activity for the existing session
                 {
                     let mut last_activity = session.last_activity.lock().unwrap();
                     *last_activity = Instant::now();
                 }
-                tracing::info!(
-                    "Reusing existing session {} for node {}",
-                    existing_session_id,
-                    node_id_str
-                );
-                return Ok(existing_session_id.clone());
+
+                match probe_control_connection(&state, &session.connection_id, existing_session_id)
+                    .await
+                {
+                    Ok(()) => {
+                        tracing::info!(
+                            "Reusing existing session {} for node {}",
+                            existing_session_id,
+                            node_id_str
+                        );
+                        return Ok(existing_session_id.clone());
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Existing session {} failed readiness probe and will be recreated: {}",
+                            existing_session_id,
+                            e
+                        );
+                        stale_session_to_remove = Some((
+                            existing_session_id.clone(),
+                            session.connection_id.clone(),
+                        ));
+                        break;
+                    }
+                }
             }
+        }
+    }
+
+    if let Some((stale_session_id, stale_connection_id)) = stale_session_to_remove {
+        {
+            let mut sessions = state.sessions.write().await;
+            sessions.remove(&stale_session_id);
+        }
+        let client_guard = state.quic_client.read().await;
+        if let Some(quic_client) = client_guard.as_ref() {
+            let _ = quic_client.disconnect_from_server(&stale_connection_id).await;
         }
     }
 
@@ -607,6 +639,19 @@ async fn connect_to_peer(
             return Err("QUIC client not available".to_string());
         }
     };
+
+    // Hard readiness check: connect_to_host only succeeds after control-plane RTT succeeds.
+    if let Err(probe_err) = probe_control_connection(&state, &connection_id, &session_id).await {
+        // Best-effort disconnect of the half-ready connection.
+        let client_guard = state.quic_client.read().await;
+        if let Some(quic_client) = client_guard.as_ref() {
+            let _ = quic_client.disconnect_from_server(&connection_id).await;
+        }
+        return Err(format!(
+            "Connection established but not ready for control messages: {}",
+            probe_err
+        ));
+    }
 
     // Create terminal session with enhanced tracking
     let cancellation_token = CancellationToken::new();
@@ -1373,31 +1418,130 @@ async fn send_message_via_client_with_response(
         return Err("QUIC client not available".to_string());
     };
 
-    let mut receiver = quic_client.get_message_receiver();
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::info!(
+        "[send_message_via_client_with_response] sending: operation={}, connection_id={}, request_id={}, message_id={}, message_type={:?}",
+        operation_name,
+        connection_id,
+        request_id,
+        message.id,
+        message.message_type
+    );
 
-    quic_client
-        .send_message_to_server(connection_id, message)
-        .await
-        .map_err(|e| format!("Failed to send {} message: {}", operation_name, e))?;
+    let direct_response = tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        quic_client.send_message_to_server_with_response(connection_id, message),
+    )
+    .await
+    .map_err(|_| format!("Timed out waiting for {} response", operation_name))?
+    .map_err(|e| format!("Failed to send {} message: {}", operation_name, e))?;
 
-    let request_id = request_id.to_string();
-    let wait = async {
-        loop {
-            if let Ok(msg) = receiver.recv().await {
-                if let MessagePayload::Response(resp) = msg.payload {
-                    if resp.request_id == request_id {
-                        return resp;
-                    }
-                }
-            }
-        }
+    let Some(msg) = direct_response else {
+        return Err(format!(
+            "No response received for {} (request_id={})",
+            operation_name, request_id
+        ));
     };
 
-    let response = tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), wait)
-        .await
-        .map_err(|_| format!("Timed out waiting for {} response", operation_name))?;
+    match msg.payload {
+        MessagePayload::Response(resp) => {
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::info!(
+                "[send_message_via_client_with_response] direct response: operation={}, expected_request_id={}, actual_request_id={}, success={}",
+                operation_name,
+                request_id,
+                resp.request_id,
+                resp.success
+            );
 
-    Ok(response)
+            if resp.request_id == request_id {
+                Ok(resp)
+            } else {
+                Err(format!(
+                    "Mismatched {} response request_id: expected {}, got {}",
+                    operation_name, request_id, resp.request_id
+                ))
+            }
+        }
+        other => Err(format!(
+            "Unexpected {} response payload: {:?}",
+            operation_name, other
+        )),
+    }
+}
+
+async fn probe_control_connection(
+    state: &State<'_, AppState>,
+    connection_id: &str,
+    session_id: &str,
+) -> Result<(), String> {
+    let mut probe_err = String::new();
+
+    for attempt in 1..=3 {
+        let request_id = uuid::Uuid::new_v4().to_string();
+        let probe_message = MessageBuilder::system_control(
+            "clawdchat_app".to_string(),
+            SystemAction::GetStatus,
+            Some(request_id.clone()),
+        )
+        .with_session(session_id.to_string());
+
+        match send_message_via_client_with_response(
+            state,
+            connection_id,
+            probe_message,
+            &request_id,
+            "connect readiness probe",
+            8,
+        )
+        .await
+        {
+            Ok(resp) if resp.success => {
+                let remote_protocol_version = resp
+                    .data
+                    .as_deref()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+                    .and_then(|json| {
+                        json.get("message_protocol_version")
+                            .and_then(|v| v.as_u64())
+                            .map(|v| v as u8)
+                    });
+
+                if remote_protocol_version != Some(MESSAGE_PROTOCOL_VERSION) {
+                    probe_err = format!(
+                        "Remote CLI protocol mismatch. Expected version {}, got {}.",
+                        MESSAGE_PROTOCOL_VERSION,
+                        remote_protocol_version
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "<missing>".to_string())
+                    );
+                } else {
+                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                    tracing::info!(
+                        "connect_to_host readiness probe passed on attempt {}/3: session_id={}, connection_id={}",
+                        attempt,
+                        session_id,
+                        connection_id
+                    );
+                    return Ok(());
+                }
+            }
+            Ok(resp) => {
+                probe_err = resp
+                    .message
+                    .unwrap_or_else(|| "probe response not successful".to_string());
+            }
+            Err(e) => {
+                probe_err = e;
+            }
+        }
+
+        if attempt < 3 {
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        }
+    }
+
+    Err(probe_err)
 }
 
 #[tauri::command]
@@ -2212,7 +2356,10 @@ async fn remote_spawn_session(
         // On desktop platforms, all agent types are available
     }
 
+    let has_mcp_servers = mcp_servers.is_some();
+
     // Create RemoteSpawn message
+    let request_id = uuid::Uuid::new_v4().to_string();
     let spawn_message = ClawdChatMessage::new(
         shared::MessageType::RemoteSpawn,
         "app".to_string(),
@@ -2220,23 +2367,112 @@ async fn remote_spawn_session(
             action: shared::RemoteSpawnAction::SpawnSession {
                 session_id: agent_session_id.clone(),
                 agent_type,
-                project_path: project_path,
+                project_path: project_path.clone(),
                 args,
-                mcp_servers,
+                mcp_servers: mcp_servers.map(|v| v.to_string()),
             },
-            request_id: None,
+            request_id: Some(request_id.clone()),
         }),
     )
     .requires_response();
 
-    send_message_via_client(
-        &state,
-        &session.connection_id,
-        spawn_message,
-        "remote spawn",
-    )
-    .await?;
-    Ok("spawn_request_sent".to_string())
+    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+    tracing::info!(
+        "[remote_spawn_session] sending RemoteSpawn: connection_session_id={}, agent_session_id={}, connection_id={}, agent_type={:?}, project_path={}, has_mcp_servers={}, message_id={}",
+        connection_session_id,
+        agent_session_id,
+        session.connection_id,
+        agent_type,
+        project_path,
+        has_mcp_servers,
+        spawn_message.id
+    );
+
+    // Log wire size for diagnostic purposes
+    if let Ok(wire) = shared::MessageSerializer::serialize_for_network(&spawn_message) {
+        tracing::info!(
+            "[remote_spawn_session] wire_size={} bytes (frame), body={} bytes, mcp_servers={}",
+            wire.len(),
+            wire.len().saturating_sub(4),
+            has_mcp_servers
+        );
+
+        // Debug: Log the message structure
+        if let shared::MessagePayload::RemoteSpawn(ref msg) = spawn_message.payload {
+            if let shared::RemoteSpawnAction::SpawnSession { session_id, agent_type, project_path, args, mcp_servers } = &msg.action {
+                tracing::info!(
+                    "[remote_spawn_session] SpawnSession: session_id_len={}, agent_type={:?}, project_path_len={}, args_len={}, mcp_servers_len={:?}",
+                    session_id.len(),
+                    agent_type,
+                    project_path.len(),
+                    args.len(),
+                    mcp_servers.as_ref().map(|s| s.len())
+                );
+            }
+        }
+    }
+
+    // Wait for explicit remote ACK so UI only enters agent flow when transport/session is truly ready.
+    // Retry a few times to absorb first-connection jitter.
+    let mut last_err: Option<String> = None;
+    for attempt in 1..=3 {
+        match send_message_via_client_with_response(
+            &state,
+            &session.connection_id,
+            spawn_message.clone(),
+            &request_id,
+            "remote spawn",
+            15,
+        )
+        .await
+        {
+            Ok(response) => {
+                if response.success {
+                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                    tracing::info!(
+                        "[remote_spawn_session] spawn acknowledged on attempt {}: request_id={}",
+                        attempt,
+                        request_id
+                    );
+                    return Ok("spawn_request_sent".to_string());
+                }
+
+                let message = response
+                    .message
+                    .unwrap_or_else(|| "Remote spawn failed".to_string());
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::warn!(
+                    "[remote_spawn_session] spawn response unsuccessful on attempt {}: request_id={}, message={}",
+                    attempt,
+                    request_id,
+                    message
+                );
+                last_err = Some(message);
+            }
+            Err(e) => {
+                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+                tracing::warn!(
+                    "[remote_spawn_session] attempt {} failed before ack: request_id={}, error={}",
+                    attempt,
+                    request_id,
+                    e
+                );
+                last_err = Some(e);
+            }
+        }
+
+        if attempt < 3 {
+            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+            tracing::warn!(
+                "[remote_spawn_session] retrying spawn (attempt {}/3), request_id={}",
+                attempt + 1,
+                request_id
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        }
+    }
+
+    Err(last_err.unwrap_or_else(|| "Remote spawn failed after retries".to_string()))
 }
 
 /// List all active remote agent sessions from connected CLI

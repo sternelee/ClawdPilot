@@ -11,7 +11,7 @@ use shared::{
     MessageHandler, MessagePayload, MessageType, NotificationData, NotificationType, OSInfo,
     PackageManager, QuicMessageServer, QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage,
     ShellInfo, SystemAction, SystemInfo, SystemInfoAction, TcpDataType, TcpForwardingAction,
-    TcpForwardingType, TcpStreamHandler, Tool, UserInfo,
+    TcpForwardingType, TcpStreamHandler, Tool, UserInfo, MESSAGE_PROTOCOL_VERSION,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -465,18 +465,24 @@ impl SystemControlMessageHandler {
 impl MessageHandler for SystemControlMessageHandler {
     async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
         match &message.payload {
-            MessagePayload::SystemControl(system_msg) => match &system_msg.action {
+            MessagePayload::SystemControl(system_msg) => {
+                let response_request_id = system_msg
+                    .request_id
+                    .clone()
+                    .unwrap_or_else(|| message.id.clone());
+                match &system_msg.action {
                 SystemAction::GetStatus => {
                     let status = self.system_status.read().await;
                     let response_data = serde_json::json!({
                         "status": status.status,
                         "uptime": status.uptime,
                         "active_tcp_sessions": status.active_tcp_sessions,
-                        "memory_usage": status.memory_usage
+                        "memory_usage": status.memory_usage,
+                        "message_protocol_version": MESSAGE_PROTOCOL_VERSION
                     });
                     return Ok(Some(message.create_response(MessagePayload::Response(
                         ResponseMessage {
-                            request_id: message.id.clone(),
+                            request_id: response_request_id.clone(),
                             success: true,
                             data: Some(response_data.to_string()),
                             message: Some("System status retrieved successfully".to_string()),
@@ -487,7 +493,7 @@ impl MessageHandler for SystemControlMessageHandler {
                     warn!("System restart not implemented");
                     return Ok(Some(message.create_response(MessagePayload::Response(
                         ResponseMessage {
-                            request_id: message.id.clone(),
+                            request_id: response_request_id.clone(),
                             success: false,
                             data: None,
                             message: Some("System restart not implemented".to_string()),
@@ -498,7 +504,7 @@ impl MessageHandler for SystemControlMessageHandler {
                     warn!("System shutdown not implemented");
                     return Ok(Some(message.create_response(MessagePayload::Response(
                         ResponseMessage {
-                            request_id: message.id.clone(),
+                            request_id: response_request_id.clone(),
                             success: false,
                             data: None,
                             message: Some("System shutdown not implemented".to_string()),
@@ -509,7 +515,7 @@ impl MessageHandler for SystemControlMessageHandler {
                     warn!("Get logs not implemented");
                     return Ok(Some(message.create_response(MessagePayload::Response(
                         ResponseMessage {
-                            request_id: message.id.clone(),
+                            request_id: response_request_id.clone(),
                             success: false,
                             data: None,
                             message: Some("Get logs not implemented".to_string()),
@@ -528,7 +534,7 @@ impl MessageHandler for SystemControlMessageHandler {
                         "openclaw" => {
                             return Ok(Some(message.create_response(MessagePayload::Response(
                                 ResponseMessage {
-                                    request_id: message.id.clone(),
+                                    request_id: response_request_id.clone(),
                                     success: false,
                                     data: None,
                                     message: Some(
@@ -540,7 +546,7 @@ impl MessageHandler for SystemControlMessageHandler {
                         _ => {
                             return Ok(Some(message.create_response(MessagePayload::Response(
                                 ResponseMessage {
-                                    request_id: message.id.clone(),
+                                    request_id: response_request_id.clone(),
                                     success: false,
                                     data: None,
                                     message: Some(format!(
@@ -567,7 +573,7 @@ impl MessageHandler for SystemControlMessageHandler {
                         Ok(Ok(true)) => {
                             return Ok(Some(message.create_response(MessagePayload::Response(
                                 ResponseMessage {
-                                    request_id: message.id.clone(),
+                                    request_id: response_request_id.clone(),
                                     success: true,
                                     data: Some(acp_package.to_string()),
                                     message: Some(format!(
@@ -580,7 +586,7 @@ impl MessageHandler for SystemControlMessageHandler {
                         Ok(Ok(false)) => {
                             return Ok(Some(message.create_response(MessagePayload::Response(
                                 ResponseMessage {
-                                    request_id: message.id.clone(),
+                                    request_id: response_request_id.clone(),
                                     success: false,
                                     data: None,
                                     message: Some(format!(
@@ -593,7 +599,7 @@ impl MessageHandler for SystemControlMessageHandler {
                         Ok(Err(e)) => {
                             return Ok(Some(message.create_response(MessagePayload::Response(
                                 ResponseMessage {
-                                    request_id: message.id.clone(),
+                                    request_id: response_request_id.clone(),
                                     success: false,
                                     data: None,
                                     message: Some(format!("Installation error: {}", e)),
@@ -603,7 +609,7 @@ impl MessageHandler for SystemControlMessageHandler {
                         Err(e) => {
                             return Ok(Some(message.create_response(MessagePayload::Response(
                                 ResponseMessage {
-                                    request_id: message.id.clone(),
+                                    request_id: response_request_id.clone(),
                                     success: false,
                                     data: None,
                                     message: Some(format!("Failed to spawn install task: {}", e)),
@@ -612,7 +618,8 @@ impl MessageHandler for SystemControlMessageHandler {
                         }
                     }
                 }
-            },
+            }
+            }
             _ => {}
         }
         Ok(None)
@@ -2242,13 +2249,15 @@ impl RemoteSpawnMessageHandler {
 
     /// Start forwarding agent events to P2P clients
     fn start_event_forwarder(
-        &self,
+        quic_server: QuicMessageServer,
+        forwarders: Arc<
+            tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>,
+        >,
         session_id: String,
         mut event_receiver: tokio::sync::broadcast::Receiver<shared::AgentTurnEvent>,
     ) {
-        let quic_server = self.quic_server.clone();
-        let forwarders_for_task = self.event_forwarders.clone();
-        let forwarders_for_insert = self.event_forwarders.clone();
+        let forwarders_for_task = forwarders.clone();
+        let forwarders_for_insert = forwarders;
         let sid = session_id.clone();
 
         let handle = tokio::spawn(async move {
@@ -2326,16 +2335,41 @@ impl RemoteSpawnMessageHandler {
         agent_type: AgentType,
         project_path: String,
         args: Vec<String>,
-        mcp_servers: Option<serde_json::Value>,
+        mcp_servers: Option<String>,
         request_id: Option<String>,
     ) -> Result<Option<Message>> {
         tracing::info!(
-            "Remote spawn request: session_id={}, agent_type={:?}, project_path={}, args={:?}",
+            "Remote spawn request: session_id={}, agent_type={:?}, project_path={}, args={:?}, request_id={}, has_mcp_servers={}",
             session_id,
             agent_type,
             project_path,
-            args
+            args,
+            request_id.as_deref().unwrap_or("<none>"),
+            mcp_servers.is_some()
         );
+
+        let parsed_mcp_servers = match mcp_servers {
+            Some(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::error!(
+                        "Remote spawn invalid mcp_servers JSON: session_id={}, request_id={}, error={}",
+                        session_id,
+                        request_id.as_deref().unwrap_or("<none>"),
+                        e
+                    );
+                    let response = MessageBuilder::response(
+                        "cli".to_string(),
+                        request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+                        false,
+                        None,
+                        Some(format!("Invalid mcp_servers JSON: {}", e)),
+                    );
+                    return Ok(Some(response));
+                }
+            },
+            None => None,
+        };
 
         // Expand ~ to home directory and canonicalize the path
         let working_dir = {
@@ -2367,36 +2401,53 @@ impl RemoteSpawnMessageHandler {
                 args.clone(),
                 working_dir,
                 None,
-                mcp_servers,
+                parsed_mcp_servers,
                 "remote".to_string(),
             )
             .await
             .map_err(|e| {
-                tracing::error!("Failed to start agent session: {}", e);
+                tracing::error!(
+                    "Failed to start agent session: session_id={}, request_id={}, error={}",
+                    session_id,
+                    request_id.as_deref().unwrap_or("<none>"),
+                    e
+                );
                 anyhow::anyhow!("Failed to start agent session: {}", e)
             })?;
 
         // Subscribe to agent events and start forwarding
-        tracing::info!(
-            "[handle_spawn_session] Attempting to subscribe to session: {}",
-            session_id
-        );
-        if let Some(event_rx) = self.agent_manager.subscribe(&session_id).await {
+        let agent_manager = self.agent_manager.clone();
+        let quic_server = self.quic_server.clone();
+        let event_forwarders = self.event_forwarders.clone();
+        let deferred_session_id = session_id.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             tracing::info!(
-                "[handle_spawn_session] Subscribe successful, starting forwarder for session: {}",
-                session_id
+                "[handle_spawn_session] Deferred subscribe attempt for session: {}",
+                deferred_session_id
             );
-            self.start_event_forwarder(session_id.clone(), event_rx);
-            tracing::info!(
-                "[event_forwarder] Started forwarding events for session: {}",
-                session_id
-            );
-        } else {
-            tracing::warn!(
-                "[event_forwarder] Could not subscribe to session events: {}",
-                session_id
-            );
-        }
+            if let Some(event_rx) = agent_manager.subscribe(&deferred_session_id).await {
+                tracing::info!(
+                    "[handle_spawn_session] Deferred subscribe successful, starting forwarder for session: {}",
+                    deferred_session_id
+                );
+                RemoteSpawnMessageHandler::start_event_forwarder(
+                    quic_server,
+                    event_forwarders,
+                    deferred_session_id.clone(),
+                    event_rx,
+                );
+                tracing::info!(
+                    "[event_forwarder] Started forwarding events for session: {}",
+                    deferred_session_id
+                );
+            } else {
+                tracing::warn!(
+                    "[event_forwarder] Could not subscribe to session events: {}",
+                    deferred_session_id
+                );
+            }
+        });
 
         // 构建响应
         let response_data = serde_json::json!({
@@ -2411,6 +2462,15 @@ impl RemoteSpawnMessageHandler {
             true,
             Some(response_data),
             None,
+        );
+        tracing::info!(
+            "[handle_spawn_session] responding: session_id={}, response_request_id={}, project_path={}",
+            session_id,
+            match &response.payload {
+                MessagePayload::Response(resp) => resp.request_id.as_str(),
+                _ => "<non-response>",
+            },
+            project_path
         );
 
         Ok(Some(response))

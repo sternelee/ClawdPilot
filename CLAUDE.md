@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**ClawdPilot** (directory: `riterm`) is a multi-agent local/remote management platform built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile). It provides unified session management for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, OpenClaw) across local and remote modes.
+**ClawdPilot** is a multi-agent local/remote management platform built with Rust (CLI/backend), SolidJS (frontend), and Tauri 2 (desktop/mobile). It provides unified session management for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, OpenClaw) across local and remote modes.
 
 ## Project Architecture & Structure
 
@@ -66,6 +66,8 @@ The frontend uses SolidJS reactivity (`createSignal`, `createStore`) and avoids 
 - Tailwind CSS v4 is configured via `@tailwindcss/vite`.
 - Uses `@kobalte/core` for headless, accessible UI components.
 - HSL CSS variables define the design system tokens (`--primary`, `--background`, etc.) in `tailwind.config.js`.
+- Use `cn()` from `~/lib/utils` for conditional Tailwind class merging (`clsx` + `tailwind-merge`).
+- Global custom utilities live in `src/index.css` using `@layer` and `@apply`.
 
 ## Development Commands
 
@@ -97,12 +99,19 @@ cargo build -p cli --release # Build CLI for release
 ```bash
 cargo test --workspace    # Run all Rust tests
 cargo test -p shared acp  # Run specific tests (e.g., the acp module in shared)
+cargo test -- --nocapture # Show stdout/stderr output
 cargo clippy --workspace -- -D warnings # Strict Rust linting
 cargo fmt --all           # Format Rust code
+./test_ticket_output.sh   # Verify ticket output
+pnpm tsc                  # TypeScript type checking
 pnpm exec prettier --write "src/**/*.{ts,tsx}" # Format frontend code
 ```
 
+After completing any code change, always run: `cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc` and fix all errors before finishing.
+
 ## Coding Conventions
+
+Detailed frontend coding conventions (component structure, Tailwind patterns, class utilities) are in `AGENTS.md`.
 
 ### Rust (Edition 2024)
 - Use `anyhow::Result<T>` for fallible operations. Propagate errors with `?` and add context using `.with_context(|| format!("..."))?`.
@@ -114,6 +123,7 @@ pnpm exec prettier --write "src/**/*.{ts,tsx}" # Format frontend code
 - Enable strict mode; avoid implicit or explicit `any`.
 - Define explicit interfaces for component props.
 - Use the `~` alias for imports from the `src` directory (e.g., `~/components/ui/Button`).
+- Component files follow a three-section structure: `// Types`, `// Variant Classes`, `// Component`. Use `Component<T>` from `solid-js` for functional components. See AGENTS.md for the full template.
 
 ## Agent Permissions
 

@@ -150,7 +150,7 @@ export const AppLayout: Component = () => {
   };
 
   return (
-    <div class="flex min-h-0 h-[var(--effective-viewport-height,100vh)] bg-muted overflow-hidden max-md:text-sm max-md:leading-5">
+    <div class="flex min-h-0 h-[var(--effective-viewport-height,100vh)] bg-base-200 overflow-hidden max-md:text-sm max-md:leading-5">
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={shortcutsDialogOpen()}
@@ -158,7 +158,7 @@ export const AppLayout: Component = () => {
       />
       <Show when={sessionStore.state.isHistoryLoading}>
         <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-60">
-          <div class="rounded-2xl bg-card/90 border border-border/60 px-6 py-5 shadow-2xl">
+          <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
             <SpinnerWithLabel
               label="Loading history…"
               size="lg"
@@ -169,7 +169,7 @@ export const AppLayout: Component = () => {
       </Show>
       {/* Mobile Menu Button */}
       <Button
-        class="fixed left-3 top-2 z-50 flex h-11 w-11 rounded-xl bg-card/95 shadow-md lg:hidden fixed-top-safe"
+        class="fixed left-3 top-2 z-50 flex h-11 w-11 rounded-xl bg-base-100/95 shadow-md lg:hidden fixed-top-safe"
         size="icon"
         variant="ghost"
         onClick={() => setSidebarOpen(!sidebarOpen())}
@@ -187,7 +187,7 @@ export const AppLayout: Component = () => {
         <Show
           when={activeSession()}
           fallback={
-            <div class="flex-1 flex items-center justify-center p-8">
+            <div class="flex-1 flex items-center justify-center p-8 bg-base-100">
               {/* Theme Switcher - Top Right */}
               <div class="fixed top-4 right-4 fixed-top-safe">
                 <ThemeSwitcher />
@@ -195,17 +195,17 @@ export const AppLayout: Component = () => {
 
               <div class="text-center max-w-lg">
                 {/* Logo */}
-                <div class="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/30">
+                <div class="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/30 bg-base-200">
                   <img
                     src="/clawdpilot-icon.svg"
                     alt="ClawdPilot logo"
                     class="h-20 w-20 rounded-2xl object-cover"
                   />
                 </div>
-                <h2 class="text-3xl font-bold mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                <h2 class="text-3xl font-bold mb-3 bg-gradient-to-r from-base-content to-base-content/70 bg-clip-text text-transparent">
                   Welcome to ClawdPilot
                 </h2>
-                <p class="text-muted-foreground/70 mb-8 max-w-xs mx-auto leading-relaxed">
+                <p class="text-base-content/60 mb-8 max-w-xs mx-auto leading-relaxed">
                   Manage multiple AI agent sessions in one place. Create a new
                   session to get started.
                 </p>
@@ -213,7 +213,7 @@ export const AppLayout: Component = () => {
                   <Button
                     variant="default"
                     size="lg"
-                    class="px-6 h-12 text-sm font-medium bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-xl shadow-primary/20"
+                    class="px-8 h-12 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-content shadow-xl shadow-primary/20 rounded-2xl"
                     onClick={() => sessionStore.openNewSessionModal("local")}
                   >
                     <FiPlus size={18} class="mr-2" />
@@ -222,24 +222,24 @@ export const AppLayout: Component = () => {
                 </div>
                 {/* Features */}
                 <div class="grid grid-cols-3 gap-4 mt-12 text-left">
-                  <div class="p-3 rounded-xl bg-muted/50 border border-border/50">
-                    <div class="text-lg mb-1">🤖</div>
-                    <div class="text-xs font-medium">AI Agents</div>
-                    <div class="text-[10px] text-muted-foreground/60">
+                  <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
+                    <div class="text-xl mb-1.5">🤖</div>
+                    <div class="text-xs font-bold">AI Agents</div>
+                    <div class="text-[10px] opacity-50">
                       Claude, Codex & more
                     </div>
                   </div>
-                  <div class="p-3 rounded-xl bg-muted/50 border border-border/50">
-                    <div class="text-lg mb-1">🔒</div>
-                    <div class="text-xs font-medium">P2P Secure</div>
-                    <div class="text-[10px] text-muted-foreground/60">
+                  <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
+                    <div class="text-xl mb-1.5">🔒</div>
+                    <div class="text-xs font-bold">P2P Secure</div>
+                    <div class="text-[10px] opacity-50">
                       End-to-end encrypted
                     </div>
                   </div>
-                  <div class="p-3 rounded-xl bg-muted/50 border border-border/50">
-                    <div class="text-lg mb-1">💬</div>
-                    <div class="text-xs font-medium">Agent</div>
-                    <div class="text-[10px] text-muted-foreground/60">
+                  <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
+                    <div class="text-xl mb-1.5">💬</div>
+                    <div class="text-xs font-bold">Agent</div>
+                    <div class="text-[10px] opacity-50">
                       Real-time sharing
                     </div>
                   </div>
@@ -266,7 +266,7 @@ export const AppLayout: Component = () => {
                 <Show when={rightPanelView() !== "none"}>
                   <button
                     type="button"
-                    class="fixed inset-0 bg-black/50 z-40 lg:hidden w-full h-full border-none cursor-default"
+                    class="fixed inset-0 bg-black/60 z-40 lg:hidden w-full h-full border-none cursor-default backdrop-blur-sm"
                     onClick={closeRightPanel}
                     aria-label="Close tools panel"
                   />
@@ -285,38 +285,36 @@ export const AppLayout: Component = () => {
                       closeRightPanel();
                     }
                   }}
-                  class={`fixed right-0 inset-y-0 z-50 w-screen sm:w-[28rem] md:w-[340px] lg:w-[360px] border-l border-border/60 bg-gradient-to-b from-background to-base-200/50 backdrop-blur-md flex flex-col overflow-hidden shadow-2xl shadow-black/20
+                  class={`fixed right-0 inset-y-0 z-50 w-screen sm:w-[28rem] md:w-[340px] lg:w-[360px] border-l border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
                     transform transition-transform duration-300 ease-in-out
                     ${rightPanelView() !== "none" ? "translate-x-0" : "translate-x-full"}
                     ${mobile() ? "pt-safe pb-safe" : ""}
                   `}
                 >
-                  <div class="h-11 px-3 border-b border-border/60 flex items-center justify-between">
-                    <div class="text-sm font-medium flex items-center gap-2">
+                  <div class="h-12 px-4 border-b border-base-content/10 flex items-center justify-between bg-base-200/50">
+                    <div class="text-sm font-bold flex items-center gap-2">
                       <Show
                         when={rightPanelView() === "file"}
-                        fallback={<FiGitBranch size={14} />}
+                        fallback={<FiGitBranch size={16} class="text-primary" />}
                       >
-                        <FiFolder size={14} />
+                        <FiFolder size={16} class="text-primary" />
                       </Show>
-                      <span>
+                      <span class="tracking-tight">
                         {rightPanelView() === "file"
                           ? "File Browser"
                           : "Git Changes"}
                       </span>
                     </div>
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="xs"
-                      class="btn btn-ghost btn-xs btn-square h-9 w-9"
+                      class="btn btn-ghost btn-sm btn-square"
                       onClick={closeRightPanel}
                       title="Close panel"
                     >
-                      <FiX size={12} />
-                    </Button>
+                      <FiX size={18} />
+                    </button>
                   </div>
-                  <div class="flex-1 overflow-auto scrollbar-thin">
+                  <div class="flex-1 overflow-auto">
                     <Show when={rightPanelView() === "file"}>
                       <FileBrowserView
                         class="h-full"

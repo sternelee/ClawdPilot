@@ -452,20 +452,28 @@ export const createSessionStore = () => {
       });
 
       setConnectionState("connected");
-
-      // Set as target control session to show agent config in modal
       setTargetControlSessionId(connectionSessionId);
+      setConnectionError(null);
 
-      // Load existing remote agent sessions from connected CLI
-      const remoteSessions = await invoke<BackendSessionMetadata[]>(
-        "remote_list_agents",
-        {
-          controlSessionId: connectionSessionId,
-        },
-      );
-
-      for (const s of remoteSessions) {
-        addSession(mapBackendSessionMetadata(s, "remote", connectionSessionId));
+      // Best-effort: load existing remote sessions.
+      // Readiness is now guaranteed by backend connect_to_host.
+      try {
+        const remoteSessions = await invoke<BackendSessionMetadata[]>(
+          "remote_list_agents",
+          {
+            controlSessionId: connectionSessionId,
+          },
+        );
+        for (const s of remoteSessions) {
+          addSession(
+            mapBackendSessionMetadata(s, "remote", connectionSessionId),
+          );
+        }
+      } catch (listError) {
+        console.warn(
+          "[handleRemoteConnect] Connected, but failed to list remote agents:",
+          listError,
+        );
       }
 
       // Don't close modal - continue with agent config flow
@@ -528,7 +536,10 @@ export const createSessionStore = () => {
       }
       return parsed;
     } catch {
-      notificationStore.error("MCP Servers JSON is invalid", "Invalid MCP Config");
+      notificationStore.error(
+        "MCP Servers JSON is invalid",
+        "Invalid MCP Config",
+      );
       return undefined;
     }
   };

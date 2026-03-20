@@ -44,9 +44,7 @@ export function SettingsModal(props: SettingsModalProps) {
             <Label>{t("settings.theme")}</Label>
             <Select
               value={settingsStore.get().theme}
-              onChange={(val) =>
-                settingsStore.setTheme(val as ThemeType)
-              }
+              onChange={(val) => settingsStore.setTheme(val as ThemeType)}
             >
               {themeOptions.map((theme) => (
                 <option value={theme.value}>{theme.label}</option>
@@ -58,9 +56,7 @@ export function SettingsModal(props: SettingsModalProps) {
             <Label>{t("settings.language")}</Label>
             <Select
               value={settingsStore.get().language}
-              onChange={(val) =>
-                settingsStore.setLanguage(val as LanguageType)
-              }
+              onChange={(val) => settingsStore.setLanguage(val as LanguageType)}
             >
               <option value="en">English</option>
               <option value="zh-CN">简体中文</option>
@@ -71,11 +67,7 @@ export function SettingsModal(props: SettingsModalProps) {
             <Label>{t("settings.fontSize")}</Label>
             <Select
               value={settingsStore.get().fontSize}
-              onChange={(val) =>
-                settingsStore.setFontSize(
-                  val as FontSizeType,
-                )
-              }
+              onChange={(val) => settingsStore.setFontSize(val as FontSizeType)}
             >
               <option value="small">{t("fontSize.small")}</option>
               <option value="medium">{t("fontSize.medium")}</option>

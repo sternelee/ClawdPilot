@@ -31,7 +31,6 @@ import { notificationStore } from "../stores/notificationStore";
 import { sessionEventRouter } from "../stores/sessionEventRouter";
 import { isMobile } from "../stores/deviceStore";
 import type { AgentType, AgentSessionMetadata } from "../stores/sessionStore";
-import { Button } from "./ui/primitives";
 import { Dropdown } from "./ui/Dropdown";
 
 const getAgentIcon = (agentType: AgentType) => {
@@ -65,7 +64,7 @@ const getAgentIcon = (agentType: AgentType) => {
 
   // Default fallback
   return (
-    <div class={`${iconClass} bg-muted`}>
+    <div class={`${iconClass} bg-base-300`}>
       <span class="text-lg">🤖</span>
     </div>
   );
@@ -118,11 +117,11 @@ const SessionItem: Component<SessionItemProps> = (props) => {
     <div
       role="button"
       tabIndex={0}
-      class={`group relative flex items-center gap-3 px-3 py-3 rounded-lg cursor-pointer transition-all duration-200 mx-1
+      class={`group relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 mx-1
         ${
           props.isActive
-            ? "bg-gradient-to-r from-primary/15 to-primary/5 border border-primary/20 shadow-sm"
-            : "hover:bg-muted/60 border border-transparent"
+            ? "bg-primary text-primary-content shadow-lg shadow-primary/20 scale-[1.02] z-10"
+            : "hover:bg-base-content/5 border border-transparent"
         }`}
       onClick={props.onClick}
       onKeyDown={(e) => {
@@ -134,7 +133,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
     >
       {/* Agent Icon */}
       <div
-        class={`shrink-0 ${props.isActive ? "text-primary" : "text-muted-foreground/70"}`}
+        class={`shrink-0 ${props.isActive ? "bg-white/20 p-0.5 rounded-lg" : ""}`}
       >
         {getAgentIcon(props.session?.agentType || "claude")}
       </div>
@@ -143,7 +142,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span
-            class={`font-medium text-sm truncate ${props.isActive ? "text-foreground" : "text-foreground/80"}`}
+            class={`font-bold text-sm truncate ${props.isActive ? "text-primary-content" : "text-base-content"}`}
           >
             {props.session?.agentType === "claude" && "Claude"}
             {props.session?.agentType === "gemini" && "Gemini"}
@@ -152,35 +151,35 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             {props.session?.agentType === "openclaw" && "OpenClaw"}
           </span>
           <span
-            class={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-              props.session?.mode === "local"
-                ? "bg-primary/15 text-primary/80"
-                : "bg-muted text-muted-foreground/60"
+            class={`text-[9px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider ${
+              props.isActive
+                ? "bg-white/20 text-white"
+                : props.session?.mode === "local"
+                  ? "bg-primary/10 text-primary"
+                  : "bg-base-content/10 text-base-content/60"
             }`}
           >
             {props.session?.mode === "local" ? "Local" : "Remote"}
           </span>
         </div>
-        <div class="text-xs text-muted-foreground/50 truncate mt-0.5">
+        <div class={`text-[11px] truncate mt-0.5 font-mono ${props.isActive ? "text-primary-content/70" : "opacity-40"}`}>
           {props.session?.projectPath?.split("/").pop() || "No project"}
         </div>
       </div>
 
       {/* Status Indicator */}
       <Show when={props.hasUnread && !props.isActive}>
-        <div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+        <div class="w-2 h-2 rounded-full bg-error animate-pulse shrink-0 shadow-sm" />
       </Show>
 
       {/* Close Button */}
       <div class="flex items-center gap-1">
         <div class="hidden md:flex items-center gap-1">
           <Show when={props.onToggleHistory}>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="xs"
-              class={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150
-                ${props.isActive ? "hover:bg-primary/20" : "hover:bg-muted"}`}
+              class={`btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-all duration-150
+                ${props.isActive ? "text-primary-content hover:bg-white/20" : ""}`}
               onClick={(e) => {
                 e.stopPropagation();
                 props.onToggleHistory?.();
@@ -189,14 +188,12 @@ const SessionItem: Component<SessionItemProps> = (props) => {
               disabled={props.historyDisabled}
             >
               <FiClock size={14} />
-            </Button>
+            </button>
           </Show>
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="xs"
-            class={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 transition-all duration-150 -mr-1
-              ${props.isActive ? "hover:bg-primary/20" : "hover:bg-muted"}`}
+            class={`btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-all duration-150
+              ${props.isActive ? "text-primary-content hover:bg-white/20" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               props.onClose();
@@ -204,7 +201,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             title="Close session"
           >
             <FiX size={14} />
-          </Button>
+          </button>
         </div>
         <div class="md:hidden" onClick={(e) => e.stopPropagation()}>
           <Dropdown
@@ -216,10 +213,10 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             trigger={
               <button
                 type="button"
-                class="btn btn-ghost btn-sm btn-square h-9 w-9"
+                class={`btn btn-ghost btn-sm btn-square h-9 w-9 ${props.isActive ? "text-primary-content hover:bg-white/20" : ""}`}
                 title="Session actions"
               >
-                <FiMoreVertical size={12} />
+                <FiMoreVertical size={14} />
               </button>
             }
           />
@@ -591,43 +588,42 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             props.onToggle();
           }
         }}
-        class={`fixed lg:static inset-y-0 left-0 z-50 w-[min(86vw,18rem)] lg:w-72 bg-gradient-to-b from-background to-base-200/50 border-r border-border/60
-          transform transition-transform duration-300 ease-in-out backdrop-blur-sm
+        class={`fixed lg:static inset-y-0 left-0 z-50 w-[min(86vw,18rem)] lg:w-72 bg-base-200 border-r border-base-content/10
+          transform transition-transform duration-300 ease-in-out backdrop-blur-md
           ${props.isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
           pt-safe lg:pt-0
-          h-[var(--effective-viewport-height,100vh)] flex flex-col
+          h-[var(--effective-viewport-height,100vh)] flex flex-col shadow-2xl lg:shadow-none
         `}
       >
         {/* Header */}
-        <div class="flex items-center justify-between px-4 py-4 border-b border-border/60 bg-background/50 backdrop-blur">
-          <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between px-5 py-5 border-b border-base-content/10 bg-base-100/50 backdrop-blur">
+          <div class="flex items-center gap-3">
             {/* App Logo */}
-            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
-              <span class="text-white font-bold text-sm">P</span>
+            <div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+              <span class="text-primary-content font-black text-lg">P</span>
             </div>
             <div>
-              <p class="text-[10px] text-muted-foreground/60 -mt-0.5">
-                AI Copilot workspace
+              <h1 class="text-sm font-black tracking-tight uppercase leading-none">ClawdPilot</h1>
+              <p class="text-[10px] opacity-40 mt-0.5 font-bold uppercase tracking-wider">
+                AI Platform
               </p>
             </div>
           </div>
           <div class="flex items-center gap-1">
-            <Button
+            <button
               type="button"
-              size="icon"
-              variant="ghost"
-              class="h-7 w-7 lg:hidden"
+              class="btn btn-ghost btn-sm btn-square lg:hidden"
               onClick={props.onToggle}
             >
-              <FiX size={16} />
-            </Button>
+              <FiX size={18} />
+            </button>
           </div>
         </div>
 
         {/* Session List */}
         <div
           ref={sessionListEl}
-          class="overflow-y-auto flex-1 p-2 space-y-1"
+          class="overflow-y-auto flex-1 p-2 space-y-1.5 bg-base-200/30"
           onTouchStart={(e) => {
             if (!isMobile() || isRefreshing() || !sessionListEl) return;
             if (sessionListEl.scrollTop > 0) return;
@@ -673,7 +669,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         >
           <Show when={isMobile() && (pullDistance() > 0 || isRefreshing())}>
             <div
-              class="flex items-center justify-center text-xs text-muted-foreground/70 transition-all"
+              class="flex items-center justify-center text-xs opacity-60 transition-all font-bold"
               style={{
                 height: `${isRefreshing() ? 42 : Math.max(18, pullDistance())}px`,
                 transform: `translateY(${Math.min(pullDistance() * 0.15, 10)}px)`,
@@ -682,9 +678,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               <Show
                 when={!isRefreshing()}
                 fallback={
-                  <span class="inline-flex items-center gap-1.5">
-                    <span class="loading loading-spinner loading-xs" />
-                    Refreshing sessions...
+                  <span class="inline-flex items-center gap-2">
+                    <span class="loading loading-spinner loading-xs text-primary" />
+                    Refreshing...
                   </span>
                 }
               >
@@ -695,8 +691,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             </div>
           </Show>
           <Show when={sessions().length > 0}>
-            <div class="px-2 py-2 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">
-              Active Sessions
+            <div class="px-3 py-2 text-[10px] font-black text-base-content/30 uppercase tracking-[0.15em]">
+              Sessions
             </div>
             <For each={sessions()}>
               {(session) => {
@@ -728,62 +724,55 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                       historyDisabled={!canShowHistory()}
                     />
                     <Show when={isExpanded()}>
-                      <div class="mx-2 mb-2 rounded-lg border border-border/60 bg-muted/30 p-2">
-                        <div class="flex items-center justify-between mb-2">
-                          <span class="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">
+                      <div class="mx-2 mb-2 rounded-xl border border-base-content/5 bg-base-300/50 p-2.5 shadow-inner">
+                        <div class="flex items-center justify-between mb-2 px-1">
+                          <span class="text-[9px] font-black text-base-content/40 uppercase tracking-widest">
                             History
                           </span>
                           <div class="flex items-center gap-2">
-                            <Button
+                            <button
                               type="button"
-                              size="xs"
-                              variant="ghost"
+                              class="btn btn-ghost btn-xs btn-square"
                               onClick={() => loadHistoryForSession(session)}
                               title="Refresh history"
                             >
-                              <FiRefreshCw size={12} />
-                            </Button>
+                              <FiRefreshCw size={12} class="opacity-50" />
+                            </button>
                           </div>
                         </div>
-                        <Show when={!canShowHistory()}>
-                          <p class="text-xs text-muted-foreground/60">
-                            History is available for local sessions only.
-                          </p>
-                        </Show>
                         <Show when={canShowHistory() && isLoading()}>
-                          <div class="flex items-center justify-center py-4">
-                            <div class="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                          <div class="flex items-center justify-center py-6">
+                            <span class="loading loading-ring loading-sm text-primary/40" />
                           </div>
                         </Show>
                         <Show when={canShowHistory() && !isLoading()}>
                           <Show when={historyEntries().length > 0}>
-                            <For each={historyEntries()}>
-                              {(entry) => (
-                                <button
-                                  type="button"
-                                  class="group w-full text-left p-2 rounded-lg hover:bg-muted/60 transition-colors"
-                                  onClick={() =>
-                                    handleLoadHistorySession(session, entry)
-                                  }
-                                >
-                                  <span class="block text-sm font-medium truncate">
-                                    {entry.title ||
-                                      entry.session_id.slice(0, 8)}
-                                  </span>
-                                  <span class="block text-[10px] text-muted-foreground/60">
-                                    {entry.updated_at || ""}
-                                  </span>
-                                </button>
-                              )}
-                            </For>
+                            <div class="space-y-1">
+                              <For each={historyEntries()}>
+                                {(entry) => (
+                                  <button
+                                    type="button"
+                                    class="group w-full text-left p-2.5 rounded-lg hover:bg-primary/10 hover:text-primary transition-all duration-200 border border-transparent hover:border-primary/10"
+                                    onClick={() =>
+                                      handleLoadHistorySession(session, entry)
+                                    }
+                                  >
+                                    <span class="block text-xs font-bold truncate">
+                                      {entry.title ||
+                                        entry.session_id.slice(0, 8)}
+                                    </span>
+                                    <span class="block text-[9px] opacity-40 group-hover:opacity-60 font-mono mt-0.5">
+                                      {entry.updated_at || ""}
+                                    </span>
+                                  </button>
+                                )}
+                              </For>
+                            </div>
                           </Show>
                           <Show when={historyEntries().length === 0}>
-                            <div class="flex flex-col items-center justify-center py-4 text-center px-2">
-                              <p class="text-sm text-muted-foreground/60">
-                                No history sessions
-                              </p>
-                              <p class="text-xs text-muted-foreground/40 mt-1">
-                                This agent may not support history
+                            <div class="flex flex-col items-center justify-center py-6 text-center px-2">
+                              <p class="text-[11px] font-bold opacity-30">
+                                No history found
                               </p>
                             </div>
                           </Show>
@@ -796,40 +785,38 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             </For>
           </Show>
           <Show when={sessions().length === 0}>
-            <div class="flex flex-col items-center justify-center py-10 text-center px-4">
-              <div class="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center mb-3">
-                <FiPlus size={24} class="text-muted-foreground/50" />
+            <div class="flex flex-col items-center justify-center py-16 text-center px-6">
+              <div class="w-16 h-16 rounded-[2rem] bg-base-300 flex items-center justify-center mb-4 border border-base-content/5 shadow-inner">
+                <FiPlus size={28} class="opacity-20" />
               </div>
-              <p class="text-sm font-medium text-muted-foreground">
+              <p class="text-sm font-bold opacity-40">
                 No active sessions
               </p>
-              <p class="text-xs text-muted-foreground/60 mt-1 max-w-[160px]">
-                Create a local session or connect to a remote CLI
+              <p class="text-[11px] opacity-30 mt-2 max-w-[140px] leading-relaxed">
+                Connect to a remote CLI or create a local session
               </p>
             </div>
           </Show>
         </div>
 
         {/* Footer */}
-        <div class="p-3 border-t border-border/60 bg-background/30 backdrop-blur">
+        <div class="p-4 border-t border-base-content/10 bg-base-100/50 backdrop-blur">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 text-xs text-muted-foreground/60">
-              <span class="inline-flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-green-500/80 animate-pulse" />
-                {activeSessions().length} active
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-tighter opacity-40">
+                <span class="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
+                {activeSessions().length} Online
               </span>
             </div>
-            <Button
+            <button
               type="button"
-              size="sm"
-              variant="default"
-              class="h-8 px-3 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-lg shadow-primary/20"
+              class="btn btn-primary btn-sm rounded-xl px-4 font-black shadow-lg shadow-primary/20 h-10 min-h-[40px]"
               onClick={() => sessionStore.openNewSessionModal("local")}
               title="New Session"
             >
-              <FiPlus size={16} class="mr-1" />
-              <span class="text-xs font-medium">New</span>
-            </Button>
+              <FiPlus size={18} class="-ml-1" />
+              <span class="text-xs uppercase tracking-widest">New</span>
+            </button>
           </div>
         </div>
       </aside>

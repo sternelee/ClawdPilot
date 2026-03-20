@@ -208,10 +208,13 @@ export const NewSessionModal: Component = () => {
     sessionStore.state.newSessionMode === "remote" &&
     !sessionStore.state.targetControlSessionId;
 
+  const remoteControlSessionId = () =>
+    sessionStore.state.newSessionMode === "remote"
+      ? sessionStore.state.targetControlSessionId
+      : null;
+
   const showAgentConfig = () =>
-    sessionStore.state.newSessionMode === "local" ||
-    (sessionStore.state.newSessionMode === "remote" &&
-      sessionStore.state.targetControlSessionId);
+    sessionStore.state.newSessionMode === "local" || !!remoteControlSessionId();
 
   createEffect(() => {
     if (!isMobile() || !sessionStore.state.isNewSessionModalOpen) return;
@@ -492,6 +495,35 @@ export const NewSessionModal: Component = () => {
                 </span>
               </Alert>
             </Show>
+          </Show>
+
+          {/* Remote Mode: Connected Summary */}
+          <Show
+            when={
+              sessionStore.state.newSessionMode === "remote" &&
+              !!remoteControlSessionId()
+            }
+          >
+            <Alert variant="info" class="mb-4 py-2">
+              <div class="flex items-center justify-between gap-2 w-full">
+                <span class="text-sm">
+                  Connected to remote host (
+                  {(remoteControlSessionId() || "").slice(0, 8)}). Configure
+                  agent below.
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    sessionStore.setTargetControlSessionId(null);
+                    sessionStore.setConnectionError(null);
+                  }}
+                >
+                  Change Ticket
+                </Button>
+              </div>
+            </Alert>
           </Show>
 
           {/* Agent Config (Local or Remote with active connection) */}

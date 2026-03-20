@@ -8,6 +8,7 @@ interface ThemeSwitcherProps {
 
 // Theme definitions with icons
 const themes = [
+  { id: "light", name: "Light", icon: FiSun, color: "#fbbf24" },
   { id: "sunset", name: "Sunset", icon: FiSun, color: "#fb923c" },
   { id: "dark", name: "Dark", icon: FiMoon, color: "#1d283a" },
   { id: "dracula", name: "Dracula", icon: FiMoon, color: "#7b2cbf" },

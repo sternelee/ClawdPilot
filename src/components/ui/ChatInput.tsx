@@ -251,30 +251,30 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex flex-col gap-1.5 px-2.5 sm:px-4 pt-2 sm:pt-3 pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] sm:pb-3 bg-background/85 backdrop-blur-md sticky bottom-0 z-20",
-        focused() && "bg-background",
+        "flex flex-col gap-1.5 px-2 sm:px-4 pt-2 sm:pt-3 pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] sm:pb-3 bg-base-100/95 backdrop-blur-md sticky bottom-0 z-20",
+        focused() && "bg-base-100",
         props.class,
       )}
     >
       {/* Input Container with Toolbar Inside */}
       <div
         class={cn(
-          "relative flex flex-col rounded-2xl border-2 bg-muted/30 transition-all duration-300",
+          "relative flex flex-col rounded-2xl border-2 bg-base-200/50 transition-all duration-300",
           focused()
-            ? "border-primary/50 shadow-xl shadow-primary/5 bg-background"
-            : "border-border/60 hover:border-muted-foreground/20 hover:bg-muted/50",
+            ? "border-primary/50 shadow-xl shadow-primary/5 bg-base-100"
+            : "border-base-content/10 hover:border-base-content/20 hover:bg-base-200/80",
         )}
       >
         <Show when={showMentionSuggestions()}>
-          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.375rem)] z-40 rounded-xl border border-border/50 bg-base-300/95 shadow-lg max-h-[7.5rem] sm:max-h-[13rem] overflow-y-auto">
+          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[10rem] sm:max-h-[15rem] overflow-y-auto">
             {mentionSuggestions().map((item, index) => (
               <button
                 type="button"
                 class={cn(
-                  "w-full px-3 py-2 text-left text-xs sm:text-sm transition-colors min-h-10 sm:min-h-11",
+                  "w-full px-4 py-3 text-left text-sm transition-colors min-h-[44px]",
                   index === activeMentionIndex()
-                    ? "bg-primary/15 text-primary"
-                    : "hover:bg-muted/60",
+                    ? "bg-primary text-primary-content"
+                    : "hover:bg-base-content/5",
                 )}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => props.onSelectMention?.(item.path)}
@@ -286,22 +286,22 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         </Show>
 
         <Show when={showSlashSuggestions()}>
-          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.375rem)] z-40 rounded-xl border border-border/50 bg-base-300/95 shadow-lg max-h-[7.5rem] sm:max-h-[13rem] overflow-y-auto">
+          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[10rem] sm:max-h-[15rem] overflow-y-auto">
             {slashSuggestions().map((item, index) => (
               <button
                 type="button"
                 class={cn(
-                  "w-full px-3 py-2 text-left transition-colors",
+                  "w-full px-4 py-3 text-left transition-colors min-h-[44px]",
                   index === activeSlashIndex()
-                    ? "bg-primary/15 text-primary"
-                    : "hover:bg-muted/60",
+                    ? "bg-primary text-primary-content"
+                    : "hover:bg-base-content/5",
                 )}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => props.onSelectSlash?.(item.value || item.name)}
               >
-                <div class="text-xs sm:text-sm font-medium">/{item.name}</div>
+                <div class="text-sm font-bold">/{item.name}</div>
                 <Show when={item.description}>
-                  <div class="mt-0.5 text-[11px] sm:text-xs text-muted-foreground line-clamp-2">
+                  <div class="mt-0.5 text-xs opacity-70 line-clamp-2">
                     {item.description}
                   </div>
                 </Show>
@@ -311,17 +311,17 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         </Show>
 
         {/* Top Row: Textarea + Send Button */}
-        <div class="flex items-end gap-1.5 sm:gap-2 p-1.5 sm:p-2 pb-1">
+        <div class="flex items-end gap-1 sm:gap-2 p-1.5 sm:p-2 pb-1">
           {/* Attach Button */}
           <button
             type="button"
-            class="p-2 text-muted-foreground/60 hover:text-foreground hover:bg-muted/80 rounded-xl transition-all duration-200 shrink-0 hidden"
+            class="p-2.5 text-base-content/60 hover:text-primary hover:bg-primary/10 rounded-xl transition-all duration-200 shrink-0 hidden"
             title="Attach files"
             aria-label="Attach files"
             disabled={props.disabled}
             onClick={handleAttach}
           >
-            <FiPlus size={20} />
+            <FiPlus size={22} />
           </button>
 
           {/* Textarea */}
@@ -334,7 +334,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             onBlur={() => setFocused(false)}
             placeholder={props.placeholder || "Type your message..."}
             aria-label="Chat input"
-            class="flex-1 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-transparent border-none outline-none resize-none text-[13px] sm:text-sm max-h-[200px] min-h-[22px] leading-5 sm:leading-relaxed placeholder:text-muted-foreground/40 scrollbar-hide"
+            class="flex-1 px-3 py-2 bg-transparent border-none outline-none resize-none text-[16px] sm:text-sm max-h-[180px] min-h-[40px] leading-relaxed placeholder:opacity-40"
             disabled={props.disabled}
             rows={1}
           />
@@ -342,17 +342,17 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
         {/* Attachments List */}
         <Show when={props.attachments && props.attachments.length > 0}>
-          <div class="flex flex-wrap gap-2 px-3 pb-1">
+          <div class="flex flex-wrap gap-2 px-3 pb-2">
             {props.attachments!.map((file) => (
-              <div class="flex items-center gap-2 px-2.5 py-1 bg-muted/60 rounded-lg text-xs border border-border/30">
-                <FiPlus size={10} class="rotate-45 text-muted-foreground/60" />
-                <span class="truncate max-w-[150px]">{file.name}</span>
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-base-300/80 rounded-lg text-xs border border-base-content/5">
+                <FiPlus size={10} class="rotate-45 opacity-60" />
+                <span class="truncate max-w-[150px] font-medium">{file.name}</span>
                 <button
                   type="button"
-                  class="p-0.5 hover:bg-muted-foreground/20 rounded text-muted-foreground/60"
+                  class="p-1 hover:bg-base-content/10 rounded text-base-content/60"
                   onClick={() => props.onAttach?.([])}
                 >
-                  <FiX size={10} />
+                  <FiX size={12} />
                 </button>
               </div>
             ))}
@@ -361,7 +361,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
         {/* Bottom Toolbar */}
         <div
-          class="flex items-center px-3 pb-1 gap-2"
+          class="flex items-center px-2 pb-1.5 gap-1.5 sm:gap-2"
           onTouchStart={(e) => {
             if (!mobile() || e.touches.length !== 1) return;
             setToolbarTouchStartY(e.touches[0].clientY);
@@ -382,57 +382,57 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           <Show when={mobile()}>
             <button
               type="button"
-              class="btn btn-ghost btn-sm h-9 min-h-9 w-9 rounded-md hide-on-keyboard"
+              class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl hide-on-keyboard"
               onClick={() => setShowMobileTools((prev) => !prev)}
               title={showMobileTools() ? "Hide tools" : "Show tools"}
               aria-label={showMobileTools() ? "Hide tools" : "Show tools"}
             >
               <Show
                 when={showMobileTools()}
-                fallback={<FiPlus class="size-4" />}
+                fallback={<FiPlus class="size-5" />}
               >
-                <FiX class="size-4" />
+                <FiX class="size-5" />
               </Show>
             </button>
           </Show>
 
           <Show when={!mobile() || showMobileTools()}>
-            <div class="flex items-center gap-0.5 hide-on-keyboard">
+            <div class="flex items-center gap-1 hide-on-keyboard">
               {/* Settings Button with Permission Dropdown */}
               <div class="relative">
                 <button
                   type="button"
                   class={cn(
-                    "btn btn-ghost btn-sm h-9 min-h-9 px-2.5 gap-1 text-[11px] transition-all rounded-md",
+                    "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
                     showSettings()
                       ? "bg-primary/15 text-primary"
-                      : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/50",
+                      : "text-base-content/70 hover:text-primary hover:bg-primary/10",
                   )}
                   onClick={() => setShowSettings(!showSettings())}
                   title="Settings"
                   aria-label="Settings"
                 >
-                  <FiSettings class="size-4 sm:size-4" />
+                  <FiSettings class="size-4.5" />
                   <span class="hidden sm:inline">Settings</span>
                 </button>
 
                 {/* Settings Dropdown */}
                 <Show when={showSettings()}>
-                  <div class="absolute bottom-full left-0 mb-2 w-48 bg-base-300 rounded-lg border border-border shadow-xl z-50 overflow-hidden">
-                    <div class="px-3 py-2 border-b border-border">
-                      <div class="text-xs font-medium text-muted-foreground">
+                  <div class="absolute bottom-full left-0 mb-2 w-56 bg-base-300 rounded-xl border border-base-content/10 shadow-2xl z-50 overflow-hidden">
+                    <div class="px-4 py-2.5 border-b border-base-content/10">
+                      <div class="text-[10px] font-bold uppercase tracking-widest opacity-50">
                         Permission Mode
                       </div>
                     </div>
-                    <div class="p-1">
+                    <div class="p-1.5">
                       {permissionOptions.map((option) => (
                         <button
                           type="button"
                           class={cn(
-                            "w-full flex items-center gap-2 px-2 py-1.5 text-left text-sm rounded-md transition-colors",
+                            "w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-lg transition-colors",
                             props.permissionMode === option.value
-                              ? "bg-primary/10 text-primary"
-                              : "hover:bg-muted",
+                              ? "bg-primary text-primary-content"
+                              : "hover:bg-base-content/5",
                           )}
                           onClick={() => {
                             props.onPermissionModeChange?.(option.value);
@@ -440,13 +440,16 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                           }}
                         >
                           <div class="flex-1 min-w-0">
-                            <div class="font-medium">{option.label}</div>
-                            <div class="text-xs text-muted-foreground truncate">
+                            <div class="text-sm font-bold">{option.label}</div>
+                            <div class={cn(
+                              "text-[11px] truncate",
+                              props.permissionMode === option.value ? "opacity-90" : "opacity-50"
+                            )}>
                               {option.description}
                             </div>
                           </div>
                           <Show when={props.permissionMode === option.value}>
-                            <FiCheck size={14} class="text-primary shrink-0" />
+                            <FiCheck size={16} class="shrink-0" />
                           </Show>
                         </button>
                       ))}
@@ -457,15 +460,15 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
               {/* File Browser Button */}
               <Show when={showAdvancedTools()}>
-                <>
+                <div class="flex items-center gap-1">
                   {/* File Browser Button */}
                   <button
                     type="button"
                     class={cn(
-                      "btn btn-ghost btn-sm h-9 min-h-9 px-2.5 gap-1 text-[11px] transition-all rounded-md",
+                      "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
                       props.rightPanelView === "file"
-                        ? "bg-primary/15 text-primary hover:bg-primary/20"
-                        : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/50",
+                        ? "bg-primary/15 text-primary"
+                        : "text-base-content/70 hover:text-primary hover:bg-primary/10",
                     )}
                     onClick={() => {
                       props.onToggleFileBrowser?.();
@@ -477,7 +480,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                     aria-label="Toggle file browser"
                     disabled={props.disabled}
                   >
-                    <FiFolder class="size-4 sm:size-4" />
+                    <FiFolder class="size-4.5" />
                     <span class="hidden sm:inline">Files</span>
                   </button>
 
@@ -485,10 +488,10 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                   <button
                     type="button"
                     class={cn(
-                      "btn btn-ghost btn-sm h-9 min-h-9 px-2.5 gap-1 text-[11px] transition-all rounded-md",
+                      "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
                       props.rightPanelView === "git"
-                        ? "bg-primary/15 text-primary hover:bg-primary/20"
-                        : "text-muted-foreground/70 hover:text-foreground hover:bg-muted/50",
+                        ? "bg-primary/15 text-primary"
+                        : "text-base-content/70 hover:text-primary hover:bg-primary/10",
                     )}
                     onClick={() => {
                       props.onToggleGitPanel?.();
@@ -500,29 +503,25 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                     aria-label="Toggle git panel"
                     disabled={props.disabled}
                   >
-                    <FiGitBranch class="size-4 sm:size-4" />
+                    <FiGitBranch class="size-4.5" />
                     <span class="hidden sm:inline">Git</span>
                   </button>
-                </>
+                </div>
               </Show>
             </div>
           </Show>
 
           {/* Right side: Keyboard hints */}
-          <div class="hidden sm:flex items-center gap-2 text-[10px] text-muted-foreground/40">
+          <div class="hidden sm:flex items-center gap-2 text-[10px] opacity-30">
             <Show when={isStreamingNow()}>
-              <span class="text-[10px] text-primary/80">Generating...</span>
+              <span class="text-[10px] text-primary font-bold">Generating...</span>
             </Show>
-            <span class="hidden sm:flex items-center gap-0.5">
-              <kbd class="kbd kbd-xs bg-muted/40 border-border/20">↵</kbd>
+            <span class="flex items-center gap-1">
+              <kbd class="kbd kbd-xs">↵</kbd>
               <span>line</span>
             </span>
-            <span class="hidden sm:flex items-center gap-0.5">
-              <kbd class="kbd kbd-xs bg-muted/40 border-border/20">⇧↵</kbd>
-              <span>send</span>
-            </span>
-            <span class="hidden sm:flex items-center gap-0.5">
-              <kbd class="kbd kbd-xs bg-muted/40 border-border/20">⌘↵</kbd>
+            <span class="flex items-center gap-1">
+              <kbd class="kbd kbd-xs">⇧↵</kbd>
               <span>send</span>
             </span>
           </div>
@@ -549,8 +548,8 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               !props.isStreaming && (!props.value.trim() || props.disabled)
             }
             class={cn(
-              "btn btn-sm h-8 min-h-8 shrink-0 ml-auto inline-flex justify-center items-center rounded-xl transition-all duration-300 mb-0.5",
-              props.isStreaming ? "p-2" : "disabled:cursor-not-allowed",
+              "btn btn-primary btn-sm h-10 min-h-[40px] px-4 rounded-xl shadow-lg shadow-primary/20 transition-all duration-300 ml-auto shrink-0",
+              props.isStreaming && "btn-error shadow-error/20",
             )}
             title={props.isStreaming ? "Stop generation" : "Send message"}
             aria-label={props.isStreaming ? "Stop generation" : "Send message"}
@@ -558,15 +557,13 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             <Show
               when={props.isStreaming}
               fallback={
-                <div class="flex items-center gap-1.5 px-1.5 py-0.5">
-                  <FiSend class="size-4 text-white" />
-                  <span class="text-sm font-medium text-white hidden sm:inline">
-                    Send
-                  </span>
+                <div class="flex items-center gap-2">
+                  <FiSend class="size-4" />
+                  <span class="text-sm font-bold hidden sm:inline">Send</span>
                 </div>
               }
             >
-              <FaSolidStopCircle size={24} />
+              <FaSolidStopCircle size={22} />
             </Show>
           </button>
         </div>
