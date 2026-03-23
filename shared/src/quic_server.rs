@@ -1511,6 +1511,30 @@ impl QuicMessageClient {
             );
         });
 
+        // Spawn streaming message receiver (accept_uni) in parallel
+        let connection_for_streaming = connection.clone();
+        let message_tx_streaming = self.message_tx.clone();
+        let connection_id_streaming = connection_id.clone();
+
+        tokio::spawn(async move {
+            loop {
+                match connection_for_streaming.accept_uni().await {
+                    Ok(recv) => {
+                        let tx = message_tx_streaming.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = Self::handle_streaming_stream_client(recv, tx).await {
+                                error!("Client streaming stream error: {}", e);
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        debug!("Client accept_uni error: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
         Ok(connection_id)
     }
 
@@ -1585,6 +1609,48 @@ impl QuicMessageClient {
         } else {
             Err(anyhow::anyhow!("Connection not found: {}", connection_id))
         }
+    }
+
+    /// 判断消息类型是否应该使用独立 stream 发送
+    fn is_streaming_message(msg_type: MessageType) -> bool {
+        matches!(msg_type, MessageType::AgentMessage | MessageType::TcpData)
+    }
+
+    /// 通过独立 uni-stream 发送流式消息到服务器
+    pub async fn send_streaming_message_to_server(
+        &self,
+        connection_id: &str,
+        message: &Message,
+    ) -> Result<u64> {
+        let connection = {
+            let connections = self.server_connections.read().await;
+            connections
+                .get(connection_id)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
+        };
+
+        let mut send_stream = connection.open_uni().await?;
+        let data = MessageSerializer::serialize_for_network(message)?;
+        send_stream.write_all(&data).await?;
+        send_stream.finish()?;
+
+        Ok(send_stream.id().into())
+    }
+
+    /// 发送消息到服务器（自动选择传输方式）
+    pub async fn send_message_to_server_auto(
+        &self,
+        connection_id: &str,
+        message: &Message,
+    ) -> Result<()> {
+        if Self::is_streaming_message(message.message_type) {
+            self.send_streaming_message_to_server(connection_id, message).await?;
+        } else {
+            // Clone is needed because send_message_to_server takes Message, not &Message
+            self.send_message_to_server(connection_id, message.clone()).await?;
+        }
+        Ok(())
     }
 
     /// 断开与服务器的连接
@@ -1740,6 +1806,42 @@ impl QuicMessageClient {
             }
         }
 
+        Ok(())
+    }
+
+    /// 处理来自独立 uni-stream 的流式消息（客户端用）
+    async fn handle_streaming_stream_client(
+        mut recv: iroh::endpoint::RecvStream,
+        message_tx: broadcast::Sender<Message>,
+    ) -> Result<()> {
+        const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+        let read_result = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            recv.read_to_end(MAX_MESSAGE_SIZE),
+        )
+        .await;
+
+        match read_result {
+            Ok(Ok(data)) => {
+                match MessageSerializer::deserialize_from_network(&data) {
+                    Ok(message) => {
+                        info!("📨 [client streaming] Received: type={:?}, id={}", 
+                              message.message_type, message.id);
+                        message_tx.send(message)?;
+                    }
+                    Err(e) => {
+                        error!("Failed to deserialize streaming message: {}", e);
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                debug!("Client streaming stream closed: {}", e);
+            }
+            Err(_) => {
+                warn!("Client streaming stream read timeout");
+                recv.stop(0u32.into())?;
+            }
+        }
         Ok(())
     }
 }
