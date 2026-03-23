@@ -526,6 +526,20 @@ impl QuicMessageServer {
             }
         };
 
+        // Spawn message stream handler (BiDi) and streaming message handler (Uni) in parallel
+        let connection_for_streaming = connection.clone();
+        let connection_id_for_streaming = connection_id.clone();
+        let communication_manager_for_streaming = communication_manager.clone();
+
+        tokio::spawn(async move {
+            let _ = Self::accept_streaming_messages(
+                connection_for_streaming,
+                connection_id_for_streaming,
+                communication_manager_for_streaming,
+            )
+            .await;
+        });
+
         // 处理消息流
         Self::handle_message_streams(
             connection,
@@ -819,6 +833,87 @@ impl QuicMessageServer {
             }
         }
 
+        Ok(())
+    }
+
+    /// 启动接收独立 uni-stream 消息的任务
+    /// 与 handle_message_streams (accept_bi) 并行运行
+    async fn accept_streaming_messages(
+        connection: iroh::endpoint::Connection,
+        connection_id: String,
+        communication_manager: Arc<CommunicationManager>,
+    ) -> Result<()> {
+        let remote_id = connection.remote_id();
+        info!("📨 Starting streaming message receiver for connection: {}", connection_id);
+
+        loop {
+            match connection.accept_uni().await {
+                Ok(recv) => {
+                    let cm = communication_manager.clone();
+                    let conn_id = connection_id.clone();
+                    let remote = remote_id;
+
+                    tokio::spawn(async move {
+                        debug!("📨 Accepted streaming stream from {:?}", remote);
+                        if let Err(e) = Self::handle_streaming_stream_static(
+                            recv,
+                            conn_id,
+                            cm,
+                        )
+                        .await
+                        {
+                            error!("Error handling streaming stream: {}", e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    debug!("accept_uni error for {}: {}", connection_id, e);
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Static helper for streaming stream handling (needed for tokio::spawn)
+    async fn handle_streaming_stream_static(
+        mut recv: iroh::endpoint::RecvStream,
+        connection_id: String,
+        communication_manager: Arc<CommunicationManager>,
+    ) -> Result<()> {
+        const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+        let read_result = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            recv.read_to_end(MAX_MESSAGE_SIZE),
+        )
+        .await;
+
+        match read_result {
+            Ok(Ok(data)) => {
+                match MessageSerializer::deserialize_from_network(&data) {
+                    Ok(message) => {
+                        info!(
+                            "📨 [streaming] Received: type={:?}, id={}",
+                            message.message_type,
+                            message.id
+                        );
+                        communication_manager
+                            .receive_incoming_message(message)
+                            .await?;
+                    }
+                    Err(e) => {
+                        error!("Failed to deserialize streaming message: {}", e);
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                debug!("Streaming stream closed: {}", e);
+            }
+            Err(_) => {
+                warn!("Streaming stream read timeout");
+                recv.stop(0u32.into())?;
+            }
+        }
         Ok(())
     }
 
