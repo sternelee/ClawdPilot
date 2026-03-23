@@ -872,6 +872,44 @@ impl AgentManager {
             Err(anyhow!("Session not found: {}", session_id))
         }
     }
+
+    /// Handle an incoming permission response from the app
+    ///
+    /// This is called when the app sends back a permission response.
+    /// We iterate through all ACP sessions and find the one that has a pending
+    /// permission request with the given request_id, then forward the response.
+    pub async fn handle_permission_response(
+        &self,
+        request_id: &str,
+        approved: bool,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let sessions = self.sessions.read().await;
+        
+        for (session_id, session) in sessions.iter() {
+            // Try to respond to permission on this session
+            // The correct session will handle it, others will log a warning and do nothing
+            match session.respond_to_permission(
+                request_id.to_string(),
+                approved,
+                false, // approve_for_session
+                reason.clone()
+            ).await {
+                Ok(()) => {
+                    info!("Successfully routed permission response to session {}", session_id);
+                    return Ok(());
+                }
+                Err(e) => {
+                    // This session didn't have this request_id, try next one
+                    debug!("Session {} doesn't have pending permission {}: {}", 
+                           session_id, request_id, e);
+                }
+            }
+        }
+        
+        warn!("No session found with pending permission request_id: {}", request_id);
+        Err(anyhow!("No session found with pending permission request_id: {}", request_id))
+    }
 }
 
 fn command_exists(command: &str) -> bool {

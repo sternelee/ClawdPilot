@@ -6,12 +6,13 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shared::{
-    AgentControlAction, AgentPermissionMode, AgentSessionAction, AgentSessionMetadata, AgentType,
-    AvailableTools, CommunicationManager, FileBrowserAction, GitAction, MESSAGE_PROTOCOL_VERSION,
-    Message, MessageBuilder, MessageHandler, MessagePayload, MessageType, NotificationData,
-    NotificationType, OSInfo, PackageManager, QuicMessageServer, QuicMessageServerConfig,
-    RemoteSpawnAction, ResponseMessage, ShellInfo, SystemAction, SystemInfo, SystemInfoAction,
-    TcpDataType, TcpForwardingAction, TcpForwardingType, TcpStreamHandler, Tool, UserInfo,
+    AgentControlAction, AgentPermissionMessageInner, AgentPermissionMode, AgentSessionAction,
+    AgentSessionMetadata, AgentType, AvailableTools, CommunicationManager, FileBrowserAction,
+    GitAction, MESSAGE_PROTOCOL_VERSION, Message, MessageBuilder, MessageHandler, MessagePayload,
+    MessageType, NotificationData, NotificationType, OSInfo, PackageManager, QuicMessageServer,
+    QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage, ShellInfo, SystemAction, SystemInfo,
+    SystemInfoAction, TcpDataType, TcpForwardingAction, TcpForwardingType, TcpStreamHandler, Tool,
+    UserInfo,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -379,6 +380,14 @@ impl CliMessageServer {
         ));
         self.communication_manager
             .register_message_handler(agent_control_handler)
+            .await;
+
+        // 注册 Agent 权限消息处理器
+        let agent_permission_handler = Arc::new(AgentPermissionMessageHandler::new(
+            self.agent_manager.clone(),
+        ));
+        self.communication_manager
+            .register_message_handler(agent_permission_handler)
             .await;
 
         info!("All message handlers registered successfully");
@@ -2837,6 +2846,63 @@ impl MessageHandler for AgentControlMessageHandler {
 
     fn supported_message_types(&self) -> Vec<MessageType> {
         vec![MessageType::AgentControl]
+    }
+}
+
+// ============================================================================
+// Agent Permission Message Handler
+// ============================================================================
+
+/// Handler for incoming AgentPermission messages from the app
+///
+/// When the app sends back a permission response (after user approved/denied),
+/// this handler routes it to the appropriate agent session.
+pub struct AgentPermissionMessageHandler {
+    agent_manager: Arc<AgentManager>,
+}
+
+impl AgentPermissionMessageHandler {
+    pub fn new(agent_manager: Arc<AgentManager>) -> Self {
+        Self { agent_manager }
+    }
+}
+
+#[async_trait::async_trait]
+impl MessageHandler for AgentPermissionMessageHandler {
+    async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
+        if let MessagePayload::AgentPermission(perm_msg) = &message.payload {
+            match &perm_msg.inner {
+                AgentPermissionMessageInner::Response(response) => {
+                    info!(
+                        "Received permission response from app: request_id={}, approved={}",
+                        response.request_id, response.approved
+                    );
+                    
+                    // Forward the permission response to the appropriate agent session
+                    if let Err(e) = self.agent_manager
+                        .handle_permission_response(
+                            &response.request_id,
+                            response.approved,
+                            response.reason.clone(),
+                        )
+                        .await
+                    {
+                        warn!("Failed to route permission response: {}", e);
+                    }
+                }
+                AgentPermissionMessageInner::Request(_request) => {
+                    // This shouldn't happen - requests go from CLI to app, not the other way
+                    warn!("Received unexpected permission request from app");
+                }
+            }
+            Ok(None)
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn supported_message_types(&self) -> Vec<MessageType> {
+        vec![MessageType::AgentPermission]
     }
 }
 
