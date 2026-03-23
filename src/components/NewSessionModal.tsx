@@ -58,6 +58,8 @@ export const NewSessionModal: Component = () => {
     null,
   );
   const [isInstallingAcp, setIsInstallingAcp] = createSignal(false);
+  const [isAgentArgsExpanded, setIsAgentArgsExpanded] = createSignal(false);
+  const [isMcpServersExpanded, setIsMcpServersExpanded] = createSignal(false);
 
   let unlistenDirListing: UnlistenFn | null = null;
 
@@ -678,19 +680,32 @@ export const NewSessionModal: Component = () => {
               }
             >
               <div class="mb-4 space-y-2">
-                <Label for="agent-args">Agent Args</Label>
-                <Textarea
-                  id="agent-args"
-                  class="h-20 font-mono text-sm"
-                  placeholder={agentArgsConfig().placeholder}
-                  value={sessionStore.state.newSessionArgs}
-                  onInput={(e) => {
-                    sessionStore.setNewSessionArgs(e.currentTarget.value);
-                  }}
-                />
-                <p class="text-xs text-muted-foreground">
-                  {agentArgsConfig().hint}
-                </p>
+                <button
+                  type="button"
+                  class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setIsAgentArgsExpanded(!isAgentArgsExpanded())}
+                >
+                  <span
+                    class={`transition-transform ${isAgentArgsExpanded() ? "rotate-90" : ""}`}
+                  >
+                    ▶
+                  </span>
+                  Agent Args (Optional)
+                </button>
+                <Show when={isAgentArgsExpanded()}>
+                  <Textarea
+                    id="agent-args"
+                    class="h-20 font-mono text-sm"
+                    placeholder={agentArgsConfig().placeholder}
+                    value={sessionStore.state.newSessionArgs}
+                    onInput={(e) => {
+                      sessionStore.setNewSessionArgs(e.currentTarget.value);
+                    }}
+                  />
+                  <p class="text-xs text-muted-foreground">
+                    {agentArgsConfig().hint}
+                  </p>
+                </Show>
               </div>
             </Show>
 
@@ -700,20 +715,33 @@ export const NewSessionModal: Component = () => {
                 sessionStore.state.newSessionAgent === "openclaw" && "hidden",
               )}
             >
-              <Label for="mcp-servers">MCP Servers (Optional JSON)</Label>
-              <Textarea
-                id="mcp-servers"
-                class="h-24 font-mono text-xs"
-                placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
-                value={sessionStore.state.newSessionMcpServers}
-                onInput={(e) => {
-                  sessionStore.setNewSessionMcpServers(e.currentTarget.value);
-                }}
-              />
-              <p class="text-xs text-muted-foreground">
-                ACP `mcpServers` JSON array. Leave empty to disable client MCP
-                servers.
-              </p>
+              <button
+                type="button"
+                class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setIsMcpServersExpanded(!isMcpServersExpanded())}
+              >
+                <span
+                  class={`transition-transform ${isMcpServersExpanded() ? "rotate-90" : ""}`}
+                >
+                  ▶
+                </span>
+                MCP Servers (Optional JSON)
+              </button>
+              <Show when={isMcpServersExpanded()}>
+                <Textarea
+                  id="mcp-servers"
+                  class="h-24 font-mono text-xs"
+                  placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
+                  value={sessionStore.state.newSessionMcpServers}
+                  onInput={(e) => {
+                    sessionStore.setNewSessionMcpServers(e.currentTarget.value);
+                  }}
+                />
+                <p class="text-xs text-muted-foreground">
+                  ACP `mcpServers` JSON array. Leave empty to disable client MCP
+                  servers.
+                </p>
+              </Show>
             </div>
           </Show>
 
@@ -726,6 +754,8 @@ export const NewSessionModal: Component = () => {
                 sessionStore.setConnectionError(null);
                 sessionStore.setNewSessionArgs("");
                 sessionStore.setNewSessionMcpServers("");
+                setIsAgentArgsExpanded(false);
+                setIsMcpServersExpanded(false);
               }}
             >
               Cancel
