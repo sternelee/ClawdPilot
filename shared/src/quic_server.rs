@@ -844,7 +844,10 @@ impl QuicMessageServer {
         communication_manager: Arc<CommunicationManager>,
     ) -> Result<()> {
         let remote_id = connection.remote_id();
-        info!("📨 Starting streaming message receiver for connection: {}", connection_id);
+        info!(
+            "📨 Starting streaming message receiver for connection: {}",
+            connection_id
+        );
 
         loop {
             match connection.accept_uni().await {
@@ -855,12 +858,8 @@ impl QuicMessageServer {
 
                     tokio::spawn(async move {
                         debug!("📨 Accepted streaming stream from {:?}", remote);
-                        if let Err(e) = Self::handle_streaming_stream_static(
-                            recv,
-                            conn_id,
-                            cm,
-                        )
-                        .await
+                        if let Err(e) =
+                            Self::handle_streaming_stream_static(recv, conn_id, cm).await
                         {
                             error!("Error handling streaming stream: {}", e);
                         }
@@ -878,7 +877,7 @@ impl QuicMessageServer {
     /// Static helper for streaming stream handling (needed for tokio::spawn)
     async fn handle_streaming_stream_static(
         mut recv: iroh::endpoint::RecvStream,
-        connection_id: String,
+        _connection_id: String,
         communication_manager: Arc<CommunicationManager>,
     ) -> Result<()> {
         const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
@@ -889,23 +888,20 @@ impl QuicMessageServer {
         .await;
 
         match read_result {
-            Ok(Ok(data)) => {
-                match MessageSerializer::deserialize_from_network(&data) {
-                    Ok(message) => {
-                        info!(
-                            "📨 [streaming] Received: type={:?}, id={}",
-                            message.message_type,
-                            message.id
-                        );
-                        communication_manager
-                            .receive_incoming_message(message)
-                            .await?;
-                    }
-                    Err(e) => {
-                        error!("Failed to deserialize streaming message: {}", e);
-                    }
+            Ok(Ok(data)) => match MessageSerializer::deserialize_from_network(&data) {
+                Ok(message) => {
+                    info!(
+                        "📨 [streaming] Received: type={:?}, id={}",
+                        message.message_type, message.id
+                    );
+                    communication_manager
+                        .receive_incoming_message(message)
+                        .await?;
                 }
-            }
+                Err(e) => {
+                    error!("Failed to deserialize streaming message: {}", e);
+                }
+            },
             Ok(Err(e)) => {
                 debug!("Streaming stream closed: {}", e);
             }
@@ -1514,7 +1510,6 @@ impl QuicMessageClient {
         // Spawn streaming message receiver (accept_uni) in parallel
         let connection_for_streaming = connection.clone();
         let message_tx_streaming = self.message_tx.clone();
-        let connection_id_streaming = connection_id.clone();
 
         tokio::spawn(async move {
             loop {
@@ -1640,15 +1635,17 @@ impl QuicMessageClient {
 
     /// 发送消息到服务器（自动选择传输方式）
     pub async fn send_message_to_server_auto(
-        &self,
+        &mut self,
         connection_id: &str,
         message: &Message,
     ) -> Result<()> {
         if Self::is_streaming_message(message.message_type) {
-            self.send_streaming_message_to_server(connection_id, message).await?;
+            self.send_streaming_message_to_server(connection_id, message)
+                .await?;
         } else {
             // Clone is needed because send_message_to_server takes Message, not &Message
-            self.send_message_to_server(connection_id, message.clone()).await?;
+            self.send_message_to_server(connection_id, message.clone())
+                .await?;
         }
         Ok(())
     }
@@ -1777,7 +1774,10 @@ impl QuicMessageClient {
                             .collect::<Vec<_>>()
                             .join(" ");
                         // First byte should be message_type tag
-                        let msg_type_tag = data.first().map(|b| format!("{:02x}", b)).unwrap_or_else(|| "empty".to_string());
+                        let msg_type_tag = data
+                            .first()
+                            .map(|b| format!("{:02x}", b))
+                            .unwrap_or_else(|| "empty".to_string());
                         error!(
                             "Failed to deserialize message for connection {}: data_len={}, msg_type_tag={}, data_hex=[{}], error={}",
                             connection_id,
@@ -1822,18 +1822,18 @@ impl QuicMessageClient {
         .await;
 
         match read_result {
-            Ok(Ok(data)) => {
-                match MessageSerializer::deserialize_from_network(&data) {
-                    Ok(message) => {
-                        info!("📨 [client streaming] Received: type={:?}, id={}", 
-                              message.message_type, message.id);
-                        message_tx.send(message)?;
-                    }
-                    Err(e) => {
-                        error!("Failed to deserialize streaming message: {}", e);
-                    }
+            Ok(Ok(data)) => match MessageSerializer::deserialize_from_network(&data) {
+                Ok(message) => {
+                    info!(
+                        "📨 [client streaming] Received: type={:?}, id={}",
+                        message.message_type, message.id
+                    );
+                    message_tx.send(message)?;
                 }
-            }
+                Err(e) => {
+                    error!("Failed to deserialize streaming message: {}", e);
+                }
+            },
             Ok(Err(e)) => {
                 debug!("Client streaming stream closed: {}", e);
             }
