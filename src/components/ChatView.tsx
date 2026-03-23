@@ -160,6 +160,7 @@ function parseEvent(eventObj: Record<string, unknown>): ParsedEvent {
     TurnCompleted: "turn_completed",
     TurnError: "turn_error",
     ToolCall: "tool_call",
+    ToolCallUpdate: "tool_call_update",
     ToolResult: "tool_result",
     MessageStart: "message_start",
     MessageEnd: "message_end",
@@ -770,6 +771,42 @@ export function ChatView(props: ChatViewProps) {
                 content: toolContent,
               });
             }
+          }
+          break;
+        }
+
+        case "tool_call_update": {
+          const toolName = parsed.toolName || "unknown";
+          const status = parsed.status || "";
+          const output = parsed.output;
+          const toolId = `tool-${toolName}-${status}`
+            .replace(/\s+/g, "-")
+            .toLowerCase();
+          let toolContent = "";
+          let parsedOutput: Record<string, unknown> | null = null;
+          if (typeof output === "string") {
+            try {
+              parsedOutput = JSON.parse(output) as Record<string, unknown>;
+            } catch {
+              parsedOutput = null;
+            }
+          }
+          if (parsedOutput) {
+            const description = parsedOutput.description as string | undefined;
+            const command = parsedOutput.command as string | undefined;
+            if (description) {
+              toolContent = `[Tool: ${toolName}] ${description}`;
+            } else if (command) {
+              toolContent = `[Tool: ${toolName}] Running: ${command}`;
+            } else {
+              toolContent = `[Tool: ${toolName}] Status: ${status}`;
+            }
+          } else {
+            toolContent = `[Tool: ${toolName}] Status: ${status}${output ? `\n${output}` : ""}`;
+          }
+          upsertToolMessage(toolId, toolContent);
+          if (status === "Completed" || status === "Error") {
+            toolMessageIds.delete(toolId);
           }
           break;
         }
@@ -1691,7 +1728,9 @@ export function ChatView(props: ChatViewProps) {
               >
                 <div class="flex flex-col items-center text-center justify-center h-full max-w-sm mx-auto">
                   <div class="w-24 h-24 rounded-[2rem] bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-6 shadow-xl shadow-primary/10 border border-primary/10">
-                    <div class="text-3xl scale-150 filter drop-shadow-sm">{getAgentIcon()}</div>
+                    <div class="text-3xl scale-150 filter drop-shadow-sm">
+                      {getAgentIcon()}
+                    </div>
                   </div>
                   <h3 class="text-2xl font-bold mb-3 tracking-tight">
                     Ready to assist
