@@ -885,30 +885,44 @@ impl AgentManager {
         reason: Option<String>,
     ) -> Result<()> {
         let sessions = self.sessions.read().await;
-        
+
         for (session_id, session) in sessions.iter() {
             // Try to respond to permission on this session
             // The correct session will handle it, others will log a warning and do nothing
-            match session.respond_to_permission(
-                request_id.to_string(),
-                approved,
-                false, // approve_for_session
-                reason.clone()
-            ).await {
+            match session
+                .respond_to_permission(
+                    request_id.to_string(),
+                    approved,
+                    false, // approve_for_session
+                    reason.clone(),
+                )
+                .await
+            {
                 Ok(()) => {
-                    info!("Successfully routed permission response to session {}", session_id);
+                    info!(
+                        "Successfully routed permission response to session {}",
+                        session_id
+                    );
                     return Ok(());
                 }
                 Err(e) => {
                     // This session didn't have this request_id, try next one
-                    debug!("Session {} doesn't have pending permission {}: {}", 
-                           session_id, request_id, e);
+                    debug!(
+                        "Session {} doesn't have pending permission {}: {}",
+                        session_id, request_id, e
+                    );
                 }
             }
         }
-        
-        warn!("No session found with pending permission request_id: {}", request_id);
-        Err(anyhow!("No session found with pending permission request_id: {}", request_id))
+
+        warn!(
+            "No session found with pending permission request_id: {}",
+            request_id
+        );
+        Err(anyhow!(
+            "No session found with pending permission request_id: {}",
+            request_id
+        ))
     }
 }
 

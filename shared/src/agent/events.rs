@@ -358,13 +358,11 @@ impl AgentEvent {
 
             AgentEvent::ToolInputUpdated {
                 tool_name, input, ..
-            } => {
-                AgentMessageContent::ToolCallUpdate {
-                    tool_name: tool_name.clone().unwrap_or_else(|| "unknown".to_string()),
-                    status: ToolCallStatus::InProgress,
-                    output: input.clone(),
-                }
-            }
+            } => AgentMessageContent::ToolCallUpdate {
+                tool_name: tool_name.clone().unwrap_or_else(|| "unknown".to_string()),
+                status: ToolCallStatus::InProgress,
+                output: input.clone(),
+            },
 
             AgentEvent::ToolCompleted {
                 tool_name,

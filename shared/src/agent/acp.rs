@@ -2413,7 +2413,11 @@ impl AcpClientHandler {
                         session_id: self.session_id.clone(),
                         tool_id,
                         tool_name: Some(tool_name),
-                        input: update.fields.raw_input.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+                        input: update
+                            .fields
+                            .raw_input
+                            .as_ref()
+                            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
                     })
                     .await;
                 }
@@ -2422,7 +2426,11 @@ impl AcpClientHandler {
                         session_id: self.session_id.clone(),
                         tool_id,
                         tool_name: Some(tool_name),
-                        output: update.fields.raw_output.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+                        output: update
+                            .fields
+                            .raw_output
+                            .as_ref()
+                            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
                         error: None,
                     })
                     .await;
@@ -2444,7 +2452,11 @@ impl AcpClientHandler {
                         session_id: self.session_id.clone(),
                         tool_id,
                         tool_name: Some(tool_name),
-                        output: update.fields.raw_output.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+                        output: update
+                            .fields
+                            .raw_output
+                            .as_ref()
+                            .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
                         error: Some(error_message),
                     })
                     .await;
@@ -2547,7 +2559,9 @@ impl acp::Client for AcpClientHandler {
             session_id: self.session_id.clone(),
             request_id: request_id.clone(),
             tool_name: tool_name.clone(),
-            input: input.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+            input: input
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
             message: Some("Agent requested permission".to_string()),
         })
         .await;
@@ -2628,7 +2642,10 @@ impl acp::Client for AcpClientHandler {
                     session_id: self.session_id.clone(),
                     tool_id: tool_id.clone(),
                     tool_name: tool_call.title.clone(),
-                    input: tool_call.raw_input.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+                    input: tool_call
+                        .raw_input
+                        .as_ref()
+                        .map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
                 })
                 .await;
 
@@ -2656,7 +2673,10 @@ impl acp::Client for AcpClientHandler {
                                 session_id: self.session_id.clone(),
                                 tool_id,
                                 tool_name: Some(tool_call.title),
-                                input: Some(serde_json::to_string(&raw_input).unwrap_or_else(|_| "{}".to_string())),
+                                input: Some(
+                                    serde_json::to_string(&raw_input)
+                                        .unwrap_or_else(|_| "{}".to_string()),
+                                ),
                             })
                             .await;
                         }
@@ -2666,7 +2686,9 @@ impl acp::Client for AcpClientHandler {
                             session_id: self.session_id.clone(),
                             tool_id,
                             tool_name: Some(tool_call.title),
-                            output: tool_call.raw_output.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+                            output: tool_call.raw_output.as_ref().map(|v| {
+                                serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())
+                            }),
                             error: None,
                         })
                         .await;
@@ -2687,7 +2709,9 @@ impl acp::Client for AcpClientHandler {
                             session_id: self.session_id.clone(),
                             tool_id,
                             tool_name: Some(tool_call.title),
-                            output: tool_call.raw_output.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())),
+                            output: tool_call.raw_output.as_ref().map(|v| {
+                                serde_json::to_string(v).unwrap_or_else(|_| "{}".to_string())
+                            }),
                             error: Some(error_message),
                         })
                         .await;
@@ -2945,7 +2969,10 @@ mod tests {
             .with_max_turns(5);
 
         let meta = options.to_meta().expect("Should have meta");
-        assert_eq!(meta.get("model").unwrap(), &serde_json::json!("claude-3-opus"));
+        assert_eq!(
+            meta.get("model").unwrap(),
+            &serde_json::json!("claude-3-opus")
+        );
         assert_eq!(meta.get("maxTurns").unwrap(), &serde_json::json!(5));
     }
 
@@ -2961,7 +2988,10 @@ mod tests {
             SessionOptions::new().with_agent_option("customOption", serde_json::json!("value"));
 
         let meta = options.to_meta().expect("Should have meta");
-        assert_eq!(meta.get("customOption").unwrap(), &serde_json::json!("value"));
+        assert_eq!(
+            meta.get("customOption").unwrap(),
+            &serde_json::json!("value")
+        );
     }
 
     #[test]

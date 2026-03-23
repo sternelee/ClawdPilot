@@ -894,10 +894,7 @@ mod tests {
             infer_tool_kind("tool", Some("Search for pattern")),
             ToolKind::Search
         );
-        assert_eq!(
-            infer_tool_kind("tool", Some("Write file")),
-            ToolKind::Edit
-        );
+        assert_eq!(infer_tool_kind("tool", Some("Write file")), ToolKind::Edit);
         assert_eq!(
             infer_tool_kind("tool", Some("Edit file content")),
             ToolKind::Edit

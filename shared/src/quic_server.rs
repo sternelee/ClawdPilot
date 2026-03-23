@@ -7,7 +7,7 @@ use crate::event_manager::*;
 use crate::message_protocol::*;
 use anyhow::Result;
 use async_trait::async_trait;
-use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey, discovery::dns::DnsDiscovery};
+use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey, endpoint::presets};
 use iroh_base::{RelayUrl, TransportAddr};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -355,23 +355,14 @@ impl QuicMessageServer {
             Self::load_or_generate_secret_key(config.secret_key_path.as_deref()).await?;
 
         // 创建endpoint builder
-        let mut builder = Endpoint::builder()
+        let mut builder = Endpoint::builder(presets::N0)
             .secret_key(secret_key)
-            .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
-            .discovery(DnsDiscovery::n0_dns());
+            .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()]);
 
         // 如果指定了 bind_addr，使用它
         if let Some(ref bind_addr) = config.bind_addr {
             info!("Binding to address: {}", bind_addr);
-            // 使用 bind_addr_v4 或 bind_addr_v6 方法
-            match bind_addr {
-                std::net::SocketAddr::V4(addr_v4) => {
-                    builder = builder.bind_addr_v4(*addr_v4);
-                }
-                std::net::SocketAddr::V6(addr_v6) => {
-                    builder = builder.bind_addr_v6(*addr_v6);
-                }
-            }
+            builder = builder.bind_addr(*bind_addr)?;
         }
 
         // 创建endpoint
@@ -1347,10 +1338,9 @@ impl QuicMessageClient {
             );
         }
 
-        let endpoint = Endpoint::builder()
+        let endpoint = Endpoint::builder(presets::N0)
             .secret_key(secret_key)
             .alpns(vec![QUIC_MESSAGE_ALPN.to_vec()])
-            .discovery(DnsDiscovery::n0_dns())
             .bind()
             .await?;
 

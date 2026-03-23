@@ -10,9 +10,9 @@ use shared::{
     AgentSessionMetadata, AgentType, AvailableTools, CommunicationManager, FileBrowserAction,
     GitAction, MESSAGE_PROTOCOL_VERSION, Message, MessageBuilder, MessageHandler, MessagePayload,
     MessageType, NotificationData, NotificationType, OSInfo, PackageManager, QuicMessageServer,
-    QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage, ShellInfo, SystemAction, SystemInfo,
-    SystemInfoAction, TcpDataType, TcpForwardingAction, TcpForwardingType, TcpStreamHandler, Tool,
-    UserInfo,
+    QuicMessageServerConfig, RemoteSpawnAction, ResponseMessage, ShellInfo, SystemAction,
+    SystemInfo, SystemInfoAction, TcpDataType, TcpForwardingAction, TcpForwardingType,
+    TcpStreamHandler, Tool, UserInfo,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -2877,9 +2877,10 @@ impl MessageHandler for AgentPermissionMessageHandler {
                         "Received permission response from app: request_id={}, approved={}",
                         response.request_id, response.approved
                     );
-                    
+
                     // Forward the permission response to the appropriate agent session
-                    if let Err(e) = self.agent_manager
+                    if let Err(e) = self
+                        .agent_manager
                         .handle_permission_response(
                             &response.request_id,
                             response.approved,
