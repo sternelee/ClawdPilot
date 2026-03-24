@@ -351,8 +351,7 @@ pub fn event_to_agent_message_content(
         // Raw events - pass through as system notification
         AgentEvent::Raw { data, .. } => AgentMessageContent::RawEvent {
             event_type: "raw".to_string(),
-            // Parse JSON string back to Value for AgentMessageContent
-            data: serde_json::from_str(data).unwrap_or(serde_json::json!({})),
+            data: data.clone(),
         },
 
         // Progress updates
