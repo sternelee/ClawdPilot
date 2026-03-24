@@ -4,7 +4,14 @@
  * AI-native toast notifications inspired by Vercel AI Elements
  */
 
-import { type Component, Show, For, createSignal, onMount, onCleanup } from "solid-js";
+import {
+  type Component,
+  Show,
+  For,
+  createSignal,
+  onMount,
+  onCleanup,
+} from "solid-js";
 import { cn } from "~/lib/utils";
 import {
   FiCheck,
@@ -86,21 +93,25 @@ const ToastItem: Component<ToastItemProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex items-start gap-3 p-4 rounded-xl border shadow-lg backdrop-blur-sm",
+        "flex items-start gap-2 sm:gap-3 p-3 sm:p-4 rounded-xl border shadow-lg backdrop-blur-sm",
         "animate-slide-up",
-        toastStyles[props.toast.type]
+        toastStyles[props.toast.type],
       )}
     >
       {/* Icon */}
       <div class={cn("shrink-0 mt-0.5", toastIconStyles[props.toast.type])}>
-        <Icon size={20} />
+        <Icon size={18} />
       </div>
 
       {/* Content */}
       <div class="flex-1 min-w-0">
-        <div class="font-medium text-sm">{props.toast.title}</div>
+        <div class="font-medium text-[13px] sm:text-sm">
+          {props.toast.title}
+        </div>
         <Show when={props.toast.description}>
-          <div class="text-xs opacity-80 mt-0.5">{props.toast.description}</div>
+          <div class="text-[11px] sm:text-xs opacity-80 mt-0.5">
+            {props.toast.description}
+          </div>
         </Show>
       </div>
 
@@ -130,14 +141,12 @@ export const ToastContainer: Component<ToastContainerProps> = (props) => {
   return (
     <div
       class={cn(
-        "fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-full max-w-sm",
-        props.class
+        "fixed bottom-4 right-4 left-4 sm:left-auto z-50 flex flex-col gap-2 sm:max-w-sm",
+        props.class,
       )}
     >
       <For each={props.toasts}>
-        {(toast) => (
-          <ToastItem toast={toast} onDismiss={props.onDismiss} />
-        )}
+        {(toast) => <ToastItem toast={toast} onDismiss={props.onDismiss} />}
       </For>
     </div>
   );
@@ -171,10 +180,14 @@ export function createToast(options: UseToastOptions = {}) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const success = (title: string, description?: string) => addToast("success", title, description);
-  const error = (title: string, description?: string) => addToast("error", title, description);
-  const warning = (title: string, description?: string) => addToast("warning", title, description);
-  const info = (title: string, description?: string) => addToast("info", title, description);
+  const success = (title: string, description?: string) =>
+    addToast("success", title, description);
+  const error = (title: string, description?: string) =>
+    addToast("error", title, description);
+  const warning = (title: string, description?: string) =>
+    addToast("warning", title, description);
+  const info = (title: string, description?: string) =>
+    addToast("info", title, description);
 
   return {
     toasts,
