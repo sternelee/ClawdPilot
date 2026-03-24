@@ -2524,6 +2524,39 @@ impl RemoteSpawnMessageHandler {
 
         Ok(Some(response))
     }
+
+    /// 处理停止远程会话请求
+    async fn handle_stop_session(
+        &self,
+        session_id: String,
+        request_id: Option<String>,
+    ) -> Result<Option<Message>> {
+        info!("Received stop session request for: {}", session_id);
+        
+        match self.agent_manager.stop_session(&session_id).await {
+            Ok(()) => {
+                let response = MessageBuilder::response(
+                    "cli".to_string(),
+                    request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+                    true,
+                    None,
+                    None,
+                );
+                Ok(Some(response))
+            }
+            Err(e) => {
+                warn!("Failed to stop session {}: {}", session_id, e);
+                let response = MessageBuilder::response(
+                    "cli".to_string(),
+                    request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+                    false,
+                    None,
+                    Some(format!("Failed to stop session: {}", e)),
+                );
+                Ok(Some(response))
+            }
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -2554,6 +2587,10 @@ impl MessageHandler for RemoteSpawnMessageHandler {
                 }
                 RemoteSpawnAction::ListSessions => {
                     self.handle_list_sessions(spawn_msg.request_id.clone())
+                        .await
+                }
+                RemoteSpawnAction::StopSession { session_id } => {
+                    self.handle_stop_session(session_id.clone(), spawn_msg.request_id.clone())
                         .await
                 }
             }

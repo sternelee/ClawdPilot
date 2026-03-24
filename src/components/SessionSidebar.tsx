@@ -162,7 +162,9 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             {props.session?.mode === "local" ? "Local" : "Remote"}
           </span>
         </div>
-        <div class={`text-[11px] truncate mt-0.5 font-mono ${props.isActive ? "text-primary-content/70" : "opacity-40"}`}>
+        <div
+          class={`text-[11px] truncate mt-0.5 font-mono ${props.isActive ? "text-primary-content/70" : "opacity-40"}`}
+        >
           {props.session?.projectPath?.split("/").pop() || "No project"}
         </div>
       </div>
@@ -379,6 +381,15 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           notificationStore.error("Failed to stop local agent", "Error");
         });
       }
+    } else if (session?.mode === "remote") {
+      // Stop remote agent on CLI
+      invoke("remote_stop_agent", {
+        sessionId,
+        controlSessionId: session.controlSessionId,
+      }).catch((err) => {
+        console.error("Failed to stop remote agent:", err);
+        notificationStore.error("Failed to stop remote agent", "Error");
+      });
     }
     // Clear chat messages for this session
     chatStore.clearMessages(sessionId);
@@ -413,7 +424,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     if (isRefreshing()) return;
     setIsRefreshing(true);
     try {
-      await Promise.all([handleLoadLocalSessions(), handleLoadRemoteSessions()]);
+      await Promise.all([
+        handleLoadLocalSessions(),
+        handleLoadRemoteSessions(),
+      ]);
       notificationStore.success("Sessions refreshed", "Session List");
     } catch (error) {
       console.error("Failed to refresh sessions:", error);
@@ -603,7 +617,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               <span class="text-primary-content font-black text-lg">P</span>
             </div>
             <div>
-              <h1 class="text-sm font-black tracking-tight uppercase leading-none">ClawdPilot</h1>
+              <h1 class="text-sm font-black tracking-tight uppercase leading-none">
+                ClawdPilot
+              </h1>
               <p class="text-[10px] opacity-40 mt-0.5 font-bold uppercase tracking-wider">
                 AI Platform
               </p>
@@ -789,9 +805,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               <div class="w-16 h-16 rounded-[2rem] bg-base-300 flex items-center justify-center mb-4 border border-base-content/5 shadow-inner">
                 <FiPlus size={28} class="opacity-20" />
               </div>
-              <p class="text-sm font-bold opacity-40">
-                No active sessions
-              </p>
+              <p class="text-sm font-bold opacity-40">No active sessions</p>
               <p class="text-[11px] opacity-30 mt-2 max-w-[140px] leading-relaxed">
                 Connect to a remote CLI or create a local session
               </p>

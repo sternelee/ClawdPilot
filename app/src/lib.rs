@@ -2572,6 +2572,60 @@ async fn remote_list_agents(
     Err("Invalid remote agents response data".to_string())
 }
 
+/// Stop a remote agent session on connected CLI
+#[tauri::command(rename_all = "camelCase")]
+async fn remote_stop_agent(
+    session_id: String,
+    control_session_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let connection_id = if let Some(cs_id) = control_session_id {
+        let sessions = state.sessions.read().await;
+        sessions
+            .get(&cs_id)
+            .map(|s| s.connection_id.clone())
+            .ok_or_else(|| format!("Control session not found: {}", cs_id))?
+    } else {
+        let sessions = state.sessions.read().await;
+        if let Some(first_session) = sessions.values().next() {
+            first_session.connection_id.clone()
+        } else {
+            return Err("No active connection available".to_string());
+        }
+    };
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let stop_message = ClawdChatMessage::new(
+        shared::MessageType::RemoteSpawn,
+        "app".to_string(),
+        shared::MessagePayload::RemoteSpawn(shared::RemoteSpawnMessage {
+            action: shared::RemoteSpawnAction::StopSession {
+                session_id: session_id.clone(),
+            },
+            request_id: Some(request_id.clone()),
+        }),
+    )
+    .requires_response();
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &connection_id,
+        stop_message,
+        &request_id,
+        "stop remote agent",
+        10,
+    )
+    .await?;
+
+    if !response.success {
+        return Err(response
+            .message
+            .unwrap_or_else(|| "Failed to stop remote agent".to_string()));
+    }
+
+    Ok(())
+}
+
 /// Respond to an agent permission request
 #[tauri::command(rename_all = "camelCase")]
 async fn respond_to_agent_permission(
@@ -3569,6 +3623,7 @@ pub fn run() {
             send_slash_command,
             remote_spawn_session,
             remote_list_agents,
+            remote_stop_agent,
             send_agent_message,
             abort_agent_action,
             respond_to_agent_permission,

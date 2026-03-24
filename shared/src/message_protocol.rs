@@ -890,6 +890,8 @@ pub enum RemoteSpawnAction {
     ListSessions,
     /// 列出可用的 agent 类型
     ListAvailableAgents,
+    /// 停止远程 CLI 上的 agent 会话
+    StopSession { session_id: String },
 }
 
 /// 推送通知消息
