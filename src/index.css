@@ -3,14 +3,10 @@
   themes:
     light --default,
     sunset --default,
-    dark --prefersdark,
     dracula,
-    night,
-    business,
     synthwave,
     forest,
-    luxury,
-    corporate;
+    luxury;
 }
 
 @tailwind utilities;

@@ -10,14 +10,10 @@ interface ThemeSwitcherProps {
 const themes = [
   { id: "light", name: "Light", icon: FiSun, color: "#fbbf24" },
   { id: "sunset", name: "Sunset", icon: FiSun, color: "#fb923c" },
-  { id: "dark", name: "Dark", icon: FiMoon, color: "#1d283a" },
   { id: "dracula", name: "Dracula", icon: FiMoon, color: "#7b2cbf" },
-  { id: "night", name: "Night", icon: FiMoon, color: "#0f1729" },
-  { id: "business", name: "Business", icon: FiMonitor, color: "#1e293b" },
   { id: "synthwave", name: "Synthwave", icon: FiMonitor, color: "#d946ef" },
   { id: "forest", name: "Forest", icon: FiSun, color: "#22c55e" },
   { id: "luxury", name: "Luxury", icon: FiMoon, color: "#78716c" },
-  { id: "corporate", name: "Corporate", icon: FiMonitor, color: "#3b82f6" },
 ];
 
 export function ThemeSwitcher(props: ThemeSwitcherProps) {
