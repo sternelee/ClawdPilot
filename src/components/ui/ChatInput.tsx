@@ -251,7 +251,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex flex-col gap-1.5 px-2 sm:px-4 pt-2 sm:pt-3 pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] sm:pb-3 bg-base-100/95 backdrop-blur-md sticky bottom-0 z-20",
+        "flex flex-col gap-1.5 px-2 sm:px-4 pt-2 sm:pt-3 pb-[max(env(safe-area-inset-bottom,0px),1rem)] sm:pb-3 bg-base-100/95 backdrop-blur-md sticky bottom-0 z-20",
         focused() && "bg-base-100",
         props.class,
       )}
@@ -346,7 +346,9 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             {props.attachments!.map((file) => (
               <div class="flex items-center gap-2 px-3 py-1.5 bg-base-300/80 rounded-lg text-xs border border-base-content/5">
                 <FiPlus size={10} class="rotate-45 opacity-60" />
-                <span class="truncate max-w-[150px] font-medium">{file.name}</span>
+                <span class="truncate max-w-[150px] font-medium">
+                  {file.name}
+                </span>
                 <button
                   type="button"
                   class="p-1 hover:bg-base-content/10 rounded text-base-content/60"
@@ -382,7 +384,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           <Show when={mobile()}>
             <button
               type="button"
-              class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl hide-on-keyboard"
+              class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl hide-on-keyboard bg-base-300/70 hover:bg-base-300"
               onClick={() => setShowMobileTools((prev) => !prev)}
               title={showMobileTools() ? "Hide tools" : "Show tools"}
               aria-label={showMobileTools() ? "Hide tools" : "Show tools"}
@@ -441,10 +443,14 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                         >
                           <div class="flex-1 min-w-0">
                             <div class="text-sm font-bold">{option.label}</div>
-                            <div class={cn(
-                              "text-[11px] truncate",
-                              props.permissionMode === option.value ? "opacity-90" : "opacity-50"
-                            )}>
+                            <div
+                              class={cn(
+                                "text-[11px] truncate",
+                                props.permissionMode === option.value
+                                  ? "opacity-90"
+                                  : "opacity-50",
+                              )}
+                            >
                               {option.description}
                             </div>
                           </div>
@@ -514,7 +520,9 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           {/* Right side: Keyboard hints */}
           <div class="hidden sm:flex items-center gap-2 text-[10px] opacity-30">
             <Show when={isStreamingNow()}>
-              <span class="text-[10px] text-primary font-bold">Generating...</span>
+              <span class="text-[10px] text-primary font-bold">
+                Generating...
+              </span>
             </Show>
             <span class="flex items-center gap-1">
               <kbd class="kbd kbd-xs">↵</kbd>

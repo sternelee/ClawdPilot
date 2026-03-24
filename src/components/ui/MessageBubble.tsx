@@ -9,6 +9,7 @@
  */
 
 import { type Component, For, Show, createMemo, createSignal } from "solid-js";
+import { cn } from "~/lib/utils";
 import { createClipboard } from "@solid-primitives/clipboard";
 import { FiCopy, FiCheck, FiMoreVertical } from "solid-icons/fi";
 import { SolidMarkdown } from "solid-markdown";
@@ -255,7 +256,9 @@ const SystemMessageContent: Component<{
                     if (props.onOpenFileLocation) {
                       props.onOpenFileLocation(loc.path, loc.line);
                     } else {
-                      props.onQuote?.(`@${loc.path}${loc.line ? `:${loc.line}` : ""}`);
+                      props.onQuote?.(
+                        `@${loc.path}${loc.line ? `:${loc.line}` : ""}`,
+                      );
                     }
                   }}
                 >
@@ -332,7 +335,9 @@ const SystemMessageContent: Component<{
           <Show when={showDiff()}>
             <div class="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-base-300">
               <pre class="m-0 w-max min-w-full p-2.5 text-[11px] sm:text-xs font-mono">
-                <code class="block whitespace-pre-wrap break-all">{diffText}</code>
+                <code class="block whitespace-pre-wrap break-all">
+                  {diffText}
+                </code>
               </pre>
             </div>
           </Show>
@@ -409,9 +414,12 @@ const SystemMessageContent: Component<{
             Terminal
           </div>
           <div class="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-[13px] sm:text-sm">
-            <div class="font-mono break-all">{card.terminalId || "unknown"}</div>
+            <div class="font-mono break-all">
+              {card.terminalId || "unknown"}
+            </div>
             <div class="mt-1 opacity-60">
-              {card.mode || "interactive/background"} {card.status ? `· ${card.status}` : ""}
+              {card.mode || "interactive/background"}{" "}
+              {card.status ? `· ${card.status}` : ""}
             </div>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -433,21 +441,27 @@ const SystemMessageContent: Component<{
               <button
                 type="button"
                 class="btn btn-ghost btn-xs h-8 min-h-8"
-                onClick={() => props.onTerminalAction?.(card.terminalId, "attach")}
+                onClick={() =>
+                  props.onTerminalAction?.(card.terminalId, "attach")
+                }
               >
                 Attach
               </button>
               <button
                 type="button"
                 class="btn btn-ghost btn-xs h-8 min-h-8"
-                onClick={() => props.onTerminalAction?.(card.terminalId, "status")}
+                onClick={() =>
+                  props.onTerminalAction?.(card.terminalId, "status")
+                }
               >
                 Status
               </button>
               <button
                 type="button"
                 class="btn btn-ghost btn-xs h-8 min-h-8 text-error"
-                onClick={() => props.onTerminalAction?.(card.terminalId, "stop")}
+                onClick={() =>
+                  props.onTerminalAction?.(card.terminalId, "stop")
+                }
               >
                 Stop
               </button>
@@ -559,7 +573,6 @@ const SystemMessageContent: Component<{
   );
 };
 
-
 // ============================================================================
 // Main Message Bubble Component
 // ============================================================================
@@ -629,7 +642,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   };
 
   return (
-    <div class={props.class}>
+    <div class={cn("relative", props.class)}>
       <Show
         when={isUser()}
         fallback={
@@ -665,23 +678,24 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         />
       </Show>
 
+      {/* Top-right action button - only on mobile */}
       <Show when={isMobile()}>
-        <div class={`mt-1 flex ${isUser() ? "justify-end" : "justify-start"}`}>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs h-8 min-h-8 w-8 rounded-lg opacity-60 hover:opacity-100"
-            onClick={() => {
-              triggerHaptic();
-              setShowActions(true);
-            }}
-            title="Message actions"
-            aria-label="Message actions"
-          >
-            <FiMoreVertical size={14} />
-          </button>
-        </div>
+        <button
+          type="button"
+          class="absolute top-2 right-2 btn btn-ghost btn-xs h-7 min-h-7 w-7 rounded-lg opacity-0 group-hover/bubble:opacity-60 hover:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation();
+            triggerHaptic();
+            setShowActions(true);
+          }}
+          title="Message actions"
+          aria-label="Message actions"
+        >
+          <FiMoreVertical size={14} />
+        </button>
       </Show>
 
+      {/* Action menu overlay */}
       <Show when={showActions()}>
         <div class="fixed inset-0 z-50 lg:hidden">
           <button
