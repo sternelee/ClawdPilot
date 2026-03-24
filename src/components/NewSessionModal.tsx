@@ -36,7 +36,6 @@ import { Dialog } from "./ui/primitives";
 import { Label } from "./ui/primitives";
 import { Select } from "./ui/primitives";
 import { Textarea } from "./ui/primitives";
-import { cn } from "../lib/utils";
 
 interface DirEntry {
   name: string;
@@ -58,8 +57,7 @@ export const NewSessionModal: Component = () => {
     null,
   );
   const [isInstallingAcp, setIsInstallingAcp] = createSignal(false);
-  const [isAgentArgsExpanded, setIsAgentArgsExpanded] = createSignal(false);
-  const [isMcpServersExpanded, setIsMcpServersExpanded] = createSignal(false);
+  const [isAdvancedExpanded, setIsAdvancedExpanded] = createSignal(false);
 
   let unlistenDirListing: UnlistenFn | null = null;
 
@@ -324,15 +322,16 @@ export const NewSessionModal: Component = () => {
         contentClass="max-w-md max-h-[90%] overflow-auto"
       >
         <div>
-          <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
-            <FiPlus size={20} />
+          <h3 class="font-semibold text-base mb-3 flex items-center gap-2">
+            <FiPlus size={18} />
             New Session
           </h3>
 
           {/* Mode Toggle */}
-          <div class="flex gap-2 mb-6">
+          <div class="flex gap-2 mb-4">
             <Button
               type="button"
+              size="sm"
               class="flex-1"
               variant={
                 sessionStore.state.newSessionMode === "remote"
@@ -351,11 +350,12 @@ export const NewSessionModal: Component = () => {
                 }
               }}
             >
-              <FiCloud class="mr-2" /> Remote
+              <FiCloud class="mr-1.5" /> Remote
             </Button>
             <Show when={!isMobile()}>
               <Button
                 type="button"
+                size="sm"
                 class="flex-1"
                 variant={
                   sessionStore.state.newSessionMode === "local"
@@ -367,7 +367,7 @@ export const NewSessionModal: Component = () => {
                   sessionStore.setConnectionError(null);
                 }}
               >
-                <FiHome class="mr-2" /> Local
+                <FiHome class="mr-1.5" /> Local
               </Button>
             </Show>
           </div>
@@ -421,8 +421,8 @@ export const NewSessionModal: Component = () => {
               </div>
               <Textarea
                 id="session-ticket"
-                class="h-24 font-mono text-sm"
-                placeholder="Paste the session ticket from CLI host..."
+                class="h-20 font-mono text-sm"
+                placeholder="Paste session ticket..."
                 value={sessionStore.state.sessionTicket}
                 onInput={(e) => {
                   sessionStore.setSessionTicket(e.currentTarget.value);
@@ -445,35 +445,31 @@ export const NewSessionModal: Component = () => {
             </div>
 
             {/* Install CLI Help */}
-            <div class="mb-4 p-3 bg-muted rounded-lg">
-              <p class="text-sm text-muted-foreground mb-2">
-                Need to install CLI on your computer?
-              </p>
-              <div class="flex flex-col gap-2">
-                <Button
+            <div class="mb-3 p-2.5 bg-muted rounded-lg">
+              <p class="text-xs text-muted-foreground mb-2">
+                Need CLI?{" "}
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  class="flex-1"
+                  class="link link-primary text-xs"
                   onClick={() => {
                     openUrl("https://github.com/sternelee/riterm#install-cli");
                   }}
                 >
                   View Guide
-                </Button>
-                <Button
+                </button>{" "}
+                or{" "}
+                <button
                   type="button"
-                  variant="default"
-                  class="flex-1"
+                  class="link link-primary text-xs"
                   onClick={async () => {
                     await writeText(
                       "curl -fsSL https://raw.githubusercontent.com/sternelee/riterm/main/install.sh | sh",
                     );
                   }}
                 >
-                  Copy Install Command
-                </Button>
-              </div>
+                  Copy Install Cmd
+                </button>
+              </p>
             </div>
 
             <Show when={sessionStore.state.connectionError}>
@@ -506,23 +502,21 @@ export const NewSessionModal: Component = () => {
               !!remoteControlSessionId()
             }
           >
-            <Alert variant="info" class="mb-4 py-2">
+            <Alert variant="info" class="mb-3 py-1.5">
               <div class="flex items-center justify-between gap-2 w-full">
-                <span class="text-sm">
-                  Connected to remote host (
-                  {(remoteControlSessionId() || "").slice(0, 8)}). Configure
-                  agent below.
+                <span class="text-xs">
+                  Remote: {(remoteControlSessionId() || "").slice(0, 8)}
                 </span>
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   onClick={() => {
                     sessionStore.setTargetControlSessionId(null);
                     sessionStore.setConnectionError(null);
                   }}
                 >
-                  Change Ticket
+                  Change
                 </Button>
               </div>
             </Alert>
@@ -530,36 +524,39 @@ export const NewSessionModal: Component = () => {
 
           {/* Agent Config (Local or Remote with active connection) */}
           <Show when={showAgentConfig()}>
-            <div class="mb-4 space-y-2">
-              <Label for="agent-type">Agent Type</Label>
-              <Select
-                id="agent-type"
-                value={sessionStore.state.newSessionAgent}
-                onChange={(val) => {
-                  const nextAgent = val as AgentType;
-                  sessionStore.setNewSessionAgent(nextAgent);
-                  if (nextAgent === "openclaw") {
-                    sessionStore.setNewSessionArgs("");
-                  }
-                }}
-              >
-                <Show
-                  when={
-                    sessionStore.state.newSessionMode === "local" && isMobile()
-                  }
-                  fallback={
-                    <>
-                      <option value="claude">Claude Code</option>
-                      <option value="codex">Codex</option>
-                      <option value="openclaw">OpenClaw</option>
-                      <option value="opencode">OpenCode</option>
-                      <option value="gemini">Gemini CLI</option>
-                    </>
-                  }
+            <div class="space-y-3">
+              <div class="space-y-1">
+                <Label for="agent-type" class="text-xs">Agent</Label>
+                <Select
+                  id="agent-type"
+                  class="select-sm"
+                  value={sessionStore.state.newSessionAgent}
+                  onChange={(val) => {
+                    const nextAgent = val as AgentType;
+                    sessionStore.setNewSessionAgent(nextAgent);
+                    if (nextAgent === "openclaw") {
+                      sessionStore.setNewSessionArgs("");
+                    }
+                  }}
                 >
-                  <option value="">Select an agent</option>
-                </Show>
-              </Select>
+                  <Show
+                    when={
+                      sessionStore.state.newSessionMode === "local" && isMobile()
+                    }
+                    fallback={
+                      <>
+                        <option value="claude">Claude Code</option>
+                        <option value="codex">Codex</option>
+                        <option value="openclaw">OpenClaw</option>
+                        <option value="opencode">OpenCode</option>
+                        <option value="gemini">Gemini CLI</option>
+                      </>
+                    }
+                  >
+                    <option value="">Select an agent</option>
+                  </Show>
+                </Select>
+              </div>
 
               {/* ACP Install Button */}
               <Show
@@ -573,8 +570,8 @@ export const NewSessionModal: Component = () => {
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
-                  class="w-full mt-2"
+                  size="xs"
+                  class="w-full"
                   disabled={isInstallingAcp()}
                   loading={isInstallingAcp()}
                   onClick={async () => {
@@ -602,16 +599,16 @@ export const NewSessionModal: Component = () => {
                         });
                       }
                       notificationStore.success(
-                        `${sessionStore.state.newSessionAgent.toUpperCase()} ACP installed successfully`,
-                        "Installation Complete",
+                        `${sessionStore.state.newSessionAgent.toUpperCase()} ACP installed`,
+                        "Done",
                       );
                     } catch (error) {
                       const msg =
                         error instanceof Error ? error.message : String(error);
                       console.error("Failed to install ACP:", error);
                       notificationStore.error(
-                        `Failed to install ACP: ${msg}`,
-                        "Installation Error",
+                        `Failed: ${msg}`,
+                        "Error",
                       );
                     } finally {
                       setIsInstallingAcp(false);
@@ -619,7 +616,7 @@ export const NewSessionModal: Component = () => {
                   }}
                 >
                   <Show when={!isInstallingAcp()}>
-                    <FiDownload class="mr-2 size-4" />
+                    <FiDownload class="mr-1.5 size-3" />
                   </Show>
                   <Show
                     when={isInstallingAcp()}
@@ -631,8 +628,8 @@ export const NewSessionModal: Component = () => {
               </Show>
             </div>
 
-            <div class="mb-4 space-y-2">
-              <Label for="project-path">Project Path</Label>
+            <div class="space-y-1.5">
+              <Label for="project-path" class="text-xs">Path</Label>
               <Combobox
                 value={sessionStore.state.newSessionPath}
                 onChange={(value) => {
@@ -658,104 +655,82 @@ export const NewSessionModal: Component = () => {
                     label: e.name,
                   };
                 })}
-                placeholder={isMobile() ? "app directory" : "/path/to/project"}
-                class="font-mono rounded-sm"
+                placeholder={isMobile() ? "app dir" : "/path/to/project"}
+                class="font-mono text-sm"
               />
               <p class="text-xs text-muted-foreground">
                 {isMobile()
-                  ? "Subdirectory name (default: app directory)"
-                  : "Type a path to autocomplete directory names"}
+                  ? "Subdirectory name"
+                  : "Type path to autocomplete"}
               </p>
             </div>
 
             <Show
-              when={agentArgsConfig().supported}
-              fallback={
-                <div class="mb-4 space-y-2">
-                  <Label>Agent Args</Label>
-                  <p class="text-xs text-muted-foreground">
-                    {agentArgsConfig().hint}
-                  </p>
-                </div>
-              }
+              when={agentArgsConfig().supported || sessionStore.state.newSessionAgent !== "openclaw"}
+              fallback={<div class="h-4" />}
             >
-              <div class="mb-4 space-y-2">
+              <div class="space-y-3">
                 <button
                   type="button"
-                  class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={() => setIsAgentArgsExpanded(!isAgentArgsExpanded())}
+                  class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setIsAdvancedExpanded(!isAdvancedExpanded())}
                 >
-                  <span
-                    class={`transition-transform ${isAgentArgsExpanded() ? "rotate-90" : ""}`}
-                  >
+                  <span class={`text-xs transition-transform ${isAdvancedExpanded() ? "rotate-90" : ""}`}>
                     ▶
                   </span>
-                  Agent Args (Optional)
+                  <span class="font-medium">Advanced Options</span>
                 </button>
-                <Show when={isAgentArgsExpanded()}>
-                  <Textarea
-                    id="agent-args"
-                    class="h-20 font-mono text-sm"
-                    placeholder={agentArgsConfig().placeholder}
-                    value={sessionStore.state.newSessionArgs}
-                    onInput={(e) => {
-                      sessionStore.setNewSessionArgs(e.currentTarget.value);
-                    }}
-                  />
-                  <p class="text-xs text-muted-foreground">
-                    {agentArgsConfig().hint}
-                  </p>
+                <Show when={isAdvancedExpanded()}>
+                  <Show when={agentArgsConfig().supported}>
+                    <div class="space-y-1.5">
+                      <Label for="agent-args" class="text-xs">Agent Args</Label>
+                      <Textarea
+                        id="agent-args"
+                        class="h-16 text-sm"
+                        placeholder={agentArgsConfig().placeholder}
+                        value={sessionStore.state.newSessionArgs}
+                        onInput={(e) => {
+                          sessionStore.setNewSessionArgs(e.currentTarget.value);
+                        }}
+                      />
+                      <p class="text-xs text-muted-foreground">
+                        {agentArgsConfig().hint}
+                      </p>
+                    </div>
+                  </Show>
+                  <Show when={sessionStore.state.newSessionAgent !== "openclaw"}>
+                    <div class="space-y-1.5">
+                      <Label for="mcp-servers" class="text-xs">MCP Servers</Label>
+                      <Textarea
+                        id="mcp-servers"
+                        class="h-16 text-xs"
+                        placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
+                        value={sessionStore.state.newSessionMcpServers}
+                        onInput={(e) => {
+                          sessionStore.setNewSessionMcpServers(e.currentTarget.value);
+                        }}
+                      />
+                      <p class="text-xs text-muted-foreground">
+                        ACP `mcpServers` JSON array
+                      </p>
+                    </div>
+                  </Show>
                 </Show>
               </div>
             </Show>
-
-            <div
-              class={cn(
-                "mb-4 space-y-2",
-                sessionStore.state.newSessionAgent === "openclaw" && "hidden",
-              )}
-            >
-              <button
-                type="button"
-                class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setIsMcpServersExpanded(!isMcpServersExpanded())}
-              >
-                <span
-                  class={`transition-transform ${isMcpServersExpanded() ? "rotate-90" : ""}`}
-                >
-                  ▶
-                </span>
-                MCP Servers (Optional JSON)
-              </button>
-              <Show when={isMcpServersExpanded()}>
-                <Textarea
-                  id="mcp-servers"
-                  class="h-24 font-mono text-xs"
-                  placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
-                  value={sessionStore.state.newSessionMcpServers}
-                  onInput={(e) => {
-                    sessionStore.setNewSessionMcpServers(e.currentTarget.value);
-                  }}
-                />
-                <p class="text-xs text-muted-foreground">
-                  ACP `mcpServers` JSON array. Leave empty to disable client MCP
-                  servers.
-                </p>
-              </Show>
-            </div>
           </Show>
 
-          <div class="mt-8 flex justify-end gap-2">
+          <div class="mt-4 flex justify-end gap-2">
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               onClick={() => {
                 sessionStore.closeNewSessionModal();
                 sessionStore.setConnectionError(null);
                 sessionStore.setNewSessionArgs("");
                 sessionStore.setNewSessionMcpServers("");
-                setIsAgentArgsExpanded(false);
-                setIsMcpServersExpanded(false);
+                setIsAdvancedExpanded(false);
               }}
             >
               Cancel
@@ -765,7 +740,7 @@ export const NewSessionModal: Component = () => {
               fallback={
                 <Button
                   type="button"
-                  variant="default"
+                  size="sm"
                   onClick={() => sessionStore.handleCreateSession()}
                   disabled={
                     !sessionStore.state.newSessionPath.trim() ||
@@ -775,7 +750,7 @@ export const NewSessionModal: Component = () => {
                 >
                   <Show
                     when={sessionStore.state.isStartingAgent}
-                    fallback={<span>Create Session</span>}
+                    fallback={<span>Create</span>}
                   >
                     Creating...
                   </Show>
@@ -784,7 +759,7 @@ export const NewSessionModal: Component = () => {
             >
               <Button
                 type="button"
-                variant="default"
+                size="sm"
                 onClick={() => sessionStore.handleRemoteConnect()}
                 disabled={
                   !sessionStore.state.sessionTicket.trim() ||
