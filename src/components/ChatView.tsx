@@ -367,44 +367,76 @@ export function ChatView(props: ChatViewProps) {
 
           notificationStore.success("Session reconnected", "Local Agent");
         } else {
-          // For remote sessions, refresh session status from CLI
-          const controlSessionId = currentSession.controlSessionId;
-          if (controlSessionId) {
-            try {
-              const remoteSessions = await invoke<BackendSessionMetadata[]>(
-                "remote_list_agents",
-                { controlSessionId },
-              );
+          // For remote sessions, reconnect to CLI and reload sessions
+          const ticket = sessionStore.state.sessionTicket.trim();
+          if (!ticket) {
+            notificationStore.error(
+              "No session ticket available. Please reconnect manually.",
+              "Reconnect Failed",
+            );
+            return;
+          }
 
-              // Find our session in the list
-              const remoteSession = remoteSessions.find(
-                (s) => s.session_id === props.sessionId,
-              );
-              if (remoteSession && remoteSession.active) {
-                sessionStore.updateSession(props.sessionId, {
-                  active: true,
-                });
+          try {
+            // Reinitialize network and reconnect to CLI
+            await sessionStore.initializeNetwork();
+
+            // Connect to remote host
+            const connectionSessionId = await invoke<string>(
+              "connect_to_host",
+              {
+                sessionTicket: ticket,
+              },
+            );
+
+            sessionStore.setTargetControlSessionId(connectionSessionId);
+            sessionStore.setConnectionState("connected");
+
+            // Reload remote sessions from CLI
+            const remoteSessions = await invoke<BackendSessionMetadata[]>(
+              "remote_list_agents",
+              { controlSessionId: connectionSessionId },
+            );
+
+            // Find our session in the list
+            const remoteSession = remoteSessions.find(
+              (s) => s.session_id === props.sessionId,
+            );
+
+            if (remoteSession) {
+              // Update session with new metadata and mark as active
+              sessionStore.updateSession(props.sessionId, {
+                active: remoteSession.active,
+                controlSessionId: connectionSessionId,
+                // Update other metadata if needed
+              });
+
+              if (remoteSession.active) {
                 notificationStore.success(
                   "Session reconnected",
                   "Remote Agent",
                 );
               } else {
                 notificationStore.error(
-                  "Session not available on remote host",
-                  "Reconnect Failed",
+                  "Session is no longer active on remote host",
+                  "Session Ended",
                 );
               }
-            } catch (err) {
+            } else {
+              // Session no longer exists on CLI
               notificationStore.error(
-                "Failed to refresh remote session status",
-                "Reconnect Failed",
+                "Session no longer exists on remote host",
+                "Session Not Found",
               );
+              // Remove the session
+              sessionStore.removeSession(props.sessionId);
             }
-          } else {
-            notificationStore.error(
-              "No connection to remote host",
-              "Reconnect Failed",
-            );
+          } catch (connErr) {
+            const msg =
+              connErr instanceof Error
+                ? connErr.message
+                : "Failed to reconnect";
+            notificationStore.error(msg, "Reconnect Failed");
           }
         }
       } catch (err) {
