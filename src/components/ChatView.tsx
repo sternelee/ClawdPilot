@@ -210,6 +210,7 @@ interface ChatViewProps {
     projectPath: string,
     args: string[],
   ) => void;
+  onToggleSidebar?: () => void;
   agentType?: AgentType;
   projectPath?: string;
   sessionMode?: "remote" | "local"; // Added session mode
@@ -1793,14 +1794,39 @@ export function ChatView(props: ChatViewProps) {
         <div class="drawer-content flex h-full bg-base-100 relative pb-safe lg:pb-0 overflow-hidden">
           <div class="flex flex-col h-full min-w-0 flex-1">
             {/* Header */}
-            <div class="z-20 flex items-center min-h-[3.5rem] box-border justify-between border-b border-base-content/10 bg-base-100/80 backdrop-blur-md pr-4 sm:pr-6 pl-16 lg:pl-8 py-2 shadow-sm">
-              <div class="flex-1">
-                <div class="flex items-center gap-3.5">
-                  <div class="p-2 rounded-xl bg-primary/10 text-primary shrink-0 shadow-inner">
+            <div class="z-20 flex items-center h-14 sm:h-16 box-border justify-between border-b border-base-content/10 bg-base-100/80 backdrop-blur-md px-4 sm:px-6 py-2 shadow-sm sticky top-0 fixed-top-safe">
+              <div class="flex items-center gap-3 overflow-hidden">
+                {/* Mobile Sidebar Toggle */}
+                <Show when={isMobile()}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl lg:hidden active:scale-95 transition-transform"
+                    onClick={() => props.onToggleSidebar?.()}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <title>Menu</title>
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 6h16M4 12h16M4 18h16"
+                      />
+                    </svg>
+                  </button>
+                </Show>
+
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="p-2 rounded-xl bg-primary/10 text-primary shrink-0 shadow-inner hidden xs:flex">
                     {getAgentIcon()}
                   </div>
                   <div class="min-w-0">
-                    <h2 class="text-[15px] sm:text-base font-bold tracking-tight truncate leading-tight">
+                    <h2 class="text-[14px] sm:text-[15px] font-bold tracking-tight truncate leading-tight">
                       {props.agentType === "claude" && "Claude Code"}
                       {props.agentType === "codex" && "Codex"}
                       {props.agentType === "opencode" && "OpenCode"}
@@ -1808,14 +1834,14 @@ export function ChatView(props: ChatViewProps) {
                       {props.agentType === "openclaw" && "OpenClaw"}
                     </h2>
                     <div
-                      class="text-[11px] opacity-50 truncate max-w-[18rem] flex items-center gap-1.5 mt-0.5"
+                      class="text-[10px] sm:text-[11px] opacity-50 truncate max-w-[12rem] sm:max-w-[18rem] flex items-center gap-1.5 mt-0.5"
                       title={props.projectPath}
                     >
                       <span class="inline-flex items-center gap-1">
                         <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                        <span class="font-medium">Active</span>
+                        <span class="font-medium hidden sm:inline">Active</span>
                       </span>
-                      <span class="opacity-30">•</span>
+                      <span class="opacity-30 hidden sm:inline">•</span>
                       <span class="truncate font-mono">
                         {props.projectPath?.split("/").pop() || "No project"}
                       </span>
@@ -1823,8 +1849,10 @@ export function ChatView(props: ChatViewProps) {
                   </div>
                 </div>
               </div>
-              {/* Theme Switcher */}
-              <ThemeSwitcher />
+
+              <div class="flex items-center gap-1 shrink-0">
+                <ThemeSwitcher />
+              </div>
             </div>
 
             {/* Messages Area */}

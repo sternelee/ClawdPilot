@@ -251,7 +251,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex flex-col gap-1.5 px-2 sm:px-4 pt-2 sm:pt-3 pb-[max(env(safe-area-inset-bottom,1px),2rem)] sm:pb-3 bg-base-100/95 backdrop-blur-md sticky bottom-0 z-20",
+        "flex flex-col gap-1.5 px-2 sm:px-4 pt-2 sm:pt-3 pb-[max(env(safe-area-inset-bottom,0.75rem),0.75rem)] sm:pb-3 bg-base-100/95 backdrop-blur-md sticky bottom-0 z-20",
         focused() && "bg-base-100",
         props.class,
       )}
@@ -266,12 +266,12 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         )}
       >
         <Show when={showMentionSuggestions()}>
-          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[10rem] sm:max-h-[15rem] overflow-y-auto">
+          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[12rem] sm:max-h-[15rem] overflow-y-auto backdrop-blur-md">
             {mentionSuggestions().map((item, index) => (
               <button
                 type="button"
                 class={cn(
-                  "w-full px-4 py-3 text-left text-sm transition-colors min-h-[44px]",
+                  "w-full px-4 py-3 text-left text-sm transition-colors min-h-[48px] flex items-center gap-2",
                   index === activeMentionIndex()
                     ? "bg-primary text-primary-content"
                     : "hover:bg-base-content/5",
@@ -279,19 +279,20 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => props.onSelectMention?.(item.path)}
               >
-                <span class="font-medium">{item.path}</span>
+                <FiFolder size={14} class="opacity-50" />
+                <span class="font-medium truncate">{item.path}</span>
               </button>
             ))}
           </div>
         </Show>
 
         <Show when={showSlashSuggestions()}>
-          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[10rem] sm:max-h-[15rem] overflow-y-auto">
+          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[12rem] sm:max-h-[15rem] overflow-y-auto backdrop-blur-md">
             {slashSuggestions().map((item, index) => (
               <button
                 type="button"
                 class={cn(
-                  "w-full px-4 py-3 text-left transition-colors min-h-[44px]",
+                  "w-full px-4 py-3 text-left transition-colors min-h-[48px]",
                   index === activeSlashIndex()
                     ? "bg-primary text-primary-content"
                     : "hover:bg-base-content/5",
@@ -299,9 +300,12 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => props.onSelectSlash?.(item.value || item.name)}
               >
-                <div class="text-sm font-bold">/{item.name}</div>
+                <div class="text-sm font-bold flex items-center gap-2">
+                  <span class="opacity-50">/</span>
+                  {item.name}
+                </div>
                 <Show when={item.description}>
-                  <div class="mt-0.5 text-xs opacity-70 line-clamp-2">
+                  <div class="mt-0.5 text-xs opacity-70 line-clamp-1">
                     {item.description}
                   </div>
                 </Show>
@@ -312,7 +316,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
         {/* Top Row: Textarea + Send Button */}
         <div class="flex items-end gap-1 sm:gap-2 p-1.5 sm:p-2 pb-1">
-          {/* Attach Button */}
+          {/* Attach Button (Hidden but kept structure) */}
           <button
             type="button"
             class="p-2.5 text-base-content/60 hover:text-primary hover:bg-primary/10 rounded-xl transition-all duration-200 shrink-0 hidden"
@@ -330,11 +334,14 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             value={props.value}
             onInput={(e) => props.onInput(e.currentTarget.value)}
             onKeyDown={handleKeyDown}
-            onFocus={() => setFocused(true)}
+            onFocus={() => {
+              setFocused(true);
+              if (mobile()) setShowMobileTools(false);
+            }}
             onBlur={() => setFocused(false)}
             placeholder={props.placeholder || "Type your message..."}
             aria-label="Chat input"
-            class="flex-1 px-3 py-2 bg-transparent border-none outline-none resize-none text-[16px] sm:text-sm max-h-[180px] min-h-[40px] leading-relaxed placeholder:opacity-40"
+            class="flex-1 px-3 py-2 bg-transparent border-none outline-none resize-none text-[16px] sm:text-sm max-h-[200px] min-h-[44px] leading-relaxed placeholder:opacity-40"
             disabled={props.disabled}
             rows={1}
           />
@@ -363,7 +370,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
         {/* Bottom Toolbar */}
         <div
-          class="flex items-center px-2 pb-1.5 gap-1.5 sm:gap-2"
+          class="flex items-center px-2 pb-2 gap-1.5 sm:gap-2"
           onTouchStart={(e) => {
             if (!mobile() || e.touches.length !== 1) return;
             setToolbarTouchStartY(e.touches[0].clientY);
@@ -384,7 +391,10 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           <Show when={mobile()}>
             <button
               type="button"
-              class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl hide-on-keyboard bg-base-300/70 hover:bg-base-300"
+              class={cn(
+                "btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl transition-all",
+                showMobileTools() ? "bg-primary/20 text-primary" : "bg-base-300/70"
+              )}
               onClick={() => setShowMobileTools((prev) => !prev)}
               title={showMobileTools() ? "Hide tools" : "Show tools"}
               aria-label={showMobileTools() ? "Hide tools" : "Show tools"}
@@ -399,7 +409,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           </Show>
 
           <Show when={!mobile() || showMobileTools()}>
-            <div class="flex items-center gap-1 hide-on-keyboard">
+            <div class="flex items-center gap-1.5">
               {/* Settings Button with Permission Dropdown */}
               <div class="relative">
                 <button
@@ -418,22 +428,51 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                   <span class="hidden sm:inline">Settings</span>
                 </button>
 
-                {/* Settings Dropdown */}
+                {/* Settings Backdrop (Mobile only) */}
+                <Show when={showSettings() && mobile()}>
+                  <div 
+                    class="fixed inset-0 bg-black/40 z-[100] backdrop-blur-[2px] animate-fade-in"
+                    onClick={() => setShowSettings(false)}
+                  />
+                </Show>
+
+                {/* Settings Dropdown / Bottom Sheet */}
                 <Show when={showSettings()}>
-                  <div class="absolute bottom-full left-0 mb-2 w-56 bg-base-300 rounded-xl border border-base-content/10 shadow-2xl z-50 overflow-hidden">
-                    <div class="px-4 py-2.5 border-b border-base-content/10">
-                      <div class="text-[10px] font-bold uppercase tracking-widest opacity-50">
+                  <div class={cn(
+                    "z-[101] bg-base-300 border border-base-content/10 shadow-2xl overflow-hidden transition-all duration-300",
+                    mobile() 
+                      ? "fixed bottom-0 left-0 right-0 rounded-t-3xl animate-slide-up" 
+                      : "absolute bottom-full left-0 mb-2 w-60 rounded-xl"
+                  )}>
+                    {/* Handle for mobile bottom sheet */}
+                    <Show when={mobile()}>
+                      <div class="flex justify-center py-3">
+                        <div class="w-10 h-1 bg-base-content/20 rounded-full" />
+                      </div>
+                    </Show>
+
+                    <div class="px-4 py-3 border-b border-base-content/10 flex items-center justify-between">
+                      <div class="text-[11px] font-black uppercase tracking-widest opacity-50">
                         Permission Mode
                       </div>
+                      <Show when={mobile()}>
+                        <button 
+                          type="button" 
+                          class="btn btn-ghost btn-xs btn-circle"
+                          onClick={() => setShowSettings(false)}
+                        >
+                          <FiX size={16} />
+                        </button>
+                      </Show>
                     </div>
-                    <div class="p-1.5">
+                    <div class="p-2 space-y-1">
                       {permissionOptions.map((option) => (
                         <button
                           type="button"
                           class={cn(
-                            "w-full flex items-center gap-3 px-3 py-2.5 text-left rounded-lg transition-colors",
+                            "w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-all active:scale-[0.98]",
                             props.permissionMode === option.value
-                              ? "bg-primary text-primary-content"
+                              ? "bg-primary text-primary-content shadow-md shadow-primary/20"
                               : "hover:bg-base-content/5",
                           )}
                           onClick={() => {
@@ -455,19 +494,22 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                             </div>
                           </div>
                           <Show when={props.permissionMode === option.value}>
-                            <FiCheck size={16} class="shrink-0" />
+                            <FiCheck size={18} class="shrink-0" />
                           </Show>
                         </button>
                       ))}
                     </div>
+                    {/* Extra spacing for mobile safe area */}
+                    <Show when={mobile()}>
+                      <div class="h-8" />
+                    </Show>
                   </div>
                 </Show>
               </div>
 
               {/* File Browser Button */}
               <Show when={showAdvancedTools()}>
-                <div class="flex items-center gap-1">
-                  {/* File Browser Button */}
+                <div class="flex items-center gap-1.5">
                   <button
                     type="button"
                     class={cn(
@@ -490,7 +532,6 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                     <span class="hidden sm:inline">Files</span>
                   </button>
 
-                  {/* Git Panel Button */}
                   <button
                     type="button"
                     class={cn(
@@ -556,7 +597,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               !props.isStreaming && (!props.value.trim() || props.disabled)
             }
             class={cn(
-              "btn btn-primary btn-sm h-10 min-h-[40px] px-4 rounded-xl shadow-lg shadow-primary/20 transition-all duration-300 ml-auto shrink-0",
+              "btn btn-primary btn-sm h-11 w-11 sm:h-10 sm:w-auto sm:px-4 rounded-xl shadow-lg shadow-primary/20 transition-all duration-300 ml-auto shrink-0 active:scale-90",
               props.isStreaming && "btn-error shadow-error/20",
             )}
             title={props.isStreaming ? "Stop generation" : "Send message"}
@@ -566,7 +607,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               when={props.isStreaming}
               fallback={
                 <div class="flex items-center gap-2">
-                  <FiSend class="size-4" />
+                  <FiSend class="size-5 sm:size-4" />
                   <span class="text-sm font-bold hidden sm:inline">Send</span>
                 </div>
               }

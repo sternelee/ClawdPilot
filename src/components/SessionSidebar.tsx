@@ -117,11 +117,11 @@ const SessionItem: Component<SessionItemProps> = (props) => {
     <div
       role="button"
       tabIndex={0}
-      class={`group relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 mx-1
+      class={`group relative flex items-center gap-3 px-4 py-4 rounded-2xl cursor-pointer transition-all duration-200 mx-2 mb-1
         ${
           props.isActive
-            ? "bg-primary text-primary-content shadow-lg shadow-primary/20 scale-[1.02] z-10"
-            : "hover:bg-base-content/5 border border-transparent"
+            ? "bg-primary text-primary-content shadow-lg shadow-primary/20 scale-[1.01] z-10"
+            : "hover:bg-base-content/5 border border-transparent active:scale-[0.98] active:bg-base-content/10"
         }`}
       onClick={props.onClick}
       onKeyDown={(e) => {
@@ -133,7 +133,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
     >
       {/* Agent Icon */}
       <div
-        class={`shrink-0 ${props.isActive ? "bg-white/20 p-0.5 rounded-lg" : ""}`}
+        class={`shrink-0 transition-transform duration-200 ${props.isActive ? "bg-white/20 p-0.5 rounded-xl scale-110" : ""}`}
       >
         {getAgentIcon(props.session?.agentType || "claude")}
       </div>
@@ -142,7 +142,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
           <span
-            class={`font-bold text-sm truncate ${props.isActive ? "text-primary-content" : "text-base-content"}`}
+            class={`font-bold text-[15px] tracking-tight truncate ${props.isActive ? "text-primary-content" : "text-base-content"}`}
           >
             {props.session?.agentType === "claude" && "Claude"}
             {props.session?.agentType === "gemini" && "Gemini"}
@@ -151,11 +151,11 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             {props.session?.agentType === "openclaw" && "OpenClaw"}
           </span>
           <span
-            class={`text-[9px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-wider ${
+            class={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest ${
               props.isActive
-                ? "bg-white/20 text-white"
+                ? "bg-white/25 text-white"
                 : props.session?.mode === "local"
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-primary/15 text-primary"
                   : "bg-base-content/10 text-base-content/60"
             }`}
           >
@@ -163,7 +163,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
           </span>
         </div>
         <div
-          class={`text-[11px] truncate mt-0.5 font-mono ${props.isActive ? "text-primary-content/70" : "opacity-40"}`}
+          class={`text-[11px] truncate mt-0.5 font-mono opacity-60 ${props.isActive ? "text-primary-content/80" : ""}`}
         >
           {props.session?.projectPath?.split("/").pop() || "No project"}
         </div>
@@ -171,10 +171,10 @@ const SessionItem: Component<SessionItemProps> = (props) => {
 
       {/* Status Indicator */}
       <Show when={props.hasUnread && !props.isActive}>
-        <div class="w-2 h-2 rounded-full bg-error animate-pulse shrink-0 shadow-sm" />
+        <div class="w-2.5 h-2.5 rounded-full bg-error animate-pulse shrink-0 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
       </Show>
 
-      {/* Close Button */}
+      {/* Actions */}
       <div class="flex items-center gap-1">
         <div class="hidden md:flex items-center gap-1">
           <Show when={props.onToggleHistory}>
@@ -215,10 +215,10 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             trigger={
               <button
                 type="button"
-                class={`btn btn-ghost btn-sm btn-square h-9 w-9 ${props.isActive ? "text-primary-content hover:bg-white/20" : ""}`}
+                class={`btn btn-ghost btn-sm btn-square h-10 w-10 rounded-xl ${props.isActive ? "text-primary-content hover:bg-white/20" : "bg-base-content/5"}`}
                 title="Session actions"
               >
-                <FiMoreVertical size={14} />
+                <FiMoreVertical size={16} />
               </button>
             }
           />

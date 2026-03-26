@@ -157,7 +157,7 @@ export const AppLayout: Component = () => {
         onClose={() => setShortcutsDialogOpen(false)}
       />
       <Show when={sessionStore.state.isHistoryLoading}>
-        <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-60">
+        <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[60]">
           <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
             <SpinnerWithLabel
               label="Loading history…"
@@ -167,27 +167,31 @@ export const AppLayout: Component = () => {
           </div>
         </div>
       </Show>
-      {/* Mobile Menu Button */}
-      <Button
-        class="fixed left-3 top-2 z-50 flex h-11 w-11 rounded-xl bg-base-100/95 shadow-md lg:hidden fixed-top-safe"
-        size="icon"
-        variant="ghost"
-        onClick={() => setSidebarOpen(!sidebarOpen())}
-        title="Open sessions"
-      >
-        <MenuIcon />
-      </Button>
+
       {/* Sidebar */}
       <SessionSidebar
         isOpen={sidebarOpen()}
         onToggle={() => setSidebarOpen(!sidebarOpen())}
       />
+
       {/* Main Content */}
       <main class="flex-1 flex min-h-0 flex-col min-w-0 lg:ml-0">
         <Show
           when={activeSession()}
           fallback={
             <div class="flex-1 flex items-center justify-center p-8 bg-base-100">
+              {/* Mobile Menu Button - Integrated for fallback view */}
+              <Show when={mobile()}>
+                <Button
+                  class="fixed left-4 top-4 z-50 h-12 w-12 rounded-2xl bg-base-200 shadow-lg border border-base-content/5 fixed-top-safe active:scale-95 transition-transform"
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <MenuIcon />
+                </Button>
+              </Show>
+
               {/* Theme Switcher - Top Right */}
               <div class="fixed top-4 right-4 fixed-top-safe">
                 <ThemeSwitcher />
@@ -221,25 +225,25 @@ export const AppLayout: Component = () => {
                   </Button>
                 </div>
                 {/* Features */}
-                <div class="grid grid-cols-3 gap-4 mt-12 text-left">
+                <div class="grid grid-cols-3 gap-4 mt-12 text-left px-4">
                   <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
-                    <div class="text-xl mb-1.5">🤖</div>
-                    <div class="text-xs font-bold">AI Agents</div>
-                    <div class="text-[10px] opacity-50">
+                    <div class="text-xl mb-1.5 text-center">🤖</div>
+                    <div class="text-xs font-bold text-center">AI Agents</div>
+                    <div class="text-[10px] opacity-50 text-center">
                       Claude, Codex & more
                     </div>
                   </div>
                   <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
-                    <div class="text-xl mb-1.5">🔒</div>
-                    <div class="text-xs font-bold">P2P Secure</div>
-                    <div class="text-[10px] opacity-50">
+                    <div class="text-xl mb-1.5 text-center">🔒</div>
+                    <div class="text-xs font-bold text-center">P2P Secure</div>
+                    <div class="text-[10px] opacity-50 text-center">
                       End-to-end encrypted
                     </div>
                   </div>
                   <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
-                    <div class="text-xl mb-1.5">💬</div>
-                    <div class="text-xs font-bold">Agent</div>
-                    <div class="text-[10px] opacity-50">
+                    <div class="text-xl mb-1.5 text-center">💬</div>
+                    <div class="text-xs font-bold text-center">Agent</div>
+                    <div class="text-[10px] opacity-50 text-center">
                       Real-time sharing
                     </div>
                   </div>
@@ -249,7 +253,6 @@ export const AppLayout: Component = () => {
           }
         >
           {(session) => {
-            // session is already the AgentSessionMetadata object
             return (
               <>
                 <ChatView
@@ -258,6 +261,7 @@ export const AppLayout: Component = () => {
                   projectPath={session().projectPath}
                   sessionMode={session().mode}
                   onSendMessage={handleSendMessage}
+                  onToggleSidebar={() => setSidebarOpen(true)}
                   rightPanelView={rightPanelView()}
                   onToggleFileBrowser={() => toggleRightPanel("file")}
                   onToggleGitPanel={() => toggleRightPanel("git")}
@@ -266,7 +270,7 @@ export const AppLayout: Component = () => {
                 <Show when={rightPanelView() !== "none"}>
                   <button
                     type="button"
-                    class="fixed inset-0 bg-black/60 z-40 lg:hidden w-full h-full border-none cursor-default backdrop-blur-sm"
+                    class="fixed inset-0 bg-black/60 z-[40] lg:hidden w-full h-full border-none cursor-default backdrop-blur-sm"
                     onClick={closeRightPanel}
                     aria-label="Close tools panel"
                   />
@@ -285,13 +289,13 @@ export const AppLayout: Component = () => {
                       closeRightPanel();
                     }
                   }}
-                  class={`fixed right-0 inset-y-0 z-50 w-screen sm:w-[28rem] md:w-[340px] lg:w-[360px] border-l border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
+                  class={`fixed right-0 inset-y-0 z-[50] w-[min(92vw,28rem)] sm:w-[28rem] md:w-[340px] lg:w-[360px] border-l border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
                     transform transition-transform duration-300 ease-in-out
                     ${rightPanelView() !== "none" ? "translate-x-0" : "translate-x-full"}
                     ${mobile() ? "pt-safe pb-safe" : ""}
                   `}
                 >
-                  <div class="h-12 px-4 border-b border-base-content/10 flex items-center justify-between bg-base-200/50">
+                  <div class="h-14 px-4 border-b border-base-content/10 flex items-center justify-between bg-base-200/50">
                     <div class="text-sm font-bold flex items-center gap-2">
                       <Show
                         when={rightPanelView() === "file"}
@@ -307,7 +311,7 @@ export const AppLayout: Component = () => {
                     </div>
                     <button
                       type="button"
-                      class="btn btn-ghost btn-sm btn-square"
+                      class="btn btn-ghost btn-sm btn-square h-10 w-10 rounded-xl"
                       onClick={closeRightPanel}
                       title="Close panel"
                     >

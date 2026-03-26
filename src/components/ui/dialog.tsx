@@ -8,6 +8,7 @@
  */
 
 import { type JSX, Show } from "solid-js";
+import { isMobile } from "../../stores/deviceStore";
 
 type DialogProps = {
   open: boolean;
@@ -21,41 +22,49 @@ export function Dialog(props: DialogProps) {
   return (
     <Show when={props.open}>
       {/* Use native HTML dialog element with DaisyUI classes */}
-      <dialog class={`modal ${props.open ? "modal-open" : ""}`}>
+      <dialog 
+        class={`modal ${props.open ? "modal-open" : ""} ${isMobile() ? "modal-bottom" : ""} ${props.class || ""}`}
+      >
         {/* Backdrop - clicks outside to close */}
-        <form method="dialog" class="modal-backdrop">
-          <button onClick={props.onClose}>close</button>
-        </form>
+        <div class="modal-backdrop bg-black/40 backdrop-blur-[2px]" onClick={props.onClose}>
+          <button type="button" class="cursor-default w-full h-full border-none">close</button>
+        </div>
 
         {/* Modal Box */}
         <div
-          class={`modal-box rounded-sm ${props.contentClass || ""}`}
+          class={`modal-box relative ${isMobile() ? "rounded-t-3xl rounded-b-none" : "rounded-2xl"} ${props.contentClass || ""}`}
           onClick={(e) => e.stopPropagation()}
         >
+          {/* Handle for mobile bottom sheet */}
+          <Show when={isMobile()}>
+            <div class="flex justify-center -mt-2 mb-4">
+              <div class="w-10 h-1 bg-base-content/20 rounded-full" />
+            </div>
+          </Show>
+
           {props.children}
 
-          {/* Close button */}
-          <form method="dialog">
-            <button
-              class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-              onClick={props.onClose}
-              aria-label="Close"
+          {/* Close button (top right) */}
+          <button
+            type="button"
+            class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+            onClick={props.onClose}
+            aria-label="Close"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="size-4"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="size-4"
-              >
-                <path d="M18 6 6 18" />
-                <path d="m6 6 12 12" />
-              </svg>
-            </button>
-          </form>
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
         </div>
       </dialog>
     </Show>
