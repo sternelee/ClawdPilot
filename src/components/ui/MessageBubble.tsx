@@ -511,7 +511,7 @@ const SystemMessageContent: Component<{
         <Show
           when={isTerminalOutput()}
           fallback={
-            <div class="prose prose-sm wrap-break-words text-[15px] sm:text-sm max-w-none leading-relaxed sm:leading-6 opacity-70 selectable">
+            <div class="prose prose-sm wrap-break-words text-[15px] sm:text-sm max-w-none leading-relaxed sm:leading-6 text-base-content/70 selectable">
               <SolidMarkdown children={props.content} />
             </div>
           }
@@ -519,7 +519,7 @@ const SystemMessageContent: Component<{
           <Show
             when={parseTerminalOutput()}
             fallback={
-              <div class="prose prose-sm wrap-break-words text-[15px] sm:text-sm max-w-none leading-relaxed sm:leading-6 opacity-70 selectable">
+              <div class="prose prose-sm wrap-break-words text-[15px] sm:text-sm max-w-none leading-relaxed sm:leading-6 text-base-content/70 selectable">
                 <SolidMarkdown children={props.content} />
               </div>
             }

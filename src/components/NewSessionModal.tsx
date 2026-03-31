@@ -24,8 +24,8 @@ import {
   requestPermissions,
   scan,
 } from "@tauri-apps/plugin-barcode-scanner";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+// import { openUrl } from "@tauri-apps/plugin-opener";
+// import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { sessionStore, AgentType } from "../stores/sessionStore";
 import { isMobile } from "../stores/deviceStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -232,13 +232,6 @@ export const NewSessionModal: Component = () => {
     }
   });
 
-  createEffect(() => {
-    if (!sessionStore.state.isNewSessionModalOpen) return;
-    if (!sessionStore.state.newSessionPath.trim()) {
-      sessionStore.setNewSessionPath("~");
-    }
-  });
-
   const agentArgsConfig = createMemo(() => {
     const agent = sessionStore.state.newSessionAgent;
 
@@ -439,37 +432,6 @@ export const NewSessionModal: Component = () => {
                   }
                 }}
               />
-              <p class="text-xs text-muted-foreground">
-                Run `clawdpilot --daemon` to get a session ticket
-              </p>
-            </div>
-
-            {/* Install CLI Help */}
-            <div class="mb-3 p-2.5 bg-muted rounded-lg">
-              <p class="text-xs text-muted-foreground mb-2">
-                Need CLI?{" "}
-                <button
-                  type="button"
-                  class="link link-primary text-xs"
-                  onClick={() => {
-                    openUrl("https://github.com/sternelee/riterm#install-cli");
-                  }}
-                >
-                  View Guide
-                </button>{" "}
-                or{" "}
-                <button
-                  type="button"
-                  class="link link-primary text-xs"
-                  onClick={async () => {
-                    await writeText(
-                      "curl -fsSL https://raw.githubusercontent.com/sternelee/riterm/main/install.sh | sh",
-                    );
-                  }}
-                >
-                  Copy Install Cmd
-                </button>
-              </p>
             </div>
 
             <Show when={sessionStore.state.connectionError}>

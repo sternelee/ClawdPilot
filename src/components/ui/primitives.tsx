@@ -220,7 +220,7 @@ export const CardTitle: ParentComponent<{ class?: string }> = (props) => (
 );
 
 export const CardDescription: ParentComponent<{ class?: string }> = (props) => (
-  <p class={cn("text-sm opacity-60", props.class)}>{props.children}</p>
+  <p class={cn("text-sm text-base-content/60", props.class)}>{props.children}</p>
 );
 
 export const CardContent: ParentComponent<{ class?: string }> = (props) => (

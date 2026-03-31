@@ -18,6 +18,7 @@ import { SessionSidebar } from "./SessionSidebar";
 import { ChatView } from "./ChatView";
 import { FileBrowserView } from "./FileBrowserView";
 import { GitDiffView } from "./GitDiffView";
+import { SetupGuide } from "./mobile/SetupGuide";
 import { sessionStore } from "../stores/sessionStore";
 import { isMobile } from "../stores/deviceStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -26,6 +27,7 @@ import { KeyboardShortcutsDialog } from "./ui/KeyboardShortcuts";
 import { SpinnerWithLabel } from "./ui/Spinner";
 import { ThemeSwitcher } from "./ui/ThemeSwitcher";
 import { FiPlus, FiFolder, FiGitBranch, FiX } from "solid-icons/fi";
+import { HelpCircle } from "lucide-solid";
 
 // ============================================================================
 // Icons
@@ -56,6 +58,7 @@ const MenuIcon: Component = () => (
 export const AppLayout: Component = () => {
   const [sidebarOpen, setSidebarOpen] = createSignal(false);
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = createSignal(false);
+  const [showSetupGuide, setShowSetupGuide] = createSignal(false);
   const [rightPanelView, setRightPanelView] = createSignal<
     "none" | "file" | "git"
   >("none");
@@ -156,6 +159,17 @@ export const AppLayout: Component = () => {
         open={shortcutsDialogOpen()}
         onClose={() => setShortcutsDialogOpen(false)}
       />
+
+      {/* Setup Guide - Full Screen Overlay */}
+      <Show when={showSetupGuide()}>
+        <div class="fixed inset-0 z-[70] bg-base-100">
+          <SetupGuide
+            onClose={() => setShowSetupGuide(false)}
+            onSkip={() => setShowSetupGuide(false)}
+          />
+        </div>
+      </Show>
+
       <Show when={sessionStore.state.isHistoryLoading}>
         <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[60]">
           <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
@@ -181,19 +195,26 @@ export const AppLayout: Component = () => {
           fallback={
             <div class="flex-1 flex items-center justify-center p-8 bg-base-100">
               {/* Mobile Menu Button - Integrated for fallback view */}
-              <Show when={mobile()}>
-                <Button
-                  class="fixed left-4 top-4 z-50 h-12 w-12 rounded-2xl bg-base-200 shadow-lg border border-base-content/5 fixed-top-safe active:scale-95 transition-transform"
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setSidebarOpen(true)}
-                >
-                  <MenuIcon />
-                </Button>
-              </Show>
+              <Button
+                class="fixed left-4 top-4 z-50 h-12 w-12 rounded-2xl bg-base-200 shadow-lg border border-base-content/5 fixed-top-safe active:scale-95 transition-transform lg:hidden"
+                size="icon"
+                variant="ghost"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <MenuIcon />
+              </Button>
 
               {/* Theme Switcher - Top Right */}
-              <div class="fixed top-4 right-4 fixed-top-safe">
+              <div class="fixed top-4 right-4 fixed-top-safe flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-10 w-10 rounded-xl lg:hidden"
+                  onClick={() => setShowSetupGuide(true)}
+                  title="Setup Guide"
+                >
+                  <HelpCircle size={20} />
+                </Button>
                 <ThemeSwitcher />
               </div>
 
@@ -213,7 +234,7 @@ export const AppLayout: Component = () => {
                   Manage multiple AI agent sessions in one place. Create a new
                   session to get started.
                 </p>
-                <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <div class="flex flex-col items-center justify-center gap-3">
                   <Button
                     variant="default"
                     size="lg"
@@ -222,6 +243,15 @@ export const AppLayout: Component = () => {
                   >
                     <FiPlus size={18} class="mr-2" />
                     Create Session
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="text-base-content/50 hover:text-base-content"
+                    onClick={() => setShowSetupGuide(true)}
+                  >
+                    <HelpCircle size={16} class="mr-1.5" />
+                    Setup Guide
                   </Button>
                 </div>
                 {/* Features */}
@@ -299,7 +329,9 @@ export const AppLayout: Component = () => {
                     <div class="text-sm font-bold flex items-center gap-2">
                       <Show
                         when={rightPanelView() === "file"}
-                        fallback={<FiGitBranch size={16} class="text-primary" />}
+                        fallback={
+                          <FiGitBranch size={16} class="text-primary" />
+                        }
                       >
                         <FiFolder size={16} class="text-primary" />
                       </Show>
