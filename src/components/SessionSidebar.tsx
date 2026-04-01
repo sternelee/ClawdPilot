@@ -289,6 +289,22 @@ interface AgentHistoryEntry {
   cwd?: string | null;
 }
 
+const unwrapAgentControlResponse = (response: string): any => {
+  const parsed = JSON.parse(response);
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    "success" in parsed &&
+    "data" in parsed
+  ) {
+    if (!parsed.success) {
+      throw new Error(parsed.message || "Agent control request failed");
+    }
+    return parsed.data;
+  }
+  return parsed;
+};
+
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const sessions = createMemo(() => sessionStore.getSessions());
   const activeSession = createMemo(() => sessionStore.getActiveSession());
@@ -511,9 +527,15 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       return;
     }
 
+    const controlSessionId = sessionStore.state.targetControlSessionId;
+    if (!controlSessionId) {
+      notificationStore.error("No remote connection selected", "Error");
+      return;
+    }
+
     // Trigger remote session spawn via CLI
     invoke("remote_spawn_session", {
-      connectionSessionId: session.sessionId,
+      connectionSessionId: controlSessionId,
       agentType: session.agentType,
       projectPath: session.projectPath,
       args: [],
@@ -575,11 +597,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             projectPath,
           },
         });
-        const parsed = JSON.parse(response);
-        if (parsed.success && parsed.data?.type === "history_list") {
-          entries = parsed.data.entries;
+        const parsed = unwrapAgentControlResponse(response);
+        if (parsed?.type === "history_list" && Array.isArray(parsed.entries)) {
+          entries = parsed.entries;
         } else {
-          throw new Error(parsed.message || "Failed to load history");
+          throw new Error("Failed to load history");
         }
       } else {
         throw new Error("Remote session without control session");
@@ -658,9 +680,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             targetSessionId: session.sessionId,
           },
         });
-        const parsed = JSON.parse(response);
-        if (!parsed.success || parsed.data?.type !== "session_loaded") {
-          throw new Error(parsed.message || "Failed to load history session");
+        const parsed = unwrapAgentControlResponse(response);
+        if (parsed?.type !== "session_loaded") {
+          throw new Error("Failed to load history session");
         }
 
         sessionStore.updateSession(session.sessionId, {

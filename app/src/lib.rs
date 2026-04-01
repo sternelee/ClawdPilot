@@ -3399,27 +3399,41 @@ async fn local_load_agent_history(
     Ok(session_id)
 }
 
-/// Set permission mode for a session
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn parse_local_permission_mode(mode: &str) -> Result<shared::agent::PermissionMode, String> {
+    match mode {
+        "AlwaysAsk" => Ok(shared::agent::PermissionMode::AlwaysAsk),
+        "AcceptEdits" => Ok(shared::agent::PermissionMode::AcceptEdits),
+        "AutoApprove" => Ok(shared::agent::PermissionMode::AutoApprove),
+        "Plan" => Ok(shared::agent::PermissionMode::Plan),
+        _ => Err(format!("Invalid permission mode: {}", mode)),
+    }
+}
+
+fn parse_remote_permission_mode(mode: &str) -> Result<AgentPermissionMode, String> {
+    match mode {
+        "AlwaysAsk" => Ok(AgentPermissionMode::AlwaysAsk),
+        "AcceptEdits" => Ok(AgentPermissionMode::AcceptEdits),
+        "AutoApprove" => Ok(AgentPermissionMode::AutoApprove),
+        "Plan" => Ok(AgentPermissionMode::Plan),
+        _ => Err(format!("Invalid permission mode: {}", mode)),
+    }
+}
+
+/// Set permission mode for a local session
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(rename_all = "camelCase")]
-async fn set_permission_mode(
+async fn local_set_permission_mode(
     session_id: String,
     mode: String,
-    control_session_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     info!(
-        "Setting permission mode for session {}: {}",
+        "Setting local permission mode for session {}: {}",
         session_id, mode
     );
 
-    let permission_mode = match mode.as_str() {
-        "AlwaysAsk" => shared::agent::PermissionMode::AlwaysAsk,
-        "AcceptEdits" => shared::agent::PermissionMode::AcceptEdits,
-        "AutoApprove" => shared::agent::PermissionMode::AutoApprove,
-        "Plan" => shared::agent::PermissionMode::Plan,
-        _ => return Err(format!("Invalid permission mode: {}", mode)),
-    };
+    let permission_mode = parse_local_permission_mode(&mode)?;
 
     if let Some(manager) = state.agent_manager.read().await.as_ref().cloned() {
         if manager
@@ -3430,6 +3444,24 @@ async fn set_permission_mode(
             return Ok(());
         }
     }
+
+    Err("Agent manager not initialized".to_string())
+}
+
+/// Set permission mode for a remote session
+#[tauri::command(rename_all = "camelCase")]
+async fn remote_set_permission_mode(
+    session_id: String,
+    mode: String,
+    control_session_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    info!(
+        "Setting remote permission mode for session {}: {}",
+        session_id, mode
+    );
+
+    let permission_mode = parse_remote_permission_mode(&mode)?;
 
     let connection_id = if let Some(cs_id) = control_session_id {
         let sessions = state.sessions.read().await;
@@ -3446,20 +3478,13 @@ async fn set_permission_mode(
         }
     };
 
-    let mode_for_remote = match permission_mode {
-        shared::agent::PermissionMode::AlwaysAsk => AgentPermissionMode::AlwaysAsk,
-        shared::agent::PermissionMode::AcceptEdits => AgentPermissionMode::AcceptEdits,
-        shared::agent::PermissionMode::AutoApprove => AgentPermissionMode::AutoApprove,
-        shared::agent::PermissionMode::Plan => AgentPermissionMode::Plan,
-    };
-
     let control_message = ClawdChatMessage::new(
         shared::MessageType::AgentControl,
         "app".to_string(),
         shared::MessagePayload::AgentControl(shared::AgentControlMessage {
             session_id: session_id.clone(),
             action: AgentControlAction::SetPermissionMode {
-                mode: mode_for_remote,
+                mode: permission_mode,
             },
             request_id: Some(uuid::Uuid::new_v4().to_string()),
         }),
@@ -3627,10 +3652,12 @@ pub fn run() {
             send_agent_message,
             abort_agent_action,
             respond_to_agent_permission,
-            // Permission Management Commands
-            set_permission_mode,
             // ACP Package Installation
             install_acp_package_remote,
+            // Permission Management Commands
+            remote_set_permission_mode,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            local_set_permission_mode,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             install_acp_package_local,
             // Local Agent Commands (desktop only)

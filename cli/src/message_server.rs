@@ -377,6 +377,7 @@ impl CliMessageServer {
         let agent_control_handler = Arc::new(AgentControlMessageHandler::new(
             self.communication_manager.clone(),
             self.agent_manager.clone(),
+            self.quic_server.clone(),
         ));
         self.communication_manager
             .register_message_handler(agent_control_handler)
@@ -2695,17 +2696,74 @@ pub struct AgentControlMessageHandler {
     #[allow(dead_code)]
     communication_manager: Arc<CommunicationManager>,
     agent_manager: Arc<AgentManager>,
+    quic_server: QuicMessageServer,
+    event_forwarders:
+        Arc<tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>>,
 }
 
 impl AgentControlMessageHandler {
     pub fn new(
         communication_manager: Arc<CommunicationManager>,
         agent_manager: Arc<AgentManager>,
+        quic_server: QuicMessageServer,
     ) -> Self {
         Self {
             communication_manager,
             agent_manager,
+            quic_server,
+            event_forwarders: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         }
+    }
+
+    async fn attach_event_forwarder(&self, session_id: String) {
+        const MAX_SUBSCRIBE_ATTEMPTS: usize = 10;
+        const SUBSCRIBE_RETRY_DELAY_MS: u64 = 25;
+
+        for attempt in 0..MAX_SUBSCRIBE_ATTEMPTS {
+            if let Some(event_rx) = self.agent_manager.subscribe(&session_id).await {
+                for event in self.agent_manager.drain_event_buffer(&session_id).await {
+                    let message = shared::message_adapter::build_agent_message(
+                        "cli".to_string(),
+                        session_id.clone(),
+                        &event.event,
+                        None,
+                    );
+
+                    if let Err(e) = self.quic_server.broadcast_message(message).await {
+                        tracing::warn!(
+                            "[event_forwarder] Failed to broadcast buffered event for session {}: {}",
+                            session_id,
+                            e
+                        );
+                    }
+                }
+
+                RemoteSpawnMessageHandler::start_event_forwarder(
+                    self.quic_server.clone(),
+                    self.event_forwarders.clone(),
+                    session_id.clone(),
+                    event_rx,
+                );
+                tracing::info!(
+                    "[event_forwarder] Attached after history load for session: {}",
+                    session_id
+                );
+                return;
+            }
+
+            tracing::debug!(
+                "[event_forwarder] Subscribe retry {}/{} for session {}",
+                attempt + 1,
+                MAX_SUBSCRIBE_ATTEMPTS,
+                session_id
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(SUBSCRIBE_RETRY_DELAY_MS)).await;
+        }
+
+        tracing::warn!(
+            "[event_forwarder] Could not subscribe to history-loaded session events: {}",
+            session_id
+        );
     }
 
     /// 处理 Agent 控制请求
@@ -2765,6 +2823,8 @@ impl AgentControlMessageHandler {
                         false,
                     )
                     .await?;
+
+                self.attach_event_forwarder(target_session_id.clone()).await;
 
                 Ok(serde_json::json!({
                     "type": "session_loaded",

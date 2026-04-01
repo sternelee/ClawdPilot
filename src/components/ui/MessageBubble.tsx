@@ -90,11 +90,9 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (
   props,
 ) => {
   return (
-    <div class="chat chat-end">
-      <div class="chat-bubble chat-bubble-primary overflow-x-hidden">
-        <div class="prose prose-sm max-w-none text-[15px] sm:text-sm selectable prose-invert break-words [overflow-wrap:anywhere]">
-          <SolidMarkdown children={props.content} />
-        </div>
+    <div class="chat chat-end overflow-x-hidden">
+      <div class="prose prose-sm max-w-none text-[15px] sm:text-sm selectable prose-invert break-words [overflow-wrap:anywhere]">
+        <SolidMarkdown children={props.content} />
       </div>
     </div>
   );
@@ -114,46 +112,44 @@ interface AssistantMessageProps {
 
 const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   return (
-    <div class="chat chat-start">
-      <div class="chat-bubble overflow-x-hidden">
-        {/* Thinking/Reasoning */}
-        <Show when={props.thinking}>
-          <ReasoningBlock
-            thinking={props.content}
-            isStreaming={props.isStreaming}
-          />
-        </Show>
+    <div class="chat chat-start overflow-x-hidden">
+      {/* Thinking/Reasoning */}
+      <Show when={props.thinking}>
+        <ReasoningBlock
+          thinking={props.content}
+          isStreaming={props.isStreaming}
+        />
+      </Show>
 
-        {/* Content */}
-        <div class="prose prose-sm max-w-none text-[15px] sm:text-sm selectable break-words [overflow-wrap:anywhere]">
-          <SolidMarkdown
-            children={props.thinking ? undefined : props.content}
-            components={{
-              code({ inline, class: className, children, ...codeProps }) {
-                const match = /language-(\w+)/.exec(className || "");
-                const codeString = String(children).replace(/\n$/, "");
-                if (inline || !match) {
-                  return (
-                    <code class={className} {...codeProps}>
-                      {children}
-                    </code>
-                  );
-                }
+      {/* Content */}
+      <div class="prose prose-sm max-w-none text-[15px] sm:text-sm selectable break-words [overflow-wrap:anywhere]">
+        <SolidMarkdown
+          children={props.thinking ? undefined : props.content}
+          components={{
+            code({ inline, class: className, children, ...codeProps }) {
+              const match = /language-(\w+)/.exec(className || "");
+              const codeString = String(children).replace(/\n$/, "");
+              if (inline || !match) {
                 return (
-                  <CodeBlockWithCopy code={codeString} language={match[1]} />
+                  <code class={className} {...codeProps}>
+                    {children}
+                  </code>
                 );
-              },
-            }}
-          />
-        </div>
-
-        {/* Tool Calls */}
-        <Show when={props.toolCalls && props.toolCalls.length > 0}>
-          <div class="mt-3.5 pt-3.5 border-t border-base-content/10">
-            <ToolCallList toolCalls={props.toolCalls!} />
-          </div>
-        </Show>
+              }
+              return (
+                <CodeBlockWithCopy code={codeString} language={match[1]} />
+              );
+            },
+          }}
+        />
       </div>
+
+      {/* Tool Calls */}
+      <Show when={props.toolCalls && props.toolCalls.length > 0}>
+        <div class="mt-3.5 pt-3.5 border-t border-base-content/10">
+          <ToolCallList toolCalls={props.toolCalls!} />
+        </div>
+      </Show>
     </div>
   );
 };
@@ -179,19 +175,17 @@ interface SystemMessageProps {
 
 const SystemMessage: Component<SystemMessageProps> = (props) => {
   return (
-    <div class="chat chat-start">
-      <div class="chat-bubble chat-bubble-neutral overflow-x-hidden">
-        <SystemMessageContent
-          content={props.content}
-          systemCard={props.systemCard}
-          onQuote={props.onQuote}
-          onToggleFileBrowser={props.onToggleFileBrowser}
-          onSyncTodoList={props.onSyncTodoList}
-          onOpenFileLocation={props.onOpenFileLocation}
-          onApplyEditReview={props.onApplyEditReview}
-          onTerminalAction={props.onTerminalAction}
-        />
-      </div>
+    <div class="chat chat-start overflow-x-hidden">
+      <SystemMessageContent
+        content={props.content}
+        systemCard={props.systemCard}
+        onQuote={props.onQuote}
+        onToggleFileBrowser={props.onToggleFileBrowser}
+        onSyncTodoList={props.onSyncTodoList}
+        onOpenFileLocation={props.onOpenFileLocation}
+        onApplyEditReview={props.onApplyEditReview}
+        onTerminalAction={props.onTerminalAction}
+      />
     </div>
   );
 };

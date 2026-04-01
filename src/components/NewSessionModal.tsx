@@ -49,6 +49,11 @@ interface RemoteDirEntry {
   size?: number;
 }
 
+interface RemoteConnectionOption {
+  controlSessionId: string;
+  hostname: string;
+}
+
 export const NewSessionModal: Component = () => {
   const [dirEntries, setDirEntries] = createSignal<DirEntry[]>([]);
   const [rawDirEntries, setRawDirEntries] = createSignal<DirEntry[]>([]);
@@ -139,17 +144,16 @@ export const NewSessionModal: Component = () => {
     // Check if we have an active remote session
     const targetSessionId = sessionStore.state.targetControlSessionId || null;
     const remoteSession =
-      remoteConnections().find((s) => s.sessionId === targetSessionId) ||
-      remoteConnections()[0];
+      remoteConnections().find(
+        (connection) => connection.controlSessionId === targetSessionId,
+      ) || remoteConnections()[0];
     const isRemote =
       sessionStore.state.newSessionMode === "remote" &&
       (!!targetSessionId || !!remoteSession);
 
     if (isRemote) {
       // Use P2P to list remote directory
-      // Use controlSessionId (session_xxx) not agent ID (agent_xxx)
-      const controlSessionId =
-        remoteSession?.controlSessionId || targetSessionId;
+      const controlSessionId = remoteSession?.controlSessionId || targetSessionId;
       try {
         const requestId = await invoke<string>("list_remote_directory", {
           sessionId: controlSessionId,
@@ -200,9 +204,26 @@ export const NewSessionModal: Component = () => {
     return entries.filter((e) => e.name.toLowerCase().includes(keyword));
   };
 
-  const remoteConnections = createMemo(() =>
-    sessionStore.getSessions().filter((s) => s.mode === "remote" && s.active),
-  );
+  const remoteConnections = createMemo<RemoteConnectionOption[]>(() => {
+    const seen = new Set<string>();
+    const connections: RemoteConnectionOption[] = [];
+
+    for (const session of sessionStore.getSessions()) {
+      if (session.mode !== "remote" || !session.active || !session.controlSessionId) {
+        continue;
+      }
+      if (seen.has(session.controlSessionId)) {
+        continue;
+      }
+      seen.add(session.controlSessionId);
+      connections.push({
+        controlSessionId: session.controlSessionId,
+        hostname: session.hostname || "Remote Host",
+      });
+    }
+
+    return connections;
+  });
 
   const isConnectingToNew = () =>
     sessionStore.state.newSessionMode === "remote" &&
@@ -227,7 +248,7 @@ export const NewSessionModal: Component = () => {
     if (!sessionStore.state.targetControlSessionId) {
       const connections = remoteConnections();
       if (connections.length > 0) {
-        sessionStore.setTargetControlSessionId(connections[0].sessionId);
+        sessionStore.setTargetControlSessionId(connections[0].controlSessionId);
       }
     }
   });
@@ -338,7 +359,7 @@ export const NewSessionModal: Component = () => {
                 const connections = remoteConnections();
                 if (connections.length > 0) {
                   sessionStore.setTargetControlSessionId(
-                    connections[0].sessionId,
+                    connections[0].controlSessionId,
                   );
                 }
               }}
@@ -383,9 +404,8 @@ export const NewSessionModal: Component = () => {
               >
                 <For each={remoteConnections()}>
                   {(conn) => (
-                    <option value={conn.sessionId}>
-                      {conn.hostname || "Remote Host"} (
-                      {conn.sessionId.slice(0, 8)})
+                    <option value={conn.controlSessionId}>
+                      {conn.hostname} ({conn.controlSessionId.slice(0, 8)})
                     </option>
                   )}
                 </For>

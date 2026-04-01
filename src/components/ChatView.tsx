@@ -187,7 +187,8 @@ function parseEvent(eventObj: Record<string, unknown>): ParsedEvent {
         if ("error" in obj) parsed.error = obj.error as string;
         if ("tool_id" in obj) parsed.toolId = obj.tool_id as string;
         if ("toolId" in obj) parsed.toolId = obj.toolId as string;
-        if ("tool_call_id" in obj) parsed.toolCallId = obj.tool_call_id as string;
+        if ("tool_call_id" in obj)
+          parsed.toolCallId = obj.tool_call_id as string;
         if ("toolCallId" in obj) parsed.toolCallId = obj.toolCallId as string;
         if ("tool_name" in obj || "toolName" in obj) {
           parsed.toolName = (obj.tool_name || obj.toolName) as string;
@@ -709,7 +710,10 @@ export function ChatView(props: ChatViewProps) {
     const normalizeToolNameKey = (toolName: string) =>
       `name-${toolName}`.replace(/\s+/g, "-").toLowerCase();
 
-    const resolveToolMessageKey = (toolName: string, explicitToolId?: string) => {
+    const resolveToolMessageKey = (
+      toolName: string,
+      explicitToolId?: string,
+    ) => {
       const toolNameKey = normalizeToolNameKey(toolName);
       const toolMessageKey =
         explicitToolId || toolNameMessageIds.get(toolNameKey) || toolNameKey;
@@ -1029,9 +1033,8 @@ export function ChatView(props: ChatViewProps) {
           const legacyToolName = parsed.toolName || "unknown";
           const legacyStatus = parsed.status || "started";
           const legacyToolOutput = parsed.output as string | undefined;
-          const { toolNameKey, toolMessageKey } = resolveToolMessageKey(
-            legacyToolName,
-          );
+          const { toolNameKey, toolMessageKey } =
+            resolveToolMessageKey(legacyToolName);
           const toolContent = `[Tool: ${legacyToolName}] Status: ${legacyStatus}${legacyToolOutput ? `\n${legacyToolOutput}` : ""}`;
           upsertToolMessage(toolMessageKey, toolContent);
           toolNameMessageIds.set(toolNameKey, toolMessageKey);
@@ -1331,35 +1334,35 @@ export function ChatView(props: ChatViewProps) {
     // Load permission mode from backend
     createEffect(() => {
       if (!props.sessionId) return;
-      const sessionId = props.sessionId;
+      // const sessionId = props.sessionId;
 
       // Avoid showing previous session's mode while loading the current session mode.
       setPermissionMode("AlwaysAsk");
 
-      const controlSessionId =
-        props.sessionMode === "remote"
-          ? sessionStore.getSession(sessionId)?.controlSessionId
-          : undefined;
+      // const controlSessionId =
+      //   props.sessionMode === "remote"
+      //     ? sessionStore.getSession(sessionId)?.controlSessionId
+      //     : undefined;
 
-      invoke<string>("get_permission_mode", {
-        sessionId,
-        controlSessionId,
-      })
-        .then((mode) => {
-          // Ignore stale async responses when user has switched sessions.
-          if (props.sessionId !== sessionId) return;
-          if (
-            mode === "AlwaysAsk" ||
-            mode === "AcceptEdits" ||
-            mode === "Plan" ||
-            mode === "AutoApprove"
-          ) {
-            setPermissionMode(mode);
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to load permission mode:", error);
-        });
+      // invoke<string>("get_permission_mode", {
+      //   sessionId,
+      //   controlSessionId,
+      // })
+      //   .then((mode) => {
+      //     // Ignore stale async responses when user has switched sessions.
+      //     if (props.sessionId !== sessionId) return;
+      //     if (
+      //       mode === "AlwaysAsk" ||
+      //       mode === "AcceptEdits" ||
+      //       mode === "Plan" ||
+      //       mode === "AutoApprove"
+      //     ) {
+      //       setPermissionMode(mode);
+      //     }
+      //   })
+      //   .catch((error) => {
+      //     console.error("Failed to load permission mode:", error);
+      //   });
     });
 
     const scrollToBottom = (behavior: "auto" | "smooth" = "auto") => {
@@ -1790,7 +1793,7 @@ export function ChatView(props: ChatViewProps) {
       setPermissionMode(mode);
       try {
         if (props.sessionMode === "local") {
-          await invoke("set_permission_mode", {
+          await invoke("local_set_permission_mode", {
             sessionId: props.sessionId,
             mode,
           });
@@ -1798,7 +1801,7 @@ export function ChatView(props: ChatViewProps) {
           const controlSessionId = sessionStore.getSession(
             props.sessionId,
           )?.controlSessionId;
-          await invoke("set_permission_mode", {
+          await invoke("remote_set_permission_mode", {
             sessionId: props.sessionId,
             mode,
             controlSessionId,
