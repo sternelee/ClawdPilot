@@ -32,6 +32,20 @@ textarea:focus {
   outline: none !important;
 }
 
+/* DaisyUI form controls: remove hover/focus outline */
+.input:hover,
+.input:focus,
+.input:focus-visible,
+.textarea:hover,
+.textarea:focus,
+.textarea:focus-visible,
+.select:hover,
+.select:focus,
+.select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 @layer utilities {
   .step {
     counter-increment: step;

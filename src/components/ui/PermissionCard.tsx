@@ -278,36 +278,36 @@ export const PermissionMessage: Component<PermissionMessageProps> = (props) => {
 
       {/* Action Buttons */}
       <Show when={!props.disabled}>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-1.5 sm:gap-2">
           <Button
             variant="default"
             size="sm"
-            class="flex-1"
+            class="flex-1 min-w-0 px-2 sm:px-3"
             onClick={() => props.onApprove("Approved")}
           >
-            <FiCheck size={14} class="mr-1" />
-            Allow
+            <FiCheck size={12} class="mr-0.5 shrink-0" />
+            <span class="text-[11px] sm:text-xs truncate">Allow</span>
           </Button>
 
           <Show when={showAllowForSession()}>
             <Button
               variant="outline"
               size="sm"
-              class="flex-1"
+              class="flex-1 min-w-0 px-2 sm:px-3"
               onClick={() => props.onApprove("ApprovedForSession")}
             >
-              Allow for Session
+              <span class="text-[11px] sm:text-xs truncate">Allow for Session</span>
             </Button>
           </Show>
 
           <Button
             variant="destructive"
             size="sm"
-            class="flex-1"
+            class="flex-1 min-w-0 px-2 sm:px-3"
             onClick={props.onDeny}
           >
-            <FiX size={14} class="mr-1" />
-            Deny
+            <FiX size={12} class="mr-0.5 shrink-0" />
+            <span class="text-[11px] sm:text-xs truncate">Deny</span>
           </Button>
         </div>
       </Show>
