@@ -9,6 +9,7 @@
  */
 
 import { type Component, For, Show, createMemo, createSignal } from "solid-js";
+import { Portal } from "solid-js/web";
 import { cn } from "~/lib/utils";
 import { createClipboard } from "@solid-primitives/clipboard";
 import { FiCopy, FiCheck, FiMoreVertical } from "solid-icons/fi";
@@ -637,7 +638,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   };
 
   return (
-    <div class={cn("relative", props.class)}>
+    <div class={cn("group/bubble relative", props.class)}>
       <Show
         when={isUser()}
         fallback={
@@ -673,89 +674,92 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         />
       </Show>
 
-      {/* Top-right action button - only on mobile */}
-      <Show when={isMobile()}>
-        <button
-          type="button"
-          class="absolute top-2 right-2 btn btn-ghost btn-xs h-7 min-h-7 w-7 rounded-lg opacity-0 group-hover/bubble:opacity-60 hover:opacity-100 transition-opacity"
-          onClick={(e) => {
-            e.stopPropagation();
-            triggerHaptic();
-            setShowActions(true);
-          }}
-          title="Message actions"
-          aria-label="Message actions"
-        >
-          <FiMoreVertical size={14} />
-        </button>
-      </Show>
+      <button
+        type="button"
+        class="pointer-events-none absolute top-2 right-2 btn btn-ghost btn-xs h-8 min-h-8 w-8 rounded-xl border border-base-content/15 bg-base-100 text-base-content shadow-md shadow-black/10 backdrop-blur-md opacity-0 transition-opacity group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-75 hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 sm:hidden"
+        onClick={(e) => {
+          e.stopPropagation();
+          triggerHaptic();
+          setShowActions(true);
+        }}
+        title="Message actions"
+        aria-label="Message actions"
+      >
+        <FiMoreVertical size={14} />
+      </button>
 
       {/* Action menu overlay */}
       <Show when={showActions()}>
-        <div
-          class="modal modal-bottom sm:modal-middle"
-          classList={{ "modal-open": showActions() }}
-        >
-          <div class="modal-box p-4 pb-[max(env(safe-area-inset-bottom,0px),1rem)]">
-            <h3 class="text-sm font-bold mb-3">Message actions</h3>
-            <div class="flex flex-col gap-1">
-              <Show when={isUser()}>
+        <Portal>
+          <div
+            class="modal modal-bottom sm:modal-middle"
+            classList={{ "modal-open": showActions() }}
+          >
+            <div class="modal-box p-4 pb-[max(env(safe-area-inset-bottom,0px),1rem)]">
+              <h3 class="text-sm font-bold mb-3">Message actions</h3>
+              <div class="flex flex-col gap-1">
+                <Show when={isUser()}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost justify-start"
+                    onClick={resendMessage}
+                  >
+                    Resend
+                  </button>
+                </Show>
                 <button
                   type="button"
                   class="btn btn-ghost justify-start"
-                  onClick={resendMessage}
+                  onClick={quoteMessage}
                 >
-                  Resend
+                  Quote to input
                 </button>
-              </Show>
-              <button
-                type="button"
-                class="btn btn-ghost justify-start"
-                onClick={quoteMessage}
-              >
-                Quote to input
-              </button>
-              <Show when={!isUser() && firstCodeBlock()}>
+                <Show when={!isUser() && firstCodeBlock()}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost justify-start"
+                    onClick={copyCodeBlock}
+                  >
+                    Copy code block
+                  </button>
+                </Show>
+                <Show when={isUser() && firstCodeBlock()}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost justify-start"
+                    onClick={copyCodeBlock}
+                  >
+                    Copy code block
+                  </button>
+                </Show>
                 <button
                   type="button"
                   class="btn btn-ghost justify-start"
-                  onClick={copyCodeBlock}
+                  onClick={copyMessage}
                 >
-                  Copy code block
+                  Copy
                 </button>
-              </Show>
-              <Show when={isUser() && firstCodeBlock()}>
                 <button
                   type="button"
                   class="btn btn-ghost justify-start"
-                  onClick={copyCodeBlock}
+                  onClick={copyAsMarkdown}
                 >
-                  Copy code block
+                  Copy as Markdown
                 </button>
-              </Show>
-              <button
-                type="button"
-                class="btn btn-ghost justify-start"
-                onClick={copyMessage}
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                class="btn btn-ghost justify-start"
-                onClick={copyAsMarkdown}
-              >
-                Copy as Markdown
-              </button>
+              </div>
+              <div class="modal-action">
+                <button type="button" class="btn btn-sm" onClick={closeActions}>
+                  Close
+                </button>
+              </div>
             </div>
-            <div class="modal-action">
-              <button type="button" class="btn btn-sm" onClick={closeActions}>
-                Close
-              </button>
-            </div>
+            <button
+              type="button"
+              class="modal-backdrop"
+              onClick={closeActions}
+            />
           </div>
-          <button type="button" class="modal-backdrop" onClick={closeActions} />
-        </div>
+        </Portal>
       </Show>
     </div>
   );

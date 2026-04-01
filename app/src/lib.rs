@@ -3628,7 +3628,6 @@ pub fn run() {
             abort_agent_action,
             respond_to_agent_permission,
             // Permission Management Commands
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             set_permission_mode,
             // ACP Package Installation
             install_acp_package_remote,

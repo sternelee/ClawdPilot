@@ -8,7 +8,6 @@
  */
 
 import { type JSX, Show } from "solid-js";
-import { isMobile } from "../../stores/deviceStore";
 
 type DialogProps = {
   open: boolean;
@@ -22,8 +21,8 @@ export function Dialog(props: DialogProps) {
   return (
     <Show when={props.open}>
       {/* Use native HTML dialog element with DaisyUI classes */}
-      <dialog 
-        class={`modal ${props.open ? "modal-open" : ""} ${isMobile() ? "modal-bottom" : ""} ${props.class || ""}`}
+      <dialog
+        class={`modal modal-bottom sm:modal-middle ${props.open ? "modal-open" : ""} ${props.class || ""}`}
       >
         {/* Backdrop - clicks outside to close */}
         <div class="modal-backdrop bg-black/40 backdrop-blur-[2px]" onClick={props.onClose}>
@@ -32,15 +31,13 @@ export function Dialog(props: DialogProps) {
 
         {/* Modal Box */}
         <div
-          class={`modal-box relative ${isMobile() ? "rounded-t-3xl rounded-b-none" : "rounded-2xl"} ${props.contentClass || ""}`}
+          class={`modal-box relative rounded-t-3xl rounded-b-none sm:rounded-2xl ${props.contentClass || ""}`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Handle for mobile bottom sheet */}
-          <Show when={isMobile()}>
-            <div class="flex justify-center -mt-2 mb-4">
-              <div class="w-10 h-1 bg-base-content/20 rounded-full" />
-            </div>
-          </Show>
+          <div class="flex justify-center -mt-2 mb-4 sm:hidden">
+            <div class="w-10 h-1 bg-base-content/20 rounded-full" />
+          </div>
 
           {props.children}
 

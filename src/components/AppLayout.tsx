@@ -62,7 +62,7 @@ export const AppLayout: Component = () => {
   const [rightPanelView, setRightPanelView] = createSignal<
     "none" | "file" | "git"
   >("none");
-  const [rightPanelTouchStartX, setRightPanelTouchStartX] = createSignal<
+  const [rightPanelTouchStartY, setRightPanelTouchStartY] = createSignal<
     number | null
   >(null);
 
@@ -308,23 +308,26 @@ export const AppLayout: Component = () => {
                 <aside
                   onTouchStart={(e) => {
                     if (!mobile() || e.touches.length !== 1) return;
-                    setRightPanelTouchStartX(e.touches[0].clientX);
+                    setRightPanelTouchStartY(e.touches[0].clientY);
                   }}
                   onTouchEnd={(e) => {
-                    const startX = rightPanelTouchStartX();
-                    setRightPanelTouchStartX(null);
-                    if (!mobile() || startX === null) return;
-                    const endX = e.changedTouches[0]?.clientX ?? startX;
-                    if (endX - startX > 70) {
+                    const startY = rightPanelTouchStartY();
+                    setRightPanelTouchStartY(null);
+                    if (!mobile() || startY === null) return;
+                    const endY = e.changedTouches[0]?.clientY ?? startY;
+                    if (endY - startY > 70) {
                       closeRightPanel();
                     }
                   }}
-                  class={`fixed right-0 inset-y-0 z-[50] w-[min(92vw,28rem)] sm:w-[28rem] md:w-[340px] lg:w-[360px] border-l border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
+                  class={`fixed bottom-0 left-0 right-0 z-[50] max-h-[min(78dvh,42rem)] rounded-t-3xl border-t border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
+                    pt-safe pb-safe sm:top-0 sm:bottom-0 sm:left-auto sm:right-0 sm:max-h-none sm:w-[28rem] sm:rounded-none sm:border-l sm:border-t-0 sm:pt-0 sm:pb-0 md:w-[340px] lg:w-[360px]
                     transform transition-transform duration-300 ease-in-out
-                    ${rightPanelView() !== "none" ? "translate-x-0" : "translate-x-full"}
-                    ${mobile() ? "pt-safe pb-safe" : ""}
+                    ${rightPanelView() !== "none" ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-y-0 sm:translate-x-full"}
                   `}
                 >
+                  <div class="flex justify-center py-3 sm:hidden">
+                    <div class="h-1 w-10 rounded-full bg-base-content/20" />
+                  </div>
                   <div class="h-14 px-4 border-b border-base-content/10 flex items-center justify-between bg-base-200/50">
                     <div class="text-sm font-bold flex items-center gap-2">
                       <Show

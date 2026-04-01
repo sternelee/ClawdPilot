@@ -75,10 +75,6 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   let textareaRef: HTMLTextAreaElement | undefined;
   const [focused, setFocused] = createSignal(false);
   const [showSettings, setShowSettings] = createSignal(false);
-  const [showMobileTools, setShowMobileTools] = createSignal(false);
-  const [toolbarTouchStartY, setToolbarTouchStartY] = createSignal<
-    number | null
-  >(null);
   const [activeMentionIndex, setActiveMentionIndex] = createSignal(0);
   const [activeSlashIndex, setActiveSlashIndex] = createSignal(0);
   const mobile = () => isMobile();
@@ -218,24 +214,16 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
       if (props.isStreaming && props.onInterrupt) {
         props.onInterrupt();
         if (mobile()) {
-          setShowMobileTools(false);
           setShowSettings(false);
         }
       } else if (props.value.trim()) {
         props.onSubmit();
         if (mobile()) {
-          setShowMobileTools(false);
           setShowSettings(false);
         }
       }
     }
   };
-
-  createEffect(() => {
-    if (!mobile()) {
-      setShowMobileTools(true);
-    }
-  });
 
   createEffect(() => {
     mentionSuggestions();
@@ -335,7 +323,6 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             onKeyDown={handleKeyDown}
             onFocus={() => {
               setFocused(true);
-              if (mobile()) setShowMobileTools(false);
             }}
             onBlur={() => setFocused(false)}
             placeholder={props.placeholder || "Type your message..."}
@@ -368,196 +355,135 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         </Show>
 
         {/* Bottom Toolbar */}
-        <div
-          class="flex items-center px-2 pb-2 gap-1.5 sm:gap-2"
-          onTouchStart={(e) => {
-            if (!mobile() || e.touches.length !== 1) return;
-            setToolbarTouchStartY(e.touches[0].clientY);
-          }}
-          onTouchEnd={(e) => {
-            const startY = toolbarTouchStartY();
-            setToolbarTouchStartY(null);
-            if (!mobile() || startY === null) return;
-            const endY = e.changedTouches[0]?.clientY ?? startY;
-            const deltaY = endY - startY;
-            if (deltaY < -35) {
-              setShowMobileTools(true);
-            } else if (deltaY > 35) {
-              setShowMobileTools(false);
-            }
-          }}
-        >
-          <Show when={mobile()}>
-            <button
-              type="button"
-              class={cn(
-                "btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl transition-all",
-                showMobileTools()
-                  ? "bg-primary/20 text-primary-content"
-                  : "bg-base-300/70",
-              )}
-              onClick={() => setShowMobileTools((prev) => !prev)}
-              title={showMobileTools() ? "Hide tools" : "Show tools"}
-              aria-label={showMobileTools() ? "Hide tools" : "Show tools"}
-            >
-              <Show
-                when={showMobileTools()}
-                fallback={<FiPlus class="size-5" />}
+        <div class="flex items-center px-2 pb-2 gap-1.5 sm:gap-2">
+          <div class="flex items-center gap-1.5">
+            {/* Settings Button with Permission Dropdown */}
+            <div class="relative">
+              <button
+                type="button"
+                class={cn(
+                  "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
+                  showSettings()
+                    ? "bg-primary/15 text-primary-content"
+                    : "text-base-content/70 hover:text-primary hover:bg-primary/10",
+                )}
+                onClick={() => setShowSettings(!showSettings())}
+                title="Settings"
+                aria-label="Settings"
               >
-                <FiX class="size-5" />
+                <FiSettings class="size-4.5" />
+                <span class="hidden sm:inline">Settings</span>
+              </button>
+
+              {/* Settings Backdrop (Mobile only) */}
+              <Show when={showSettings()}>
+                <div
+                  class="fixed inset-0 z-[100] bg-black/40 backdrop-blur-[2px] animate-fade-in sm:hidden"
+                  onClick={() => setShowSettings(false)}
+                />
               </Show>
-            </button>
-          </Show>
 
-          <Show when={!mobile() || showMobileTools()}>
-            <div class="flex items-center gap-1.5">
-              {/* Settings Button with Permission Dropdown */}
-              <div class="relative">
-                <button
-                  type="button"
-                  class={cn(
-                    "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
-                    showSettings()
-                      ? "bg-primary/15 text-primary-content"
-                      : "text-base-content/70 hover:text-primary hover:bg-primary/10",
-                  )}
-                  onClick={() => setShowSettings(!showSettings())}
-                  title="Settings"
-                  aria-label="Settings"
-                >
-                  <FiSettings class="size-4.5" />
-                  <span class="hidden sm:inline">Settings</span>
-                </button>
-
-                {/* Settings Backdrop (Mobile only) */}
-                <Show when={showSettings() && mobile()}>
-                  <div
-                    class="fixed inset-0 bg-black/40 z-[100] backdrop-blur-[2px] animate-fade-in"
-                    onClick={() => setShowSettings(false)}
-                  />
-                </Show>
-
-                {/* Settings Dropdown / Bottom Sheet */}
-                <Show when={showSettings()}>
-                  <div
-                    class={cn(
-                      "z-[101] bg-base-300 border border-base-content/10 shadow-2xl overflow-hidden transition-all duration-300",
-                      mobile()
-                        ? "fixed bottom-0 left-0 right-0 rounded-t-3xl animate-slide-up"
-                        : "absolute bottom-full left-0 mb-2 w-60 rounded-xl",
-                    )}
-                  >
-                    {/* Handle for mobile bottom sheet */}
-                    <Show when={mobile()}>
-                      <div class="flex justify-center py-3">
-                        <div class="w-10 h-1 bg-base-content/20 rounded-full" />
-                      </div>
-                    </Show>
-
-                    <div class="px-4 py-3 border-b border-base-content/10 flex items-center justify-between">
-                      <div class="text-[11px] font-black uppercase tracking-widest opacity-50">
-                        Permission Mode
-                      </div>
-                      <Show when={mobile()}>
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-xs btn-circle"
-                          onClick={() => setShowSettings(false)}
-                        >
-                          <FiX size={16} />
-                        </button>
-                      </Show>
-                    </div>
-                    <div class="p-2 space-y-1">
-                      {permissionOptions.map((option) => (
-                        <button
-                          type="button"
-                          class={cn(
-                            "w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-all active:scale-[0.98]",
-                            props.permissionMode === option.value
-                              ? "bg-primary text-primary-content shadow-md shadow-primary/20"
-                              : "hover:bg-base-content/5",
-                          )}
-                          onClick={() => {
-                            props.onPermissionModeChange?.(option.value);
-                            setShowSettings(false);
-                          }}
-                        >
-                          <div class="flex-1 min-w-0">
-                            <div class="text-sm font-bold">{option.label}</div>
-                            <div
-                              class={cn(
-                                "text-[11px] truncate",
-                                props.permissionMode === option.value
-                                  ? "opacity-90"
-                                  : "opacity-50",
-                              )}
-                            >
-                              {option.description}
-                            </div>
-                          </div>
-                          <Show when={props.permissionMode === option.value}>
-                            <FiCheck size={18} class="shrink-0" />
-                          </Show>
-                        </button>
-                      ))}
-                    </div>
-                    {/* Extra spacing for mobile safe area */}
-                    <Show when={mobile()}>
-                      <div class="h-8" />
-                    </Show>
+              {/* Settings Dropdown / Bottom Sheet */}
+              <Show when={showSettings()}>
+                <div class="fixed bottom-0 left-0 right-0 z-[101] overflow-hidden rounded-t-3xl border border-base-content/10 bg-base-300 shadow-2xl transition-all duration-300 animate-slide-up sm:absolute sm:bottom-full sm:left-0 sm:right-auto sm:mb-2 sm:w-60 sm:rounded-xl">
+                  {/* Handle for mobile bottom sheet */}
+                  <div class="flex justify-center py-3 sm:hidden">
+                    <div class="w-10 h-1 bg-base-content/20 rounded-full" />
                   </div>
-                </Show>
-              </div>
 
-              {/* File Browser Button */}
-              <div class="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  class={cn(
-                    "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
-                    props.rightPanelView === "file"
-                      ? "bg-primary/15 text-primary-content"
-                      : "text-base-content/70 hover:text-primary hover:bg-primary/10",
-                  )}
-                  onClick={() => {
-                    props.onToggleFileBrowser?.();
-                    if (mobile()) {
-                      setShowMobileTools(false);
-                    }
-                  }}
-                  title="Toggle file browser"
-                  aria-label="Toggle file browser"
-                  disabled={props.disabled}
-                >
-                  <FiFolder class="size-4.5" />
-                  <span class="hidden sm:inline">Files</span>
-                </button>
-
-                <button
-                  type="button"
-                  class={cn(
-                    "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
-                    props.rightPanelView === "git"
-                      ? "bg-primary/15 text-primary-content"
-                      : "text-base-content/70 hover:text-primary hover:bg-primary/10",
-                  )}
-                  onClick={() => {
-                    props.onToggleGitPanel?.();
-                    if (mobile()) {
-                      setShowMobileTools(false);
-                    }
-                  }}
-                  title="Toggle git panel"
-                  aria-label="Toggle git panel"
-                  disabled={props.disabled}
-                >
-                  <FiGitBranch class="size-4.5" />
-                  <span class="hidden sm:inline">Git</span>
-                </button>
-              </div>
+                  <div class="px-4 py-3 border-b border-base-content/10 flex items-center justify-between">
+                    <div class="text-[11px] font-black uppercase tracking-widest opacity-50">
+                      Permission Mode
+                    </div>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs btn-circle sm:hidden"
+                      onClick={() => setShowSettings(false)}
+                    >
+                      <FiX size={16} />
+                    </button>
+                  </div>
+                  <div class="p-2 space-y-1">
+                    {permissionOptions.map((option) => (
+                      <button
+                        type="button"
+                        class={cn(
+                          "w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-all active:scale-[0.98]",
+                          props.permissionMode === option.value
+                            ? "bg-primary text-primary-content shadow-md shadow-primary/20"
+                            : "hover:bg-base-content/5",
+                        )}
+                        onClick={() => {
+                          props.onPermissionModeChange?.(option.value);
+                          setShowSettings(false);
+                        }}
+                      >
+                        <div class="flex-1 min-w-0">
+                          <div class="text-sm font-bold">{option.label}</div>
+                          <div
+                            class={cn(
+                              "text-[11px] truncate",
+                              props.permissionMode === option.value
+                                ? "opacity-90"
+                                : "opacity-50",
+                            )}
+                          >
+                            {option.description}
+                          </div>
+                        </div>
+                        <Show when={props.permissionMode === option.value}>
+                          <FiCheck size={18} class="shrink-0" />
+                        </Show>
+                      </button>
+                    ))}
+                  </div>
+                  {/* Extra spacing for mobile safe area */}
+                  <div class="h-8 sm:hidden" />
+                </div>
+              </Show>
             </div>
-          </Show>
+
+            {/* File Browser Button */}
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                class={cn(
+                  "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
+                  props.rightPanelView === "file"
+                    ? "bg-primary/15 text-primary-content"
+                    : "text-base-content/70 hover:text-primary hover:bg-primary/10",
+                )}
+                onClick={() => {
+                  props.onToggleFileBrowser?.();
+                }}
+                title="Toggle file browser"
+                aria-label="Toggle file browser"
+                disabled={props.disabled}
+              >
+                <FiFolder class="size-4.5" />
+                <span class="hidden sm:inline">Files</span>
+              </button>
+
+              <button
+                type="button"
+                class={cn(
+                  "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
+                  props.rightPanelView === "git"
+                    ? "bg-primary/15 text-primary-content"
+                    : "text-base-content/70 hover:text-primary hover:bg-primary/10",
+                )}
+                onClick={() => {
+                  props.onToggleGitPanel?.();
+                }}
+                title="Toggle git panel"
+                aria-label="Toggle git panel"
+                disabled={props.disabled}
+              >
+                <FiGitBranch class="size-4.5" />
+                <span class="hidden sm:inline">Git</span>
+              </button>
+            </div>
+          </div>
 
           {/* Right side: Keyboard hints */}
           <div class="hidden sm:flex items-center gap-2 text-[10px] opacity-30">
@@ -583,13 +509,11 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               if (props.isStreaming && props.onInterrupt) {
                 props.onInterrupt();
                 if (mobile()) {
-                  setShowMobileTools(false);
                   setShowSettings(false);
                 }
               } else {
                 props.onSubmit();
                 if (mobile()) {
-                  setShowMobileTools(false);
                   setShowSettings(false);
                 }
               }

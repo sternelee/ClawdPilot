@@ -345,24 +345,22 @@ export const NewSessionModal: Component = () => {
             >
               <FiCloud class="mr-1.5" /> Remote
             </Button>
-            <Show when={!isMobile()}>
-              <Button
-                type="button"
-                size="sm"
-                class="flex-1"
-                variant={
-                  sessionStore.state.newSessionMode === "local"
-                    ? "primary"
-                    : "ghost"
-                }
-                onClick={() => {
-                  sessionStore.setNewSessionMode("local");
-                  sessionStore.setConnectionError(null);
-                }}
-              >
-                <FiHome class="mr-1.5" /> Local
-              </Button>
-            </Show>
+            <Button
+              type="button"
+              size="sm"
+              class="hidden flex-1 sm:inline-flex"
+              variant={
+                sessionStore.state.newSessionMode === "local"
+                  ? "primary"
+                  : "ghost"
+              }
+              onClick={() => {
+                sessionStore.setNewSessionMode("local");
+                sessionStore.setConnectionError(null);
+              }}
+            >
+              <FiHome class="mr-1.5" /> Local
+            </Button>
           </div>
 
           {/* Remote Connection Selector */}
@@ -401,16 +399,15 @@ export const NewSessionModal: Component = () => {
             <div class="mb-4 space-y-2">
               <div class="flex items-center justify-between gap-2">
                 <Label for="session-ticket">Session Ticket</Label>
-                <Show when={isMobile()}>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleScanBarcode}
-                  >
-                    Scan QR
-                  </Button>
-                </Show>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="sm:hidden"
+                  onClick={handleScanBarcode}
+                >
+                  Scan QR
+                </Button>
               </div>
               <Textarea
                 id="session-ticket"
@@ -617,13 +614,11 @@ export const NewSessionModal: Component = () => {
                     label: e.name,
                   };
                 })}
-                placeholder={isMobile() ? "app dir" : "/path/to/project"}
+                placeholder="Project path"
                 class="font-mono text-sm"
               />
               <p class="text-xs text-muted-foreground">
-                {isMobile()
-                  ? "Subdirectory name"
-                  : "Type path to autocomplete"}
+                Type path to autocomplete
               </p>
             </div>
 
