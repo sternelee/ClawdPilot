@@ -1835,6 +1835,7 @@ export function ChatView(props: ChatViewProps) {
         claudecode: "/claude-ai.svg",
         "claude-code": "/claude-ai.svg",
         codex: "/openai-light.svg",
+        cursor: "/cursor.svg",
         opencode: "/opencode-wordmark-dark.svg",
         open: "/openai-light.svg",
         openai: "/openai-light.svg",

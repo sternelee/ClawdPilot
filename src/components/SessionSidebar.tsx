@@ -43,7 +43,7 @@ const getAgentIcon = (agentType: AgentType) => {
     claudecode: "/claude-ai.svg",
     "claude-code": "/claude-ai.svg",
     codex: "/openai-light.svg",
-    cursor: "/clawdpilot-icon.svg",
+    cursor: "/cursor.svg",
     opencode: "/opencode-wordmark-dark.svg",
     open: "/openai-light.svg",
     openai: "/openai-light.svg",
@@ -427,6 +427,9 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     Record<string, boolean>
   >({});
 
+  const supportsHistory = (session: AgentSessionMetadata) =>
+    session.agentType !== "cursor";
+
   // Load local sessions on mount
   const handleLoadLocalSessions = async () => {
     try {
@@ -571,6 +574,14 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   };
 
   const loadHistoryForSession = async (session: AgentSessionMetadata) => {
+    if (!supportsHistory(session)) {
+      notificationStore.info(
+        "Cursor CLI does not expose ACP history listing",
+        "History Unavailable",
+      );
+      return;
+    }
+
     setHistoryLoadingBySession((prev) => ({
       ...prev,
       [session.sessionId]: true,
@@ -629,6 +640,15 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     e?: Event,
   ) => {
     e?.stopPropagation();
+
+    if (!supportsHistory(session)) {
+      notificationStore.info(
+        "Cursor CLI does not expose ACP history listing",
+        "History Unavailable",
+      );
+      return;
+    }
+
     setHistoryExpanded((prev) => ({
       ...prev,
       [session.sessionId]: !prev[session.sessionId],
@@ -849,7 +869,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                   historyEntriesBySession()[session.sessionId] || [];
                 const isLoading = () =>
                   historyLoadingBySession()[session.sessionId] || false;
-                const canShowHistory = () => true;
+                const canShowHistory = () => supportsHistory(session);
 
                 return (
                   <>
