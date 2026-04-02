@@ -26,6 +26,7 @@ import {
   mapBackendSessionMetadata,
   sessionStore,
 } from "../stores/sessionStore";
+import { i18nStore } from "../stores/i18nStore";
 import { chatStore } from "../stores/chatStore";
 import { notificationStore } from "../stores/notificationStore";
 import { sessionEventRouter } from "../stores/sessionEventRouter";
@@ -90,17 +91,20 @@ interface SessionItemProps {
 }
 
 const SessionItem: Component<SessionItemProps> = (props) => {
+  const t = i18nStore.t;
   const mobileSessionActions = () => [
     {
       id: "history",
-      label: props.historyOpen ? "Hide history" : "Show history",
+      label: props.historyOpen
+        ? t("sidebar.hideHistory")
+        : t("sidebar.showHistory"),
       disabled: props.historyDisabled,
       icon: FiClock,
     },
     { id: "divider", label: "", divider: true },
     {
       id: "close",
-      label: "Close session",
+      label: t("sidebar.closeSession"),
       danger: true,
       icon: FiX,
     },
@@ -123,8 +127,8 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       class={`group relative flex items-center gap-3 px-4 py-4 rounded-2xl cursor-pointer transition-all duration-200 mx-2 mb-1
         ${
           props.isActive
-            ? "bg-base-content/10 text-primary-content shadow-lg shadow-primary/20 scale-[1.01] z-10"
-            : "hover:bg-base-content/5 border border-transparent active:scale-[0.98] active:bg-base-content/10"
+            ? "border border-primary/20 bg-base-100 shadow-lg shadow-base-content/5 scale-[1.01] z-10"
+            : "border border-transparent hover:bg-base-content/5 active:scale-[0.98] active:bg-base-content/10"
         }`}
       onClick={props.onClick}
       onKeyDown={(e) => {
@@ -136,7 +140,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
     >
       {/* Agent Icon */}
       <div
-        class={`shrink-0 transition-transform duration-200 ${props.isActive ? "bg-white/20 p-0.5 rounded-xl scale-110" : ""}`}
+        class={`shrink-0 transition-transform duration-200 ${props.isActive ? "rounded-xl bg-primary/10 p-0.5 scale-110 ring-1 ring-primary/20" : ""}`}
       >
         {getAgentIcon(props.session?.agentType || "claude")}
       </div>
@@ -144,9 +148,7 @@ const SessionItem: Component<SessionItemProps> = (props) => {
       {/* Session Info */}
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2">
-          <span
-            class={`font-bold text-[15px] tracking-tight truncate text-base-content`}
-          >
+          <span class="font-bold text-[15px] tracking-tight truncate text-base-content">
             {props.session?.agentType === "claude" && "Claude"}
             {props.session?.agentType === "gemini" && "Gemini"}
             {props.session?.agentType === "opencode" && "OpenCode"}
@@ -157,32 +159,34 @@ const SessionItem: Component<SessionItemProps> = (props) => {
           <span
             class={`text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest ${
               props.isActive
-                ? "bg-white/25 text-white"
+                ? "bg-primary/12 text-primary ring-1 ring-primary/15"
                 : props.session?.mode === "local"
-                  ? "bg-primary/15 text-primary-content"
+                  ? "bg-primary/12 text-primary"
                   : "bg-base-content/10 text-base-content/60"
             }`}
           >
-            {props.session?.mode === "local" ? "Local" : "Remote"}
+            {props.session?.mode === "local"
+              ? t("common.local")
+              : t("common.remote")}
           </span>
         </div>
         <div
-          class={`text-[11px] truncate mt-0.5 font-mono opacity-60 ${props.isActive ? "text-base-content/90" : ""}`}
+          class={`mt-0.5 truncate font-mono text-[11px] ${props.isActive ? "text-base-content/80" : "text-base-content/55"}`}
         >
           {props.session?.projectPath?.split("/").pop() || "No project"}
         </div>
         <div class="flex items-center gap-2 mt-1">
           <Show when={props.isStreaming}>
-            <span class="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-info/15 text-info">
+            <span class="inline-flex items-center gap-1 rounded-md bg-info/12 px-1.5 py-0.5 text-[9px] font-bold text-info ring-1 ring-info/15">
               <span class="w-1.5 h-1.5 rounded-full bg-info animate-pulse" />
-              Thinking
+              {t("sidebar.thinking")}
             </span>
           </Show>
           <Show when={props.session?.gitBranch}>
             <span
               class={`inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
                 props.isActive
-                  ? "bg-primary/20 text-primary-content"
+                  ? "bg-base-content/6 text-base-content/75 ring-1 ring-base-content/8"
                   : "bg-base-content/10 text-base-content/60"
               }`}
             >
@@ -205,8 +209,8 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             <span
               class={`text-[9px] font-mono font-bold px-1 py-0.5 rounded ${
                 props.isActive
-                  ? "bg-primary/10 text-base-content/70"
-                  : "bg-base-content/5 text-base-content/50"
+                  ? "bg-base-content/6 text-base-content/75 ring-1 ring-base-content/8"
+                  : "bg-base-content/8 text-base-content/55"
               }`}
             >
               {props.gitStatusText}
@@ -227,12 +231,16 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             <button
               type="button"
               class={`btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-all duration-150
-                ${props.isActive ? "text-primary-content hover:bg-white/20" : ""}`}
+                ${props.isActive ? "text-base-content/70 hover:bg-base-content/8" : ""}`}
               onClick={(e) => {
                 e.stopPropagation();
                 props.onToggleHistory?.();
               }}
-              title={props.historyOpen ? "Hide history" : "Show history"}
+              title={
+                props.historyOpen
+                  ? t("sidebar.hideHistory")
+                  : t("sidebar.showHistory")
+              }
               disabled={props.historyDisabled}
             >
               <FiClock size={14} />
@@ -241,12 +249,12 @@ const SessionItem: Component<SessionItemProps> = (props) => {
           <button
             type="button"
             class={`btn btn-ghost btn-xs btn-square opacity-0 group-hover:opacity-100 transition-all duration-150
-              ${props.isActive ? "text-primary-content hover:bg-white/20" : ""}`}
+              ${props.isActive ? "text-base-content/70 hover:bg-base-content/8" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               props.onClose();
             }}
-            title="Close session"
+            title={t("sidebar.closeSession")}
           >
             <FiX size={14} />
           </button>
@@ -261,8 +269,8 @@ const SessionItem: Component<SessionItemProps> = (props) => {
             trigger={
               <button
                 type="button"
-                class={`btn btn-ghost btn-sm btn-square h-10 w-10 rounded-xl ${props.isActive ? "text-primary-content hover:bg-white/20" : "bg-base-content/5"}`}
-                title="Session actions"
+                class={`btn btn-ghost btn-sm btn-square h-10 w-10 rounded-xl ${props.isActive ? "text-base-content/70 hover:bg-base-content/8" : "bg-base-content/5"}`}
+                title={t("sidebar.sessionActions")}
               >
                 <FiMoreVertical size={16} />
               </button>
@@ -308,6 +316,7 @@ const unwrapAgentControlResponse = (response: string): any => {
 };
 
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
+  const t = i18nStore.t;
   const sessions = createMemo(() => sessionStore.getSessions());
   const activeSession = createMemo(() => sessionStore.getActiveSession());
   const activeSessions = createMemo(() => sessionStore.getActiveSessions());
@@ -514,12 +523,18 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       if (isMobile()) {
         invoke("mobile_stop_agent", { sessionId }).catch((err) => {
           console.error("Failed to stop mobile agent:", err);
-          notificationStore.error("Failed to stop local agent", "Error");
+          notificationStore.error(
+            t("sidebar.failedStopLocalAgent"),
+            t("sidebar.errorTitle"),
+          );
         });
       } else {
         invoke("local_stop_agent", { sessionId }).catch((err) => {
           console.error("Failed to stop local agent:", err);
-          notificationStore.error("Failed to stop local agent", "Error");
+          notificationStore.error(
+            t("sidebar.failedStopLocalAgent"),
+            t("sidebar.errorTitle"),
+          );
         });
       }
     } else if (session?.mode === "remote") {
@@ -529,7 +544,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         controlSessionId: session.controlSessionId,
       }).catch((err) => {
         console.error("Failed to stop remote agent:", err);
-        notificationStore.error("Failed to stop remote agent", "Error");
+        notificationStore.error(
+          t("sidebar.failedStopRemoteAgent"),
+          t("sidebar.errorTitle"),
+        );
       });
     }
     // Clear chat messages for this session
@@ -546,7 +564,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
     const controlSessionId = sessionStore.state.targetControlSessionId;
     if (!controlSessionId) {
-      notificationStore.error("No remote connection selected", "Error");
+      notificationStore.error(
+        t("sidebar.noRemoteConnection"),
+        t("sidebar.errorTitle"),
+      );
       return;
     }
 
@@ -558,7 +579,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       args: [],
     }).catch((err) => {
       console.error("Failed to spawn remote session:", err);
-      notificationStore.error("Failed to spawn remote session", "Error");
+      notificationStore.error(
+        t("sidebar.failedSpawnRemoteSession"),
+        t("sidebar.errorTitle"),
+      );
     });
   };
 
@@ -575,10 +599,16 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         handleLoadLocalSessions(),
         handleLoadRemoteSessions(),
       ]);
-      notificationStore.success("Sessions refreshed", "Session List");
+      notificationStore.success(
+        t("sidebar.refreshSessionsSuccess"),
+        t("sidebar.refreshSessionsTitle"),
+      );
     } catch (error) {
       console.error("Failed to refresh sessions:", error);
-      notificationStore.error("Failed to refresh sessions", "Session List");
+      notificationStore.error(
+        t("sidebar.refreshSessionsFailed"),
+        t("sidebar.refreshSessionsTitle"),
+      );
     } finally {
       setIsRefreshing(false);
       setPullDistance(0);
@@ -588,8 +618,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const loadHistoryForSession = async (session: AgentSessionMetadata) => {
     if (!supportsHistory(session)) {
       notificationStore.info(
-        "Cursor CLI does not expose ACP history listing",
-        "History Unavailable",
+        t("sidebar.cursorHistoryUnavailable"),
+        t("sidebar.historyUnavailableTitle"),
       );
       return;
     }
@@ -638,7 +668,10 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
       }));
     } catch (error) {
       console.error("Failed to load agent history:", error);
-      notificationStore.error("Failed to load agent history", "Error");
+      notificationStore.error(
+        t("sidebar.historyLoadFailed"),
+        t("sidebar.errorTitle"),
+      );
     } finally {
       setHistoryLoadingBySession((prev) => ({
         ...prev,
@@ -655,8 +688,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
     if (!supportsHistory(session)) {
       notificationStore.info(
-        "Cursor CLI does not expose ACP history listing",
-        "History Unavailable",
+        t("sidebar.cursorHistoryUnavailable"),
+        t("sidebar.historyUnavailableTitle"),
       );
       return;
     }
@@ -730,10 +763,16 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         throw new Error("Remote session without control session");
       }
 
-      notificationStore.success("History session loaded", "History");
+      notificationStore.success(
+        t("sidebar.historyLoadedSuccess"),
+        t("sidebar.historyLoadedTitle"),
+      );
     } catch (error) {
       console.error("Failed to load history session:", error);
-      notificationStore.error("Failed to load history session", "Error");
+      notificationStore.error(
+        t("sidebar.historySessionLoadFailed"),
+        t("sidebar.errorTitle"),
+      );
     } finally {
       sessionStore.setHistoryLoading(false);
     }
@@ -785,7 +824,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 ClawdPilot
               </h1>
               <p class="text-[10px] opacity-40 mt-0.5 font-bold uppercase tracking-wider">
-                AI Platform
+                {t("sidebar.platform")}
               </p>
             </div>
           </div>
@@ -860,19 +899,19 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                 fallback={
                   <span class="inline-flex items-center gap-2">
                     <span class="loading loading-spinner loading-xs text-primary" />
-                    Refreshing...
+                    {t("sidebar.refreshing")}
                   </span>
                 }
               >
                 {pullDistance() >= 56
-                  ? "Release to refresh"
-                  : "Pull to refresh"}
+                  ? t("sidebar.releaseToRefresh")
+                  : t("sidebar.pullToRefresh")}
               </Show>
             </div>
           </Show>
           <Show when={sessions().length > 0}>
             <div class="px-3 py-2 text-[10px] font-black text-base-content/30 uppercase tracking-[0.15em]">
-              Sessions
+              {t("sidebar.sessions")}
             </div>
             <For each={sessions()}>
               {(session) => {
@@ -909,14 +948,14 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                       <div class="mx-2 mb-2 rounded-xl border border-base-content/5 bg-base-300/50 p-2.5 shadow-inner">
                         <div class="flex items-center justify-between mb-2 px-1">
                           <span class="text-[9px] font-black text-base-content/40 uppercase tracking-widest">
-                            History
+                            {t("sidebar.history")}
                           </span>
                           <div class="flex items-center gap-2">
                             <button
                               type="button"
                               class="btn btn-ghost btn-xs btn-square"
                               onClick={() => loadHistoryForSession(session)}
-                              title="Refresh history"
+                              title={t("sidebar.refreshHistory")}
                             >
                               <FiRefreshCw size={12} class="opacity-50" />
                             </button>
@@ -954,7 +993,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                           <Show when={historyEntries().length === 0}>
                             <div class="flex flex-col items-center justify-center py-6 text-center px-2">
                               <p class="text-[11px] font-bold opacity-30">
-                                No history found
+                                {t("sidebar.noHistoryFound")}
                               </p>
                             </div>
                           </Show>
@@ -971,9 +1010,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
               <div class="w-16 h-16 rounded-[2rem] bg-base-300 flex items-center justify-center mb-4 border border-base-content/5 shadow-inner">
                 <FiPlus size={28} class="opacity-20" />
               </div>
-              <p class="text-sm font-bold opacity-40">No active sessions</p>
+              <p class="text-sm font-bold opacity-40">
+                {t("sidebar.activeSessionsEmpty")}
+              </p>
               <p class="text-[11px] opacity-30 mt-2 max-w-[140px] leading-relaxed">
-                Connect to a remote CLI or create a local session
+                {t("sidebar.activeSessionsHint")}
               </p>
             </div>
           </Show>
@@ -981,22 +1022,53 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
         {/* Footer */}
         <div class="p-4 border-t border-base-content/10 bg-base-100/50 backdrop-blur">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <span class="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-tighter opacity-40">
                 <span class="w-1.5 h-1.5 rounded-full bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
-                {activeSessions().length} Online
+                {t("common.onlineCount", { count: activeSessions().length })}
               </span>
             </div>
             <button
               type="button"
               class="btn btn-primary btn-sm rounded-xl px-4 font-black shadow-lg shadow-primary/20 h-10 min-h-[40px]"
               onClick={() => sessionStore.openNewSessionModal("local")}
-              title="New Session"
+              title={t("home.createSession")}
             >
               <FiPlus size={18} class="-ml-1" />
-              <span class="text-xs uppercase tracking-widest">New</span>
+              <span class="text-xs uppercase tracking-widest">
+                {t("common.new")}
+              </span>
             </button>
+          </div>
+          <div class="mt-3 flex items-center justify-between rounded-xl border border-base-content/10 bg-base-200/70 p-1">
+            <span class="px-2 text-[10px] font-bold uppercase tracking-widest opacity-45">
+              {t("common.language")}
+            </span>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class={`h-8 rounded-lg px-3 text-xs font-bold transition-colors ${
+                  i18nStore.locale() === "en"
+                    ? "bg-primary text-primary-content"
+                    : "text-base-content/60 hover:bg-base-content/5"
+                }`}
+                onClick={() => i18nStore.setLocale("en")}
+              >
+                {t("common.english")}
+              </button>
+              <button
+                type="button"
+                class={`h-8 rounded-lg px-3 text-xs font-bold transition-colors ${
+                  i18nStore.locale() === "zh-CN"
+                    ? "bg-primary text-primary-content"
+                    : "text-base-content/60 hover:bg-base-content/5"
+                }`}
+                onClick={() => i18nStore.setLocale("zh-CN")}
+              >
+                {t("common.chinese")}
+              </button>
+            </div>
           </div>
         </div>
       </aside>

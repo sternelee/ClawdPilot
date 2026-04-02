@@ -44,31 +44,36 @@ const statusConfig = {
   started: {
     icon: FiLoader,
     label: "Started",
-    class: "text-info",
+    iconClass: "text-info",
+    badgeClass: "bg-info/12 text-info ring-1 ring-info/15",
     animate: true,
   },
   in_progress: {
     icon: FiLoader,
     label: "Running",
-    class: "text-warning animate-spin",
+    iconClass: "text-warning animate-spin",
+    badgeClass: "bg-warning/12 text-warning ring-1 ring-warning/15",
     animate: true,
   },
   completed: {
     icon: FiCheckCircle,
     label: "Completed",
-    class: "text-success",
+    iconClass: "text-success",
+    badgeClass: "bg-success/12 text-success ring-1 ring-success/15",
     animate: false,
   },
   failed: {
     icon: FiAlertCircle,
     label: "Failed",
-    class: "text-error",
+    iconClass: "text-error",
+    badgeClass: "bg-error/12 text-error ring-1 ring-error/15",
     animate: false,
   },
   cancelled: {
     icon: FiX,
     label: "Cancelled",
-    class: "text-muted-foreground",
+    iconClass: "text-muted-foreground",
+    badgeClass: "bg-base-content/8 text-base-content/60 ring-1 ring-base-content/10",
     animate: false,
   },
 };
@@ -117,7 +122,7 @@ export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
         class="w-full flex items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors text-left"
       >
         {/* Status Icon */}
-        <div class={cn("shrink-0", config().class)}>
+        <div class={cn("shrink-0", config().iconClass)}>
           <StatusIcon size={14} />
         </div>
 
@@ -132,8 +137,8 @@ export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
         {/* Status Badge */}
         <span
           class={cn(
-            "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
-            config().class,
+            "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+            config().badgeClass,
           )}
         >
           {config().label}
@@ -163,7 +168,7 @@ export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
               title="Copy output"
             >
               <Show when={copied()} fallback={<FiCopy size={12} />}>
-                <FiCheck size={12} class="text-success" />
+                <FiCheck size={12} class="text-success-content" />
               </Show>
             </button>
           </div>
@@ -219,7 +224,7 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
     <Show when={props.thinking}>
       <div
         class={cn(
-          "rounded-lg border border-info/30 bg-info/5 overflow-hidden",
+          "overflow-hidden rounded-lg border border-base-content/10 bg-base-200/50",
           props.class,
         )}
       >
@@ -227,14 +232,16 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
         <button
           type="button"
           onClick={() => setIsExpanded(!isExpanded())}
-          class="w-full flex items-center gap-2 px-3 py-2 hover:bg-info/10 transition-colors text-left"
+          class="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-base-content/5"
         >
-          <div class="text-info animate-pulse">
+          <div class="animate-pulse text-info">
             <FiLoader size={14} />
           </div>
-          <span class="text-sm font-medium text-info">Thinking</span>
+          <span class="inline-flex items-center rounded-md bg-info/12 px-2 py-1 text-sm font-medium text-info ring-1 ring-info/15">
+            Thinking
+          </span>
           <Show when={props.isStreaming}>
-            <span class="text-xs text-info/60 animate-pulse">...</span>
+            <span class="animate-pulse text-xs text-base-content/45">...</span>
           </Show>
           <div class="flex-1" />
           <div class="text-muted-foreground">
@@ -246,7 +253,7 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
 
         {/* Content */}
         <Show when={isExpanded()}>
-          <div class="px-3 py-2 border-t border-info/20">
+          <div class="border-t border-base-content/10 px-3 py-2">
             <pre class="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-all">
               {normalizeMultiline(props.thinking || "")}
             </pre>
@@ -282,9 +289,13 @@ export const TerminalOutput: Component<TerminalOutputProps> = (props) => {
   };
 
   const statusColor = () => {
-    if (props.exitCode === 0) return "text-success";
-    if (props.exitCode !== undefined) return "text-error";
-    return "text-muted-foreground";
+    if (props.exitCode === 0) {
+      return "bg-success/12 text-success ring-1 ring-success/15";
+    }
+    if (props.exitCode !== undefined) {
+      return "bg-error/12 text-error ring-1 ring-error/15";
+    }
+    return "bg-base-content/8 text-base-content/60 ring-1 ring-base-content/10";
   };
 
   return (
@@ -302,7 +313,10 @@ export const TerminalOutput: Component<TerminalOutputProps> = (props) => {
         </span>
         <Show when={props.exitCode !== undefined}>
           <span
-            class={cn("text-xs px-1.5 py-0.5 rounded font-mono", statusColor())}
+            class={cn(
+              "rounded px-1.5 py-0.5 font-mono text-xs",
+              statusColor(),
+            )}
           >
             {props.exitCode}
           </span>
@@ -323,7 +337,7 @@ export const TerminalOutput: Component<TerminalOutputProps> = (props) => {
           title="Copy output"
         >
           <Show when={copied()} fallback={<FiCopy size={14} />}>
-            <FiCheck size={14} class="text-success" />
+            <FiCheck size={14} class="text-success-content" />
           </Show>
         </button>
       </div>

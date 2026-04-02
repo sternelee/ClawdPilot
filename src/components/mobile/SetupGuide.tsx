@@ -91,7 +91,7 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
                 onClick={() => copyToClipboard("curl -fsSL https://raw.githubusercontent.com/sternelee/riterm/main/install.sh | sh", 1)}
                 class="btn btn-ghost btn-xs btn-square text-neutral-content/40 hover:text-primary hover:bg-primary/10"
               >
-                {copiedIndex() === 1 ? <Check size={14} class="text-success" /> : <Copy size={14} />}
+                {copiedIndex() === 1 ? <Check size={14} class="text-success-content" /> : <Copy size={14} />}
               </button>
             </div>
             <pre data-prefix="$" class="pr-10"><code>curl -fsSL https://raw.github...</code></pre>
@@ -114,12 +114,12 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
                 onClick={() => copyToClipboard("clawdpilot --daemon", 2)}
                 class="btn btn-ghost btn-xs btn-square text-neutral-content/40 hover:text-primary hover:bg-primary/10"
               >
-                {copiedIndex() === 2 ? <Check size={14} class="text-success" /> : <Copy size={14} />}
+                {copiedIndex() === 2 ? <Check size={14} class="text-success-content" /> : <Copy size={14} />}
               </button>
             </div>
-            <pre data-prefix="$"><code class="text-success font-bold">clawdpilot --daemon</code></pre>
+            <pre data-prefix="$"><code class="font-bold text-success-content">clawdpilot --daemon</code></pre>
             <div class="divider divider-neutral m-0 h-1 opacity-10"></div>
-            <pre class="text-warning/80"><code>iroh-ticket:bafkp7...</code></pre>
+            <pre class="text-warning-content/85"><code>iroh-ticket:bafkp7...</code></pre>
           </div>
         </div>
       )
@@ -127,7 +127,7 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
     {
       title: "即刻开始",
       description: "在手机上点击“扫描二维码”直接扫描 CLI 输出的二维码，或者手动输入票据。",
-      icon: <Cpu size={56} class="text-success" stroke-width={1.5} />,
+      icon: <Cpu size={56} class="text-success-content" stroke-width={1.5} />,
       color: "bg-success/10",
       content: (
         <div class="grid grid-cols-2 gap-3 mt-4">
@@ -228,7 +228,7 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
 
         <Button 
           variant="primary"
-          class="w-full py-3 h-auto rounded-xl shadow-lg shadow-primary/20 font-bold text-base text-primary-content"
+          class="h-auto w-full rounded-xl py-3 text-base font-bold text-primary-content shadow-lg shadow-base-content/10"
           onClick={() => {
             if (currentPage() === pages.length - 1) props.onClose();
             else scrollToPage(currentPage() + 1);

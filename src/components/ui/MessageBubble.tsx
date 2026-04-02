@@ -51,7 +51,7 @@ const CodeBlockWithCopy: Component<CodeBlockProps> = (props) => {
         title="Copy code"
       >
         <Show when={copied()} fallback={<FiCopy size={14} />}>
-          <FiCheck size={14} class="text-success" />
+          <FiCheck size={14} class="text-success-content" />
         </Show>
       </button>
       <div class="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-base-300">
@@ -229,7 +229,7 @@ const SystemMessageContent: Component<{
     if (card.type === "following") {
       return (
         <div class="space-y-2.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-info">
+          <div class="inline-flex items-center rounded-md bg-info/12 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-info ring-1 ring-info/15">
             Following
           </div>
           <For each={card.locations}>
@@ -280,10 +280,10 @@ const SystemMessageContent: Component<{
       const diffText = `--- old\n+++ new\n-${card.oldText}\n+${card.newText}`;
       return (
         <div class="space-y-2.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-warning">
+          <div class="inline-flex items-center rounded-md bg-warning/12 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-warning ring-1 ring-warning/15">
             Edit Review
           </div>
-          <div class="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[13px] sm:text-sm font-mono break-all">
+          <div class="rounded-lg border border-base-content/10 bg-base-200/80 px-3 py-2 text-[13px] sm:text-sm font-mono break-all text-base-content/80">
             {card.path}
           </div>
           <div class="flex flex-wrap gap-2">
@@ -346,7 +346,7 @@ const SystemMessageContent: Component<{
 
       return (
         <div class="space-y-2.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-success">
+          <div class="inline-flex items-center rounded-md bg-success/12 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-success ring-1 ring-success/15">
             TODO List
           </div>
           <div class="space-y-1">
@@ -396,10 +396,10 @@ const SystemMessageContent: Component<{
     if (card.type === "terminal") {
       return (
         <div class="space-y-2.5">
-          <div class="text-[10px] font-bold uppercase tracking-wider text-primary">
+          <div class="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary ring-1 ring-primary/15">
             Terminal
           </div>
-          <div class="rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-[13px] sm:text-sm">
+          <div class="rounded-lg border border-base-content/10 bg-base-200/80 px-3 py-2.5 text-[13px] sm:text-sm text-base-content/80">
             <div class="font-mono break-all">
               {card.terminalId || "unknown"}
             </div>
@@ -444,7 +444,7 @@ const SystemMessageContent: Component<{
               </button>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-8 min-h-8 text-error"
+                class="btn btn-ghost btn-xs h-8 min-h-8 text-error hover:bg-error/10"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "stop")
                 }
@@ -543,7 +543,7 @@ const SystemMessageContent: Component<{
                 }
               >
                 <div class="text-sm">
-                  <span class="font-mono text-xs text-info">
+                  <span class="inline-flex items-center rounded-md bg-info/12 px-2 py-1 font-mono text-xs text-info ring-1 ring-info/15">
                     [{parsed().toolName}]
                   </span>
                   <Show when={parsed().output}>

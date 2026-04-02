@@ -119,7 +119,7 @@ export const ConnectView: Component<ConnectViewProps> = (props) => {
                 </p>
                 <Button 
                   variant="primary"
-                  class="rounded-xl shadow-lg shadow-primary/20 px-8 font-bold"
+                  class="rounded-xl px-8 font-bold shadow-lg shadow-base-content/10"
                   onClick={() => { HapticFeedback.medium(); props.onConnect(""); }}
                 >
                   <Plus size={18} class="mr-1" stroke-width={3} />
@@ -166,7 +166,7 @@ export const ConnectView: Component<ConnectViewProps> = (props) => {
         <div class="flex flex-col gap-2 mb-8 shrink-0">
           <Button 
             variant="outline"
-            class="rounded-xl py-3 h-auto border-2 border-primary/10 text-primary hover:bg-primary hover:text-primary-content font-bold shadow-sm"
+            class="h-auto rounded-xl border-2 border-primary/10 py-3 font-bold text-primary shadow-sm hover:bg-primary/10 hover:text-primary"
             onClick={() => { HapticFeedback.medium(); props.onScanQR(); }}
           >
             <Scan size={18} class="mr-2" stroke-width={2.5} />
@@ -203,7 +203,7 @@ export const ConnectView: Component<ConnectViewProps> = (props) => {
               </Button>
               <Button 
                 variant="ghost"
-                class="rounded-xl py-3 h-auto font-bold text-base-content/40"
+                class="h-auto rounded-xl py-3 font-bold text-base-content/55"
                 onClick={() => setShowDeleteConfirm(false)}
               >
                 取消

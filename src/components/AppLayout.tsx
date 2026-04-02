@@ -20,6 +20,7 @@ import { FileBrowserView } from "./FileBrowserView";
 import { GitDiffView } from "./GitDiffView";
 import { SetupGuide } from "./mobile/SetupGuide";
 import { sessionStore } from "../stores/sessionStore";
+import { i18nStore } from "../stores/i18nStore";
 import { isMobile } from "../stores/deviceStore";
 import { notificationStore } from "../stores/notificationStore";
 import { Button } from "./ui/primitives";
@@ -174,7 +175,7 @@ export const AppLayout: Component = () => {
         <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-[60]">
           <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
             <SpinnerWithLabel
-              label="Loading history…"
+              label={i18nStore.t("common.loadingHistory")}
               size="lg"
               variant="primary"
             />
@@ -220,21 +221,20 @@ export const AppLayout: Component = () => {
                     />
                   </div>
                   <h2 class="text-3xl font-bold mb-3 bg-gradient-to-r from-base-content to-base-content/70 bg-clip-text text-transparent">
-                    Welcome to ClawdPilot
+                    {i18nStore.t("home.welcomeTitle")}
                   </h2>
                   <p class="text-base-content/60 mb-8 max-w-xs mx-auto leading-relaxed">
-                    Manage multiple AI agent sessions in one place. Create a new
-                    session to get started.
+                    {i18nStore.t("home.welcomeDescription")}
                   </p>
                   <div class="flex flex-col items-center justify-center gap-3">
                     <Button
                       variant="default"
                       size="lg"
-                      class="px-8 h-12 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-content shadow-xl shadow-primary/20 rounded-2xl"
+                      class="px-8 h-12 rounded-2xl bg-primary text-sm font-bold text-primary-content shadow-xl shadow-base-content/10 hover:bg-primary/90"
                       onClick={() => sessionStore.openNewSessionModal("local")}
                     >
                       <FiPlus size={18} class="mr-2" />
-                      Create Session
+                      {i18nStore.t("home.createSession")}
                     </Button>
                     <Button
                       variant="ghost"
@@ -243,7 +243,7 @@ export const AppLayout: Component = () => {
                       onClick={() => setShowSetupGuide(true)}
                     >
                       <HelpCircle size={16} class="mr-1.5" />
-                      Setup Guide
+                      {i18nStore.t("home.setupGuide")}
                     </Button>
                   </div>
                   {/* Features */}
@@ -252,10 +252,10 @@ export const AppLayout: Component = () => {
                       <div class="text-xl shrink-0 sm:mb-1.5 text-center">🤖</div>
                       <div class="min-w-0">
                         <div class="text-xs font-bold text-left sm:text-center">
-                          AI Agents
+                          {i18nStore.t("home.features.aiAgentsTitle")}
                         </div>
                         <div class="text-[10px] opacity-50 text-left sm:text-center">
-                          Claude, Codex & more
+                          {i18nStore.t("home.features.aiAgentsDesc")}
                         </div>
                       </div>
                     </div>
@@ -263,10 +263,10 @@ export const AppLayout: Component = () => {
                       <div class="text-xl shrink-0 sm:mb-1.5 text-center">🔒</div>
                       <div class="min-w-0">
                         <div class="text-xs font-bold text-left sm:text-center">
-                          P2P Secure
+                          {i18nStore.t("home.features.secureTitle")}
                         </div>
                         <div class="text-[10px] opacity-50 text-left sm:text-center">
-                          End-to-end encrypted
+                          {i18nStore.t("home.features.secureDesc")}
                         </div>
                       </div>
                     </div>
@@ -274,10 +274,10 @@ export const AppLayout: Component = () => {
                       <div class="text-xl shrink-0 sm:mb-1.5 text-center">💬</div>
                       <div class="min-w-0">
                         <div class="text-xs font-bold text-left sm:text-center">
-                          Agent
+                          {i18nStore.t("home.features.agentTitle")}
                         </div>
                         <div class="text-[10px] opacity-50 text-left sm:text-center">
-                          Real-time sharing
+                          {i18nStore.t("home.features.agentDesc")}
                         </div>
                       </div>
                     </div>

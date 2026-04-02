@@ -70,20 +70,20 @@ export function MobileNavigation(props: MobileNavigationProps) {
   };
 
   const getStatusColor = () => {
-    if (!props.isConnected) return "text-foreground";
+    if (!props.isConnected) return "text-base-content";
     switch (props.networkStrength) {
       case 0:
-        return "text-error";
+        return "text-error-content";
       case 1:
-        return "text-warning";
+        return "text-warning-content";
       case 2:
-        return "text-warning";
+        return "text-warning-content";
       case 3:
-        return "text-success";
+        return "text-success-content";
       case 4:
-        return "text-success";
+        return "text-success-content";
       default:
-        return "text-foreground";
+        return "text-base-content";
     }
   };
 
@@ -225,7 +225,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
             >
               <span class="text-sm">{getNetworkIcon()}</span>
               <Show when={props.isConnected}>
-                <div class="w-2 h-2 bg-success rounded-full animate-pulse"></div>
+                <div class="h-2 w-2 rounded-full bg-success animate-pulse shadow-[0_0_0_2px_color-mix(in_oklab,var(--color-base-100)_80%,transparent)]"></div>
               </Show>
             </Button>
 
@@ -275,7 +275,7 @@ export function MobileNavigation(props: MobileNavigationProps) {
                     <div
                       class={`w-1 h-3 mx-px rounded-sm ${
                         level <= props.networkStrength
-                          ? "bg-success"
+                          ? "bg-success/80"
                           : "bg-muted"
                       }`}
                     />

@@ -1897,7 +1897,7 @@ export function ChatView(props: ChatViewProps) {
                 </Show>
 
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="p-2 rounded-xl bg-primary/10 text-primary shrink-0 shadow-inner hidden xs:flex">
+                  <div class="hidden rounded-xl bg-primary/10 p-2 text-primary shadow-inner ring-1 ring-primary/10 xs:flex shrink-0">
                     {getAgentIcon()}
                   </div>
                   <div class="min-w-0">
@@ -1914,7 +1914,7 @@ export function ChatView(props: ChatViewProps) {
                       title={props.projectPath}
                     >
                       <span class="inline-flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                        <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse shadow-[0_0_0_3px_color-mix(in_oklab,var(--color-base-100)_82%,transparent)]" />
                         <span class="font-medium hidden sm:inline">Active</span>
                       </span>
                       <span class="opacity-30 hidden sm:inline">•</span>

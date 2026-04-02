@@ -45,9 +45,9 @@ const variantClasses: Record<SpinnerVariant, string> = {
   default: "text-muted-foreground",
   primary: "text-primary",
   secondary: "text-secondary",
-  success: "text-success",
-  warning: "text-warning",
-  error: "text-error",
+  success: "text-success-content",
+  warning: "text-warning-content",
+  error: "text-error-content",
 };
 
 // ============================================================================

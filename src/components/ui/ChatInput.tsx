@@ -260,7 +260,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 class={cn(
                   "w-full px-4 py-3 text-left text-sm transition-colors min-h-[48px] flex items-center gap-2",
                   index === activeMentionIndex()
-                    ? "bg-primary text-primary-content"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
                     : "hover:bg-base-content/5",
                 )}
                 onMouseDown={(e) => e.preventDefault()}
@@ -281,7 +281,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 class={cn(
                   "w-full px-4 py-3 text-left transition-colors min-h-[48px]",
                   index === activeSlashIndex()
-                    ? "bg-primary text-primary-content"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
                     : "hover:bg-base-content/5",
                 )}
                 onMouseDown={(e) => e.preventDefault()}
@@ -364,7 +364,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 class={cn(
                   "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
                   showSettings()
-                    ? "bg-primary/15 text-primary-content"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
                     : "text-base-content/70 hover:text-primary hover:bg-primary/10",
                 )}
                 onClick={() => setShowSettings(!showSettings())}
@@ -410,7 +410,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                         class={cn(
                           "w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-all active:scale-[0.98]",
                           props.permissionMode === option.value
-                            ? "bg-primary text-primary-content shadow-md shadow-primary/20"
+                            ? "bg-primary/10 text-primary ring-1 ring-primary/15 shadow-md shadow-base-content/5"
                             : "hover:bg-base-content/5",
                         )}
                         onClick={() => {
@@ -450,7 +450,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 class={cn(
                   "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
                   props.rightPanelView === "file"
-                    ? "bg-primary/15 text-primary-content"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
                     : "text-base-content/70 hover:text-primary hover:bg-primary/10",
                 )}
                 onClick={() => {
@@ -469,7 +469,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 class={cn(
                   "btn btn-ghost btn-sm h-10 min-h-[40px] px-3 gap-2 text-[12px] transition-all rounded-xl",
                   props.rightPanelView === "git"
-                    ? "bg-primary/15 text-primary-content"
+                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
                     : "text-base-content/70 hover:text-primary hover:bg-primary/10",
                 )}
                 onClick={() => {

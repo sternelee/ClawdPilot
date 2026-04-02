@@ -34,19 +34,19 @@ type GitStatusChar = "?" | " " | "M" | "A" | "D" | "R" | "C" | "U";
 const getStatusColor = (status: GitStatusChar): string => {
   switch (status) {
     case "M":
-      return "text-warning";
+      return "text-warning-content";
     case "A":
-      return "text-success";
+      return "text-success-content";
     case "D":
-      return "text-error";
+      return "text-error-content";
     case "R":
-      return "text-info";
+      return "text-info-content";
     case "?":
-      return "text-foreground/50";
+      return "text-base-content/55";
     case " ":
-      return "text-success";
+      return "text-success-content";
     default:
-      return "text-foreground";
+      return "text-base-content";
   }
 };
 
@@ -237,25 +237,31 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
     const line = () => props.line;
     return (
       <div
-        class={`flex ${line().type === "add" ? "bg-success/10" : line().type === "remove" ? "bg-error/10" : ""}`}
+        class={`flex ${
+          line().type === "add"
+            ? "bg-success/12"
+            : line().type === "remove"
+              ? "bg-error/12"
+              : ""
+        }`}
       >
         <Show when={line().oldLineNum !== undefined}>
-          <span class="w-12 text-right pr-2 text-foreground/30 select-none text-xs font-mono">
+          <span class="w-12 select-none pr-2 text-right font-mono text-xs text-base-content/35">
             {line().oldLineNum}
           </span>
         </Show>
         <Show when={line().newLineNum !== undefined}>
-          <span class="w-12 text-right pr-2 text-foreground/30 select-none text-xs font-mono">
+          <span class="w-12 select-none pr-2 text-right font-mono text-xs text-base-content/35">
             {line().newLineNum}
           </span>
         </Show>
         <span
           class={`flex-1 font-mono text-xs whitespace-pre ${
             line().type === "add"
-              ? "text-success"
+              ? "text-success-content"
               : line().type === "remove"
-                ? "text-error"
-                : "text-foreground"
+                ? "text-error-content"
+                : "text-base-content"
           }`}
         >
           {line().type === "add" && "+"}
@@ -308,16 +314,20 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
         {/* Summary */}
         <Show when={hasChanges()}>
           <div class="flex gap-3 mt-2 text-xs">
-            <span class="text-success">Staged: {summary().staged}</span>
-            <span class="text-warning">Modified: {summary().modified}</span>
-            <span class="text-foreground/50">
+            <span class="inline-flex items-center rounded-md bg-success/12 px-2 py-1 font-medium text-success ring-1 ring-success/15">
+              Staged: {summary().staged}
+            </span>
+            <span class="inline-flex items-center rounded-md bg-warning/12 px-2 py-1 font-medium text-warning ring-1 ring-warning/15">
+              Modified: {summary().modified}
+            </span>
+            <span class="inline-flex items-center rounded-md bg-base-content/6 px-2 py-1 font-medium text-base-content/60 ring-1 ring-base-content/10">
               Untracked: {summary().untracked}
             </span>
           </div>
         </Show>
 
         <Show when={!hasChanges() && !state.isLoadingStatus}>
-          <div class="mt-2 text-xs text-foreground/50">No changes detected</div>
+          <div class="mt-2 text-xs text-base-content/55">No changes detected</div>
         </Show>
       </div>
 
@@ -329,7 +339,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
             {/* Staged Files */}
             <Show when={getStagedFiles().length > 0}>
               <div class="p-2.5">
-                <h3 class="text-xs font-semibold mb-1.5 text-success">
+                <h3 class="mb-1.5 inline-flex items-center rounded-md bg-success/12 px-2 py-1 text-xs font-semibold text-success ring-1 ring-success/15">
                   Staged Changes
                 </h3>
                 <For each={getStagedFiles()}>
@@ -339,14 +349,14 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                       onClick={() => loadDiff(entry.from)}
                     >
                       <span
-                        class={`text-lg ${getStatusColor(entry.x as GitStatusChar)}`}
+                        class={`inline-flex h-6 w-6 items-center justify-center rounded-md bg-base-content/6 text-sm font-bold ring-1 ring-base-content/10 ${getStatusColor(entry.x as GitStatusChar)}`}
                       >
                         {entry.x}
                       </span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
                       <Show when={entry.to}>
-                        <span class="text-foreground/50">→ {entry.to}</span>
+                        <span class="text-base-content/50">→ {entry.to}</span>
                       </Show>
                     </div>
                   )}
@@ -357,7 +367,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
             {/* Modified Files */}
             <Show when={getModifiedFiles().length > 0}>
               <div class="p-2.5">
-                <h3 class="text-xs font-semibold mb-1.5 text-warning">
+                <h3 class="mb-1.5 inline-flex items-center rounded-md bg-warning/12 px-2 py-1 text-xs font-semibold text-warning ring-1 ring-warning/15">
                   Modified
                 </h3>
                 <For each={getModifiedFiles()}>
@@ -367,13 +377,13 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                       onClick={() => loadDiff(entry.from)}
                     >
                       <span
-                        class={`text-lg ${getStatusColor(entry.y as GitStatusChar)}`}
+                        class={`inline-flex h-6 w-6 items-center justify-center rounded-md bg-base-content/6 text-sm font-bold ring-1 ring-base-content/10 ${getStatusColor(entry.y as GitStatusChar)}`}
                       >
                         {entry.y}
                       </span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
-                      <span class="text-xs text-foreground/50">
+                      <span class="text-xs text-base-content/50">
                         {getStatusLabel(
                           entry.x as GitStatusChar,
                           entry.y as GitStatusChar,
@@ -388,7 +398,7 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
             {/* Untracked Files */}
             <Show when={getUntrackedFiles().length > 0}>
               <div class="p-2.5">
-                <h3 class="text-xs font-semibold mb-1.5 text-foreground/50">
+                <h3 class="mb-1.5 inline-flex items-center rounded-md bg-base-content/6 px-2 py-1 text-xs font-semibold text-base-content/60 ring-1 ring-base-content/10">
                   Untracked
                 </h3>
                 <For each={getUntrackedFiles()}>
@@ -397,7 +407,9 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
                       class="flex items-center gap-2 p-1.5 rounded hover:bg-muted cursor-pointer text-sm"
                       onClick={() => loadDiff(entry.from)}
                     >
-                      <span class="text-lg text-foreground/30">?</span>
+                      <span class="inline-flex h-6 w-6 items-center justify-center rounded-md bg-base-content/6 text-sm font-bold text-base-content/45 ring-1 ring-base-content/10">
+                        ?
+                      </span>
                       <FileIcon />
                       <span class="flex-1 truncate">{entry.from}</span>
                     </div>

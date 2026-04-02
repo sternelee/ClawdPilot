@@ -245,10 +245,10 @@ export const PermissionMessage: Component<PermissionMessageProps> = (props) => {
   });
 
   return (
-    <div class="rounded-xl border border-warning bg-warning/10 px-4 py-3">
+    <div class="rounded-xl border border-warning/20 bg-warning/8 px-4 py-3">
       {/* Header */}
       <div class="flex items-center gap-2 mb-3">
-        <div class="p-1.5 rounded-lg bg-warning/20 text-warning-content">
+        <div class="rounded-lg bg-warning/15 p-1.5 text-warning ring-1 ring-warning/15">
           <FiShield size={16} />
         </div>
         <div class="flex-1">
@@ -338,10 +338,10 @@ export const UserQuestionMessage: Component<UserQuestionMessageProps> = (
   props,
 ) => {
   return (
-    <div class="rounded-xl border border-info/50 bg-info/10 px-4 py-3">
+    <div class="rounded-xl border border-info/20 bg-info/8 px-4 py-3">
       {/* Header */}
       <div class="flex items-center gap-2 mb-3">
-        <div class="p-1.5 rounded-lg bg-info/20 text-info">
+        <div class="rounded-lg bg-info/15 p-1.5 text-info ring-1 ring-info/15">
           <FiLoader size={16} />
         </div>
         <div class="font-medium text-sm">Question</div>

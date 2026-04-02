@@ -226,7 +226,7 @@ export function KeyboardAwareInput(props: KeyboardAwareInputProps) {
       </div>
 
       <Show when={props.error}>
-        <p class="text-xs text-error">{props.error}</p>
+        <p class="text-xs text-error-content">{props.error}</p>
       </Show>
       <Show when={props.preserveSpace && isFocused()}>
         <div class="h-20" aria-hidden="true" />
