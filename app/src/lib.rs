@@ -30,9 +30,9 @@ use shared::AgentManager;
 use shared::{
     AgentControlAction, AgentPermissionMode, AgentPermissionResponse, AgentType,
     CommunicationManager, DirEntry, Event, EventListener, EventType, FileBrowserAction,
-    FileBrowserEntry, MESSAGE_PROTOCOL_VERSION, MentionCandidate, Message as ClawdChatMessage,
-    MessageBuilder, MessagePayload, QuicMessageClientHandle, SystemAction, TcpDataType,
-    TcpForwardingAction, TcpForwardingType,
+    FileBrowserEntry, GitAction, MESSAGE_PROTOCOL_VERSION, MentionCandidate,
+    Message as ClawdChatMessage, MessageBuilder, MessagePayload, QuicMessageClientHandle,
+    SystemAction, TcpDataType, TcpForwardingAction, TcpForwardingType,
 };
 
 use crate::tcp_forwarding::TcpForwardingManager;
@@ -1876,6 +1876,240 @@ async fn list_remote_directory(
     Ok(request_id)
 }
 
+async fn get_control_connection_session(
+    state: &State<'_, AppState>,
+    control_session_id: &str,
+) -> Result<ConnectionSession, String> {
+    let sessions = state.sessions.read().await;
+    sessions
+        .get(control_session_id)
+        .cloned()
+        .ok_or_else(|| format!("Control session not found: {}", control_session_id))
+}
+
+fn parse_response_payload(
+    data: Option<String>,
+    operation_name: &str,
+) -> Result<serde_json::Value, String> {
+    let raw = data.ok_or_else(|| format!("Missing {} response data", operation_name))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| format!("Invalid {} response data: {}", operation_name, e))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn remote_file_browser_list(
+    control_session_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<FileBrowserListResponse, String> {
+    let session = get_control_connection_session(&state, &control_session_id).await?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let message = MessageBuilder::file_browser(
+        "clawdchat_app".to_string(),
+        FileBrowserAction::ListDirectory { path: path.clone() },
+        Some(request_id.clone()),
+    )
+    .with_session(control_session_id);
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        message,
+        &request_id,
+        "remote file browser list",
+        10,
+    )
+    .await?;
+
+    if !response.success {
+        return Ok(FileBrowserListResponse {
+            success: false,
+            entries: Vec::new(),
+            error: Some(
+                response
+                    .message
+                    .unwrap_or_else(|| "Failed to load remote directory".to_string()),
+            ),
+        });
+    }
+
+    let payload = parse_response_payload(response.data, "remote file browser list")?;
+    let entries = payload
+        .get("entries")
+        .cloned()
+        .unwrap_or(serde_json::Value::Array(Vec::new()));
+
+    Ok(FileBrowserListResponse {
+        success: true,
+        entries: serde_json::from_value(entries)
+            .map_err(|e| format!("Invalid remote file browser list payload: {}", e))?,
+        error: None,
+    })
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn remote_file_browser_read(
+    control_session_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<FileBrowserReadResponse, String> {
+    let session = get_control_connection_session(&state, &control_session_id).await?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let message = MessageBuilder::file_browser(
+        "clawdchat_app".to_string(),
+        FileBrowserAction::ReadFile { path: path.clone() },
+        Some(request_id.clone()),
+    )
+    .with_session(control_session_id);
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        message,
+        &request_id,
+        "remote file browser read",
+        10,
+    )
+    .await?;
+
+    if !response.success {
+        return Ok(FileBrowserReadResponse {
+            success: false,
+            path,
+            content: None,
+            error: Some(
+                response
+                    .message
+                    .unwrap_or_else(|| "Failed to read remote file".to_string()),
+            ),
+        });
+    }
+
+    let payload = parse_response_payload(response.data, "remote file browser read")?;
+    let response_path = payload
+        .get("path")
+        .and_then(|value| value.as_str())
+        .unwrap_or(&path)
+        .to_string();
+    let content = payload
+        .get("content")
+        .and_then(|value| value.as_str())
+        .map(ToString::to_string);
+
+    Ok(FileBrowserReadResponse {
+        success: true,
+        path: response_path,
+        content,
+        error: None,
+    })
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn remote_git_status(
+    control_session_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<GitStatusResponse, String> {
+    let session = get_control_connection_session(&state, &control_session_id).await?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let message = MessageBuilder::git_status(
+        "clawdchat_app".to_string(),
+        GitAction::GetStatus { path },
+        Some(request_id.clone()),
+    )
+    .with_session(control_session_id);
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        message,
+        &request_id,
+        "remote git status",
+        10,
+    )
+    .await?;
+
+    if !response.success {
+        return Ok(GitStatusResponse {
+            success: false,
+            status: None,
+            error: Some(
+                response
+                    .message
+                    .unwrap_or_else(|| "Failed to get remote git status".to_string()),
+            ),
+        });
+    }
+
+    let payload = parse_response_payload(response.data, "remote git status")?;
+    Ok(GitStatusResponse {
+        success: true,
+        status: payload
+            .get("status")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        error: None,
+    })
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn remote_git_diff(
+    control_session_id: String,
+    path: String,
+    file: String,
+    state: State<'_, AppState>,
+) -> Result<GitDiffResponse, String> {
+    let session = get_control_connection_session(&state, &control_session_id).await?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let message = MessageBuilder::git_status(
+        "clawdchat_app".to_string(),
+        GitAction::GetDiff {
+            path,
+            file: file.clone(),
+        },
+        Some(request_id.clone()),
+    )
+    .with_session(control_session_id);
+
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        message,
+        &request_id,
+        "remote git diff",
+        10,
+    )
+    .await?;
+
+    if !response.success {
+        return Ok(GitDiffResponse {
+            success: false,
+            file: Some(file),
+            diff: None,
+            error: Some(
+                response
+                    .message
+                    .unwrap_or_else(|| "Failed to get remote git diff".to_string()),
+            ),
+        });
+    }
+
+    let payload = parse_response_payload(response.data, "remote git diff")?;
+    Ok(GitDiffResponse {
+        success: true,
+        file: payload
+            .get("file")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string)
+            .or(Some(file)),
+        diff: payload
+            .get("diff")
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string),
+        error: None,
+    })
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn list_remote_mention_candidates(
     session_id: String,
@@ -2441,67 +2675,28 @@ async fn remote_spawn_session(
         }
     }
 
-    // Wait for explicit remote ACK so UI only enters agent flow when transport/session is truly ready.
-    // Retry a few times to absorb first-connection jitter.
-    let mut last_err: Option<String> = None;
-    for attempt in 1..=3 {
-        match send_message_via_client_with_response(
-            &state,
-            &session.connection_id,
-            spawn_message.clone(),
-            &request_id,
-            "remote spawn",
-            15,
-        )
-        .await
-        {
-            Ok(response) => {
-                if response.success {
-                    #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                    tracing::info!(
-                        "[remote_spawn_session] spawn acknowledged on attempt {}: request_id={}",
-                        attempt,
-                        request_id
-                    );
-                    return Ok("spawn_request_sent".to_string());
-                }
+    let response = send_message_via_client_with_response(
+        &state,
+        &session.connection_id,
+        spawn_message,
+        &request_id,
+        "remote spawn",
+        60,
+    )
+    .await?;
 
-                let message = response
-                    .message
-                    .unwrap_or_else(|| "Remote spawn failed".to_string());
-                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::warn!(
-                    "[remote_spawn_session] spawn response unsuccessful on attempt {}: request_id={}, message={}",
-                    attempt,
-                    request_id,
-                    message
-                );
-                last_err = Some(message);
-            }
-            Err(e) => {
-                #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-                tracing::warn!(
-                    "[remote_spawn_session] attempt {} failed before ack: request_id={}, error={}",
-                    attempt,
-                    request_id,
-                    e
-                );
-                last_err = Some(e);
-            }
-        }
-
-        if attempt < 3 {
-            #[cfg(any(debug_assertions, not(feature = "release-logging")))]
-            tracing::warn!(
-                "[remote_spawn_session] retrying spawn (attempt {}/3), request_id={}",
-                attempt + 1,
-                request_id
-            );
-            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-        }
+    if response.success {
+        #[cfg(any(debug_assertions, not(feature = "release-logging")))]
+        tracing::info!(
+            "[remote_spawn_session] spawn acknowledged: request_id={}",
+            request_id
+        );
+        Ok("spawn_request_sent".to_string())
+    } else {
+        Err(response
+            .message
+            .unwrap_or_else(|| "Remote spawn failed".to_string()))
     }
-
-    Err(last_err.unwrap_or_else(|| "Remote spawn failed after retries".to_string()))
 }
 
 /// List all active remote agent sessions from connected CLI
@@ -3648,6 +3843,10 @@ pub fn run() {
             git_status,
             git_diff,
             list_remote_directory, // List remote directory via P2P
+            remote_file_browser_list,
+            remote_file_browser_read,
+            remote_git_status,
+            remote_git_diff,
             list_remote_mention_candidates,
             // TCP Forwarding Management
             create_tcp_forwarding_session,

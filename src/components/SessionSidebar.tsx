@@ -339,12 +339,24 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     Record<string, GitStatusCount>
   >({});
 
-  const fetchGitStatus = async (sessionId: string, projectPath: string) => {
+  const fetchGitStatus = async (session: AgentSessionMetadata) => {
     try {
-      const response = await invoke<{ success: boolean; status?: string }>(
-        "git_status",
-        { path: projectPath || "." },
-      );
+      if (session.mode === "remote" && !session.controlSessionId) {
+        return;
+      }
+
+      const response =
+        session.mode === "remote"
+          ? await invoke<{ success: boolean; status?: string }>(
+              "remote_git_status",
+              {
+                controlSessionId: session.controlSessionId,
+                path: session.projectPath || ".",
+              },
+            )
+          : await invoke<{ success: boolean; status?: string }>("git_status", {
+              path: session.projectPath || ".",
+            });
       if (response?.success && response.status) {
         const lines = response.status.split("\n").filter(Boolean);
         let added = 0,
@@ -365,12 +377,12 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         }
         setGitStatusBySession((prev) => ({
           ...prev,
-          [sessionId]: { added, modified, deleted, untracked },
+          [session.sessionId]: { added, modified, deleted, untracked },
         }));
       }
     } catch (err) {
       console.error(
-        `Failed to fetch git status for session ${sessionId}:`,
+        `Failed to fetch git status for session ${session.sessionId}:`,
         err,
       );
     }
@@ -413,7 +425,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         next.delete(active.sessionId);
         return next;
       });
-      void fetchGitStatus(active.sessionId, active.projectPath);
+      void fetchGitStatus(active);
     }
   });
 

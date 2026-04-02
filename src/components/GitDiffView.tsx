@@ -8,6 +8,7 @@ import { Component, For, Show, onMount } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { gitStore } from "../stores/gitStore";
 import { notificationStore } from "../stores/notificationStore";
+import type { SessionMode } from "../stores/sessionStore";
 import { Alert } from "./ui/primitives";
 import { Badge } from "./ui/primitives";
 import { Button } from "./ui/primitives";
@@ -20,6 +21,8 @@ import { Spinner } from "./ui/primitives";
 interface GitDiffViewProps {
   class?: string;
   projectPath?: string;
+  sessionMode?: SessionMode;
+  controlSessionId?: string;
 }
 
 // ============================================================================
@@ -115,19 +118,37 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
     getStatusSummary,
   } = gitStore;
 
+  const getRemoteControlSessionId = (): string => {
+    const controlSessionId = props.controlSessionId;
+    if (!controlSessionId) {
+      throw new Error("Remote control session is not available");
+    }
+    return controlSessionId;
+  };
+
   // Load git status
   const loadStatus = async () => {
     setLoadingStatus(true);
     setError(null);
 
     try {
-      const response = await invoke<{
-        success: boolean;
-        status?: string;
-        error?: string;
-      }>("git_status", {
-        path: props.projectPath || ".",
-      });
+      const response =
+        props.sessionMode === "remote"
+          ? await invoke<{
+              success: boolean;
+              status?: string;
+              error?: string;
+            }>("remote_git_status", {
+              controlSessionId: getRemoteControlSessionId(),
+              path: props.projectPath || ".",
+            })
+          : await invoke<{
+              success: boolean;
+              status?: string;
+              error?: string;
+            }>("git_status", {
+              path: props.projectPath || ".",
+            });
       if (response?.success) {
         setStatusOutput(response.status || "");
       } else {
@@ -150,14 +171,25 @@ export const GitDiffView: Component<GitDiffViewProps> = (props) => {
     setSelectedFile(filePath);
 
     try {
-      const response = await invoke<{
-        success: boolean;
-        diff?: string;
-        error?: string;
-      }>("git_diff", {
-        path: props.projectPath || ".",
-        file: filePath,
-      });
+      const response =
+        props.sessionMode === "remote"
+          ? await invoke<{
+              success: boolean;
+              diff?: string;
+              error?: string;
+            }>("remote_git_diff", {
+              controlSessionId: getRemoteControlSessionId(),
+              path: props.projectPath || ".",
+              file: filePath,
+            })
+          : await invoke<{
+              success: boolean;
+              diff?: string;
+              error?: string;
+            }>("git_diff", {
+              path: props.projectPath || ".",
+              file: filePath,
+            });
       if (response?.success) {
         setCurrentDiff({
           file: filePath,

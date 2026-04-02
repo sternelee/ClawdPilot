@@ -2021,18 +2021,22 @@ impl FileBrowserMessageHandler {
         )))
     }
 
-    async fn handle_read_file(&self, path: String) -> Result<Option<Message>> {
+    async fn handle_read_file(
+        &self,
+        path: String,
+        request_id: Option<String>,
+    ) -> Result<Option<Message>> {
         match shared::file_browser_read(&path) {
             Ok(content) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
-                Uuid::new_v4().to_string(),
+                request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 true,
                 Some(serde_json::json!({"path": path, "content": content})),
                 None,
             ))),
             Err(e) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
-                Uuid::new_v4().to_string(),
+                request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 false,
                 None,
                 Some(format!("Failed to read file: {}", e)),
@@ -2082,7 +2086,10 @@ impl MessageHandler for FileBrowserMessageHandler {
                     )
                     .await
                 }
-                FileBrowserAction::ReadFile { path } => self.handle_read_file(path.clone()).await,
+                FileBrowserAction::ReadFile { path } => {
+                    self.handle_read_file(path.clone(), fb.request_id.clone())
+                        .await
+                }
                 _ => Ok(None),
             }
         } else {
@@ -2108,18 +2115,22 @@ impl GitStatusMessageHandler {
         }
     }
 
-    async fn handle_get_status(&self, path: String) -> Result<Option<Message>> {
+    async fn handle_get_status(
+        &self,
+        path: String,
+        request_id: Option<String>,
+    ) -> Result<Option<Message>> {
         match shared::git_status(&path) {
             Ok(status) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
-                Uuid::new_v4().to_string(),
+                request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 true,
                 Some(serde_json::json!({"status": status})),
                 None,
             ))),
             Err(error) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
-                Uuid::new_v4().to_string(),
+                request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 false,
                 None,
                 Some(format!("Failed to get git status: {}", error)),
@@ -2127,18 +2138,23 @@ impl GitStatusMessageHandler {
         }
     }
 
-    async fn handle_get_diff(&self, path: String, file: String) -> Result<Option<Message>> {
+    async fn handle_get_diff(
+        &self,
+        path: String,
+        file: String,
+        request_id: Option<String>,
+    ) -> Result<Option<Message>> {
         match shared::git_diff(&path, &file) {
             Ok(diff) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
-                Uuid::new_v4().to_string(),
+                request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 true,
                 Some(serde_json::json!({"file": file, "diff": diff})),
                 None,
             ))),
             Err(error) => Ok(Some(MessageBuilder::response(
                 "cli".to_string(),
-                Uuid::new_v4().to_string(),
+                request_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
                 false,
                 None,
                 Some(format!("Failed to get diff: {}", error)),
@@ -2152,9 +2168,13 @@ impl MessageHandler for GitStatusMessageHandler {
     async fn handle_message(&self, message: &Message) -> Result<Option<Message>> {
         if let MessagePayload::GitStatus(gs) = &message.payload {
             match &gs.action {
-                GitAction::GetStatus { path } => self.handle_get_status(path.clone()).await,
+                GitAction::GetStatus { path } => {
+                    self.handle_get_status(path.clone(), gs.request_id.clone())
+                        .await
+                }
                 GitAction::GetDiff { path, file } => {
-                    self.handle_get_diff(path.clone(), file.clone()).await
+                    self.handle_get_diff(path.clone(), file.clone(), gs.request_id.clone())
+                        .await
                 }
                 _ => Ok(None),
             }

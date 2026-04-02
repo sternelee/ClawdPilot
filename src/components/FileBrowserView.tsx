@@ -33,6 +33,7 @@ import "prismjs/components/prism-diff";
 import { fileBrowserStore } from "../stores/fileBrowserStore";
 import type { FileEntry } from "../stores/fileBrowserStore";
 import { notificationStore } from "../stores/notificationStore";
+import type { SessionMode } from "../stores/sessionStore";
 import { Alert } from "./ui/primitives";
 import { Button } from "./ui/primitives";
 import { Dialog } from "./ui/primitives";
@@ -45,6 +46,8 @@ import { Spinner } from "./ui/primitives";
 interface FileBrowserViewProps {
   class?: string;
   projectPath?: string;
+  sessionMode?: SessionMode;
+  controlSessionId?: string;
   onPathChange?: (path: string) => void;
 }
 
@@ -176,6 +179,14 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     return `${base}/${name}`;
   };
 
+  const getRemoteControlSessionId = (): string => {
+    const controlSessionId = props.controlSessionId;
+    if (!controlSessionId) {
+      throw new Error("Remote control session is not available");
+    }
+    return controlSessionId;
+  };
+
   // Load directory content
   const loadDirectory = async (path: string) => {
     const resolvedPath = resolvePath(path);
@@ -183,11 +194,21 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     setError(null);
 
     try {
-      const response = await invoke<{
-        success: boolean;
-        entries?: FileEntry[];
-        error?: string;
-      }>("file_browser_list", { path: resolvedPath });
+      const response =
+        props.sessionMode === "remote"
+          ? await invoke<{
+              success: boolean;
+              entries?: FileEntry[];
+              error?: string;
+            }>("remote_file_browser_list", {
+              controlSessionId: getRemoteControlSessionId(),
+              path: resolvedPath,
+            })
+          : await invoke<{
+              success: boolean;
+              entries?: FileEntry[];
+              error?: string;
+            }>("file_browser_list", { path: resolvedPath });
       if (response?.success) {
         setEntries(response.entries || []);
         navigateToPath(resolvedPath);
@@ -211,11 +232,21 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     setError(null);
 
     try {
-      const response = await invoke<{
-        success: boolean;
-        content?: string;
-        error?: string;
-      }>("file_browser_read", { path });
+      const response =
+        props.sessionMode === "remote"
+          ? await invoke<{
+              success: boolean;
+              content?: string;
+              error?: string;
+            }>("remote_file_browser_read", {
+              controlSessionId: getRemoteControlSessionId(),
+              path,
+            })
+          : await invoke<{
+              success: boolean;
+              content?: string;
+              error?: string;
+            }>("file_browser_read", { path });
       if (response?.success) {
         viewFile(path, response.content || "");
         if (

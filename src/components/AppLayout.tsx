@@ -206,15 +206,6 @@ export const AppLayout: Component = () => {
 
               {/* Theme Switcher - Top Right */}
               <div class="fixed top-4 right-4 fixed-top-safe flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-10 w-10 rounded-xl lg:hidden"
-                  onClick={() => setShowSetupGuide(true)}
-                  title="Setup Guide"
-                >
-                  <HelpCircle size={20} />
-                </Button>
                 <ThemeSwitcher />
               </div>
 
@@ -358,12 +349,16 @@ export const AppLayout: Component = () => {
                       <FileBrowserView
                         class="h-full"
                         projectPath={session()?.projectPath}
+                        sessionMode={session()?.mode}
+                        controlSessionId={session()?.controlSessionId}
                       />
                     </Show>
                     <Show when={rightPanelView() === "git"}>
                       <GitDiffView
                         class="h-full"
                         projectPath={session()?.projectPath}
+                        sessionMode={session()?.mode}
+                        controlSessionId={session()?.controlSessionId}
                       />
                     </Show>
                   </div>
