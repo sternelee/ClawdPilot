@@ -755,7 +755,11 @@ async fn connect_to_peer(
                                                     "state": "disconnected"
                                                 }),
                                             );
-                                            continue;
+                                            tracing::info!(
+                                                "Stopping message receiver task for disconnected session {}",
+                                                session_id_clone
+                                            );
+                                            break;
                                         }
                                         "reconnecting" => {
                                             let _ = app_handle_clone.emit(
