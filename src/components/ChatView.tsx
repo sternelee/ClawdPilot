@@ -217,6 +217,7 @@ interface ChatViewProps {
     args: string[],
   ) => void;
   onToggleSidebar?: () => void;
+  sidebarOpen?: boolean;
   agentType?: AgentType;
   projectPath?: string;
   sessionMode?: "remote" | "local"; // Added session mode
@@ -1871,27 +1872,29 @@ export function ChatView(props: ChatViewProps) {
             <div class="z-20 flex items-center h-14 sm:h-16 box-border justify-between border-b border-base-content/10 bg-base-100/80 backdrop-blur-md px-4 sm:px-6 py-2 shadow-sm sticky top-0">
               <div class="flex items-center gap-3 overflow-hidden">
                 {/* Mobile Sidebar Toggle */}
-                <button
-                  type="button"
-                  class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl lg:hidden active:scale-95 transition-transform"
-                  onClick={() => props.onToggleSidebar?.()}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="w-5 h-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                <Show when={!props.sidebarOpen}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-sm h-10 w-10 min-h-[40px] rounded-xl lg:hidden active:scale-95 transition-transform"
+                    onClick={() => props.onToggleSidebar?.()}
                   >
-                    <title>Menu</title>
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M4 6h16M4 12h16M4 18h16"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="w-5 h-5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <title>Menu</title>
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 6h16M4 12h16M4 18h16"
+                      />
+                    </svg>
+                  </button>
+                </Show>
 
                 <div class="flex items-center gap-2.5 min-w-0">
                   <div class="p-2 rounded-xl bg-primary/10 text-primary shrink-0 shadow-inner hidden xs:flex">

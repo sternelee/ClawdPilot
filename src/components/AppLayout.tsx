@@ -193,10 +193,10 @@ export const AppLayout: Component = () => {
         <Show
           when={activeSession()}
           fallback={
-            <div class="flex-1 flex items-center justify-center p-8 bg-base-100">
+            <div class="flex-1 overflow-y-auto bg-base-100">
               {/* Mobile Menu Button - Integrated for fallback view */}
               <Button
-                class="fixed left-4 top-4 z-50 h-12 w-12 rounded-2xl bg-base-200 shadow-lg border border-base-content/5 fixed-top-safe active:scale-95 transition-transform lg:hidden"
+                class={`fixed left-4 top-4 z-50 h-12 w-12 rounded-2xl bg-base-200 shadow-lg border border-base-content/5 fixed-top-safe active:scale-95 transition-transform lg:hidden ${sidebarOpen() ? "hidden" : ""}`}
                 size="icon"
                 variant="ghost"
                 onClick={() => setSidebarOpen(true)}
@@ -209,63 +209,77 @@ export const AppLayout: Component = () => {
                 <ThemeSwitcher />
               </div>
 
-              <div class="text-center max-w-lg">
-                {/* Logo */}
-                <div class="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/30 bg-base-200">
-                  <img
-                    src="/clawdpilot-icon.svg"
-                    alt="ClawdPilot logo"
-                    class="h-20 w-20 rounded-2xl object-cover"
-                  />
-                </div>
-                <h2 class="text-3xl font-bold mb-3 bg-gradient-to-r from-base-content to-base-content/70 bg-clip-text text-transparent">
-                  Welcome to ClawdPilot
-                </h2>
-                <p class="text-base-content/60 mb-8 max-w-xs mx-auto leading-relaxed">
-                  Manage multiple AI agent sessions in one place. Create a new
-                  session to get started.
-                </p>
-                <div class="flex flex-col items-center justify-center gap-3">
-                  <Button
-                    variant="default"
-                    size="lg"
-                    class="px-8 h-12 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-content shadow-xl shadow-primary/20 rounded-2xl"
-                    onClick={() => sessionStore.openNewSessionModal("local")}
-                  >
-                    <FiPlus size={18} class="mr-2" />
-                    Create Session
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    class="text-base-content/50 hover:text-base-content"
-                    onClick={() => setShowSetupGuide(true)}
-                  >
-                    <HelpCircle size={16} class="mr-1.5" />
-                    Setup Guide
-                  </Button>
-                </div>
-                {/* Features */}
-                <div class="grid grid-cols-3 gap-4 mt-12 text-left px-4">
-                  <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
-                    <div class="text-xl mb-1.5 text-center">🤖</div>
-                    <div class="text-xs font-bold text-center">AI Agents</div>
-                    <div class="text-[10px] opacity-50 text-center">
-                      Claude, Codex & more
-                    </div>
+              <div class="flex min-h-full items-start justify-center p-6 pt-24 pb-10 sm:items-center sm:p-8">
+                <div class="text-center max-w-lg w-full">
+                  {/* Logo */}
+                  <div class="w-20 h-20 mx-auto mb-6 rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/30 bg-base-200">
+                    <img
+                      src="/clawdpilot-icon.svg"
+                      alt="ClawdPilot logo"
+                      class="h-20 w-20 rounded-2xl object-cover"
+                    />
                   </div>
-                  <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
-                    <div class="text-xl mb-1.5 text-center">🔒</div>
-                    <div class="text-xs font-bold text-center">P2P Secure</div>
-                    <div class="text-[10px] opacity-50 text-center">
-                      End-to-end encrypted
-                    </div>
+                  <h2 class="text-3xl font-bold mb-3 bg-gradient-to-r from-base-content to-base-content/70 bg-clip-text text-transparent">
+                    Welcome to ClawdPilot
+                  </h2>
+                  <p class="text-base-content/60 mb-8 max-w-xs mx-auto leading-relaxed">
+                    Manage multiple AI agent sessions in one place. Create a new
+                    session to get started.
+                  </p>
+                  <div class="flex flex-col items-center justify-center gap-3">
+                    <Button
+                      variant="default"
+                      size="lg"
+                      class="px-8 h-12 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-content shadow-xl shadow-primary/20 rounded-2xl"
+                      onClick={() => sessionStore.openNewSessionModal("local")}
+                    >
+                      <FiPlus size={18} class="mr-2" />
+                      Create Session
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      class="text-base-content/50 hover:text-base-content"
+                      onClick={() => setShowSetupGuide(true)}
+                    >
+                      <HelpCircle size={16} class="mr-1.5" />
+                      Setup Guide
+                    </Button>
                   </div>
-                  <div class="p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
-                    <div class="text-xl mb-1.5 text-center">💬</div>
-                    <div class="text-xs font-bold text-center">Agent</div>
-                    <div class="text-[10px] opacity-50 text-center">
-                      Real-time sharing
+                  {/* Features */}
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-12 text-left px-4 w-full">
+                    <div class="flex items-center gap-3 sm:block p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
+                      <div class="text-xl shrink-0 sm:mb-1.5 text-center">🤖</div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold text-left sm:text-center">
+                          AI Agents
+                        </div>
+                        <div class="text-[10px] opacity-50 text-left sm:text-center">
+                          Claude, Codex & more
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 sm:block p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
+                      <div class="text-xl shrink-0 sm:mb-1.5 text-center">🔒</div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold text-left sm:text-center">
+                          P2P Secure
+                        </div>
+                        <div class="text-[10px] opacity-50 text-left sm:text-center">
+                          End-to-end encrypted
+                        </div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-3 sm:block p-4 rounded-2xl bg-base-200 border border-base-content/5 shadow-sm">
+                      <div class="text-xl shrink-0 sm:mb-1.5 text-center">💬</div>
+                      <div class="min-w-0">
+                        <div class="text-xs font-bold text-left sm:text-center">
+                          Agent
+                        </div>
+                        <div class="text-[10px] opacity-50 text-left sm:text-center">
+                          Real-time sharing
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -281,6 +295,7 @@ export const AppLayout: Component = () => {
                   agentType={session().agentType}
                   projectPath={session().projectPath}
                   sessionMode={session().mode}
+                  sidebarOpen={sidebarOpen()}
                   onSendMessage={handleSendMessage}
                   onToggleSidebar={() => setSidebarOpen(true)}
                   rightPanelView={rightPanelView()}
