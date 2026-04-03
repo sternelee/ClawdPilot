@@ -12,7 +12,11 @@ import { createStore, produce } from "solid-js/store";
 import { invoke } from "@tauri-apps/api/core";
 import { notificationStore } from "./notificationStore";
 import { sessionEventRouter } from "./sessionEventRouter";
-import { getLastTicket, saveTicket } from "../utils/localStorage";
+import {
+  getLastTicket,
+  saveProjectPath,
+  saveTicket,
+} from "../utils/localStorage";
 
 // ============================================================================
 // Types
@@ -500,6 +504,8 @@ export const createSessionStore = () => {
         mcpServers,
       });
 
+      saveProjectPath(state.newSessionPath);
+
       notificationStore.success(
         `Spawn request sent for ${state.newSessionAgent} on remote host`,
         "Spawn Session",
@@ -587,6 +593,8 @@ export const createSessionStore = () => {
         extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
         mcpServers,
       });
+
+      saveProjectPath(state.newSessionPath);
 
       const newSession: AgentSessionMetadata = {
         sessionId,

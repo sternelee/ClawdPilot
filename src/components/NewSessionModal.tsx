@@ -15,6 +15,7 @@ import {
   onCleanup,
   onMount,
 } from "solid-js";
+import { getProjectPathHistory } from "../utils/localStorage";
 import { FiPlus, FiHome, FiCloud, FiDownload } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -57,6 +58,7 @@ interface RemoteConnectionOption {
 export const NewSessionModal: Component = () => {
   const [dirEntries, setDirEntries] = createSignal<DirEntry[]>([]);
   const [rawDirEntries, setRawDirEntries] = createSignal<DirEntry[]>([]);
+  const [pathHistory, setPathHistory] = createSignal<string[]>([]);
   const [listedDirectory, setListedDirectory] = createSignal<string>("");
   const [currentRequestId, setCurrentRequestId] = createSignal<string | null>(
     null,
@@ -230,6 +232,26 @@ export const NewSessionModal: Component = () => {
     return connections;
   });
 
+  const pathComboboxItems = createMemo(() => {
+    const query = getPathQueryParts(sessionStore.state.newSessionPath);
+    const directoryItems = dirEntries().map((e) => {
+      const basePath = query?.dirToList || "";
+      return {
+        value: basePath + e.name,
+        label: e.name,
+      };
+    });
+
+    if (directoryItems.length > 0) {
+      return directoryItems;
+    }
+
+    return pathHistory().map((path) => ({
+      value: path,
+      label: path,
+    }));
+  });
+
   const isConnectingToNew = () =>
     sessionStore.state.newSessionMode === "remote" &&
     !sessionStore.state.targetControlSessionId;
@@ -256,6 +278,11 @@ export const NewSessionModal: Component = () => {
         sessionStore.setTargetControlSessionId(connections[0].controlSessionId);
       }
     }
+  });
+
+  createEffect(() => {
+    if (!sessionStore.state.isNewSessionModalOpen) return;
+    setPathHistory(getProjectPathHistory());
   });
 
   const agentArgsConfig = createMemo(() => {
@@ -629,6 +656,9 @@ export const NewSessionModal: Component = () => {
                 onChange={(value) => {
                   sessionStore.setNewSessionPath(value);
                 }}
+                onFocus={() => {
+                  setPathHistory(getProjectPathHistory());
+                }}
                 onInputChange={(value) => {
                   sessionStore.setNewSessionPath(value);
                   if (value.includes("/")) {
@@ -639,16 +669,7 @@ export const NewSessionModal: Component = () => {
                     setListedDirectory("");
                   }
                 }}
-                items={dirEntries().map((e) => {
-                  const query = getPathQueryParts(
-                    sessionStore.state.newSessionPath,
-                  );
-                  const basePath = query?.dirToList || "";
-                  return {
-                    value: basePath + e.name,
-                    label: e.name,
-                  };
-                })}
+                items={pathComboboxItems()}
                 placeholder="Project path"
                 class="font-mono text-sm"
               />

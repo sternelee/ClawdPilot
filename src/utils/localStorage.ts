@@ -4,7 +4,9 @@
 
 const STORAGE_KEY_LAST_TICKET = "clawdchat_last_ticket";
 const STORAGE_KEY_TICKET_HISTORY = "clawdchat_ticket_history";
-const MAX_HISTORY_SIZE = 3;
+const STORAGE_KEY_PROJECT_PATH_HISTORY = "clawdchat_project_path_history";
+const MAX_TICKET_HISTORY_SIZE = 3;
+const MAX_PROJECT_PATH_HISTORY_SIZE = 10;
 
 /**
  * Save a ticket to localStorage
@@ -14,12 +16,12 @@ export function saveTicket(ticket: string): void {
     // Save current ticket
     localStorage.setItem(STORAGE_KEY_LAST_TICKET, ticket);
 
-    // Update history (keep last MAX_HISTORY_SIZE unique tickets)
+    // Update history (keep last MAX_TICKET_HISTORY_SIZE unique tickets)
     const history = getTicketHistory();
     const updatedHistory = [
       ticket,
       ...history.filter((t) => t !== ticket),
-    ].slice(0, MAX_HISTORY_SIZE);
+    ].slice(0, MAX_TICKET_HISTORY_SIZE);
     localStorage.setItem(
       STORAGE_KEY_TICKET_HISTORY,
       JSON.stringify(updatedHistory),
@@ -58,6 +60,47 @@ export function getTicketHistory(): string[] {
       : [];
   } catch (error) {
     console.warn("Failed to get ticket history from localStorage:", error);
+    return [];
+  }
+}
+
+/**
+ * Save a project path to localStorage history
+ */
+export function saveProjectPath(path: string): void {
+  const trimmed = path.trim();
+  if (!trimmed) return;
+
+  try {
+    const history = getProjectPathHistory();
+    const updatedHistory = [
+      trimmed,
+      ...history.filter((item) => item !== trimmed),
+    ].slice(0, MAX_PROJECT_PATH_HISTORY_SIZE);
+
+    localStorage.setItem(
+      STORAGE_KEY_PROJECT_PATH_HISTORY,
+      JSON.stringify(updatedHistory),
+    );
+  } catch (error) {
+    console.warn("Failed to save project path to localStorage:", error);
+  }
+}
+
+/**
+ * Get project path history from localStorage
+ */
+export function getProjectPathHistory(): string[] {
+  try {
+    const historyJson = localStorage.getItem(STORAGE_KEY_PROJECT_PATH_HISTORY);
+    if (!historyJson) return [];
+
+    const history = JSON.parse(historyJson);
+    return Array.isArray(history)
+      ? history.filter((path) => typeof path === "string" && path.trim())
+      : [];
+  } catch (error) {
+    console.warn("Failed to get project path history from localStorage:", error);
     return [];
   }
 }

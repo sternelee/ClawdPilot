@@ -17,6 +17,7 @@ type LegacyComboboxProps = {
   value?: string;
   onChange?: (value: string) => void;
   onInputChange?: (value: string) => void;
+  onFocus?: () => void;
   items?: ComboboxItem[];
   placeholder?: string;
   class?: string;
@@ -28,6 +29,7 @@ const LegacyCombobox: Component<LegacyComboboxProps> = (props) => {
     "value",
     "onChange",
     "onInputChange",
+    "onFocus",
     "items",
     "placeholder",
   ]);
@@ -101,6 +103,7 @@ const LegacyCombobox: Component<LegacyComboboxProps> = (props) => {
           placeholder={local.placeholder}
           onInput={(e) => local.onChange?.(e.currentTarget.value)}
           onFocus={() => {
+            local.onFocus?.();
             setIsFocused(true);
             const input = local.value || "";
             if ((local.items?.length || 0) > 0 && !hasExactOptionMatch(input)) {

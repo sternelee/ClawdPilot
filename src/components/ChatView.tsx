@@ -2124,7 +2124,7 @@ export function ChatView(props: ChatViewProps) {
             <Show
               when={isActive()}
               fallback={
-                <div class="alert alert-warning m-4">
+                <div class="alert alert-warning m-4 mb-8">
                   <FiAlertTriangle size={20} />
                   <span class="text-sm">
                     Session inactive. Connection might be lost.
