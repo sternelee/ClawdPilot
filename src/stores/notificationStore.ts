@@ -1,269 +1,75 @@
 /**
- * Notification Store
- *
- * Manages P2P push notifications including:
- * - Notification queue
- * - Display state
- * - Auto-dismiss behavior
+ * Notification Store (solid-sonner adapter)
  */
 
-import { createStore, produce } from 'solid-js/store'
+import { toast } from "solid-sonner";
 
-// ============================================================================
-// Types
-// ============================================================================
+const toSonnerDuration = (duration: number): number => {
+  if (duration === 0) return Number.POSITIVE_INFINITY;
+  return duration;
+};
 
-export type NotificationType = 'info' | 'success' | 'warning' | 'error'
-export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent'
+const notify = (
+  type: "info" | "success" | "warning" | "error",
+  message: string,
+  title: string,
+  duration: number,
+): string => {
+  const baseClass =
+    "alert bg-base-100 text-base-content border shadow-lg rounded-xl px-3 py-2 pr-10";
+  const typeClass =
+    type === "success"
+      ? "border-success/45"
+      : type === "error"
+        ? "border-error/45"
+        : type === "warning"
+          ? "border-warning/45"
+          : "border-info/45";
 
-export interface Notification {
-  id: string
-  type: NotificationType
-  priority: NotificationPriority
-  title: string
-  message: string
-  timestamp: number
-  read: boolean
-  dismissed: boolean
-  duration?: number // Auto-dismiss duration in ms (0 = no auto-dismiss)
-  actions?: NotificationAction[]
-  metadata?: Record<string, unknown>
-}
+  const options = {
+    description: message,
+    duration: toSonnerDuration(duration),
+    unstyled: true,
+    class: `${baseClass} ${typeClass}`,
+    classes: {
+      title: "font-semibold text-sm leading-tight",
+      description: "text-xs opacity-80 leading-relaxed",
+      closeButton:
+        "btn btn-ghost btn-xs btn-circle bg-base-200 text-base-content/75 border border-base-content/15",
+    },
+  };
 
-export interface NotificationAction {
-  label: string
-  action: () => void
-  primary?: boolean
-}
+  const id =
+    type === "success"
+      ? toast.success(title, options)
+      : type === "warning"
+        ? toast.warning(title, options)
+        : type === "error"
+          ? toast.error(title, options)
+          : toast.info(title, options);
 
-// ============================================================================
-// Store
-// ============================================================================
-
-interface NotificationState {
-  notifications: Notification[]
-  visible: boolean
-  queuePosition: number
-  maxVisible: number
-}
-
-const initialState: NotificationState = {
-  notifications: [],
-  visible: false,
-  queuePosition: 0,
-  maxVisible: 3,
-}
+  return String(id);
+};
 
 export const createNotificationStore = () => {
-  const [state, setState] = createStore<NotificationState>(initialState)
+  const info = (message: string, title?: string, duration = 5000) =>
+    notify("info", message, title ?? "Info", duration);
 
-  // ========================================================================
-  // Add Notifications
-  // ========================================================================
+  const success = (message: string, title?: string, duration = 3000) =>
+    notify("success", message, title ?? "Success", duration);
 
-  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read' | 'dismissed'>) => {
-    const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    const newNotification: Notification = {
-      ...notification,
-      id,
-      timestamp: Date.now(),
-      read: false,
-      dismissed: false,
-      duration: notification.duration ?? (notification.priority === 'urgent' ? 0 : 5000),
-    }
+  const warning = (message: string, title?: string, duration = 5000) =>
+    notify("warning", message, title ?? "Warning", duration);
 
-    setState(
-      produce((s: NotificationState) => {
-        s.notifications.unshift(newNotification)
-        s.visible = true
-      }),
-    )
-
-    // Auto-dismiss if duration is set
-    if (newNotification.duration && newNotification.duration > 0) {
-      setTimeout(() => {
-        dismissNotification(id)
-      }, newNotification.duration)
-    }
-
-    return id
-  }
-
-  // Convenience methods for common notification types
-  const info = (message: string, title?: string, duration?: number) => {
-    return addNotification({
-      type: 'info',
-      priority: 'normal',
-      title: title ?? 'Info',
-      message,
-      duration,
-    })
-  }
-
-  const success = (message: string, title?: string, duration?: number) => {
-    return addNotification({
-      type: 'success',
-      priority: 'normal',
-      title: title ?? 'Success',
-      message,
-      duration: duration ?? 3000,
-    })
-  }
-
-  const warning = (message: string, title?: string, duration?: number) => {
-    return addNotification({
-      type: 'warning',
-      priority: 'high',
-      title: title ?? 'Warning',
-      message,
-      duration,
-    })
-  }
-
-  const error = (message: string, title?: string, duration?: number) => {
-    return addNotification({
-      type: 'error',
-      priority: 'urgent',
-      title: title ?? 'Error',
-      message,
-      duration: duration ?? 0,
-    })
-  }
-
-  // ========================================================================
-  // Manage Notifications
-  // ========================================================================
-
-  const dismissNotification = (id: string) => {
-    setState(
-      produce((s: NotificationState) => {
-        const notif = s.notifications.find((n) => n.id === id)
-        if (notif) {
-          notif.dismissed = true
-        }
-      }),
-    )
-
-    // Remove from list after animation
-    setTimeout(() => {
-      setState(
-        produce((s: NotificationState) => {
-          s.notifications = s.notifications.filter((n) => n.id !== id)
-          s.visible = s.notifications.length > 0
-        }),
-      )
-    }, 300)
-  }
-
-  const dismissAll = () => {
-    setState(
-      produce((s: NotificationState) => {
-        s.notifications.forEach((n) => (n.dismissed = true))
-      }),
-    )
-
-    setTimeout(() => {
-      setState(
-        produce((s: NotificationState) => {
-          s.notifications = []
-          s.visible = false
-        }),
-      )
-    }, 300)
-  }
-
-  const markAsRead = (id: string) => {
-    setState(
-      produce((s: NotificationState) => {
-        const notif = s.notifications.find((n) => n.id === id)
-        if (notif) {
-          notif.read = true
-        }
-      }),
-    )
-  }
-
-  const markAllAsRead = () => {
-    setState(
-      produce((s: NotificationState) => {
-        s.notifications.forEach((n) => (n.read = true))
-      }),
-    )
-  }
-
-  const removeNotification = (id: string) => {
-    setState(
-      produce((s: NotificationState) => {
-        s.notifications = s.notifications.filter((n) => n.id !== id)
-        s.visible = s.notifications.length > 0
-      }),
-    )
-  }
-
-  const clear = () => {
-    setState({
-      notifications: [],
-      visible: false,
-      queuePosition: 0,
-    })
-  }
-
-  // ========================================================================
-  // Actions
-  // ========================================================================
-
-  const executeAction = (id: string, actionIndex: number) => {
-    const notif = state.notifications.find((n) => n.id === id)
-    if (notif?.actions?.[actionIndex]) {
-      notif.actions[actionIndex].action()
-      dismissNotification(id)
-    }
-  }
-
-  // ========================================================================
-  // Derived State
-  // ========================================================================
-
-  const getVisibleNotifications = (): Notification[] => {
-    return state.notifications.filter((n) => !n.dismissed).slice(0, state.maxVisible)
-  }
-
-  const getUnreadCount = (): number => {
-    return state.notifications.filter((n) => !n.read && !n.dismissed).length
-  }
-
-  const getByPriority = (priority: NotificationPriority): Notification[] => {
-    return state.notifications.filter((n) => n.priority === priority && !n.dismissed)
-  }
+  const error = (message: string, title?: string, duration = 0) =>
+    notify("error", message, title ?? "Error", duration);
 
   return {
-    // State
-    state,
-
-    // Add
-    addNotification,
     info,
     success,
     warning,
     error,
+  };
+};
 
-    // Manage
-    dismissNotification,
-    dismissAll,
-    markAsRead,
-    markAllAsRead,
-    removeNotification,
-    clear,
-
-    // Actions
-    executeAction,
-
-    // Derived
-    getVisibleNotifications,
-    getUnreadCount,
-    getByPriority,
-  }
-}
-
-// Global store instance
-export const notificationStore = createNotificationStore()
+export const notificationStore = createNotificationStore();

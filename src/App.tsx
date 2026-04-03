@@ -14,7 +14,6 @@ import { type as osType } from "@tauri-apps/plugin-os";
 import { AppLayout } from "./components/AppLayout";
 import { SettingsModal } from "./components/SettingsModal";
 import { NewSessionModal } from "./components/NewSessionModal";
-import { NotificationDisplay } from "./components/NotificationDisplay";
 
 // Stores
 import { sessionStore } from "./stores/sessionStore";
@@ -209,16 +208,8 @@ export default function App() {
       {/* New Session Modal */}
       <NewSessionModal />
 
-      {/* Notification Display */}
-      <NotificationDisplay position="top-right" />
-
       {/* Toaster for solid-sonner */}
-      <Toaster
-        richColors
-        position="top-right"
-        closeButton
-        class="top-2 sm:top-1"
-      />
+      <Toaster position="top-right" closeButton class="top-2 sm:top-1" />
     </>
   );
 }

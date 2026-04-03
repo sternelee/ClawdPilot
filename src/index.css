@@ -939,15 +939,15 @@ textarea:focus {
 @media (max-width: 640px) {
   [data-sonner-toaster] {
     --sonner-safe-top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
-    --sonner-safe-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
     left: 0.5rem !important;
     right: 0.5rem !important;
     width: auto !important;
     top: var(--sonner-safe-top) !important;
-    bottom: var(--sonner-safe-bottom) !important;
+    bottom: auto !important;
+    height: auto !important;
+    max-height: none !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
-    max-height: calc(100dvh - var(--sonner-safe-top) - var(--sonner-safe-bottom)) !important;
   }
 
   [data-sonner-toaster] [data-sonner-toast] {
@@ -987,7 +987,21 @@ textarea:focus {
 }
 
 [data-sonner-toaster] {
+  list-style: none !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
   z-index: 2147483647 !important;
+}
+
+[data-sonner-toaster] {
+  list-style: none !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  z-index: 2147483647 !important;
+}
+
+[data-sonner-toaster] [data-sonner-toast] {
+  font-family: inherit !important;
 }
 
 /* Enhanced custom animations */
