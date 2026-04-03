@@ -415,7 +415,7 @@ jobs:
       - name: Upload to public mirror repository
         uses: softprops/action-gh-release@v2
         with:
-          repository: sternelee/clawdpilot-releases
+          repository: sternelee/clawdpilot
           token: ${{ secrets.PUBLIC_REPO_PAT }}
           tag_name: ${{ github.ref_name }}
           files: |
