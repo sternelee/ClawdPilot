@@ -332,7 +332,7 @@ export const AppLayout: Component = () => {
                       closeRightPanel();
                     }
                   }}
-                  class={`fixed bottom-0 left-0 right-0 z-[50] h-[min(86dvh,42rem)] rounded-t-3xl border-t border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
+                  class={`fixed bottom-0 left-0 right-0 z-[50] h-[min(86dvh,42rem)] sm:h-full rounded-t-3xl border-t border-base-content/10 bg-base-100 flex flex-col overflow-hidden shadow-2xl
                     pt-safe pb-safe sm:top-0 sm:bottom-0 sm:left-auto sm:right-0 sm:max-h-none sm:w-[28rem] sm:rounded-none sm:border-l sm:border-t-0 sm:pt-0 sm:pb-0 md:w-[340px] lg:w-[360px]
                     transform transition-transform duration-300 ease-in-out
                     ${rightPanelView() !== "none" ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-y-0 sm:translate-x-full"}

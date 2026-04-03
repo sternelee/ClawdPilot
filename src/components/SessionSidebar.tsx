@@ -709,6 +709,8 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     session: AgentSessionMetadata,
     entry: AgentHistoryEntry,
   ) => {
+    let targetSessionId = session.sessionId;
+
     try {
       sessionStore.setHistoryLoading(true);
       const projectPath =
@@ -728,6 +730,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           targetSessionId: session.sessionId,
         });
 
+        targetSessionId = sessionId;
         sessionStore.updateSession(sessionId, {
           projectPath,
           currentDir: projectPath,
@@ -763,6 +766,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         throw new Error("Remote session without control session");
       }
 
+      sessionEventRouter.resetStreamingState(targetSessionId);
       notificationStore.success(
         t("sidebar.historyLoadedSuccess"),
         t("sidebar.historyLoadedTitle"),

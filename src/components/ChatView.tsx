@@ -1155,6 +1155,7 @@ export function ChatView(props: ChatViewProps) {
         default:
           console.log("[ChatView] Unknown event type:", eventType, parsed);
       }
+
     };
 
     // Subscribe to session events via centralized router.
@@ -1193,6 +1194,15 @@ export function ChatView(props: ChatViewProps) {
         const routerState = sessionEventRouter.getStreamingState(sid);
         setIsStreaming(routerState.isStreaming);
       }
+    });
+
+    // Re-sync streaming state after history load finishes
+    createEffect(() => {
+      const sid = props.sessionId;
+      const historyLoading = sessionStore.state.isHistoryLoading;
+      if (!sid || historyLoading) return;
+      const routerState = sessionEventRouter.getStreamingState(sid);
+      setIsStreaming(routerState.isStreaming);
     });
 
     createEffect(() => {

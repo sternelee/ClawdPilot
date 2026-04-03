@@ -383,6 +383,17 @@ class SessionEventRouter {
   }
 
   /**
+   * Force reset streaming state for a session
+   */
+  resetStreamingState(sessionId: string): void {
+    this.streamingStates.set(sessionId, {
+      isStreaming: false,
+      turnId: null,
+      startedAt: null,
+    });
+  }
+
+  /**
    * Check if any session is streaming
    */
   hasActiveStreaming(): boolean {
