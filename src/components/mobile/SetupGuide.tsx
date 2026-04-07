@@ -30,7 +30,10 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
     await writeText(text);
     setCopiedIndex(index);
     HapticFeedback.success();
-    notificationStore.success(t("setupGuide.copySuccess"), t("setupGuide.copySuccessTitle"));
+    notificationStore.success(
+      t("setupGuide.copySuccess"),
+      t("setupGuide.copySuccessTitle"),
+    );
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
@@ -65,7 +68,9 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
           </h3>
           <div class="flex items-center justify-between gap-1">
             <div class="flex-1 bg-base-100 rounded-xl p-3 flex flex-col items-center border border-base-content/10 shadow-sm">
-              <span class="text-primary font-bold text-[10px]">{t("setupGuide.step1.mobile")}</span>
+              <span class="text-primary font-bold text-[10px]">
+                {t("setupGuide.step1.mobile")}
+              </span>
             </div>
             <ArrowRight size={14} class="text-base-content/20" />
             <div class="flex-[1.2] bg-primary rounded-xl p-3 flex flex-col items-center shadow-md">
@@ -203,7 +208,9 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
           </Button>
         </div>
         <div class="flex-1 justify-center">
-          <h1 class="text-lg font-bold tracking-tight">{t("setupGuide.title")}</h1>
+          <h1 class="text-lg font-bold tracking-tight">
+            {t("setupGuide.title")}
+          </h1>
         </div>
         <div class="flex-none">
           <button
@@ -277,7 +284,9 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
           }}
         >
           <span>
-            {currentPage() === pages().length - 1 ? t("setupGuide.start") : t("setupGuide.continue")}
+            {currentPage() === pages().length - 1
+              ? t("setupGuide.start")
+              : t("setupGuide.continue")}
           </span>
           <ArrowRight size={16} class="ml-1" />
         </Button>
