@@ -6,7 +6,7 @@
  */
 
 import { For, Show, createEffect, createSignal, on, onCleanup } from "solid-js";
-import { FiAlertTriangle, FiRefreshCw } from "solid-icons/fi";
+import { FiAlertTriangle, FiRefreshCw, FiGlobe } from "solid-icons/fi";
 import { invoke } from "@tauri-apps/api/core";
 import { Virtualizer } from "virtua/solid";
 import { chatStore } from "../stores/chatStore";
@@ -29,6 +29,7 @@ import { PermissionMessage, UserQuestionMessage } from "./ui/PermissionCard";
 import { MessageBubble } from "./ui/MessageBubble";
 import { ChatInput } from "./ui/ChatInput";
 import { LanguageSwitcher, ThemeSwitcher } from "./ui/ThemeSwitcher";
+import { TcpForwardingModal } from "./TcpForwardingModal";
 
 // ============================================================================
 // Helper Functions
@@ -334,6 +335,7 @@ export function ChatView(props: ChatViewProps) {
     // Use props if provided, otherwise use internal state
     const [internalRightPanelView, setInternalRightPanelView] =
       createSignal<RightPanelView>("none");
+    const [tcpModalOpen, setTcpModalOpen] = createSignal(false);
     const rightPanelView = () =>
       props.rightPanelView ?? internalRightPanelView();
     const toolMessageIds = new Map<string, string>();
@@ -1936,6 +1938,16 @@ export function ChatView(props: ChatViewProps) {
               </div>
 
               <div class="flex items-center gap-0.5 sm:gap-1 shrink-0">
+                <Show when={props.sessionMode === "remote"}>
+                  <button
+                    type="button"
+                    class="btn btn-ghost btn-xs sm:btn-sm h-8 w-8 sm:h-10 sm:w-10 min-h-8 sm:min-h-10 rounded-lg sm:rounded-xl text-base-content/60 hover:text-primary active:scale-95 transition-all"
+                    onClick={() => setTcpModalOpen(true)}
+                    title="TCP Forwarding"
+                  >
+                    <FiGlobe class="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                </Show>
                 <LanguageSwitcher />
                 <ThemeSwitcher />
               </div>
@@ -2198,6 +2210,13 @@ export function ChatView(props: ChatViewProps) {
               />
             </Show>
           </div>
+          <Show when={tcpModalOpen()}>
+            <TcpForwardingModal
+              sessionId={session()?.controlSessionId || props.sessionId}
+              isOpen={tcpModalOpen()}
+              onClose={() => setTcpModalOpen(false)}
+            />
+          </Show>
         </div>
       </div>
     );

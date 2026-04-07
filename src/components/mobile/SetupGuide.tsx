@@ -116,8 +116,8 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
                 )}
               </button>
             </div>
-            <pre data-prefix="$" class="pr-10">
-              <code>
+            <pre class="px-4">
+              <code class="w-full wrap-break-word whitespace-pre-line">
                 curl -fsSL
                 https://raw.githubusercontent.com/sternelee/ClawdPilot/main/install.sh
                 | sh
@@ -151,12 +151,10 @@ export const SetupGuide: Component<SetupGuideProps> = (props) => {
               </button>
             </div>
             <pre data-prefix="$">
-              <code class="font-bold text-success-content">
-                clawdpilot --daemon
-              </code>
+              <code class="font-bold">clawdpilot --daemon</code>
             </pre>
             <div class="divider divider-neutral m-0 h-1 opacity-10"></div>
-            <pre class="text-warning-content/85">
+            <pre>
               <code>iroh-ticket:bafkp7...</code>
             </pre>
           </div>
