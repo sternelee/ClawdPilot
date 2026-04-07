@@ -16,6 +16,10 @@
 - Node.js 20+
 - pnpm 10+
 
+## iOS 开发
+
+详见 [iOS 构建与安装指南](docs/IOS_BUILD.md)。
+
 ## 本地开发
 
 ```bash
