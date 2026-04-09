@@ -3221,7 +3221,7 @@ async fn install_acp_package_local(agent_type: String) -> Result<String, String>
     let acp_package = match agent_type.as_str() {
         "codex" => "@zed-industries/codex-acp",
         "opencode" => "opencode-ai",
-        "claude" => "@zed-industries/claude-agent-acp",
+        "claude" => "@agentclientprotocol/claude-agent-acp",
         "gemini" => "@google/gemini-cli",
         "cursor" => {
             return Err("Cursor does not support ACP auto-install in ClawdPilot".to_string());
