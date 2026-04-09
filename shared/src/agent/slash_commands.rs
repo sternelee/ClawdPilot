@@ -1,46 +1,46 @@
-//! 内置斜杠命令处理器
+//! Built-in slash command processor
 //!
-//! 此模块将 ClawdPilot 内置命令转换为 ACP prompt，
-//! 通过 Claude Code 的能力来实现这些功能。
+//! This module converts ClawdPilot built-in commands to ACP prompts,
+//! leveraging Claude Code's capabilities to implement these features.
 
 use std::path::Path;
 
 use crate::message_protocol::BuiltinCommand;
 
-/// 内置命令处理结果
+/// Built-in command processing result
 #[derive(Debug, Clone)]
 pub struct BuiltinCommandResult {
-    /// 转换后的 prompt 文本
+    /// Converted prompt text
     pub prompt: String,
-    /// 可选的系统提示（用于改变 agent 行为）
+    /// Optional system prompt (for changing agent behavior)
     pub system_prompt: Option<String>,
-    /// 是否需要特殊处理（如等待用户确认）
+    /// Whether special handling is required (e.g., waiting for user confirmation)
     pub requires_confirmation: bool,
 }
 
-/// 将内置命令转换为 ACP prompt
-pub fn process_builtin_command(cmd: &BuiltinCommand, working_dir: &Path) -> BuiltinCommandResult {
+/// Convert built-in commands to ACP prompts
+pub fn process_builtin_command(cmd: &BuiltinCommand, _working_dir: &Path) -> BuiltinCommandResult {
     match cmd {
         BuiltinCommand::Init { description } => {
             let prompt = format!(
-                r#"请帮我初始化这个项目。
+                r#"Please help me initialize this project.
 
 {}
 
-请：
-1. 分析项目结构和现有文件
-2. 识别技术栈和依赖
-3. 创建详细的开发计划和架构建议
-4. 如果有配置文件，检查是否需要更新"#,
+Please:
+1. Analyze project structure and existing files
+2. Identify technology stack and dependencies
+3. Create detailed development plan and architecture recommendations
+4. If there are config files, check if updates are needed"#,
                 description
                     .as_ref()
-                    .map(|d| format!("项目描述：{}\n", d))
+                    .map(|d| format!("Project description: {}\n", d))
                     .unwrap_or_default()
             );
             BuiltinCommandResult {
                 prompt,
                 system_prompt: Some(
-                    "你是一个项目初始化专家，擅长分析代码库并提供结构化的开发建议。"
+                    "You are a project initialization expert, skilled at analyzing codebases and providing structured development advice."
                         .to_string(),
                 ),
                 requires_confirmation: false,
@@ -50,35 +50,35 @@ pub fn process_builtin_command(cmd: &BuiltinCommand, working_dir: &Path) -> Buil
         BuiltinCommand::Review { target } => {
             let prompt = if let Some(t) = target {
                 format!(
-                    r#"请对以下目标进行代码审查：{}
+                    r#"Please conduct a code review for the following target: {}
 
-请检查：
-1. 代码质量和可读性
-2. 潜在的性能问题
-3. 安全漏洞
-4. 是否符合最佳实践
-5. 是否有改进建议
+Please check:
+1. Code quality and readability
+2. Potential performance issues
+3. Security vulnerabilities
+4. Compliance with best practices
+5. Improvement suggestions
 
-请提供具体的改进建议和代码示例。"#,
+Please provide specific improvement suggestions and code examples."#,
                     t
                 )
             } else {
-                r#"请审查当前工作目录中的所有更改（包括未提交的修改）。
+                r#"Please review all changes in the current working directory (including uncommitted modifications).
 
-请检查：
-1. 代码质量和可读性
-2. 潜在的性能问题
-3. 安全漏洞
-4. 是否符合最佳实践
-5. 是否有改进建议
+Please check:
+1. Code quality and readability
+2. Potential performance issues
+3. Security vulnerabilities
+4. Compliance with best practices
+5. Improvement suggestions
 
-请提供具体的改进建议和代码示例。"#
+Please provide specific improvement suggestions and code examples."#
                     .to_string()
             };
             BuiltinCommandResult {
                 prompt,
                 system_prompt: Some(
-                    "你是一个严格的代码审查专家，善于发现潜在问题并提供建设性反馈。"
+                    "You are a strict code review expert, adept at identifying potential issues and providing constructive feedback."
                         .to_string(),
                 ),
                 requires_confirmation: false,
@@ -89,33 +89,33 @@ pub fn process_builtin_command(cmd: &BuiltinCommand, working_dir: &Path) -> Buil
             if let Some(msg) = message {
                 BuiltinCommandResult {
                     prompt: format!(
-                        r#"请执行以下 git 操作：
-1. 运行 `git status` 查看当前更改
-2. 运行 `git add -A` 暂存所有更改
-3. 运行 `git commit -m "{}"` 提交更改
+                        r#"Please execute the following git operations:
+1. Run `git status` to view current changes
+2. Run `git add -A` to stage all changes
+3. Run `git commit -m "{}"` to commit changes
 
-完成后请告诉我提交结果。"#,
+Please tell me the commit result when done."#,
                         msg
                     ),
-                    system_prompt: Some("你是一个 git 操作助手。".to_string()),
+                    system_prompt: Some("You are a git operations assistant.".to_string()),
                     requires_confirmation: true,
                 }
             } else {
                 BuiltinCommandResult {
-                    prompt: r#"请帮我生成提交信息并创建 commit。
+                    prompt: r#"Please help me generate a commit message and create a commit.
 
-步骤：
-1. 运行 `git status` 和 `git diff --staged`（或 `git diff`）查看更改
-2. 根据更改内容生成符合 Conventional Commits 规范的提交信息
-3. 执行 `git add -A` 和 `git commit` 完成提交
+Steps:
+1. Run `git status` and `git diff --staged` (or `git diff`) to view changes
+2. Generate a commit message following Conventional Commits specification based on the changes
+3. Execute `git add -A` and `git commit` to complete the commit
 
-提交信息格式：<type>(<scope>): <description>
-type 可以是：feat, fix, docs, style, refactor, test, chore
+Commit message format: <type>(<scope>): <description>
+Type can be: feat, fix, docs, style, refactor, test, chore
 
-请先生成提交信息让我确认，然后再执行提交。"#
+Please generate the commit message for my confirmation first, then execute the commit."#
                         .to_string(),
                     system_prompt: Some(
-                        "你是一个 git 专家，擅长生成规范的提交信息。".to_string(),
+                        "You are a git expert, adept at generating standardized commit messages.".to_string(),
                     ),
                     requires_confirmation: true,
                 }
@@ -124,24 +124,24 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
 
         BuiltinCommand::Loop { task, iterations } => {
             let iter_desc = iterations
-                .map(|i| format!("最多 {} 次迭代", i))
-                .unwrap_or_else(|| "直到任务完成".to_string());
+                .map(|i| format!("up to {} iterations", i))
+                .unwrap_or_else(|| "until task completion".to_string());
 
             BuiltinCommandResult {
                 prompt: format!(
-                    r#"请循环执行以下任务（{}）：
+                    r#"Please execute the following task in a loop ({}):
 
-任务：{}
+Task: {}
 
-要求：
-1. 每次迭代后总结进展
-2. 检查是否已完成目标
-3. 如果未完成，继续下一次迭代
-4. 完成后报告总迭代次数和最终结果"#,
+Requirements:
+1. Summarize progress after each iteration
+2. Check if the goal has been achieved
+3. If not completed, continue to the next iteration
+4. Report total iteration count and final result when done"#,
                     iter_desc, task
                 ),
                 system_prompt: Some(
-                    "你是一个专注的执行助手，善于迭代完成任务并持续跟进。".to_string(),
+                    "You are a focused execution assistant, skilled at iteratively completing tasks and continuously following up.".to_string(),
                 ),
                 requires_confirmation: false,
             }
@@ -150,13 +150,13 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
         BuiltinCommand::AddDir { path } => {
             BuiltinCommandResult {
                 prompt: format!(
-                    r#"请阅读目录 {} 中的所有相关文件，并将其内容纳入我们的对话上下文中。
+                    r#"Please read all relevant files in directory {} and include their content in our conversation context.
 
-请：
-1. 列出目录结构
-2. 阅读关键文件（代码、配置、文档）
-3. 总结这个目录的主要功能和用途
-4. 在后续回答中参考这些文件内容"#,
+Please:
+1. List the directory structure
+2. Read key files (code, config, documentation)
+3. Summarize the main functionality and purpose of this directory
+4. Reference these file contents in subsequent responses"#,
                     path
                 ),
                 system_prompt: None,
@@ -168,22 +168,22 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
             if let Some(branch_name) = name {
                 BuiltinCommandResult {
                     prompt: format!(
-                        r#"请执行以下 git 分支操作：
-1. 运行 `git status` 检查当前状态
-2. 如果工作区干净，运行 `git checkout -b {}` 创建并切换到新分支
-3. 如果工作区有更改，先提交或暂存，然后创建分支
-4. 完成后告诉我当前所在分支"#,
+                        r#"Please execute the following git branch operations:
+1. Run `git status` to check current status
+2. If working directory is clean, run `git checkout -b {}` to create and switch to new branch
+3. If working directory has changes, stash or commit first, then create branch
+4. Tell me the current branch when done"#,
                         branch_name
                     ),
-                    system_prompt: Some("你是一个 git 分支管理助手。".to_string()),
+                    system_prompt: Some("You are a git branch management assistant.".to_string()),
                     requires_confirmation: true,
                 }
             } else {
                 BuiltinCommandResult {
-                    prompt: r#"请帮我查看分支情况：
-1. 运行 `git branch -a` 列出所有分支
-2. 运行 `git status` 查看当前状态
-3. 告诉我建议的操作（创建新分支、切换分支或保持当前分支）"#
+                    prompt: r#"Please help me check the branch situation:
+1. Run `git branch -a` to list all branches
+2. Run `git status` to view current status
+3. Tell me recommended actions (create new branch, switch branch, or stay on current branch)"#
                         .to_string(),
                     system_prompt: None,
                     requires_confirmation: false,
@@ -194,11 +194,11 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
         BuiltinCommand::Btw { message } => {
             BuiltinCommandResult {
                 prompt: format!(
-                    r#"顺便记录以下想法/上下文，请在后续回答中考虑：
+                    r#"By the way, record the following thought/context, please consider it in subsequent responses:
 
 💭 {}
 
-这可能会影响我们当前的讨论，请适当调整后续建议。"#,
+This may affect our current discussion, please adjust subsequent recommendations accordingly."#,
                     message
                 ),
                 system_prompt: None,
@@ -209,24 +209,24 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
         BuiltinCommand::Clear => BuiltinCommandResult {
             // Note: ACP does not support true context clearing
             // This just sends a hint to start a new topic
-            prompt: r#"让我们开始一个新的话题。请忽略之前的对话上下文，专注于接下来的讨论。
+            prompt: r#"Let's start a new topic. Please ignore previous conversation context and focus on the upcoming discussion.
 
-（提示：如需真正清空上下文，请创建新会话）"#             .to_string(),
+(Hint: To truly clear context, please create a new session)"#             .to_string(),
             system_prompt: None,
             requires_confirmation: false,
         },
 
         BuiltinCommand::Compact => {
             BuiltinCommandResult {
-                prompt: r#"请总结我们目前的对话内容，压缩成一个简洁的摘要：
+                prompt: r#"Please summarize our current conversation content into a concise summary:
 
-要求：
-1. 总结主要讨论点和决策
-2. 列出待办事项和下一步行动
-3. 保留关键代码片段和配置
-4. 丢弃冗余的中间思考过程
+Requirements:
+1. Summarize main discussion points and decisions
+2. List to-do items and next actions
+3. Keep key code snippets and configurations
+4. Discard redundant intermediate thinking processes
 
-这样我们可以用更清晰的上下文继续。"#.to_string(),
+So we can continue with a clearer context."#.to_string(),
                 system_prompt: None,
                 requires_confirmation: false,
             }
@@ -235,23 +235,23 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
         BuiltinCommand::Plan { description } => {
             BuiltinCommandResult {
                 prompt: format!(
-                    r#"请为以下任务创建一个结构化的执行计划：
+                    r#"Please create a structured execution plan for the following task:
 
-任务：{}
+Task: {}
 
-请提供：
-1. 目标澄清和理解
-2. 分步骤的详细计划（包含每个步骤的预计时间和依赖）
-3. 潜在风险和缓解措施
-4. 成功标准
-5. 使用 todo 格式输出可勾选的任务列表
+Please provide:
+1. Goal clarification and understanding
+2. Step-by-step detailed plan (including estimated time and dependencies for each step)
+3. Potential risks and mitigation measures
+4. Success criteria
+5. Output as a todo-style checkable task list
 
-格式示例：
-- [ ] 步骤1：描述"#,
+Format example:
+- [ ] Step 1: Description"#,
                     description
                 ),
                 system_prompt: Some(
-                    "你是一个项目规划专家，善于创建结构化的执行计划。".to_string(),
+                    "You are a project planning expert, skilled at creating structured execution plans.".to_string(),
                 ),
                 requires_confirmation: false,
             }
@@ -262,9 +262,9 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
             // Actual session rename should be handled by UI layer
             BuiltinCommandResult {
                 prompt: format!(
-                    r#"此会话已被重命名为："{}"
+                    r#"This session has been renamed to: "{}"
 
-请在后续回答中适当引用此名称。"#,
+Please appropriately reference this name in subsequent responses."#,
                     new_name
                 ),
                 system_prompt: None,
@@ -272,7 +272,7 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
             }
         }
 
-        // 其他命令不通过此处理器处理
+        // Other commands are not processed through this handler
         _ => BuiltinCommandResult {
             prompt: String::new(),
             system_prompt: None,
@@ -281,7 +281,7 @@ type 可以是：feat, fix, docs, style, refactor, test, chore
     }
 }
 
-/// 解析斜杠命令字符串为 BuiltinCommand
+/// Parse slash command string into BuiltinCommand
 pub fn parse_slash_command(input: &str) -> Option<BuiltinCommand> {
     let input = input.trim();
     if !input.starts_with('/') {
@@ -307,7 +307,7 @@ pub fn parse_slash_command(input: &str) -> Option<BuiltinCommand> {
             message: args.join(" ").trim().to_string().into(),
         }),
         "loop" => {
-            // 解析格式: /loop [n] <task>
+            // Parse format: /loop [n] <task>
             if args.is_empty() {
                 return None;
             }

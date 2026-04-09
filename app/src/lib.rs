@@ -39,85 +39,28 @@ use crate::tcp_forwarding::TcpForwardingManager;
 
 #[cfg(target_os = "android")]
 mod android_foreground {
-    use serde_json::json;
     use tauri::AppHandle;
 
     /// Update the Android foreground service notification with agent status
     pub fn update_agent_status(
-        app: &AppHandle,
-        session_id: &str,
-        agent_type: &str,
-        state: &str,
-        details: &str,
-        tool_name: &str,
-        message: &str,
+        _app: &AppHandle,
+        _session_id: &str,
+        _agent_type: &str,
+        _state: &str,
+        _details: &str,
+        _tool_name: &str,
+        _message: &str,
     ) {
-        use jni::signature::JavaType;
-        use jni::objects::JString;
-        use jni::signature::JavaType::Object;
-
-        let payload = json!({
-            "sessionId": session_id,
-            "agentType": agent_type,
-            "state": state,
-            "details": details,
-            "toolName": tool_name,
-            "message": message,
-        });
-
-        app.run_on_android_context(move |env, activity, _webview| {
-            let class = env.find_class("com/clawdpilot/dev/AgentForegroundService");
-            if let Err(e) = class {
-                tracing::warn!("Failed to find AgentForegroundService class: {}", e);
-                return;
-            }
-            let class = class.unwrap();
-
-            let payload_jstring = env.new_string(payload.to_string());
-            if let Err(e) = payload_jstring {
-                tracing::warn!("Failed to create payload string: {}", e);
-                return;
-            }
-            let payload_jstring = JString::from(payload_jstring.unwrap());
-
-            // Call AgentForegroundService.upsert(context, payloadJson)
-            let result = env.call_static_method(
-                &class,
-                "upsert",
-                "(Landroid/content/Context;Ljava/lang/String;)V",
-                &[
-                    (&activity).into(),
-                    (&payload_jstring).into(),
-                ],
-            );
-
-            if let Err(e) = result {
-                tracing::warn!("Failed to call AgentForegroundService.upsert: {}", e);
-            }
-        });
+        // TODO: Implement using proper Tauri 2 Android API
+        // The run_on_android_context method doesn't exist in Tauri 2
+        // Need to use tauri::platform::android or a custom plugin
+        tracing::debug!("Android foreground service update - stub implementation");
     }
 
     /// Stop the Android foreground service
-    pub fn stop_service(app: &AppHandle) {
-        app.run_on_android_context(move |env, activity, _webview| {
-            let class = env.find_class("com/clawdpilot/dev/AgentForegroundService");
-            if let Err(e) = class {
-                tracing::warn!("Failed to find AgentForegroundService class: {}", e);
-                return;
-            }
-            let class = class.unwrap();
-
-            let result = env.call_static_method(
-                &class,
-                "stop",
-                "(Landroid/content/Context;)V",
-                &[(&activity).into()],
-            );
-
-            if let Err(e) = result {
-                tracing::warn!("Failed to call AgentForegroundService.stop: {}", e);
-            }
-        });
+    pub fn stop_service(_app: &AppHandle) {
+        // TODO: Implement using proper Tauri 2 Android API
+        tracing::debug!("Android foreground service stop - stub implementation");
     }
 }
 
@@ -1060,40 +1003,40 @@ async fn connect_to_peer(
                                     {
                                         let (state, details, tool_name, message) = match &agent_msg.content {
                                             shared::message_protocol::AgentMessageContent::AgentResponse { content, .. } => {
-                                                ("responding", content.chars().take(30).collect::<String>(), "", "")
+                                                ("responding", content.chars().take(30).collect::<String>(), "".to_string(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::ToolCallUpdate { tool_name, status, .. } => {
-                                                ("tool_call", format!("{:?}", status), tool_name, "")
+                                                ("tool_call", format!("{:?}", status), tool_name.clone(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::TextDelta { thinking, .. } if *thinking => {
-                                                ("thinking", "Thinking...".to_string(), "", "")
+                                                ("thinking", "Thinking...".to_string(), "".to_string(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::TextDelta { .. } => {
-                                                ("responding", "Receiving...".to_string(), "", "")
+                                                ("responding", "Receiving...".to_string(), "".to_string(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::TurnStarted { .. } => {
-                                                ("thinking", "Starting...".to_string(), "", "")
+                                                ("thinking", "Starting...".to_string(), "".to_string(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::TurnCompleted { .. } => {
-                                                ("idle", "Complete".to_string(), "", "")
+                                                ("idle", "Complete".to_string(), "".to_string(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::TurnError { error } => {
-                                                ("error", error.chars().take(40).collect::<String>(), "", "")
+                                                ("error", error.chars().take(40).collect::<String>(), "".to_string(), "".to_string())
                                             }
                                             shared::message_protocol::AgentMessageContent::ApprovalRequest { tool_name, .. } => {
-                                                ("permission_requested", "Needs approval".to_string(), tool_name, "")
+                                                ("permission_requested", "Needs approval".to_string(), tool_name.clone(), "".to_string())
                                             }
-                                            _ => ("idle", "".to_string(), "", "")
+                                            _ => ("idle", "".to_string(), "".to_string(), "".to_string())
                                         };
 
                                         android_foreground::update_agent_status(
                                             &app_handle_clone,
                                             &agent_msg.session_id,
-                                            &agent_msg.agent_type.as_deref().unwrap_or("Agent"),
+                                            "Agent",
                                             state,
                                             &details,
-                                            tool_name,
-                                            message,
+                                            &tool_name,
+                                            &message,
                                         );
                                     }
 
@@ -2580,6 +2523,7 @@ async fn send_tcp_data(
 
 /// Parse and handle slash commands
 /// Returns (is_builtin, processed_prompt) where is_builtin indicates if this was recognized as a builtin
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn process_slash_command(command: &str) -> (bool, String) {
     use shared::agent::slash_commands::parse_slash_command;
 
@@ -2593,6 +2537,14 @@ fn process_slash_command(command: &str) -> (bool, String) {
 
     // Not a builtin, pass through as-is
     (false, command.to_string())
+}
+
+/// Parse and handle slash commands (mobile stub - always returns passthrough)
+/// Returns (is_builtin, processed_prompt) where is_builtin indicates if this was recognized as a builtin
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn process_slash_command(_command: &str) -> (bool, String) {
+    // Mobile builds don't have agent module, so just pass through
+    (false, _command.to_string())
 }
 
 /// Send a slash command to an AI agent session
