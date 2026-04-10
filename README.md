@@ -74,6 +74,13 @@ pnpm build
 # Desktop app
 pnpm tauri:build
 
+# iOS app (完整流程)
+./scripts/ios-deploy.sh
+
+# iOS app (分步构建)
+# - 查看详细指南: docs/iOS_BUILD_AND_INSTALL.md
+# - 快速参考: docs/iOS_QUICK_START.md
+
 # CLI release binary
 cargo build -p cli --release
 ```
