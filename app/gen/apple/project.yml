@@ -67,7 +67,7 @@ targets:
         ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
         SWIFT_VERSION: 5.0
         EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
-        OTHER_LDFLAGS[arch=arm64]: -Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibility56 -Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibilityConcurrency -Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibilityPacks
+        OTHER_LDFLAGS[arch=arm64]: -Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibility56 -Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibilityConcurrency -Wl,-U,__swift_FORCE_LOAD_$_swiftCompatibilityPacks -undefined dynamic_lookup
       groups: [app]
     dependencies:
       - framework: $(SRCROOT)/Externals/arm64/$(CONFIGURATION)/libapp.a
