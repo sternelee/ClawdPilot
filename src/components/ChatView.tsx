@@ -1876,7 +1876,7 @@ export function ChatView(props: ChatViewProps) {
           checked={rightPanelView() !== "none"}
           readOnly
         />
-        <div class="drawer-content flex h-full bg-base-100 relative overflow-hidden">
+        <div class="drawer-content flex h-dvh bg-base-100 relative overflow-hidden">
           <div class="flex flex-col h-full min-w-0 flex-1">
             {/* Header */}
             <div class="compact-mobile-controls z-20 sticky top-0 flex h-16 shrink-0 items-center justify-between border-b border-base-content/10 bg-base-100/80 px-4 sm:px-6 shadow-sm backdrop-blur-lg">
@@ -1938,7 +1938,7 @@ export function ChatView(props: ChatViewProps) {
             <div
               ref={setMessageScrollEl}
               onScroll={updateScrollState}
-              class="flex-1 overflow-y-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-36 sm:pb-10 overflow-x-hidden bg-base-100"
+              class="flex-1 overflow-y-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-10 overflow-x-hidden bg-base-100"
             >
               <Show
                 when={

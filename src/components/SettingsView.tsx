@@ -5,6 +5,7 @@
  */
 
 import { type Component, createSignal, Show } from "solid-js";
+import { cn } from "../lib/utils";
 import { settingsStore, t, FontSizeType } from "../stores/settingsStore";
 import { notificationStore } from "../stores/notificationStore";
 import { FiMoon, FiGlobe, FiPlay, FiInfo } from "solid-icons/fi";
@@ -29,14 +30,11 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
 
   const handleResetSettings = () => {
     settingsStore.resetToDefaults();
-    notificationStore.success(
-      "Settings reset to defaults",
-      "Reset Complete",
-    );
+    notificationStore.success("Settings reset to defaults", "Reset Complete");
   };
 
   return (
-    <div class={props.class}>
+    <div class={cn("flex flex-col min-h-0", props.class)}>
       {/* Page Header with Hamburger Menu */}
       <header class="compact-mobile-controls z-20 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-base-content/10 bg-base-100/80 px-4 py-3 backdrop-blur-lg md:px-6">
         <div class="flex items-center gap-3">
@@ -66,11 +64,12 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
         </div>
       </header>
 
-      <div class="flex flex-col gap-6 p-4 sm:p-6 max-w-2xl mx-auto">
-        {/* Description */}
-        <p class="text-sm opacity-60">
-          {t("settings.description") || "Customize your Irogen experience"}
-        </p>
+      <div class="flex-1 overflow-y-auto">
+        <div class="flex flex-col gap-6 p-4 sm:p-6 max-w-2xl mx-auto">
+          {/* Description */}
+          <p class="text-sm opacity-60">
+            {t("settings.description") || "Customize your Irogen experience"}
+          </p>
 
         {/* Appearance Section */}
         <div class="card bg-base-200 shadow">
@@ -174,6 +173,7 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
             {t("action.reset") || "Reset to Defaults"}
           </Button>
         </div>
+        </div>
       </div>
 
       {/* Setup Guide Modal */}
@@ -190,3 +190,4 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
 };
 
 export default SettingsView;
+

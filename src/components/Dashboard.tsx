@@ -675,19 +675,6 @@ const TopologyView: Component = () => {
             </For>
           </Show>
         </div>
-
-        {/* Setup Button */}
-        <div class="mt-6 flex justify-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            class="px-4 py-2 rounded text-[10px] font-label uppercase tracking-widest font-bold border border-base-content/20"
-            onClick={() => setShowSetupGuide(true)}
-          >
-            <FiBox size={14} class="mr-1" />
-            Setup Guide
-          </Button>
-        </div>
       </div>
     </div>
   );

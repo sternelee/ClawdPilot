@@ -304,7 +304,7 @@ export const AppLayout: Component = () => {
       </div>
 
       {/* Main Content */}
-      <div class="drawer-content flex flex-col min-h-0 bg-base-200">
+      <div class="drawer-content flex flex-col min-h-0 bg-base-200 h-dvh">
         {/* Keyboard Shortcuts Dialog */}
         <KeyboardShortcutsDialog
           open={shortcutsDialogOpen()}
