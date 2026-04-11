@@ -216,7 +216,7 @@ fn print_host_info(node_id: &str, ticket: &str) {
     // 在release模式下，只显示标题和ticket
     #[cfg(not(debug_assertions))]
     {
-        println!("🚀 ClawdChat Host Server");
+        println!("🚀 Irogen Host Server");
         println!();
         println!("🎫 Scan QR code or use ticket below:");
         println!();
@@ -231,7 +231,7 @@ fn print_host_info(node_id: &str, ticket: &str) {
     // 在debug模式下，显示完整信息
     #[cfg(debug_assertions)]
     {
-        println!("🚀 ClawdChat Host Server Started");
+        println!("🚀 Irogen Host Server Started");
         println!("🔑 Node ID: {}", node_id);
         println!();
 
@@ -243,7 +243,7 @@ fn print_host_info(node_id: &str, ticket: &str) {
         println!();
 
         println!("📱 App Connection Instructions:");
-        println!("   1. Open ClawdChat app on your mobile device");
+        println!("   1. Open the Irogen app on your mobile device");
         println!("   2. Tap the camera button to scan QR code");
         println!("   3. Or copy the ticket above and paste it in the app");
         println!();

@@ -1,7 +1,7 @@
 //! Message adapter for converting agent events to P2P messages
 #![allow(dead_code)]
 //!
-//! Provides utilities to convert AgentEvent to ClawdChat message protocol types
+//! Provides utilities to convert AgentEvent to Irogen message protocol types
 //! for transmission to remote P2P clients.
 
 use crate::message_protocol::{

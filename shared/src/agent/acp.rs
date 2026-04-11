@@ -1,7 +1,7 @@
 //! ACP-based streaming session implementation.
 //!
 //! This module hosts ACP client connections to external agent processes
-//! and adapts ACP updates into ClawdChat AgentEvent messages.
+//! and adapts ACP updates into Irogen AgentEvent messages.
 //!
 //! # ACP Protocol Overview
 //!
@@ -1012,7 +1012,7 @@ pub async fn list_agent_history(
                             )
                             .client_info(
                                 acp::Implementation::new("irogen-cli", env!("CARGO_PKG_VERSION"))
-                                    .title("ClawdChat CLI"),
+                                    .title("Irogen CLI"),
                             ),
                     ),
                 )

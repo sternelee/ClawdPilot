@@ -328,7 +328,7 @@ pub struct PermissionResponse {
     pub reason: Option<String>,
 }
 
-/// Convert AgentEvent to ClawdChat message protocol types
+/// Convert AgentEvent to Irogen message protocol types
 impl AgentEvent {
     /// Convert to AgentMessageContent for P2P transmission
     pub fn to_agent_message_content(

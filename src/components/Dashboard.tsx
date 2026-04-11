@@ -583,7 +583,7 @@ const TopologyView: Component = () => {
   };
 
   return (
-    <div class="flex min-h-0 flex-1 flex-col bg-base-100">
+    <div class="flex min-h-0 flex-1 flex-col bg-base-100 h-full">
       <PageHeader icon={FiTerminal} section="Topology" />
 
       {/* Main Dashboard Content */}
@@ -999,7 +999,7 @@ const HostsView: Component = () => {
   );
 
   return (
-    <div class="flex min-h-0 flex-1 flex-col bg-base-100">
+    <div class="flex min-h-0 flex-1 flex-col bg-base-100 h-full">
       <PageHeader icon={FiServer} section="Hosts" />
 
       <div class="flex-1 overflow-y-auto bg-base-100 px-4 py-6 md:px-8 md:py-8">
@@ -1103,7 +1103,7 @@ const ProxiesView: Component = () => {
   );
 
   return (
-    <div class="flex min-h-0 flex-1 flex-col bg-base-100">
+    <div class="flex min-h-0 flex-1 flex-col bg-base-100 h-full">
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100">
         <header class="flex items-center justify-between gap-3 border-b border-base-content/10 bg-base-100/80 px-4 py-3 backdrop-blur-lg md:px-6">
           <div class="min-w-0">

@@ -214,7 +214,7 @@ pnpm tsc              # TypeScript check (run before committing)
 
 - CLI host uses iroh QUIC for P2P connections with relay support
 - Message protocol: `shared/src/message_protocol.rs` (bincode + JSON serialization)
-- Agent management: `shared/src/agent.rs` with `AgentFactory`
+- Agent management lives in `shared/src/agent/mod.rs`; `AgentManager` owns session lifecycle and runtime selection
 - Frontend uses `sessionStore` pattern for multi-session management
 - Permission modes: AlwaysAsk, AcceptEdits, Plan, AutoApprove
 - Desktop/mobile split: `app/Cargo.toml` gates heavy dependencies (portable-pty, agent-client-protocol) behind `cfg(not(any(target_os = "android", target_os = "ios")))`

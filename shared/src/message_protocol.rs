@@ -1,6 +1,6 @@
 //! 统一的消息事件协议
 //!
-//! 此模块定义了ClawdChat中所有组件间的统一消息协议，
+//! 此模块定义了 Irogen 中所有组件间的统一消息协议，
 //! 支持App-CLI、AI Agent会话管理、TCP转发、文件浏览、Git操作等各种消息类型。
 
 use anyhow::Result;
@@ -1019,14 +1019,14 @@ pub enum SlashCommand {
         /// 原始命令字符串（如 "/help", "/sessions", "/plugin install xxx"）
         raw: String,
     },
-    /// ClawdChat 内置命令
+    /// Irogen 内置命令
     Builtin {
         /// 命令类型
         command_type: BuiltinCommand,
     },
 }
 
-/// ClawdChat 内置命令
+/// Irogen 内置命令
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BuiltinCommand {
     /// 列出所有会话

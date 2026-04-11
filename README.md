@@ -18,11 +18,12 @@ Irogen provides a unified session management experience for running and controll
 
 ## Repository Layout
 
-- `cli/`: Rust CLI (`clawdpilot`) host entry
+- `cli/`: Rust CLI (`irogen`) host entry
 - `app/`: Tauri backend (Rust)
 - `shared/`: Shared networking/protocol library (Rust)
 - `src/`: SolidJS frontend (chat, sessions, permissions, tools)
 - `browser/`: WebAssembly client
+- `web/`: Separate TanStack Start + Cloudflare Workers app
 
 ## Quick Start
 
@@ -112,7 +113,7 @@ git push origin v0.5.0
 Workflow: `.github/workflows/publish-to-auto-release.yml`
 
 - App packaging via official `tauri-apps/tauri-action`
-- CLI artifacts published as `clawdpilot_cli-*`
+- CLI artifacts published as `irogen_cli-*`
 
 ### Android Signing Secrets (GitHub Actions)
 
@@ -135,4 +136,5 @@ base64 -i upload-keystore.jks | tr -d '\n'
 - Chinese README: `README_cn.md`
 - Development guide: `DEVELOPMENT.md`
 - Session management: `docs/SESSION_MANAGEMENT.md`
-- Chat/terminal interaction details: `docs/TERMINAL_SESSIONS.md`
+- iOS build/install guide: `docs/iOS_BUILD_AND_INSTALL.md`
+- iOS quick start: `docs/iOS_QUICK_START.md`
