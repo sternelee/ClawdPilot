@@ -20,6 +20,7 @@ import { FileBrowserView } from "./FileBrowserView";
 import { GitDiffView } from "./GitDiffView";
 import { SetupGuide } from "./mobile/SetupGuide";
 import { Dashboard } from "./Dashboard";
+import { SettingsView } from "./SettingsView";
 import { sessionStore } from "../stores/sessionStore";
 import { navigationStore } from "../stores/navigationStore";
 import { i18nStore } from "../stores/i18nStore";
@@ -238,6 +239,8 @@ export const AppLayout: Component = () => {
 
   const renderMainContent = () => {
     switch (activeView()) {
+      case "settings":
+        return <SettingsView />;
       case "hosts":
         return <Dashboard view="hosts" />;
       case "proxies":

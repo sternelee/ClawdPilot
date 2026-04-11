@@ -10,7 +10,7 @@ import { createStore } from "solid-js/store";
 // Types
 // ============================================================================
 
-export type NavigationView = "dashboard" | "hosts" | "chat" | "proxies";
+export type NavigationView = "dashboard" | "hosts" | "chat" | "proxies" | "settings";
 
 interface NavigationState {
   activeView: NavigationView;

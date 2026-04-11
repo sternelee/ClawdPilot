@@ -43,7 +43,6 @@ import {
 } from "solid-icons/fi";
 import { Button, Input, Label } from "./ui/primitives";
 import { ConnectHostModal } from "./ConnectHostModal";
-import { LanguageSwitcher, ThemeSwitcher } from "./ui/ThemeSwitcher";
 import { SetupGuide } from "./mobile/SetupGuide";
 import {
   tcpForwardingStore,
@@ -233,8 +232,7 @@ const DashboardEmptyState: Component<{
 const DashboardToolbar: Component = () => {
   return (
     <div class="flex flex-wrap items-center justify-end gap-2">
-      <LanguageSwitcher />
-      <ThemeSwitcher class="rounded-lg border border-base-content/10 bg-base-100/85 shadow-sm backdrop-blur" />
+      {/* Theme and language switchers moved to Settings page */}
     </div>
   );
 };

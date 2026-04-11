@@ -12,6 +12,7 @@ import {
   FiServer,
   FiMessageSquare,
   FiBox,
+  FiSettings,
 } from "solid-icons/fi";
 import {
   navigationStore,
@@ -34,6 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "chat", label: "Chat", icon: FiMessageSquare },
   { id: "hosts", label: "Hosts", icon: FiServer },
   { id: "proxies", label: "Preview", icon: FiBox },
+  { id: "settings", label: "Settings", icon: FiSettings },
 ];
 
 // ============================================================================
