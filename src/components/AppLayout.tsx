@@ -20,7 +20,6 @@ import { FileBrowserView } from "./FileBrowserView";
 import { GitDiffView } from "./GitDiffView";
 import { SetupGuide } from "./mobile/SetupGuide";
 import { Dashboard } from "./Dashboard";
-import { BottomNavBar } from "./BottomNavBar";
 import { sessionStore } from "../stores/sessionStore";
 import { navigationStore } from "../stores/navigationStore";
 import { i18nStore } from "../stores/i18nStore";
@@ -252,37 +251,22 @@ export const AppLayout: Component = () => {
   };
 
   return (
-    <div class="app-root flex h-full bg-base-200 overflow-hidden max-md:text-sm max-md:leading-5">
-      {/* Keyboard Shortcuts Dialog */}
-      <KeyboardShortcutsDialog
-        open={shortcutsDialogOpen()}
-        onClose={() => setShortcutsDialogOpen(false)}
+    <div class="app-root drawer lg:drawer-open h-full max-sm:text-sm max-sm:leading-5">
+      {/* Drawer toggle checkbox */}
+      <input
+        id="drawer"
+        type="checkbox"
+        class="drawer-toggle"
+        checked={sidebarOpen()}
+        onChange={(e) => setSidebarOpen(e.currentTarget.checked)}
       />
 
-      {/* Setup Guide - Full Screen Overlay */}
-      <Show when={showSetupGuide()}>
-        <div class="fixed inset-0 z-70 bg-base-100 pb-safe">
-          <SetupGuide
-            onClose={() => setShowSetupGuide(false)}
-            onSkip={() => setShowSetupGuide(false)}
-          />
-        </div>
-      </Show>
-
-      <Show when={sessionStore.state.isHistoryLoading}>
-        <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-60">
-          <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
-            <SpinnerWithLabel
-              label={i18nStore.t("common.loadingHistory")}
-              size="lg"
-              variant="primary"
-            />
-          </div>
-        </div>
-      </Show>
-
-      {/* Sidebar - Desktop Only (md and above) */}
-      <div class="hidden md:block">
+      {/* Sidebar - Desktop always visible, Mobile as drawer-side */}
+      <div class="drawer-side z-50">
+        <label
+          class="drawer-overlay lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
         <SessionSidebar
           isOpen={sidebarOpen()}
           onToggle={() => setSidebarOpen(!sidebarOpen())}
@@ -290,19 +274,73 @@ export const AppLayout: Component = () => {
       </div>
 
       {/* Main Content */}
-      <main class="flex-1 flex min-h-0 flex-col min-w-0">
-        <Show when={mobile()} fallback={renderMainContent()}>
-          {/* Mobile: fixed top/content/bottom structure */}
-          <div class="flex flex-1 min-h-0 flex-col overflow-hidden md:hidden">
-            <div class="flex-1 min-h-0 overflow-hidden pb-[calc(3rem+env(safe-area-inset-bottom,0px))]">
-              {renderMainContent()}
+      <div class="drawer-content flex flex-col min-h-0 bg-base-200">
+        {/* Keyboard Shortcuts Dialog */}
+        <KeyboardShortcutsDialog
+          open={shortcutsDialogOpen()}
+          onClose={() => setShortcutsDialogOpen(false)}
+        />
+
+        {/* Setup Guide - Full Screen Overlay */}
+        <Show when={showSetupGuide()}>
+          <div class="fixed inset-0 z-70 bg-base-100 pb-safe">
+            <SetupGuide
+              onClose={() => setShowSetupGuide(false)}
+              onSkip={() => setShowSetupGuide(false)}
+            />
+          </div>
+        </Show>
+
+        <Show when={sessionStore.state.isHistoryLoading}>
+          <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-60">
+            <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
+              <SpinnerWithLabel
+                label={i18nStore.t("common.loadingHistory")}
+                size="lg"
+                variant="primary"
+              />
             </div>
           </div>
         </Show>
-      </main>
 
-      {/* Bottom Navigation Bar - Mobile Only */}
-      <BottomNavBar />
+        {/* Mobile Header with Menu Button - hidden on lg and above */}
+        <header class="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-base-content/10 bg-base-100 px-3 pt-safe shrink-0 lg:hidden">
+          <label
+            for="drawer"
+            aria-label="Open menu"
+            class="btn btn-square btn-ghost drawer-button"
+          >
+            <svg
+              width="20"
+              height="20"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              class="inline-block h-5 w-5 stroke-current"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              ></path>
+            </svg>
+          </label>
+          <span class="text-sm font-bold">Irogen</span>
+        </header>
+
+        {/* Main Content Area */}
+        <main class="flex-1 flex min-h-0 flex-col min-w-0">
+          <Show when={mobile()} fallback={renderMainContent()}>
+            {/* Mobile: fixed top/content structure */}
+            <div class="flex flex-1 min-h-0 flex-col overflow-hidden sm:hidden">
+              <div class="flex-1 min-h-0 overflow-hidden pb-safe">
+                {renderMainContent()}
+              </div>
+            </div>
+          </Show>
+        </main>
+      </div>
     </div>
   );
 };

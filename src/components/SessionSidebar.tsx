@@ -91,13 +91,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   };
 
   return (
-    <aside
-      class={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-base-200 border-r border-base-content/10
-        transform transition-transform duration-300 ease-in-out backdrop-blur-md
-        ${props.isOpen ? "translate-x-0" : "-translate-x-full"}
-        h-dvh flex flex-col shadow-2xl
-      `}
-    >
+    <aside class="w-64 bg-base-200 h-full flex flex-col shadow-2xl">
       {/* Header */}
       <div class="flex items-center justify-between px-5 py-4 border-b border-base-content/10 bg-base-100/50 backdrop-blur">
         <div class="flex items-center gap-3">
