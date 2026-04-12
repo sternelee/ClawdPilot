@@ -5,6 +5,13 @@
  * - topology: Tree structure showing hosts and agents
  * - hosts: Connected hosts with inline TCP forwarding lists
  * - proxies: TCP forwarding preview
+ *
+ * Improved with OpenChamber-inspired patterns:
+ * - Better session cards with status animations
+ * - Time-based grouping (Today, Yesterday, This Week, Older)
+ * - Session actions menu (pin, delete, share)
+ * - Folder/group organization
+ * - Improved empty states with icons
  */
 
 import {
@@ -41,6 +48,19 @@ import {
   FiTrash2,
   FiExternalLink,
   FiClock,
+  FiSearch,
+  FiMoreVertical,
+  FiFolder,
+  FiFolderPlus,
+  FiBookmark,
+  FiShare2,
+  FiCopy,
+  FiEdit3,
+  FiX,
+  FiCheck,
+  FiInbox,
+  FiCalendar,
+  FiChevronRight,
 } from "solid-icons/fi";
 import { Button, Input, Label } from "./ui/primitives";
 import { ConnectHostModal } from "./ConnectHostModal";
@@ -51,6 +71,7 @@ import {
 } from "../stores/tcpForwardingStore";
 import { cn } from "../lib/utils";
 import { HistorySelectionModal } from "./HistorySelectionModal";
+import { createClipboardCopied } from "@solid-primitives/clipboard";
 
 // ============================================================================
 // Types
@@ -105,8 +126,14 @@ interface HostBuildOptions {
   includeDesktopLocal?: boolean;
 }
 
+interface SessionGroup {
+  title: string;
+  icon: typeof FiCalendar;
+  sessions: AgentSessionMetadata[];
+}
+
 // ============================================================================
-// Helper Functions
+// Utility Functions
 // ============================================================================
 
 const getAgentIcon = (agentType: string) => {
@@ -221,37 +248,58 @@ const getProxyPreviewUrl = (localAddr: string): string => {
   return `http://${localAddr.startsWith(":") ? `127.0.0.1${localAddr}` : localAddr}`;
 };
 
-const DashboardEmptyState: Component<{
-  title: string;
-  description?: string;
-  action?: { label: string; onClick: () => void };
-}> = (props) => {
-  return (
-    <div class="flex flex-col items-center justify-center px-6 py-16 text-center md:py-24">
-      <h3 class="text-lg font-semibold text-base-content/80 mb-2">{props.title}</h3>
-      <Show when={props.description}>
-        <p class="text-sm text-base-content/50 max-w-xs mb-6">{props.description}</p>
-      </Show>
-      <Show when={props.action}>
-        <button
-          type="button"
-          class="px-4 py-2 text-sm rounded-xl bg-primary text-primary-content font-medium shadow-lg shadow-primary/20 hover:shadow-xl transition-shadow"
-          onClick={props.action?.onClick}
-        >
-          {props.action?.label}
-        </button>
-      </Show>
-    </div>
-  );
+// ============================================================================
+// Time-based Grouping
+// ============================================================================
+
+const groupSessionsByTime = (sessions: AgentSessionMetadata[]): SessionGroup[] => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const groups: Record<string, AgentSessionMetadata[]> = {
+    today: [],
+    yesterday: [],
+    thisWeek: [],
+    older: [],
+  };
+
+  sessions.forEach((session) => {
+    const sessionDate = new Date(session.startedAt);
+    
+    if (sessionDate >= today) {
+      groups.today.push(session);
+    } else if (sessionDate >= yesterday) {
+      groups.yesterday.push(session);
+    } else if (sessionDate >= thisWeek) {
+      groups.thisWeek.push(session);
+    } else {
+      groups.older.push(session);
+    }
+  });
+
+  const result: SessionGroup[] = [];
+  
+  if (groups.today.length > 0) {
+    result.push({ title: "Today", icon: FiCalendar, sessions: groups.today });
+  }
+  if (groups.yesterday.length > 0) {
+    result.push({ title: "Yesterday", icon: FiCalendar, sessions: groups.yesterday });
+  }
+  if (groups.thisWeek.length > 0) {
+    result.push({ title: "This Week", icon: FiFolder, sessions: groups.thisWeek });
+  }
+  if (groups.older.length > 0) {
+    result.push({ title: "Older", icon: FiInbox, sessions: groups.older });
+  }
+
+  return result;
 };
 
-const DashboardToolbar: Component = () => {
-  return (
-    <div class="flex flex-wrap items-center justify-end gap-2">
-      {/* Theme and language switchers moved to Settings page */}
-    </div>
-  );
-};
+// ============================================================================
+// Status Indicators
+// ============================================================================
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -280,8 +328,574 @@ const getStatusGlow = (status: string) => {
   }
 };
 
+const getStatusDotColor = (status: string) => {
+  switch (status) {
+    case "streaming":
+      return "bg-info";
+    case "thinking":
+      return "bg-secondary";
+    case "tool_calling":
+      return "bg-warning";
+    case "idle":
+    default:
+      return "bg-base-content/40";
+  }
+};
+
 // ============================================================================
-// Reusable Components
+// Session Actions Menu
+// ============================================================================
+
+interface SessionActionsMenuProps {
+  session: AgentSessionMetadata;
+  onPin?: () => void;
+  onDelete?: () => void;
+  onShare?: () => void;
+  onCopyUrl?: () => void;
+  isPinned?: boolean;
+}
+
+const SessionActionsMenu: Component<SessionActionsMenuProps> = (props) => {
+  const [isOpen, setIsOpen] = createSignal(false);
+  let menuRef: HTMLDivElement | undefined;
+
+  const handleAction = (action: () => void) => {
+    action();
+    setIsOpen(false);
+  };
+
+  // Close on click outside
+  createEffect(() => {
+    if (isOpen()) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (menuRef && !menuRef.contains(e.target as Node)) {
+          setIsOpen(false);
+        }
+      };
+      document.addEventListener("click", handleClickOutside);
+      onCleanup(() => document.removeEventListener("click", handleClickOutside));
+    }
+  });
+
+  return (
+    <div class="relative" ref={menuRef}>
+      <button
+        type="button"
+        class="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-150 hover:bg-base-300/50 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-primary/50"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen());
+        }}
+        aria-label="Session actions"
+      >
+        <FiMoreVertical size={14} class="text-base-content/60" />
+      </button>
+
+      <Show when={isOpen()}>
+        <div class="absolute right-0 top-full mt-1 z-50 w-44 rounded-xl border border-base-content/10 bg-base-100 shadow-xl shadow-base-content/5 py-1 animate-in fade-in slide-in-from-top-2 duration-150">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-base-content/80 hover:bg-base-200/60 hover:text-base-content transition-colors"
+            onClick={() => handleAction(() => props.onPin?.())}
+          >
+            <FiBookmark size={14} class={props.isPinned ? "text-primary" : ""} />
+            {props.isPinned ? "Unpin" : "Pin"}
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-base-content/80 hover:bg-base-200/60 hover:text-base-content transition-colors"
+            onClick={() => handleAction(() => props.onCopyUrl?.())}
+          >
+            <FiCopy size={14} />
+            Copy URL
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-base-content/80 hover:bg-base-200/60 hover:text-base-content transition-colors"
+            onClick={() => handleAction(() => props.onShare?.())}
+          >
+            <FiShare2 size={14} />
+            Share
+          </button>
+          <div class="my-1 h-px bg-base-content/10" />
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-error/70 hover:bg-error/10 hover:text-error transition-colors"
+            onClick={() => handleAction(() => props.onDelete?.())}
+          >
+            <FiTrash2 size={14} />
+            Delete
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+// ============================================================================
+// Enhanced Empty State
+// ============================================================================
+
+interface DashboardEmptyStateProps {
+  title: string;
+  description?: string;
+  icon?: typeof FiInbox;
+  action?: { label: string; onClick: () => void };
+}
+
+const DashboardEmptyState: Component<DashboardEmptyStateProps> = (props) => {
+  const Icon = props.icon || FiInbox;
+  
+  return (
+    <div class="flex flex-col items-center justify-center px-6 py-16 text-center md:py-24 animate-in fade-in duration-300">
+      <div class="relative mb-6">
+        <div class="w-20 h-20 rounded-2xl bg-base-200/80 flex items-center justify-center">
+          <Icon size={36} class="text-base-content/30" />
+        </div>
+        <div class="absolute -bottom-1 -right-1 w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
+          <FiPlus size={16} class="text-primary/60" />
+        </div>
+      </div>
+      <h3 class="text-lg font-semibold text-base-content/80 mb-2">{props.title}</h3>
+      <Show when={props.description}>
+        <p class="text-sm text-base-content/50 max-w-xs mb-6 leading-relaxed">{props.description}</p>
+      </Show>
+      <Show when={props.action}>
+        <button
+          type="button"
+          class="px-5 py-2.5 text-sm rounded-xl bg-primary text-primary-content font-medium shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary/50"
+          onClick={props.action?.onClick}
+        >
+          {props.action?.label}
+        </button>
+      </Show>
+    </div>
+  );
+};
+
+// ============================================================================
+// Dashboard Toolbar with Search
+// ============================================================================
+
+interface DashboardToolbarProps {
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  onRefresh: () => void;
+  onAddHost: () => void;
+  isLoading?: boolean;
+}
+
+const DashboardToolbar: Component<DashboardToolbarProps> = (props) => {
+  return (
+    <div class="flex flex-wrap items-center justify-end gap-2">
+      {/* Search Input */}
+      <div class="relative">
+        <FiSearch size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
+        <input
+          type="text"
+          placeholder="Search sessions..."
+          value={props.searchQuery}
+          onInput={(e) => props.onSearchChange(e.currentTarget.value)}
+          class="pl-9 pr-4 py-2 h-9 text-sm rounded-xl border border-base-content/10 bg-base-200/50 placeholder:text-base-content/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all w-48"
+        />
+        <Show when={props.searchQuery()}>
+          <button
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-300/50"
+            onClick={() => props.onSearchChange("")}
+          >
+            <FiX size={12} class="text-base-content/40" />
+          </button>
+        </Show>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Tree Line Components
+// ============================================================================
+
+const TreeLineVertical: Component<{ height?: string }> = (props) => (
+  <div
+    class="absolute left-0 top-0 tree-line-v"
+    style={{ height: props.height || "100%" }}
+  />
+);
+
+// ============================================================================
+// Enhanced Agent Node Component with Actions
+// ============================================================================
+
+interface AgentNodeProps {
+  session: AgentSessionMetadata;
+  isStreaming: boolean;
+  isActive: boolean;
+  onClick: () => void;
+  onPin?: () => void;
+  onDelete?: () => void;
+  onShare?: () => void;
+  onCopyUrl?: () => void;
+  isPinned?: boolean;
+}
+
+const AgentNode: Component<AgentNodeProps> = (props) => {
+  const statusText = () => {
+    if (props.isStreaming) {
+      return "STREAMING";
+    }
+    if (props.session.thinking) {
+      return "THINKING";
+    }
+    return "IDLE";
+  };
+
+  const status = () => {
+    if (props.isStreaming) return "streaming";
+    if (props.session.thinking) return "thinking";
+    return "idle";
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  return (
+    <div
+      class={cn(
+        "group relative flex w-full items-center py-3 px-4 text-left transition-all duration-200 rounded-lg mx-1.5 my-1",
+        "border",
+        props.isActive
+          ? "bg-primary/10 border-primary/30 shadow-sm shadow-primary/10"
+          : "bg-secondary/5 border-secondary/20 hover:bg-secondary/15 hover:border-secondary/30",
+      )}
+    >
+      {/* Selection indicator */}
+      <Show when={props.isActive}>
+        <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-primary" />
+      </Show>
+
+      <button
+        type="button"
+        class="flex flex-1 items-center justify-between gap-3"
+        onClick={props.onClick}
+      >
+        <div class="flex items-center gap-3 min-w-0">
+          {/* Status dot with animation */}
+          <div class="relative">
+            <span
+              class={cn(
+                "w-2.5 h-2.5 rounded-full transition-colors",
+                getStatusDotColor(status()),
+              )}
+            />
+            <Show when={props.isStreaming}>
+              <span
+                class={cn(
+                  "absolute inset-0 rounded-full animate-ping opacity-75",
+                  getStatusDotColor(status()),
+                )}
+              />
+            </Show>
+          </div>
+
+          {getAgentIcon(props.session.agentType)}
+          
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-medium block truncate">
+                {props.session.agentType.charAt(0).toUpperCase() +
+                  props.session.agentType.slice(1)}
+              </span>
+              <Show when={props.session.gitBranch}>
+                <span class="px-1.5 py-0.5 rounded bg-base-300/50 text-[9px] font-mono text-base-content/60">
+                  {props.session.gitBranch}
+                </span>
+              </Show>
+            </div>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span class="text-[9px] opacity-50 font-mono truncate max-w-[150px]">
+                {props.session.projectPath?.split("/").pop() || "No project"}
+              </span>
+              <span class="text-[9px] text-base-content/30">•</span>
+              <span class="text-[9px] text-base-content/40">
+                {formatTime(props.session.startedAt)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div
+            class={cn(
+              `px-3 py-0.5 rounded-full text-[9px] font-bold tracking-widest border transition-all duration-200`,
+              getStatusColor(status()),
+              getStatusGlow(status()),
+            )}
+          >
+            {statusText()}
+          </div>
+        </div>
+      </button>
+
+      {/* Actions Menu */}
+      <div class="ml-2">
+        <SessionActionsMenu
+          session={props.session}
+          onPin={props.onPin}
+          onDelete={props.onDelete}
+          onShare={props.onShare}
+          onCopyUrl={props.onCopyUrl}
+          isPinned={props.isPinned}
+        />
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
+// Host Card Component with Grouping
+// ============================================================================
+
+interface HostCardProps {
+  host: HostNode;
+  onRefresh: () => void;
+  onShowStats: () => void;
+  onAgentClick: (sessionId: string) => void;
+  onAddAgent: (host: HostNode) => void;
+  onLoadHistory: () => void;
+  searchQuery?: string;
+}
+
+const HostCard: Component<HostCardProps> = (props) => {
+  const [expanded, setExpanded] = createSignal(true);
+  const [pinnedSessions, setPinnedSessions] = createSignal<Set<string>>(new Set());
+
+  const filteredSessions = createMemo(() => {
+    const query = props.searchQuery?.toLowerCase() || "";
+    if (!query) return props.host.sessions;
+    
+    return props.host.sessions.filter(
+      (session) =>
+        session.agentType.toLowerCase().includes(query) ||
+        session.projectPath.toLowerCase().includes(query) ||
+        session.hostname.toLowerCase().includes(query)
+    );
+  });
+
+  const groupedSessions = createMemo(() => {
+    const sessions = filteredSessions();
+    const pinned: AgentSessionMetadata[] = [];
+    const unpinned: AgentSessionMetadata[] = [];
+
+    sessions.forEach((session) => {
+      if (pinnedSessions().has(session.sessionId)) {
+        pinned.push(session);
+      } else {
+        unpinned.push(session);
+      }
+    });
+
+    const groups = groupSessionsByTime(unpinned);
+    
+    // Add pinned sessions at the top if any
+    if (pinned.length > 0) {
+      groups.unshift({ title: "Pinned", icon: FiBookmark, sessions: pinned });
+    }
+
+    return groups;
+  });
+
+  const togglePin = (sessionId: string) => {
+    setPinnedSessions((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(sessionId)) {
+        newSet.delete(sessionId);
+      } else {
+        newSet.add(sessionId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCopyUrl = (session: AgentSessionMetadata) => {
+    const url = `irogen://session/${session.sessionId}`;
+    navigator.clipboard.writeText(url);
+    notificationStore.success("Session URL copied to clipboard", "Copied");
+  };
+
+  const activeSessionId = () => sessionStore.getActiveSession()?.sessionId;
+
+  return (
+    <div class="group animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* Host Header - Clickable to expand/collapse */}
+      <div
+        class={cn(
+          "flex items-center justify-between p-4 rounded-lg border-l-4 transition-all duration-200 cursor-pointer",
+          "hover:shadow-md",
+          props.host.status === "online"
+            ? "bg-primary/5 border-primary/40 hover:bg-primary/8"
+            : "bg-base-200/30 border-base-content/20 hover:bg-base-200/50",
+        )}
+        onClick={() => setExpanded(!expanded())}
+      >
+        <div class="flex items-center gap-4">
+          {/* Host status indicator */}
+          <div class="relative">
+            <FiServer
+              class={cn(
+                "w-5 h-5",
+                props.host.status === "online"
+                  ? "text-primary"
+                  : "text-base-content/40",
+              )}
+            />
+            <Show when={props.host.status === "online"}>
+              <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-success">
+                <span class="absolute inset-0 rounded-full bg-success animate-ping opacity-75" />
+              </span>
+            </Show>
+          </div>
+
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="font-mono text-sm font-medium tracking-tight truncate">
+                {props.host.hostname}
+              </h3>
+              <Show when={props.host.sessions.length > 0}>
+                <span class="px-2 py-0.5 rounded-full bg-base-300/50 text-[10px] font-bold text-base-content/60">
+                  {props.host.sessions.length}
+                </span>
+              </Show>
+            </div>
+            <p
+              class={cn(
+                "text-[10px] font-label uppercase tracking-tighter",
+                props.host.controlSessionId
+                  ? "text-base-content/60"
+                  : "hidden",
+              )}
+            >
+              {props.host.os}
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          {/* Add Agent Button */}
+          <Button
+            variant="default"
+            size="sm"
+            class="h-7 px-2.5 text-[10px] font-bold rounded-lg shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onAddAgent(props.host);
+            }}
+          >
+            <FiPlus size={12} class="mr-1" />
+            Agent
+          </Button>
+
+          <Show when={props.host.machineId === "local"}>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-7 px-2 text-[10px] font-label uppercase tracking-widest border border-base-content/10 hover:border-base-content/20 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onLoadHistory();
+              }}
+            >
+              <FiClock size={12} class="mr-1" />
+              History
+            </Button>
+          </Show>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-7 px-2 text-[10px] font-label uppercase tracking-widest border border-base-content/10 hover:border-base-content/20 transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onShowStats();
+            }}
+          >
+            STATS
+          </Button>
+
+          {/* Expand/Collapse Icon with rotation animation */}
+          <div class="text-base-content/40 transition-transform duration-200">
+            <FiChevronRight
+              size={18}
+              class={cn("transition-transform duration-200", expanded() && "rotate-90")}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Expandable Session Groups */}
+      <Show when={expanded()}>
+        <div class="ml-4 mt-2 relative">
+          <TreeLineVertical
+            height={`${props.host.sessions.length * 60 + 16}px`}
+          />
+
+          <For each={groupedSessions()}>
+            {(group) => (
+              <div class="mb-3">
+                {/* Group Header */}
+                <div class="flex items-center gap-2 px-2 mb-1">
+                  <group.icon size={12} class="text-base-content/40" />
+                  <span class="text-[10px] font-semibold uppercase tracking-widest text-base-content/40">
+                    {group.title}
+                  </span>
+                  <span class="text-[10px] text-base-content/30">
+                    ({group.sessions.length})
+                  </span>
+                </div>
+
+                <For each={group.sessions}>
+                  {(session) => (
+                    <AgentNode
+                      session={session}
+                      isStreaming={
+                        sessionEventRouter.getStreamingState(session.sessionId)
+                          .isStreaming
+                      }
+                      isActive={activeSessionId() === session.sessionId}
+                      onClick={() => props.onAgentClick(session.sessionId)}
+                      onPin={() => togglePin(session.sessionId)}
+                      onDelete={() => {
+                        // Handle delete
+                        notificationStore.info(
+                          `Delete session: ${session.sessionId}`,
+                          "Delete Session"
+                        );
+                      }}
+                      onCopyUrl={() => handleCopyUrl(session)}
+                      isPinned={pinnedSessions().has(session.sessionId)}
+                    />
+                  )}
+                </For>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
+// ============================================================================
+// Page Header Component
 // ============================================================================
 
 interface PageHeaderProps {
@@ -329,177 +943,13 @@ const PageHeader: Component<PageHeaderProps> = (props) => {
           </p>
         </div>
       </div>
-      <DashboardToolbar />
+      <DashboardToolbar
+        searchQuery={createSignal("")}
+        onSearchChange={() => {}}
+        onRefresh={() => {}}
+        onAddHost={() => {}}
+      />
     </header>
-  );
-};
-
-// ============================================================================
-// Tree Line Components
-// ============================================================================
-
-const TreeLineVertical: Component<{ height?: string }> = (props) => (
-  <div
-    class="absolute left-0 top-0 tree-line-v"
-    style={{ height: props.height || "100%" }}
-  />
-);
-
-// ============================================================================
-// Agent Node Component
-// ============================================================================
-
-interface AgentNodeProps {
-  session: AgentSessionMetadata;
-  isStreaming: boolean;
-  onClick: () => void;
-}
-
-const AgentNode: Component<AgentNodeProps> = (props) => {
-  const statusText = () => {
-    if (props.isStreaming) {
-      return "STREAMING";
-    }
-    return "IDLE";
-  };
-
-  return (
-    <button
-      type="button"
-      class="relative flex w-full items-center py-3 px-4 text-left transition-colors rounded-lg mx-1.5 my-1 hover:bg-secondary/15 bg-secondary/8 border border-secondary/20"
-      onClick={props.onClick}
-    >
-      <div class="flex flex-1 items-center justify-between gap-3">
-        <div class="flex items-center gap-3 min-w-0">
-          {getAgentIcon(props.session.agentType)}
-          <div class="min-w-0">
-            <span class="font-mono text-xs font-medium block truncate">
-              {props.session.agentType.charAt(0).toUpperCase() +
-                props.session.agentType.slice(1)}
-            </span>
-            <span class="text-[9px] opacity-40 font-mono">
-              {props.session.projectPath?.split("/").pop() || "No project"}
-            </span>
-          </div>
-        </div>
-        <div
-          class={`px-3 py-0.5 rounded-full text-[9px] font-bold tracking-widest border ${getStatusColor(statusText())} ${getStatusGlow(statusText())}`}
-        >
-          {statusText()}
-        </div>
-      </div>
-    </button>
-  );
-};
-
-// ============================================================================
-// Host Card Component
-// ============================================================================
-
-interface HostCardProps {
-  host: HostNode;
-  onRefresh: () => void;
-  onShowStats: () => void;
-  onAgentClick: (sessionId: string) => void;
-  onAddAgent: (host: HostNode) => void;
-  onLoadHistory: () => void;
-}
-
-const HostCard: Component<HostCardProps> = (props) => {
-  const [expanded, setExpanded] = createSignal(true);
-
-  return (
-    <div class="group">
-      {/* Host Header - Clickable to expand/collapse */}
-      <div
-        class="flex items-center justify-between bg-primary/8 p-4 rounded-lg border-l-4 border-primary transition-all hover:bg-primary/12 cursor-pointer"
-        onClick={() => setExpanded(!expanded())}
-      >
-        <div class="flex items-center gap-4">
-          <FiServer class="w-5 h-5 text-base-content/60" />
-          <div class="min-w-0">
-            <h3 class="font-mono text-sm font-medium tracking-tight truncate">
-              {props.host.hostname}
-            </h3>
-            <p
-              class={cn(
-                props.host.controlSessionId
-                  ? "text-[10px] font-label uppercase text-base-content/60 tracking-tighter"
-                  : "hidden",
-              )}
-            >
-              {props.host.os}
-            </p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          {/* Add Agent Button */}
-          <Button
-            variant="default"
-            size="sm"
-            class="h-7 px-2 text-[10px] font-bold rounded-lg shadow-lg shadow-primary/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onAddAgent(props.host);
-            }}
-          >
-            <FiPlus size={12} class="mr-1" />
-            Agent
-          </Button>
-          <Show when={props.host.machineId === "local"}>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-7 px-2 text-[10px] font-label uppercase tracking-widest border border-base-content/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onLoadHistory();
-              }}
-            >
-              <FiClock size={12} class="mr-1" />
-              History
-            </Button>
-          </Show>
-          <Button
-            variant="ghost"
-            size="sm"
-            class="h-7 px-2 text-[10px] font-label uppercase tracking-widest border border-base-content/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              props.onShowStats();
-            }}
-          >
-            STATS
-          </Button>
-          {/* Expand/Collapse Icon */}
-          <div class="text-base-content/40">
-            <Show when={expanded()} fallback={<FiChevronDown size={18} />}>
-              <FiChevronUp size={18} />
-            </Show>
-          </div>
-        </div>
-      </div>
-
-      <Show when={expanded()}>
-        <div class="ml-4 mt-2 relative">
-          <TreeLineVertical
-            height={`${props.host.sessions.length * 56 + 16}px`}
-          />
-          <For each={props.host.sessions}>
-            {(session) => (
-              <AgentNode
-                session={session}
-                isStreaming={
-                  sessionEventRouter.getStreamingState(session.sessionId)
-                    .isStreaming
-                }
-                onClick={() => props.onAgentClick(session.sessionId)}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
-    </div>
   );
 };
 
@@ -536,6 +986,7 @@ const TopologyView: Component = () => {
   const [showSetupGuide, setShowSetupGuide] = createSignal(false);
   const [historyModalOpen, setHistoryModalOpen] = createSignal(false);
   const [historyHost, setHistoryHost] = createSignal<HostNode | null>(null);
+  const [searchQuery, setSearchQuery] = createSignal("");
 
   // Group sessions by host machine
   const hosts = createMemo(() => {
@@ -545,6 +996,21 @@ const TopologyView: Component = () => {
       {
         includeDesktopLocal: true,
       },
+    );
+  });
+
+  const filteredHosts = createMemo(() => {
+    const query = searchQuery().toLowerCase();
+    if (!query) return hosts();
+    
+    return hosts().filter(
+      (host) =>
+        host.hostname.toLowerCase().includes(query) ||
+        host.sessions.some(
+          (session) =>
+            session.agentType.toLowerCase().includes(query) ||
+            session.projectPath.toLowerCase().includes(query)
+        )
     );
   });
 
@@ -660,7 +1126,7 @@ const TopologyView: Component = () => {
             <Button
               variant="ghost"
               size="sm"
-              class="px-4 py-1.5 rounded text-[10px] font-label uppercase tracking-widest border border-base-content/10"
+              class="px-4 py-1.5 rounded-lg text-[10px] font-label uppercase tracking-widest border border-base-content/10 hover:border-base-content/20 transition-colors"
               onClick={handleRefresh}
               disabled={isLoading()}
             >
@@ -675,12 +1141,36 @@ const TopologyView: Component = () => {
             <Button
               variant="default"
               size="sm"
-              class="px-4 py-1.5 rounded text-[10px] font-label uppercase tracking-widest font-bold shadow-lg shadow-primary/20"
+              class="px-4 py-1.5 rounded-lg text-[10px] font-label uppercase tracking-widest font-bold shadow-lg shadow-primary/20 hover:shadow-xl transition-all"
               onClick={() => setConnectModalOpen(true)}
             >
               <FiWifi size={14} class="mr-1" />
               Add Host
             </Button>
+          </div>
+
+          {/* Search */}
+          <div class="relative w-full sm:w-64">
+            <FiSearch
+              size={14}
+              class="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40"
+            />
+            <input
+              type="text"
+              placeholder="Search hosts & sessions..."
+              value={searchQuery()}
+              onInput={(e) => setSearchQuery(e.currentTarget.value)}
+              class="w-full pl-9 pr-4 py-2 h-9 text-sm rounded-xl border border-base-content/10 bg-base-200/50 placeholder:text-base-content/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all"
+            />
+            <Show when={searchQuery()}>
+              <button
+                type="button"
+                class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-300/50 transition-colors"
+                onClick={() => setSearchQuery("")}
+              >
+                <FiX size={12} class="text-base-content/40" />
+              </button>
+            </Show>
           </div>
         </div>
 
@@ -705,16 +1195,25 @@ const TopologyView: Component = () => {
         {/* Topology List */}
         <div class="space-y-4">
           <Show
-            when={hosts().length > 0}
+            when={filteredHosts().length > 0}
             fallback={
               <DashboardEmptyState
-                title="No active hosts"
-                description="Add a host to start managing agents remotely"
-                action={{ label: "Add Host", onClick: () => setConnectModalOpen(true) }}
+                title={searchQuery() ? "No matching results" : "No active hosts"}
+                description={
+                  searchQuery()
+                    ? `No hosts or sessions match "${searchQuery()}"`
+                    : "Add a host to start managing agents remotely"
+                }
+                icon={searchQuery() ? FiSearch : FiServer}
+                action={
+                  searchQuery()
+                    ? undefined
+                    : { label: "Add Host", onClick: () => setConnectModalOpen(true) }
+                }
               />
             }
           >
-            <For each={hosts()}>
+            <For each={filteredHosts()}>
               {(host) => (
                 <HostCard
                   host={host}
@@ -723,6 +1222,7 @@ const TopologyView: Component = () => {
                   onAgentClick={handleAgentClick}
                   onAddAgent={handleAddAgent}
                   onLoadHistory={() => handleLoadHistory(host)}
+                  searchQuery={searchQuery()}
                 />
               )}
             </For>
