@@ -11,3 +11,4 @@ tsc-cache
 *.xml
 .kotlin
 .worktrees
+.omx/

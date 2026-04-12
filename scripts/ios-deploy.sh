@@ -211,8 +211,13 @@ find_device() {
     return
   fi
   
-  # 尝试从 xctrace 获取设备
-  local devices=$(xcrun xctrace list devices 2>/dev/null | grep -oP '(?<=\()[\dA-F]{40}(?=\))')
+  # 尝试从 xctrace 获取设备；避免依赖 GNU grep 的 -P 选项
+  local devices=$(
+    xcrun xctrace list devices 2>/dev/null \
+      | grep -E 'iPhone|iPad' \
+      | grep -v 'Simulator' \
+      | sed -nE 's/.*\(([0-9A-F-]{20,40})\).*/\1/p'
+  )
   
   if [ -z "$devices" ]; then
     print_error "未找到连接的 iOS 设备"
