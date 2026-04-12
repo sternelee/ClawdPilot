@@ -436,36 +436,74 @@ const SessionActionsMenu: Component<SessionActionsMenuProps> = (props) => {
 // Enhanced Empty State
 // ============================================================================
 
+const NetworkAnimation: Component = () => (
+  <div class="relative w-20 h-20">
+    {/* Central node */}
+    <div class="absolute inset-0 flex items-center justify-center">
+      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/30 animate-pulse">
+        <FiServer size={16} class="text-primary-contrast" />
+      </div>
+    </div>
+    {/* Pulsing rings */}
+    <div class="absolute inset-0 rounded-full border border-primary/20 animate-ping" />
+    <div class="absolute inset-2 rounded-full border border-primary/10 animate-ping" style="animation-delay: 0.5s" />
+    <div class="absolute inset-4 rounded-full border border-primary/5 animate-ping" style="animation-delay: 1s" />
+  </div>
+);
+
 interface DashboardEmptyStateProps {
   title: string;
   description?: string;
   icon?: typeof FiInbox;
   action?: { label: string; onClick: () => void };
+  tips?: string[];
 }
 
 const DashboardEmptyState: Component<DashboardEmptyStateProps> = (props) => {
   const Icon = props.icon || FiInbox;
-  
+
   return (
     <div class="flex flex-col items-center justify-center px-6 py-16 text-center md:py-24 animate-in fade-in duration-300">
+      {/* Animated Icon */}
       <div class="relative mb-6">
-        <div class="w-20 h-20 rounded-2xl bg-base-200/80 flex items-center justify-center">
-          <Icon size={36} class="text-base-content/30" />
+        <div class="absolute inset-0 bg-primary/10 rounded-3xl blur-xl" />
+        <div class="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-transparent border border-primary/20 flex items-center justify-center shadow-lg shadow-primary/10">
+          <NetworkAnimation />
         </div>
-        <div class="absolute -bottom-1 -right-1 w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-          <FiPlus size={16} class="text-primary/60" />
+        {/* Decorative badge */}
+        <div class="absolute -bottom-2 -right-2 w-10 h-10 rounded-xl bg-base-200 border border-base-content/10 flex items-center justify-center">
+          <FiPlus size={18} class="text-primary" />
         </div>
       </div>
+
       <h3 class="text-lg font-semibold text-base-content/80 mb-2">{props.title}</h3>
+
       <Show when={props.description}>
         <p class="text-sm text-base-content/50 max-w-xs mb-6 leading-relaxed">{props.description}</p>
       </Show>
+
+      {/* Tips */}
+      <Show when={props.tips && props.tips.length > 0}>
+        <div class="mb-6 w-full max-w-sm rounded-xl bg-base-200/50 border border-base-content/5 p-4 text-left">
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-base-content/40 mb-2">Quick Tips</p>
+          <ul class="space-y-1.5">
+            {props.tips.map((tip) => (
+              <li class="flex items-start gap-2 text-xs text-base-content/60">
+                <span class="text-primary mt-0.5">•</span>
+                <span>{tip}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Show>
+
       <Show when={props.action}>
         <button
           type="button"
           class="px-5 py-2.5 text-sm rounded-xl bg-primary text-primary-content font-medium shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/30 transition-all duration-200 hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary/50"
           onClick={props.action?.onClick}
         >
+          <FiPlus size={14} class="inline mr-1.5 -mt-0.5" />
           {props.action?.label}
         </button>
       </Show>
@@ -1202,9 +1240,18 @@ const TopologyView: Component = () => {
                 description={
                   searchQuery()
                     ? `No hosts or sessions match "${searchQuery()}"`
-                    : "Add a host to start managing agents remotely"
+                    : "Add a host to start managing agents, debugging code, and collaborating"
                 }
                 icon={searchQuery() ? FiSearch : FiServer}
+                tips={
+                  searchQuery()
+                    ? undefined
+                    : [
+                        "Hosts let you run AI agents on any machine",
+                        "Agents can help write, review, and debug your code",
+                        "Connect to multiple machines for distributed workflows",
+                      ]
+                }
                 action={
                   searchQuery()
                     ? undefined
@@ -1600,7 +1647,12 @@ const HostsView: Component = () => {
           fallback={
             <DashboardEmptyState
               title="No connected hosts"
-              description="Connect to a remote host to manage agents"
+              description="Connect to a host to remotely manage AI agents, forward TCP traffic, and more."
+              tips={[
+                "Hosts allow you to manage agents running on other machines",
+                "Start a local agent to get coding help anywhere in your project",
+                "Remote hosts use end-to-end encrypted P2P connections",
+              ]}
               action={{ label: "Add Host", onClick: () => setConnectModalOpen(true) }}
             />
           }

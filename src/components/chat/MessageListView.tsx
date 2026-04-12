@@ -15,7 +15,16 @@ import {
 } from "solid-js";
 import { cn } from "~/lib/utils";
 import type { ChatMessage } from "~/stores/chatStore";
-import { FiChevronDown, FiMessageSquare } from "solid-icons/fi";
+import {
+  FiMessageSquare,
+  FiTerminal,
+  FiFile,
+  FiAlertTriangle,
+  FiCode,
+  FiEye,
+  FiZap,
+  FiKeyboard,
+} from "solid-icons/fi";
 
 interface MessageListViewProps {
   messages: ChatMessage[];
@@ -77,34 +86,84 @@ const DateSeparator: Component<{ date: string }> = (props) => (
 
 interface ChatEmptyStateProps {
   agentType?: string;
+  onSuggestionClick?: (suggestion: string) => void;
 }
 
-const ChatEmptyState: Component<ChatEmptyStateProps> = (props) => (
-  <div class="flex flex-col items-center justify-center min-h-[400px] px-4 sm:px-6 text-center">
-    <div class="relative mb-6">
-      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary/10 flex items-center justify-center">
-        <FiMessageSquare size={28} class="text-primary sm:w-8 sm:h-8" />
+const conversationStarters = [
+  { icon: FiCode, text: "Help me write a function", hint: "Generate code" },
+  { icon: FiEye, text: "Review my code", hint: "Find issues" },
+  { icon: FiFile, text: "Explain this file", hint: "Understand context" },
+  { icon: FiAlertTriangle, text: "Debug this error", hint: "Fix problems" },
+];
+
+const ChatEmptyState: Component<ChatEmptyStateProps> = (props) => {
+  return (
+    <div class="flex flex-col items-center justify-center min-h-[400px] px-4 sm:px-6 text-center">
+      {/* Animated Agent Avatar */}
+      <div class="relative mb-6">
+        <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/20 flex items-center justify-center shadow-xl shadow-primary/10">
+          <FiTerminal size={36} class="text-primary sm:w-10 sm:h-10" />
+        </div>
+        {/* Floating ring */}
+        <div class="absolute inset-0 rounded-3xl border-2 border-primary/30 scale-105 animate-ping" />
+        {/* Sparkles */}
+        <div class="absolute -top-3 -right-3 w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center animate-bounce">
+          <span class="text-primary text-sm">✨</span>
+        </div>
       </div>
-      <div class="absolute inset-0 rounded-2xl border-2 border-primary/20 scale-110 animate-ping opacity-50" />
+
+      {/* Title */}
+      <h3 class="text-xl sm:text-2xl font-bold tracking-tight mb-2">
+        Ready to assist
+      </h3>
+
+      {/* Description */}
+      <p class="text-sm text-muted-foreground max-w-md mb-6 leading-relaxed">
+        Send a message to start chatting with{" "}
+        <span class="font-medium text-foreground">{props.agentType || "your AI agent"}</span>
+      </p>
+
+      {/* Conversation Starters */}
+      <div class="mb-8 w-full max-w-md">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-4">
+          Try asking
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {conversationStarters.map((starter) => (
+            <button
+              type="button"
+              onClick={() => props.onSuggestionClick?.(starter.text)}
+              class="group flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/40 hover:bg-muted border border-border/50 hover:border-primary/30 transition-all duration-200 text-left hover:shadow-md hover:shadow-primary/5"
+            >
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-transparent flex items-center justify-center group-hover:scale-110 transition-transform">
+                <starter.icon size={18} class="text-primary" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium truncate">{starter.text}</p>
+                <p class="text-[10px] text-muted-foreground/60">{starter.hint}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Keyboard Shortcut Hint */}
+      <div class="flex items-center gap-3 px-4 py-2 rounded-full bg-muted/30 border border-border/30">
+        <div class="flex items-center gap-1">
+          <kbd class="kbd kbd-sm bg-base-200 border-base-300">Enter</kbd>
+          <span class="text-xs text-muted-foreground/60">to send</span>
+        </div>
+        <div class="w-px h-4 bg-border/50" />
+        <div class="flex items-center gap-1">
+          <kbd class="kbd kbd-sm bg-base-200 border-base-300">Shift</kbd>
+          <span class="text-xs text-muted-foreground/60">+</span>
+          <kbd class="kbd kbd-sm bg-base-200 border-base-300">Enter</kbd>
+          <span class="text-xs text-muted-foreground/60">new line</span>
+        </div>
+      </div>
     </div>
-    <h3 class="text-lg sm:text-xl font-semibold tracking-tight mb-2">Start a conversation</h3>
-    <p class="text-sm text-muted-foreground max-w-xs mb-6">
-      Send a message to begin chatting with{" "}
-      <span class="font-medium text-foreground">{props.agentType || "your AI agent"}</span>
-    </p>
-    <div class="flex flex-wrap gap-2 justify-center px-4">
-      <button type="button" class="px-4 py-2 text-sm rounded-xl bg-muted/50 hover:bg-muted border border-border transition-colors">
-        Help me code
-      </button>
-      <button type="button" class="px-4 py-2 text-sm rounded-xl bg-muted/50 hover:bg-muted border border-border transition-colors">
-        Explain this
-      </button>
-      <button type="button" class="px-4 py-2 text-sm rounded-xl bg-muted/50 hover:bg-muted border border-border transition-colors">
-        Debug issue
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 interface ScrollToBottomButtonProps {
   visible: boolean;
