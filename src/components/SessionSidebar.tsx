@@ -8,7 +8,6 @@
 
 import { Show, For, type Component, createMemo } from "solid-js";
 import {
-  FiX,
   FiActivity,
   FiServer,
   FiMessageSquare,
@@ -92,8 +91,7 @@ interface NavItemButtonProps {
 const NavItemButton: Component<NavItemButtonProps> = (props) => {
   const Icon = props.item.icon;
   const hasActiveSession =
-    props.item.id === "chat" &&
-    sessionStore.getActiveSessions().length > 0;
+    props.item.id === "chat" && sessionStore.getActiveSessions().length > 0;
 
   return (
     <button
@@ -118,11 +116,15 @@ const NavItemButton: Component<NavItemButtonProps> = (props) => {
       <Icon
         size={18}
         class={cn(
-          "transition-colors flex-shrink-0",
-          props.isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+          "transition-colors shrink-0",
+          props.isActive
+            ? "text-primary"
+            : "text-muted-foreground group-hover:text-foreground",
         )}
       />
-      <span class="flex-1 text-left text-sm font-medium">{props.item.label}</span>
+      <span class="flex-1 text-left text-sm font-medium">
+        {props.item.label}
+      </span>
 
       {/* Active session indicator */}
       <Show when={hasActiveSession}>
@@ -183,14 +185,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-square h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground"
-          onClick={props.onToggle}
-          title="Close sidebar"
-        >
-          <FiX size={18} />
-        </button>
       </div>
 
       {/* Navigation */}
@@ -236,7 +230,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                     {/* Status dot */}
                     <span
                       class={cn(
-                        "h-2 w-2 rounded-full flex-shrink-0",
+                        "h-2 w-2 rounded-full shrink-0",
                         session.active
                           ? "bg-green-500"
                           : "bg-muted-foreground/40",

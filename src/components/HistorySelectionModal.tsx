@@ -3,10 +3,11 @@ import {
   For,
   createSignal,
   createEffect,
+  createMemo,
   type Component,
 } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import { FiClock, FiFolder, FiChevronRight, FiX } from "solid-icons/fi";
+import { FiClock, FiFolder, FiChevronRight, FiChevronDown, FiX } from "solid-icons/fi";
 import { sessionStore, AgentType, type AgentSessionMetadata } from "../stores/sessionStore";
 import { isMobile } from "../stores/deviceStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -25,22 +26,81 @@ interface AgentHistoryEntry {
   meta?: unknown;
 }
 
+interface HistoryTreeNode {
+  id: string;
+  label: string;
+  timestamp: string;
+  path: string;
+  children?: HistoryTreeNode[];
+  isExpanded?: boolean;
+}
+
 interface HistorySelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   hostMachineId?: string;
   defaultProjectPath?: string;
+  agentType?: AgentType;
 }
 
 export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
   props,
 ) => {
-  const [agentType, setAgentType] = createSignal<AgentType>("claude");
+  const [agentType, setAgentType] = createSignal<AgentType>(props.agentType || "claude");
   const [projectPath, setProjectPath] = createSignal<string>("");
   const [historySessions, setHistorySessions] = createSignal<AgentHistoryEntry[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = createSignal(false);
   const [isLoadingSession, setIsLoadingSession] = createSignal(false);
   const [selectedSession, setSelectedSession] = createSignal<string | null>(null);
+  const [expandedNodes, setExpandedNodes] = createSignal<Set<string>>(new Set());
+
+  // Convert flat list to tree structure (grouped by date)
+  const buildSessionTree = (sessions: AgentHistoryEntry[]): HistoryTreeNode[] => {
+    const grouped: Map<string, AgentHistoryEntry[]> = new Map();
+    
+    sessions.forEach((session) => {
+      const dateStr = session.updated_at
+        ? new Date(session.updated_at).toLocaleDateString()
+        : "Unknown Date";
+      
+      if (!grouped.has(dateStr)) {
+        grouped.set(dateStr, []);
+      }
+      grouped.get(dateStr)!.push(session);
+    });
+
+    const nodes: HistoryTreeNode[] = [];
+    grouped.forEach((sessions, dateStr) => {
+      const dateNode: HistoryTreeNode = {
+        id: `date-${dateStr}`,
+        label: dateStr,
+        timestamp: dateStr,
+        path: "",
+        isExpanded: true,
+        children: sessions.map((session) => ({
+          id: session.session_id,
+          label: session.title || formatCwd(session.cwd),
+          timestamp: session.updated_at || "Unknown",
+          path: session.cwd || "Unknown directory",
+        })),
+      };
+      nodes.push(dateNode);
+    });
+
+    return nodes.reverse(); // Most recent first
+  };
+
+  const toggleNodeExpanded = (nodeId: string) => {
+    setExpandedNodes((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  };
 
   createEffect(() => {
     if (props.isOpen) {
@@ -51,6 +111,16 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
       if (props.defaultProjectPath) {
         setProjectPath(props.defaultProjectPath);
       }
+      if (props.agentType) {
+        setAgentType(props.agentType);
+      }
+    }
+  });
+
+  // Auto-load history when modal opens with agent type and project path
+  createEffect(() => {
+    if (props.isOpen && props.agentType && props.defaultProjectPath && historySessions().length === 0) {
+      loadHistory();
     }
   });
 
@@ -164,6 +234,8 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
     return parts[parts.length - 1] || cwd;
   };
 
+  const sessionTree = createMemo(() => buildSessionTree(historySessions()));
+
   return (
     <Dialog
       open={props.isOpen}
@@ -194,90 +266,113 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
           </div>
         </Show>
 
-        <div class="space-y-1.5 mb-4">
-          <Label for="history-agent-type" class="text-xs">
-            Agent Type
-          </Label>
-          <Select
-            id="history-agent-type"
-            class="select-sm"
-            value={agentType()}
-            onChange={(val) => setAgentType(val as AgentType)}
+        <Show when={!props.agentType}>
+          <div class="space-y-1.5 mb-4">
+            <Label for="history-agent-type" class="text-xs">
+              Agent Type
+            </Label>
+            <Select
+              id="history-agent-type"
+              class="select-sm"
+              value={agentType()}
+              onChange={(val) => setAgentType(val as AgentType)}
+            >
+              <option value="claude">Claude Code</option>
+              <option value="codex">Codex</option>
+              <option value="cursor">Cursor</option>
+              <option value="opencode">OpenCode</option>
+              <option value="gemini">Gemini CLI</option>
+            </Select>
+          </div>
+        </Show>
+
+        <Show when={!props.defaultProjectPath}>
+          <div class="space-y-1.5 mb-4">
+            <Label for="history-project-path" class="text-xs">
+              Project Path
+            </Label>
+            <input
+              id="history-project-path"
+              type="text"
+              class="input input-sm input-bordered w-full font-mono text-sm"
+              placeholder="Enter project path"
+              value={projectPath()}
+              onInput={(e) => setProjectPath(e.currentTarget.value)}
+            />
+          </div>
+        </Show>
+
+        <Show when={!props.agentType || !props.defaultProjectPath}>
+          <Button
+            variant="outline"
+            size="sm"
+            class="w-full mb-4"
+            onClick={loadHistory}
+            disabled={isLoadingHistory() || !projectPath().trim()}
           >
-            <option value="claude">Claude Code</option>
-            <option value="codex">Codex</option>
-            <option value="cursor">Cursor</option>
-            <option value="opencode">OpenCode</option>
-            <option value="gemini">Gemini CLI</option>
-          </Select>
-        </div>
-
-        <div class="space-y-1.5 mb-4">
-          <Label for="history-project-path" class="text-xs">
-            Project Path
-          </Label>
-          <input
-            id="history-project-path"
-            type="text"
-            class="input input-sm input-bordered w-full font-mono text-sm"
-            placeholder="Enter project path"
-            value={projectPath()}
-            onInput={(e) => setProjectPath(e.currentTarget.value)}
-          />
-        </div>
-
-        <Button
-          variant="outline"
-          size="sm"
-          class="w-full mb-4"
-          onClick={loadHistory}
-          disabled={isLoadingHistory() || !projectPath().trim()}
-        >
-          <Show when={isLoadingHistory()} fallback={<><FiClock class="mr-1.5 size-4" /> Load History</>}>
-            <SpinnerWithLabel label="Loading..." size="sm" />
-          </Show>
-        </Button>
+            <Show when={isLoadingHistory()} fallback={<><FiClock class="mr-1.5 size-4" /> Load History</>}>
+              <SpinnerWithLabel label="Loading..." size="sm" />
+            </Show>
+          </Button>
+        </Show>
 
         <Show when={historySessions().length > 0}>
           <div class="space-y-2">
             <Label class="text-xs text-muted-foreground">
               Available Sessions ({historySessions().length})
             </Label>
-            <div class="max-h-64 overflow-y-auto space-y-2">
-              <For each={historySessions()}>
-                {(session) => (
-                  <button
-                    type="button"
-                    class={`w-full p-3 rounded-lg border text-left transition-all ${
-                      selectedSession() === session.session_id
-                        ? "border-primary bg-primary/10"
-                        : "border-base-content/10 hover:bg-base-content/5"
-                    }`}
-                    onClick={() => setSelectedSession(session.session_id)}
-                  >
-                    <div class="flex items-start gap-3">
-                      <FiFolder class="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
-                      <div class="flex-1 min-w-0">
-                        <div class="flex items-center justify-between gap-2">
-                          <span class="font-medium text-sm truncate">
-                            {session.title || formatCwd(session.cwd)}
-                          </span>
-                          <FiChevronRight class="w-4 h-4 text-muted-foreground shrink-0" />
-                        </div>
-                        <div class="flex items-center gap-2 mt-1">
-                          <span class="text-xs text-muted-foreground">
-                            {formatTime(session.updated_at)}
-                          </span>
-                          <span class="text-xs text-muted-foreground">
-                            •
-                          </span>
-                          <span class="text-xs text-muted-foreground font-mono truncate">
-                            {session.cwd}
-                          </span>
-                        </div>
+            <div class="max-h-64 overflow-y-auto space-y-1">
+              <For each={sessionTree()}>
+                {(node) => (
+                  <div>
+                    <button
+                      type="button"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-base-content/5 transition-colors"
+                      onClick={() => toggleNodeExpanded(node.id)}
+                    >
+                      <Show when={node.children && node.children.length > 0} fallback={<div class="w-4" />}>
+                        <Show
+                          when={expandedNodes().has(node.id)}
+                          fallback={<FiChevronRight size={14} class="text-muted-foreground shrink-0" />}
+                        >
+                          <FiChevronDown size={14} class="text-muted-foreground shrink-0" />
+                        </Show>
+                      </Show>
+                      <FiClock size={12} class="text-muted-foreground shrink-0" />
+                      <span class="text-xs font-semibold text-base-content/70">{node.label}</span>
+                    </button>
+
+                    {/* Child nodes (individual sessions) */}
+                    <Show when={expandedNodes().has(node.id)}>
+                      <div class="space-y-1 pl-6">
+                        <For each={node.children || []}>
+                          {(child) => (
+                            <button
+                              type="button"
+                              class={`w-full p-2 rounded-lg border text-left transition-all text-xs ${
+                                selectedSession() === child.id
+                                  ? "border-primary bg-primary/10"
+                                  : "border-base-content/10 hover:bg-base-content/5"
+                              }`}
+                              onClick={() => setSelectedSession(child.id)}
+                            >
+                              <div class="flex items-start gap-2">
+                                <FiFolder size={12} class="mt-0.5 text-muted-foreground shrink-0" />
+                                <div class="flex-1 min-w-0">
+                                  <div class="font-medium text-xs truncate">
+                                    {child.label}
+                                  </div>
+                                  <div class="text-xs text-muted-foreground/60 font-mono truncate mt-0.5">
+                                    {child.path}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          )}
+                        </For>
                       </div>
-                    </div>
-                  </button>
+                    </Show>
+                  </div>
                 )}
               </For>
             </div>

@@ -15,6 +15,7 @@ export type NavigationView = "dashboard" | "hosts" | "chat" | "proxies" | "setti
 interface NavigationState {
   activeView: NavigationView;
   previewProxyId: string | null;
+  sidebarOpen: boolean;
 }
 
 // ============================================================================
@@ -24,6 +25,7 @@ interface NavigationState {
 const initialState: NavigationState = {
   activeView: "dashboard",
   previewProxyId: null,
+  sidebarOpen: true,
 };
 
 export const createNavigationStore = () => {
@@ -37,12 +39,34 @@ export const createNavigationStore = () => {
     setState("previewProxyId", proxyId);
   };
 
+  const toggleSidebar = () => {
+    setState("sidebarOpen", (prev) => !prev);
+  };
+
+  const setSidebarOpen = (open: boolean) => {
+    setState("sidebarOpen", open);
+  };
+
   return {
     state,
     setActiveView,
     setPreviewProxyId,
+    toggleSidebar,
+    setSidebarOpen,
   };
 };
 
 // Global store instance
+// Start sidebar open on desktop (>=768px), closed on mobile
 export const navigationStore = createNavigationStore();
+// Sync sidebar with window size on load
+if (typeof window !== "undefined") {
+  if (window.innerWidth < 768) {
+    navigationStore.setSidebarOpen(false);
+  }
+  window.addEventListener("resize", () => {
+    if (window.innerWidth >= 768) {
+      navigationStore.setSidebarOpen(true);
+    }
+  });
+}

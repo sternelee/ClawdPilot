@@ -47,17 +47,13 @@ import {
   FiChevronDown,
   FiTrash2,
   FiExternalLink,
-  FiClock,
   FiSearch,
   FiMoreVertical,
   FiFolder,
-  FiFolderPlus,
   FiBookmark,
   FiShare2,
   FiCopy,
-  FiEdit3,
   FiX,
-  FiCheck,
   FiInbox,
   FiCalendar,
   FiChevronRight,
@@ -71,7 +67,6 @@ import {
 } from "../stores/tcpForwardingStore";
 import { cn } from "../lib/utils";
 import { HistorySelectionModal } from "./HistorySelectionModal";
-import { createClipboardCopied } from "@solid-primitives/clipboard";
 
 // ============================================================================
 // Types
@@ -252,7 +247,9 @@ const getProxyPreviewUrl = (localAddr: string): string => {
 // Time-based Grouping
 // ============================================================================
 
-const groupSessionsByTime = (sessions: AgentSessionMetadata[]): SessionGroup[] => {
+const groupSessionsByTime = (
+  sessions: AgentSessionMetadata[],
+): SessionGroup[] => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
@@ -267,7 +264,7 @@ const groupSessionsByTime = (sessions: AgentSessionMetadata[]): SessionGroup[] =
 
   sessions.forEach((session) => {
     const sessionDate = new Date(session.startedAt);
-    
+
     if (sessionDate >= today) {
       groups.today.push(session);
     } else if (sessionDate >= yesterday) {
@@ -280,15 +277,23 @@ const groupSessionsByTime = (sessions: AgentSessionMetadata[]): SessionGroup[] =
   });
 
   const result: SessionGroup[] = [];
-  
+
   if (groups.today.length > 0) {
     result.push({ title: "Today", icon: FiCalendar, sessions: groups.today });
   }
   if (groups.yesterday.length > 0) {
-    result.push({ title: "Yesterday", icon: FiCalendar, sessions: groups.yesterday });
+    result.push({
+      title: "Yesterday",
+      icon: FiCalendar,
+      sessions: groups.yesterday,
+    });
   }
   if (groups.thisWeek.length > 0) {
-    result.push({ title: "This Week", icon: FiFolder, sessions: groups.thisWeek });
+    result.push({
+      title: "This Week",
+      icon: FiFolder,
+      sessions: groups.thisWeek,
+    });
   }
   if (groups.older.length > 0) {
     result.push({ title: "Older", icon: FiInbox, sessions: groups.older });
@@ -373,7 +378,9 @@ const SessionActionsMenu: Component<SessionActionsMenuProps> = (props) => {
         }
       };
       document.addEventListener("click", handleClickOutside);
-      onCleanup(() => document.removeEventListener("click", handleClickOutside));
+      onCleanup(() =>
+        document.removeEventListener("click", handleClickOutside),
+      );
     }
   });
 
@@ -398,7 +405,10 @@ const SessionActionsMenu: Component<SessionActionsMenuProps> = (props) => {
             class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-base-content/80 hover:bg-base-200/60 hover:text-base-content transition-colors"
             onClick={() => handleAction(() => props.onPin?.())}
           >
-            <FiBookmark size={14} class={props.isPinned ? "text-primary" : ""} />
+            <FiBookmark
+              size={14}
+              class={props.isPinned ? "text-primary" : ""}
+            />
             {props.isPinned ? "Unpin" : "Pin"}
           </button>
           <button
@@ -440,14 +450,20 @@ const NetworkAnimation: Component = () => (
   <div class="relative w-20 h-20">
     {/* Central node */}
     <div class="absolute inset-0 flex items-center justify-center">
-      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/30 animate-pulse">
+      <div class="w-8 h-8 rounded-full bg-linear-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/30 animate-pulse">
         <FiServer size={16} class="text-primary-contrast" />
       </div>
     </div>
     {/* Pulsing rings */}
     <div class="absolute inset-0 rounded-full border border-primary/20 animate-ping" />
-    <div class="absolute inset-2 rounded-full border border-primary/10 animate-ping" style="animation-delay: 0.5s" />
-    <div class="absolute inset-4 rounded-full border border-primary/5 animate-ping" style="animation-delay: 1s" />
+    <div
+      class="absolute inset-2 rounded-full border border-primary/10 animate-ping"
+      style="animation-delay: 0.5s"
+    />
+    <div
+      class="absolute inset-4 rounded-full border border-primary/5 animate-ping"
+      style="animation-delay: 1s"
+    />
   </div>
 );
 
@@ -460,14 +476,12 @@ interface DashboardEmptyStateProps {
 }
 
 const DashboardEmptyState: Component<DashboardEmptyStateProps> = (props) => {
-  const Icon = props.icon || FiInbox;
-
   return (
     <div class="flex flex-col items-center justify-center px-6 py-16 text-center md:py-24 animate-in fade-in duration-300">
       {/* Animated Icon */}
       <div class="relative mb-6">
         <div class="absolute inset-0 bg-primary/10 rounded-3xl blur-xl" />
-        <div class="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-transparent border border-primary/20 flex items-center justify-center shadow-lg shadow-primary/10">
+        <div class="relative w-20 h-20 rounded-2xl bg-linear-to-br from-primary/20 to-transparent border border-primary/20 flex items-center justify-center shadow-lg shadow-primary/10">
           <NetworkAnimation />
         </div>
         {/* Decorative badge */}
@@ -476,16 +490,22 @@ const DashboardEmptyState: Component<DashboardEmptyStateProps> = (props) => {
         </div>
       </div>
 
-      <h3 class="text-lg font-semibold text-base-content/80 mb-2">{props.title}</h3>
+      <h3 class="text-lg font-semibold text-base-content/80 mb-2">
+        {props.title}
+      </h3>
 
       <Show when={props.description}>
-        <p class="text-sm text-base-content/50 max-w-xs mb-6 leading-relaxed">{props.description}</p>
+        <p class="text-sm text-base-content/50 max-w-xs mb-6 leading-relaxed">
+          {props.description}
+        </p>
       </Show>
 
       {/* Tips */}
       <Show when={props.tips && props.tips.length > 0}>
         <div class="mb-6 w-full max-w-sm rounded-xl bg-base-200/50 border border-base-content/5 p-4 text-left">
-          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-base-content/40 mb-2">Quick Tips</p>
+          <p class="text-[10px] font-black uppercase tracking-[0.2em] text-base-content/40 mb-2">
+            Quick Tips
+          </p>
           <ul class="space-y-1.5">
             {props.tips.map((tip) => (
               <li class="flex items-start gap-2 text-xs text-base-content/60">
@@ -516,7 +536,7 @@ const DashboardEmptyState: Component<DashboardEmptyStateProps> = (props) => {
 // ============================================================================
 
 interface DashboardToolbarProps {
-  searchQuery: string;
+  searchQuery?: () => string;
   onSearchChange: (query: string) => void;
   onRefresh: () => void;
   onAddHost: () => void;
@@ -528,15 +548,18 @@ const DashboardToolbar: Component<DashboardToolbarProps> = (props) => {
     <div class="flex flex-wrap items-center justify-end gap-2">
       {/* Search Input */}
       <div class="relative">
-        <FiSearch size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
+        <FiSearch
+          size={14}
+          class="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40"
+        />
         <input
           type="text"
           placeholder="Search sessions..."
-          value={props.searchQuery}
+          value={props.searchQuery?.() ?? ""}
           onInput={(e) => props.onSearchChange(e.currentTarget.value)}
           class="pl-9 pr-4 py-2 h-9 text-sm rounded-xl border border-base-content/10 bg-base-200/50 placeholder:text-base-content/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 transition-all w-48"
         />
-        <Show when={props.searchQuery()}>
+        <Show when={props.searchQuery?.()}>
           <button
             type="button"
             class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-base-300/50"
@@ -646,7 +669,7 @@ const AgentNode: Component<AgentNodeProps> = (props) => {
           </div>
 
           {getAgentIcon(props.session.agentType)}
-          
+
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <span class="font-mono text-xs font-medium block truncate">
@@ -660,7 +683,7 @@ const AgentNode: Component<AgentNodeProps> = (props) => {
               </Show>
             </div>
             <div class="flex items-center gap-2 mt-0.5">
-              <span class="text-[9px] opacity-50 font-mono truncate max-w-[150px]">
+              <span class="text-[9px] opacity-50 font-mono truncate max-w-37.5">
                 {props.session.projectPath?.split("/").pop() || "No project"}
               </span>
               <span class="text-[9px] text-base-content/30">•</span>
@@ -715,17 +738,19 @@ interface HostCardProps {
 
 const HostCard: Component<HostCardProps> = (props) => {
   const [expanded, setExpanded] = createSignal(true);
-  const [pinnedSessions, setPinnedSessions] = createSignal<Set<string>>(new Set());
+  const [pinnedSessions, setPinnedSessions] = createSignal<Set<string>>(
+    new Set(),
+  );
 
   const filteredSessions = createMemo(() => {
     const query = props.searchQuery?.toLowerCase() || "";
     if (!query) return props.host.sessions;
-    
+
     return props.host.sessions.filter(
       (session) =>
         session.agentType.toLowerCase().includes(query) ||
         session.projectPath.toLowerCase().includes(query) ||
-        session.hostname.toLowerCase().includes(query)
+        session.hostname.toLowerCase().includes(query),
     );
   });
 
@@ -743,7 +768,7 @@ const HostCard: Component<HostCardProps> = (props) => {
     });
 
     const groups = groupSessionsByTime(unpinned);
-    
+
     // Add pinned sessions at the top if any
     if (pinned.length > 0) {
       groups.unshift({ title: "Pinned", icon: FiBookmark, sessions: pinned });
@@ -817,9 +842,7 @@ const HostCard: Component<HostCardProps> = (props) => {
             <p
               class={cn(
                 "text-[10px] font-label uppercase tracking-tighter",
-                props.host.controlSessionId
-                  ? "text-base-content/60"
-                  : "hidden",
+                props.host.controlSessionId ? "text-base-content/60" : "hidden",
               )}
             >
               {props.host.os}
@@ -842,21 +865,6 @@ const HostCard: Component<HostCardProps> = (props) => {
             Agent
           </Button>
 
-          <Show when={props.host.machineId === "local"}>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-7 px-2 text-[10px] font-label uppercase tracking-widest border border-base-content/10 hover:border-base-content/20 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onLoadHistory();
-              }}
-            >
-              <FiClock size={12} class="mr-1" />
-              History
-            </Button>
-          </Show>
-
           <Button
             variant="ghost"
             size="sm"
@@ -873,7 +881,10 @@ const HostCard: Component<HostCardProps> = (props) => {
           <div class="text-base-content/40 transition-transform duration-200">
             <FiChevronRight
               size={18}
-              class={cn("transition-transform duration-200", expanded() && "rotate-90")}
+              class={cn(
+                "transition-transform duration-200",
+                expanded() && "rotate-90",
+              )}
             />
           </div>
         </div>
@@ -915,7 +926,7 @@ const HostCard: Component<HostCardProps> = (props) => {
                         // Handle delete
                         notificationStore.info(
                           `Delete session: ${session.sessionId}`,
-                          "Delete Session"
+                          "Delete Session",
                         );
                       }}
                       onCopyUrl={() => handleCopyUrl(session)}
@@ -948,10 +959,11 @@ const PageHeader: Component<PageHeaderProps> = (props) => {
     <header class="compact-mobile-controls z-20 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-base-content/10 bg-base-100/80 px-4 py-3 backdrop-blur-lg md:px-6">
       <div class="flex items-center gap-3">
         {/* Hamburger menu - only visible on mobile */}
-        <label
-          for="drawer"
+        <button
+          type="button"
           aria-label="Open menu"
           class="btn btn-square btn-ghost drawer-button lg:hidden"
+          onClick={() => navigationStore.setSidebarOpen(true)}
         >
           <svg
             width="20"
@@ -968,7 +980,7 @@ const PageHeader: Component<PageHeaderProps> = (props) => {
               d="M4 6h16M4 12h16M4 18h16"
             ></path>
           </svg>
-        </label>
+        </button>
         <div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
           <Icon class="w-5 h-5 text-primary-content" />
         </div>
@@ -982,7 +994,7 @@ const PageHeader: Component<PageHeaderProps> = (props) => {
         </div>
       </div>
       <DashboardToolbar
-        searchQuery={createSignal("")}
+        searchQuery={() => ""}
         onSearchChange={() => {}}
         onRefresh={() => {}}
         onAddHost={() => {}}
@@ -1040,15 +1052,15 @@ const TopologyView: Component = () => {
   const filteredHosts = createMemo(() => {
     const query = searchQuery().toLowerCase();
     if (!query) return hosts();
-    
+
     return hosts().filter(
       (host) =>
         host.hostname.toLowerCase().includes(query) ||
         host.sessions.some(
           (session) =>
             session.agentType.toLowerCase().includes(query) ||
-            session.projectPath.toLowerCase().includes(query)
-        )
+            session.projectPath.toLowerCase().includes(query),
+        ),
     );
   });
 
@@ -1236,7 +1248,9 @@ const TopologyView: Component = () => {
             when={filteredHosts().length > 0}
             fallback={
               <DashboardEmptyState
-                title={searchQuery() ? "No matching results" : "No active hosts"}
+                title={
+                  searchQuery() ? "No matching results" : "No active hosts"
+                }
                 description={
                   searchQuery()
                     ? `No hosts or sessions match "${searchQuery()}"`
@@ -1255,7 +1269,10 @@ const TopologyView: Component = () => {
                 action={
                   searchQuery()
                     ? undefined
-                    : { label: "Add Host", onClick: () => setConnectModalOpen(true) }
+                    : {
+                        label: "Add Host",
+                        onClick: () => setConnectModalOpen(true),
+                      }
                 }
               />
             }
@@ -1653,7 +1670,10 @@ const HostsView: Component = () => {
                 "Start a local agent to get coding help anywhere in your project",
                 "Remote hosts use end-to-end encrypted P2P connections",
               ]}
-              action={{ label: "Add Host", onClick: () => setConnectModalOpen(true) }}
+              action={{
+                label: "Add Host",
+                onClick: () => setConnectModalOpen(true),
+              }}
             />
           }
         >
@@ -1733,10 +1753,11 @@ const ProxiesView: Component = () => {
         <header class="flex items-center justify-between gap-3 border-b border-base-content/10 bg-base-100/80 px-4 py-3 backdrop-blur-lg md:px-6">
           <div class="flex items-center gap-3 min-w-0">
             {/* Hamburger menu - only visible on mobile */}
-            <label
-              for="drawer"
+            <button
+              type="button"
               aria-label="Open menu"
               class="btn btn-square btn-ghost drawer-button lg:hidden"
+              onClick={() => navigationStore.setSidebarOpen(true)}
             >
               <svg
                 width="20"
@@ -1753,7 +1774,7 @@ const ProxiesView: Component = () => {
                   d="M4 6h16M4 12h16M4 18h16"
                 ></path>
               </svg>
-            </label>
+            </button>
             <div class="min-w-0">
               <p class="text-[10px] font-black uppercase tracking-[0.3em] text-primary/80">
                 TCP Preview

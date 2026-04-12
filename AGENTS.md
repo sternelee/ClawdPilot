@@ -21,22 +21,20 @@ Rust stable, Node.js 20+, pnpm 10+.
 ### Frontend (SolidJS/Tauri)
 
 ```bash
-pnpm install          # Install dependencies
-pnpm dev              # Run SolidJS dev server (Vite, port 1420)
-pnpm tauri:dev        # Run Tauri desktop app in dev mode
-pnpm build            # Build frontend only
-pnpm tauri:build      # Build desktop app
-pnpm tauri:android:dev|build   # Android (macOS)
-pnpm tauri:ios:dev|build       # iOS (macOS)
+pnpm install && pnpm build    # Install and build (order matters)
+pnpm dev                      # Run SolidJS dev server (Vite, port 1420)
+pnpm tauri:dev                # Run Tauri desktop app in dev mode
+pnpm tauri:build              # Build desktop app
+pnpm tauri:android:dev|build  # Android (macOS)
+pnpm tauri:ios:dev|build      # iOS (macOS)
 ```
 
-### Web (Cloudflare Workers - Separate Workspace)
+### Web (Separate Workspace)
 
 ```bash
 cd web && pnpm install
-cd web && pnpm dev          # Dev server on port 3000
-cd web && pnpm build         # Build for production
-cd web && pnpm deploy        # Deploy to Cloudflare
+cd web && pnpm dev            # Dev server on port 3000
+cd web && pnpm build && pnpm deploy
 ```
 
 ### Rust
@@ -50,19 +48,17 @@ cargo run -p cli -- host --daemon    # Run CLI in background (Unix)
 
 ## Test Commands
 
-### Rust
-
 ```bash
 cargo test --workspace                           # All tests
 cargo test -p <crate> <test_name>                # Single crate test (e.g., cargo test -p shared message_protocol)
 cargo test -- --nocapture                        # Show print output
-./test_ticket_output.sh                          # CLI ticket output verification
+./test_ticket_output.sh                          # CLI ticket output verification (root-level helper)
 ```
 
-### Frontend
+## Verification Order
 
 ```bash
-cd web && pnpm test                              # Vitest tests
+cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc
 ```
 
 ## Lint & Format
@@ -70,152 +66,46 @@ cd web && pnpm test                              # Vitest tests
 ### Rust
 
 ```bash
-cargo fmt --all                          # Format all code
-cargo fmt --all -- --check               # Check formatting
-cargo clippy --workspace -- -D warnings  # Lint with warnings as errors
+cargo fmt --all && cargo fmt --all -- --check    # Format and verify
+cargo clippy --workspace -- -D warnings           # Lint with warnings as errors
 ```
 
-### Frontend (web/)
+### Frontend (src/ and web/)
 
 ```bash
-cd web && pnpm lint                      # ESLint
-cd web && pnpm format                     # Prettier check
-cd web && pnpm check                      # Prettier write + ESLint fix
+pnpm tsc                     # TypeScript check (root: src/, web/: web/)
+cd web && pnpm lint && pnpm format
 ```
 
-## Code Style Guidelines
+## Key Architecture
 
-### Rust (Edition 2024)
+- CLI host uses **iroh QUIC** for P2P connections with relay support
+- Wire protocol: `shared/src/message_protocol.rs` (bincode + JSON, chacha20poly1305 encryption)
+- `AgentManager` in `shared/src/agent/mod.rs` owns session lifecycle and runtime selection
+- Frontend uses `sessionStore` pattern for multi-session management
+- Permission modes: AlwaysAsk, AcceptEdits, Plan, AutoApprove
 
-**Naming:**
+## Desktop/Mobile Split
 
-- `snake_case` for variables and functions
-- `PascalCase` for types and enums
-- `SCREAMING_SNAKE_CASE` for constants
-
-**Imports (in order):**
-
-1. External crates (`use anyhow::Result;`)
-2. Standard library (`use std::collections::HashMap;`)
-3. Local modules (`use crate::shared::foo;`)
-
-**Error Handling:**
-
-- Prefer `anyhow::Result<T>` for application code
-- Add context: `.with_context(|| "description")`
-- Avoid `.unwrap()` / `.expect()` outside tests
-- Use `thiserror` for library error types
-
-**Logging:**
-
-- Use `tracing` with structured logging
-- No `println!` in production paths
-- Use `tracing::info!`, `.warn!`, `.error!` etc.
-
-**Async:**
-
-- Use `tokio` runtime with `#[tokio::main]`
-- Prefer async traits from `async_trait`
-
-**Other:**
-
-- Resolve clippy warnings with `-D warnings`
-- Run `cargo fmt` before committing
-
-### TypeScript/SolidJS
-
-**Naming:**
-
-- `camelCase` for variables and functions
-- `PascalCase` for components and types
-- Use descriptive names, avoid abbreviations
-
-**Imports:**
-
-- Use `~` alias for src directory: `~/components/...`
-- Order: SolidJS imports → external libraries → local
-
-**Types:**
-
-- Strict TypeScript mode (no `implicit any`)
-- Define prop interfaces explicitly
-- Use `Component<T>` type for functional components
-- Avoid type assertions; prefer proper typing
-
-**Components:**
-
-- Functional components with `createSignal()` for reactive state
-- Use `.tsx` extension for JSX files
-- Proper typing for event handlers (`KeyboardEvent`, `MouseEvent`, etc.)
-- Use `onCleanup()` for cleanup
-- Use `createContext` for type-safe context
-
-**File Structure:**
-
-```tsx
-// ============================================================================
-// Types
-// ============================================================================
-export interface CardProps {
-  /* ... */
-}
-
-// ============================================================================
-// Variant Classes
-// ============================================================================
-const variantClasses = {
-  /* ... */
-};
-
-// ============================================================================
-// Component
-// ============================================================================
-export const Card: Component<CardProps> = (props) => {
-  /* ... */
-};
-```
-
-### Styling (TailwindCSS v4 + DaisyUI)
-
-- Utility-first CSS; use Tailwind classes directly in components
-- Use `@apply` in CSS files (`/src/index.css`) with `@layer` directives
-- Use `cn()` utility from `~/lib/utils` for conditional class merging
-- Responsive design with mobile-first approach
-- Dark mode via DaisyUI themes with `[data-theme]` attribute
-- Default themes: `sunset` (light), `dark` (prefers-color-scheme)
-
-### Web-specific (web/.cursorrules)
-
-- TanStack Router for routing
-- TanStack Query for data fetching
-- Cloudflare Workers SSR with `@tanstack/solid-start`
-- Tailwind's `@layer` directive for custom styles
-
-### Frontend TypeScript (src/)
-
-```bash
-pnpm tsc              # TypeScript check (run before committing)
-```
-
-## Commit Guidelines
-
-- Follow Conventional Commits: `feat:`, `fix:`, `refactor:`, `chore:` with optional scope
-- Example: `feat(ui): add new button component`
-- PRs: include summary, testing performed, and screenshots for UI changes
+`app/Cargo.toml` gates heavy dependencies (portable-pty, agent-client-protocol) behind `cfg(not(any(target_os = "android", target_os = "ios")))`.
 
 ## Security
 
 - Never commit secrets (API keys, client keys, tokens)
 - Use environment variables for sensitive configuration
-- Regenerate keys if compromised
-- `shared/src/message_protocol.rs` uses bincode + JSON for wire protocol; `chacha20poly1305` for encryption
+- `shared/src/message_protocol.rs` uses chacha20poly1305 for encryption
 
-## Architecture Notes
+## Release
 
-- CLI host uses iroh QUIC for P2P connections with relay support
-- Message protocol: `shared/src/message_protocol.rs` (bincode + JSON serialization)
-- Agent management lives in `shared/src/agent/mod.rs`; `AgentManager` owns session lifecycle and runtime selection
-- Frontend uses `sessionStore` pattern for multi-session management
-- Permission modes: AlwaysAsk, AcceptEdits, Plan, AutoApprove
-- Desktop/mobile split: `app/Cargo.toml` gates heavy dependencies (portable-pty, agent-client-protocol) behind `cfg(not(any(target_os = "android", target_os = "ios")))`
-- Web workspace (`web/`) is a separate TanStack Start + Cloudflare Workers app with own `pnpm` workspace
+```bash
+git tag v0.x.y && git push origin v0.x.y
+```
+
+## Adding a New Agent Integration
+
+1. `shared/src/message_protocol.rs` - add agent type
+2. `shared/src/agent/factory.rs` - process/binary detection
+3. `shared/src/agent/mod.rs` - session startup
+4. `shared/src/agent/` - streaming format and permissions handling
+5. `app/src/lib.rs` - backend commands/events
+6. `src/stores/` and components - frontend session/UI handling

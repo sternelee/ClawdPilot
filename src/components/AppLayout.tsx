@@ -36,7 +36,6 @@ import { FiFolder, FiGitBranch, FiX } from "solid-icons/fi";
 // ============================================================================
 
 export const AppLayout: Component = () => {
-  const [sidebarOpen, setSidebarOpen] = createSignal(true); // Start open on desktop
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = createSignal(false);
   const [showSetupGuide, setShowSetupGuide] = createSignal(false);
   const [rightPanelView, setRightPanelView] = createSignal<
@@ -50,7 +49,7 @@ export const AppLayout: Component = () => {
   const closeRightPanel = () => setRightPanelView("none");
 
   createEffect(() => {
-    const shouldLockScroll = sidebarOpen() || rightPanelView() !== "none";
+    const shouldLockScroll = navigationStore.state.sidebarOpen || rightPanelView() !== "none";
     document.body.style.overflow = shouldLockScroll ? "hidden" : "";
   });
 
@@ -71,7 +70,7 @@ export const AppLayout: Component = () => {
 
       // Press 'b' to toggle sidebar (desktop only)
       if ((e.key === "b" || e.key === "B") && !isMobile()) {
-        setSidebarOpen((prev) => !prev);
+        navigationStore.toggleSidebar();
       }
 
       // Press ? to show keyboard shortcuts
@@ -93,8 +92,8 @@ export const AppLayout: Component = () => {
 
   // Auto-expand sidebar on desktop (md and above)
   createEffect(() => {
-    if (window.innerWidth >= 768 && !sidebarOpen()) {
-      setSidebarOpen(true);
+    if (window.innerWidth >= 768 && !navigationStore.state.sidebarOpen) {
+      navigationStore.setSidebarOpen(true);
     }
   });
 
@@ -148,30 +147,28 @@ export const AppLayout: Component = () => {
     <div class="flex flex-col h-full min-h-0 flex-1 overflow-hidden bg-background">
       {/* Empty State Header */}
       <header class="z-20 flex min-h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background/80 px-4 py-3 backdrop-blur-md sm:min-h-16 sm:px-6">
-        <Show when={mobile()}>
-          <button
-            type="button"
-            class="btn btn-square btn-ghost h-10 w-10 rounded-xl"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Open menu"
+        <button
+          type="button"
+          class="btn btn-square btn-ghost h-10 w-10 rounded-xl md:hidden"
+          onClick={() => navigationStore.setSidebarOpen(true)}
+          aria-label="Open menu"
+        >
+          <svg
+            width="20"
+            height="20"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            class="inline-block h-5 w-5 stroke-current"
           >
-            <svg
-              width="20"
-              height="20"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              class="inline-block h-5 w-5 stroke-current"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              ></path>
-            </svg>
-          </button>
-        </Show>
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            ></path>
+          </svg>
+        </button>
         <h1 class="text-lg font-semibold tracking-tight text-foreground">
           Chat
         </h1>
@@ -198,9 +195,9 @@ export const AppLayout: Component = () => {
             agentType={session().agentType}
             projectPath={session().projectPath}
             sessionMode={session().mode}
-            sidebarOpen={sidebarOpen()}
+            sidebarOpen={navigationStore.state.sidebarOpen}
             onSendMessage={handleSendMessage}
-            onToggleSidebar={() => setSidebarOpen(true)}
+            onToggleSidebar={() => navigationStore.setSidebarOpen(true)}
             rightPanelView={rightPanelView()}
             onToggleFileBrowser={() => toggleRightPanel("file")}
             onToggleGitPanel={() => toggleRightPanel("git")}
@@ -323,47 +320,35 @@ export const AppLayout: Component = () => {
         </div>
       </Show>
 
-      {/* Session Sidebar */}
-      <Show when={!isMobileDevice || sidebarOpen()}>
-        {/* Mobile overlay backdrop */}
-        <Show when={isMobileDevice && sidebarOpen()}>
-          <button
-            type="button"
-            class="fixed inset-0 z-40 h-full w-full cursor-default border-none bg-black/50 backdrop-blur-sm lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-            aria-label="Close sidebar"
-          />
-        </Show>
+      {/* Mobile overlay backdrop - hidden on desktop (md+) */}
+      <button
+        type="button"
+        class={`fixed inset-0 z-40 h-full w-full cursor-default border-none bg-black/50 backdrop-blur-sm transition-all duration-300 md:hidden ${
+          navigationStore.state.sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => navigationStore.setSidebarOpen(false)}
+        aria-label="Close sidebar"
+      />
 
-        <div
-          class={`flex-shrink-0 transition-all duration-300 ease-out ${
-            isMobileDevice
-              ? `fixed inset-y-0 left-0 z-50 w-[85vw] max-w-80 shadow-2xl ${
-                  sidebarOpen() ? "translate-x-0" : "-translate-x-full"
-                }`
-              : sidebarOpen()
-                ? "w-64 lg:w-68"
-                : "w-0 overflow-hidden"
-          }`}
-        >
-          <SessionSidebar
-            isOpen={sidebarOpen()}
-            onToggle={() => setSidebarOpen(!sidebarOpen())}
-          />
-        </div>
-      </Show>
+      {/* Session Sidebar */}
+      {/* Mobile: fixed overlay, slides in from left. Desktop (md+): always visible inline */}
+      <div
+        class={`flex-shrink-0 transition-all duration-300 ease-out md:relative md:inset-auto md:z-auto md:w-64 lg:w-68 md:shadow-none md:border-0
+          fixed inset-y-0 left-0 z-50 w-[85vw] max-w-80 shadow-2xl
+          ${navigationStore.state.sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        }`}
+      >
+        <SessionSidebar
+          isOpen={navigationStore.state.sidebarOpen}
+          onToggle={() => navigationStore.toggleSidebar()}
+        />
+      </div>
 
       {/* Main Content */}
       <div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
         {/* Main Content Area */}
         <main class="flex-1 flex min-h-0 flex-col min-w-0">
-          <Show when={isMobileDevice} fallback={renderMainContent()}>
-            <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
-              <div class="flex-1 min-h-0 overflow-hidden">
-                {renderMainContent()}
-              </div>
-            </div>
-          </Show>
+          {renderMainContent()}
         </main>
       </div>
     </div>

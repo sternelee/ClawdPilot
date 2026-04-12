@@ -8,6 +8,7 @@ import { type Component, createSignal, Show } from "solid-js";
 import { cn } from "../lib/utils";
 import { settingsStore, t, FontSizeType } from "../stores/settingsStore";
 import { notificationStore } from "../stores/notificationStore";
+import { navigationStore } from "../stores/navigationStore";
 import { FiMoon, FiGlobe, FiPlay, FiInfo } from "solid-icons/fi";
 import { Button } from "./ui/primitives";
 import { Label, Select, Switch } from "./ui/primitives";
@@ -39,10 +40,11 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
       <header class="compact-mobile-controls z-20 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-base-content/10 bg-base-100/80 px-4 py-3 backdrop-blur-lg md:px-6">
         <div class="flex items-center gap-3">
           {/* Hamburger menu - only visible on mobile */}
-          <label
-            for="drawer"
+          <button
+            type="button"
             aria-label="Open menu"
             class="btn btn-square btn-ghost drawer-button lg:hidden"
+            onClick={() => navigationStore.setSidebarOpen(true)}
           >
             <svg
               width="20"
@@ -59,7 +61,7 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
                 d="M4 6h16M4 12h16M4 18h16"
               ></path>
             </svg>
-          </label>
+          </button>
           <h1 class="text-xl font-bold">{t("settings.title")}</h1>
         </div>
       </header>

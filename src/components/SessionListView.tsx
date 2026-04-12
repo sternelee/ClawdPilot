@@ -24,6 +24,7 @@ import {
 import { sessionStore, type AgentSessionMetadata, type AgentType } from "../stores/sessionStore";
 import { sessionEventRouter } from "../stores/sessionEventRouter";
 import { notificationStore } from "../stores/notificationStore";
+import { HistorySelectionModal } from "./HistorySelectionModal";
 import {
   FiSearch,
   FiX,
@@ -453,6 +454,7 @@ interface SessionCardProps {
   onCopyUrl?: () => void;
   onShare?: () => void;
   onRename?: (title: string) => void;
+  onHistory?: (session: AgentSessionMetadata) => void;
 }
 
 const SessionCard: Component<SessionCardProps> = (props) => {
@@ -552,6 +554,18 @@ const SessionCard: Component<SessionCardProps> = (props) => {
             >
               Open
             </button>
+            <Show when={props.session.mode !== "local"}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onHistory?.(props.session);
+                }}
+                class="p-1.5 rounded-lg hover:bg-base-300/50 text-base-content/40 hover:text-base-content transition-colors"
+                title="Load history"
+              >
+                <FiClock size={14} />
+              </button>
+            </Show>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -603,6 +617,7 @@ interface SessionGroupItemProps {
   onStopSession: (sessionId: string) => void;
   onPinSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => void;
+  onHistorySession?: (session: AgentSessionMetadata) => void;
 }
 
 const SessionGroupItem: Component<SessionGroupItemProps> = (props) => {
@@ -643,6 +658,7 @@ const SessionGroupItem: Component<SessionGroupItemProps> = (props) => {
                 onStop={() => props.onStopSession(session.sessionId)}
                 onPin={() => props.onPinSession(session.sessionId)}
                 onDelete={() => props.onDeleteSession(session.sessionId)}
+                onHistory={(path) => props.onHistorySession?.(session)}
                 onRename={(title) => {
                   // Handle rename - in a real app this would update the session
                   console.log("Rename session", session.sessionId, "to", title);
@@ -718,6 +734,9 @@ export function SessionListView(props: SessionListViewProps) {
   const [searchQuery, setSearchQuery] = createSignal("");
   const [isLoading, setIsLoading] = createSignal(false);
   const [pinnedSessions, setPinnedSessions] = createSignal<Set<string>>(new Set());
+  const [historyModalOpen, setHistoryModalOpen] = createSignal(false);
+  const [historyModalPath, setHistoryModalPath] = createSignal<string>("");
+  const [historyModalAgentType, setHistoryModalAgentType] = createSignal<AgentType>("claude");
 
   const sessions = createMemo(() => {
     let allSessions = sessionStore.getSessions();
@@ -773,6 +792,12 @@ export function SessionListView(props: SessionListViewProps) {
       `Delete session: ${sessionId}`,
       "Delete Session"
     );
+  };
+
+  const handleLoadHistory = (session: AgentSessionMetadata) => {
+    setHistoryModalAgentType(session.agentType);
+    setHistoryModalPath(session.currentDir);
+    setHistoryModalOpen(true);
   };
 
   return (
@@ -885,6 +910,7 @@ export function SessionListView(props: SessionListViewProps) {
                       onStop={() => handleStopSession(session.sessionId)}
                       onPin={() => togglePinSession(session.sessionId)}
                       onDelete={() => handleDeleteSession(session.sessionId)}
+                      onHistory={() => handleLoadHistory(session)}
                     />
                   )}
                 </For>
@@ -903,11 +929,20 @@ export function SessionListView(props: SessionListViewProps) {
                 onStopSession={handleStopSession}
                 onPinSession={togglePinSession}
                 onDeleteSession={handleDeleteSession}
+                onHistorySession={(session) => handleLoadHistory(session)}
               />
             )}
           </For>
         </Show>
       </div>
+
+      {/* History Selection Modal */}
+      <HistorySelectionModal
+        isOpen={historyModalOpen()}
+        onClose={() => setHistoryModalOpen(false)}
+        agentType={historyModalAgentType()}
+        defaultProjectPath={historyModalPath()}
+      />
     </div>
   );
 }
