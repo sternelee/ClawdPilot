@@ -289,7 +289,7 @@ impl AgentEvent {
 }
 
 /// Event wrapper with turn ID for broadcast channel
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AgentTurnEvent {
     pub turn_id: String,
     pub event: AgentEvent,

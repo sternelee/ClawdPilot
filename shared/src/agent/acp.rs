@@ -89,6 +89,96 @@ use super::events::{AgentEvent, AgentTurnEvent, PendingPermission};
 use super::permission_handler::{ApprovalDecision, PermissionHandler, PermissionMode};
 use crate::message_protocol::AgentHistoryEntry;
 
+/// Key used in ACP ToolCall meta to store the tool's programmatic name.
+/// This is a workaround since ACP's ToolCall doesn't have a dedicated name field.
+pub const TOOL_NAME_META_KEY: &str = "tool_name";
+
+/// Key used in ACP ToolCall meta to store the session id and message indexes
+/// when a tool call spawns a subagent.
+pub const SUBAGENT_SESSION_INFO_META_KEY: &str = "subagent_session_info";
+
+/// Information about a subagent session spawned by a tool call
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SubagentSessionInfo {
+    /// The session id of the subagent that was spawned
+    pub session_id: String,
+    /// The index of the message at the start of the "turn" run by this tool call
+    pub message_start_index: usize,
+    /// The index of the output of the message that the subagent has returned
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_end_index: Option<usize>,
+}
+
+#[derive(Debug)]
+struct HistoryListCache {
+    entries: Vec<AgentHistoryEntry>,
+    cached_at: std::time::Instant,
+    ttl: Duration,
+}
+
+impl HistoryListCache {
+    fn new(entries: Vec<AgentHistoryEntry>, ttl_secs: u64) -> Self {
+        Self {
+            entries,
+            cached_at: std::time::Instant::now(),
+            ttl: Duration::from_secs(ttl_secs),
+        }
+    }
+
+    fn is_expired(&self) -> bool {
+        self.cached_at.elapsed() > self.ttl
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct HistoryListCacheManager {
+    caches: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HistoryListCache>>>,
+}
+
+impl HistoryListCacheManager {
+    pub fn new() -> Self {
+        Self {
+            caches: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        }
+    }
+
+    fn cache_key(agent_type: &AgentType, cwd: &Path) -> String {
+        format!("{:?}:{}", agent_type, cwd.display())
+    }
+
+    pub fn get(&self, agent_type: &AgentType, cwd: &Path) -> Option<Vec<AgentHistoryEntry>> {
+        let key = Self::cache_key(agent_type, cwd);
+        let caches = self.caches.lock().ok()?;
+        caches.get(&key).and_then(|cache| {
+            if cache.is_expired() {
+                None
+            } else {
+                Some(cache.entries.clone())
+            }
+        })
+    }
+
+    pub fn set(&self, agent_type: &AgentType, cwd: PathBuf, entries: Vec<AgentHistoryEntry>) {
+        let key = Self::cache_key(agent_type, &cwd);
+        if let Ok(mut caches) = self.caches.lock() {
+            caches.insert(key, HistoryListCache::new(entries, 60));
+        }
+    }
+
+    pub fn invalidate(&self, agent_type: &AgentType, cwd: &Path) {
+        let key = Self::cache_key(agent_type, cwd);
+        if let Ok(mut caches) = self.caches.lock() {
+            caches.remove(&key);
+        }
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut caches) = self.caches.lock() {
+            caches.clear();
+        }
+    }
+}
+
 /// Session options for agent-specific configuration
 #[derive(Debug, Clone, Default)]
 pub struct SessionOptions {
@@ -373,6 +463,24 @@ enum AcpCommand {
     },
 }
 
+pub struct SharedAcpRuntime {
+    _phantom: std::marker::PhantomData<()>,
+}
+
+impl SharedAcpRuntime {
+    pub fn new() -> Self {
+        Self {
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl Default for SharedAcpRuntime {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(dead_code)]
 pub struct AcpStreamingSession {
     session_id: String,
@@ -443,6 +551,38 @@ impl AcpStreamingSession {
         start_mode: AcpSessionStartMode,
         retry_config: RetryConfig,
     ) -> Result<Self> {
+        Self::spawn_with_options_and_runtime(
+            session_id,
+            agent_type,
+            command,
+            args,
+            env,
+            working_dir,
+            home_dir,
+            mcp_servers,
+            session_options,
+            start_mode,
+            retry_config,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn_with_options_and_runtime(
+        session_id: String,
+        agent_type: AgentType,
+        command: String,
+        args: Vec<String>,
+        env: HashMap<String, String>,
+        working_dir: PathBuf,
+        home_dir: Option<String>,
+        mcp_servers: Option<serde_json::Value>,
+        session_options: Option<SessionOptions>,
+        start_mode: AcpSessionStartMode,
+        retry_config: RetryConfig,
+        shared_runtime: Option<Arc<SharedAcpRuntime>>,
+    ) -> Result<Self> {
         let (event_sender, _) = broadcast::channel(1024);
         let event_buffer = Arc::new(Mutex::new(VecDeque::new()));
         let (command_tx, command_rx) = mpsc::unbounded_channel();
@@ -453,7 +593,6 @@ impl AcpStreamingSession {
         )));
         let pending_tool_names = Arc::new(RwLock::new(HashMap::<String, String>::new()));
 
-        // Session update draining state
         let session_update_count = Arc::new(AtomicU64::new(0));
         let processed_update_count = Arc::new(AtomicU64::new(0));
         let suppress_session_updates = Arc::new(AtomicBool::new(false));
@@ -471,81 +610,80 @@ impl AcpStreamingSession {
         let runtime_suppress_session_updates = suppress_session_updates.clone();
         let runtime_session_options = session_options.clone();
 
+        let _ = shared_runtime;
         let thread_name = format!("irogen-acp-{}", &session_id[..session_id.len().min(8)]);
 
-        std::thread::Builder::new()
-            .name(thread_name)
-            .spawn(move || {
-                let runtime = match tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                {
-                    Ok(runtime) => runtime,
-                    Err(err) => {
-                        let _ = ready_tx.send(Err(format!("Failed to build ACP runtime: {err}")));
-                        return;
-                    }
-                };
-
-                let local_set = tokio::task::LocalSet::new();
-                runtime.block_on(local_set.run_until(async move {
-                    if let Err(err) = run_acp_runtime(AcpRuntimeParams {
-                        session_id: runtime_session_id,
-                        agent_type,
-                        command,
-                        args,
-                        env,
-                        working_dir,
-                        home_dir,
-                        mcp_servers,
-                        start_mode,
-                        event_sender: runtime_event_sender,
-                        event_buffer: runtime_event_buffer,
-                        command_tx: runtime_command_tx,
-                        command_rx,
-                        manager_tx: runtime_manager_tx,
-                        manager_rx,
-                        ready_tx,
-                        retry_config: runtime_retry_config,
-                        permission_handler: runtime_permission_handler,
-                        pending_tool_names: runtime_pending_tool_names,
-                        session_update_count: runtime_session_update_count,
-                        processed_update_count: runtime_processed_update_count,
-                        suppress_session_updates: runtime_suppress_session_updates,
-                        session_options: runtime_session_options,
-                    })
-                    .await
+            std::thread::Builder::new()
+                .name(thread_name)
+                .spawn(move || {
+                    let runtime = match tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
                     {
-                        error!("ACP runtime exited with error: {err}");
-                    }
-                }));
-            })
-            .with_context(|| format!("Failed to spawn ACP thread for session {session_id}"))?;
+                        Ok(runtime) => runtime,
+                        Err(err) => {
+                            let _ = ready_tx.send(Err(format!("Failed to build ACP runtime: {err}")));
+                            return;
+                        }
+                    };
 
-        match ready_rx.await {
-            Ok(Ok(())) => Ok(Self {
-                session_id,
-                agent_type,
-                event_sender,
-                event_buffer,
-                command_tx,
-                manager_tx,
-                retry_config,
-                permission_handler,
-                pending_tool_names,
-                session_update_count,
-                processed_update_count,
-                suppress_session_updates,
-            }),
-            Ok(Err(err)) => Err(anyhow!(err)),
-            Err(_) => Err(anyhow!(
-                "ACP startup channel closed before session became ready"
-            )),
-        }
+                    let local_set = tokio::task::LocalSet::new();
+                    runtime.block_on(local_set.run_until(async move {
+                        if let Err(err) = run_acp_runtime(AcpRuntimeParams {
+                            session_id: runtime_session_id,
+                            agent_type,
+                            command,
+                            args,
+                            env,
+                            working_dir,
+                            home_dir,
+                            mcp_servers,
+                            start_mode,
+                            event_sender: runtime_event_sender,
+                            event_buffer: runtime_event_buffer,
+                            command_tx: runtime_command_tx,
+                            command_rx,
+                            manager_tx: runtime_manager_tx,
+                            manager_rx,
+                            ready_tx,
+                            retry_config: runtime_retry_config,
+                            permission_handler: runtime_permission_handler,
+                            pending_tool_names: runtime_pending_tool_names,
+                            session_update_count: runtime_session_update_count,
+                            processed_update_count: runtime_processed_update_count,
+                            suppress_session_updates: runtime_suppress_session_updates,
+                            session_options: runtime_session_options,
+                        })
+                        .await
+                        {
+                            error!("ACP runtime exited with error: {err}");
+                        }
+                    }));
+                })
+                .with_context(|| format!("Failed to spawn ACP thread for session {session_id}"))?;
+
+            match ready_rx.await {
+                Ok(Ok(())) => Ok(Self {
+                    session_id,
+                    agent_type,
+                    event_sender,
+                    event_buffer,
+                    command_tx,
+                    manager_tx,
+                    retry_config,
+                    permission_handler,
+                    pending_tool_names,
+                    session_update_count,
+                    processed_update_count,
+                    suppress_session_updates,
+                }),
+                Ok(Err(err)) => Err(anyhow!(err)),
+                Err(_) => Err(anyhow!(
+                    "ACP startup channel closed before session became ready"
+                )),
+            }
     }
 
-    /// Create a new ACP streaming session with custom retry configuration
-    /// (backward compatible with previous API)
     #[allow(clippy::too_many_arguments)]
     pub async fn spawn_with_start_mode(
         session_id: String,
@@ -571,6 +709,37 @@ impl AcpStreamingSession {
             None,
             start_mode,
             retry_config,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn_with_start_mode_and_runtime(
+        session_id: String,
+        agent_type: AgentType,
+        command: String,
+        args: Vec<String>,
+        env: HashMap<String, String>,
+        working_dir: PathBuf,
+        home_dir: Option<String>,
+        mcp_servers: Option<serde_json::Value>,
+        start_mode: AcpSessionStartMode,
+        retry_config: RetryConfig,
+        shared_runtime: Option<Arc<SharedAcpRuntime>>,
+    ) -> Result<Self> {
+        Self::spawn_with_options_and_runtime(
+            session_id,
+            agent_type,
+            command,
+            args,
+            env,
+            working_dir,
+            home_dir,
+            mcp_servers,
+            None,
+            start_mode,
+            retry_config,
+            shared_runtime,
         )
         .await
     }
@@ -1108,7 +1277,6 @@ pub async fn list_agent_history(
 }
 
 /// Load Codex session messages from the JSONL file in ~/.codex/sessions/
-/// Codex ACP adapter doesn't support resume_session, so we read the session file directly.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct CodexHistoryMessage {
     pub role: String,
@@ -1120,19 +1288,15 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
     let sessions_dir = format!("{}/.codex/sessions", home);
 
-    info!(
-        "[Codex history] Searching for session {} in {}",
-        session_id, sessions_dir
-    );
+    info!("[Codex history] Searching for session {} in {}", session_id, sessions_dir);
 
-    // Search for the JSONL file matching the session ID
     let session_dir = std::path::Path::new(&sessions_dir);
     if !session_dir.exists() {
+        debug!("[Codex history] Sessions directory does not exist: {}", sessions_dir);
         return Ok(Vec::new());
     }
 
-    // Find the JSONL file containing our session
-    let mut matching_file: Option<std::path::PathBuf> = None;
+    let mut matching_files: Vec<std::path::PathBuf> = Vec::new();
     let entries = std::fs::read_dir(session_dir)
         .map_err(|e| anyhow::anyhow!("Failed to read sessions directory: {}", e))?;
 
@@ -1153,101 +1317,139 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
                 for file in files.flatten() {
                     let file_name = file.file_name().to_string_lossy().to_string();
                     if file_name.ends_with(".jsonl") && file_name.contains(session_id) {
-                        matching_file = Some(file.path());
-                        break;
+                        matching_files.push(file.path());
                     }
                 }
             }
-            if matching_file.is_some() {
-                break;
-            }
-        }
-        if matching_file.is_some() {
-            break;
         }
     }
 
-    let file_path = match matching_file {
-        Some(p) => p,
-        None => {
-            warn!("[Codex history] Session file not found for {}", session_id);
-            return Ok(Vec::new());
-        }
-    };
+    if matching_files.is_empty() {
+        let entries = std::fs::read_dir(session_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to read sessions directory: {}", e))?;
 
-    info!("[Codex history] Loading from {:?}", file_path);
+        for year_entry in entries.flatten() {
+            let year_path = year_entry.path();
+            if !year_path.is_dir() {
+                continue;
+            }
 
-    // Read and parse the JSONL file
-    let content = std::fs::read_to_string(&file_path)
-        .map_err(|e| anyhow::anyhow!("Failed to read session file: {}", e))?;
+            let month_entries = std::fs::read_dir(&year_path).ok();
+            for month_entry in month_entries.into_iter().flatten().flatten() {
+                let day_path = month_entry.path();
+                if !day_path.is_dir() {
+                    continue;
+                }
 
-    let mut messages = Vec::new();
-
-    for line in content.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        // Parse the JSON line
-        let json: serde_json::Value = match serde_json::from_str(line) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-
-        let entry_type = json.get("type").and_then(|v| v.as_str()).unwrap_or("");
-        let payload = json.get("payload");
-
-        match entry_type {
-            "response_item" => {
-                if let Some(p) = payload {
-                    let role = p.get("role").and_then(|v| v.as_str()).unwrap_or("");
-                    let content = p.get("content").and_then(|v| v.as_array());
-
-                    if let Some(contents) = content {
-                        for item in contents {
-                            if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
-                                // Create appropriate message based on role
-                                let msg = CodexHistoryMessage {
-                                    role: if role == "developer" {
-                                        "assistant".to_string()
-                                    } else {
-                                        role.to_string()
-                                    },
-                                    content: text.to_string(),
-                                    timestamp: std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
-                                        .unwrap_or_default()
-                                        .as_secs()
-                                        as i64,
-                                };
-                                messages.push(msg);
+                if let Ok(files) = std::fs::read_dir(&day_path) {
+                    for file in files.flatten() {
+                        let file_path = file.path();
+                        if file_path.extension().map_or(false, |e| e == "jsonl") {
+                            if let Ok(content) = std::fs::read_to_string(&file_path) {
+                                if content.lines().take(10).any(|line| line.contains(session_id)) {
+                                    matching_files.push(file_path);
+                                }
                             }
                         }
                     }
                 }
             }
-            _ => {
-                // Skip other types for now
+        }
+    }
+
+    if matching_files.is_empty() {
+        warn!("[Codex history] Session file not found for {}", session_id);
+        return Ok(Vec::new());
+    }
+
+    if matching_files.len() > 1 {
+        warn!("[Codex history] Multiple files match session {}: {:?}, using first", session_id, matching_files);
+    }
+
+    let file_path = &matching_files[0];
+    info!("[Codex history] Loading from {:?}", file_path);
+
+    const MAX_FILE_SIZE: usize = 50 * 1024 * 1024;
+    let metadata = std::fs::metadata(&file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read file metadata: {}", e))?;
+
+    if metadata.len() as usize > MAX_FILE_SIZE {
+        warn!("[Codex history] File too large ({} bytes)", metadata.len());
+    }
+
+    let content = std::fs::read_to_string(&file_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read session file: {}", e))?;
+
+    let first_line = content.lines().next().unwrap_or("");
+    if !first_line.contains(session_id) {
+        warn!("[Codex history] File may not contain session {}: {:?}", session_id, file_path);
+    }
+
+    let mut messages = Vec::new();
+    let mut parse_errors = 0;
+
+    for (line_num, line) in content.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let json: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(e) => {
+                parse_errors += 1;
+                if parse_errors <= 3 {
+                    warn!("[Codex history] Parse error at line {}: {}", line_num + 1, e);
+                }
+                continue;
+            }
+        };
+
+        let entry_type = json.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        let payload = json.get("payload");
+
+        if entry_type == "response_item" {
+            if let Some(p) = payload {
+                let role = p.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                let content = p.get("content").and_then(|v| v.as_array());
+
+                if let Some(contents) = content {
+                    for item in contents {
+                        if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                            let timestamp = p
+                                .get("metadata")
+                                .and_then(|m| m.get("timestamp"))
+                                .and_then(|t| t.as_i64())
+                                .unwrap_or_else(|| {
+                                    std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs() as i64
+                                });
+
+                            let msg = CodexHistoryMessage {
+                                role: if role == "developer" { "assistant".to_string() } else { role.to_string() },
+                                content: text.to_string(),
+                                timestamp,
+                            };
+                            messages.push(msg);
+                        }
+                    }
+                }
             }
         }
     }
 
-    info!(
-        "[Codex history] Loaded {} messages from session {}",
-        messages.len(),
-        session_id
-    );
+    if parse_errors > 3 {
+        warn!("[Codex history] {} additional parse errors suppressed", parse_errors - 3);
+    }
+
+    info!("[Codex history] Loaded {} messages from session {} ({} parse errors)", messages.len(), session_id, parse_errors);
     Ok(messages)
 }
 
-/// Load OpenCode session messages using `opencode export` command
 pub async fn load_opencode_session_history(session_id: &str) -> Result<Vec<CodexHistoryMessage>> {
-    info!(
-        "[OpenCode history] Loading session {} via opencode export",
-        session_id
-    );
+    info!("[OpenCode history] Loading session {} via opencode export", session_id);
 
-    // Use tokio::process::Command to run opencode export
     let output = tokio::process::Command::new("opencode")
         .arg("export")
         .arg(session_id)
@@ -1262,22 +1464,13 @@ pub async fn load_opencode_session_history(session_id: &str) -> Result<Vec<Codex
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // Parse the JSON output - with fallback for large strings that may cause parsing issues
     let json: serde_json::Value = match serde_json::from_str(&stdout) {
         Ok(v) => v,
         Err(e) => {
-            // Try to recover by truncating extremely long strings
-            warn!(
-                "[OpenCode] Full JSON parse failed: {}, attempting recovery",
-                e
-            );
+            warn!("[OpenCode] Full JSON parse failed: {}, attempting recovery", e);
             let truncated = truncate_large_strings(&stdout, 50000);
             serde_json::from_str(&truncated).map_err(|e2| {
-                anyhow::anyhow!(
-                    "Failed to parse opencode export output: {} (recovery also failed: {})",
-                    e,
-                    e2
-                )
+                anyhow::anyhow!("Failed to parse opencode export output: {} (recovery also failed: {})", e, e2)
             })?
         }
     };
@@ -1322,11 +1515,7 @@ pub async fn load_opencode_session_history(session_id: &str) -> Result<Vec<Codex
         })
         .unwrap_or_default();
 
-    info!(
-        "[OpenCode history] Loaded {} messages from session {}",
-        messages.len(),
-        session_id
-    );
+    info!("[OpenCode history] Loaded {} messages from session {}", messages.len(), session_id);
     Ok(messages)
 }
 
@@ -1585,7 +1774,7 @@ async fn run_acp_runtime(params: AcpRuntimeParams) -> Result<()> {
                         )
                         .client_info(
                             acp::Implementation::new("irogen-cli", env!("CARGO_PKG_VERSION"))
-                                .title("ClawdChat CLI"),
+                                .title("Irogen CLI"),
                         ),
                 )
                 .await

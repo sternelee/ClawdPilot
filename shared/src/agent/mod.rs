@@ -25,8 +25,9 @@ use tokio::task;
 use tracing::{debug, info, warn};
 
 pub use acp::{
-    AcpSessionStartMode, AcpStreamingSession, SessionOptions, load_codex_session_history,
-    load_opencode_session_history,
+    AcpSessionStartMode, AcpStreamingSession, HistoryListCacheManager, RetryConfig, SessionOptions,
+    SharedAcpRuntime, SubagentSessionInfo, TOOL_NAME_META_KEY, SUBAGENT_SESSION_INFO_META_KEY,
+    load_codex_session_history, load_opencode_session_history,
 };
 pub use acp_errors::{AcpSessionError, AcpStartupError, AcpTerminalError};
 pub use acp_permission::{AcpPermissionHandler, AcpPermissionState};
@@ -172,18 +173,28 @@ impl SessionKind {
 /// External agents are launched as ACP-compatible processes (Zed-style external agents).
 #[derive(Clone)]
 pub struct AgentManager {
-    /// Active sessions by session ID
     sessions: Arc<RwLock<HashMap<String, Arc<SessionKind>>>>,
-    /// Session metadata by session ID
     session_metadata: Arc<RwLock<HashMap<String, AgentSessionMetadata>>>,
+    acp_runtime: Option<Arc<SharedAcpRuntime>>,
+    history_cache: HistoryListCacheManager,
 }
 
 impl AgentManager {
-    /// Create a new agent manager
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             session_metadata: Arc::new(RwLock::new(HashMap::new())),
+            acp_runtime: None,
+            history_cache: HistoryListCacheManager::new(),
+        }
+    }
+
+    pub fn with_shared_runtime() -> Self {
+        Self {
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            session_metadata: Arc::new(RwLock::new(HashMap::new())),
+            acp_runtime: Some(Arc::new(SharedAcpRuntime::new())),
+            history_cache: HistoryListCacheManager::new(),
         }
     }
 
@@ -399,7 +410,6 @@ impl AgentManager {
         }
 
         let session: Arc<SessionKind> = if agent_type == AgentType::OpenClaw {
-            // OpenClaw uses WebSocket Gateway mode
             let command = binary_path.unwrap_or(launch_config.command);
             let mut args = launch_config.args;
             args.extend(extra_args);
@@ -417,23 +427,41 @@ impl AgentManager {
 
             Arc::new(SessionKind::OpenClawWs(Arc::new(openclaw_session)))
         } else {
-            // All other agents use ACP (external agent model)
             let command = binary_path.unwrap_or(launch_config.command);
             let mut args = launch_config.args;
             args.extend(extra_args);
 
-            let acp_session = AcpStreamingSession::spawn(
-                session_id.clone(),
-                agent_type,
-                command,
-                args,
-                launch_config.env,
-                working_dir.clone(),
-                home_dir,
-                mcp_servers,
-            )
-            .await
-            .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?;
+            let acp_session = if let Some(ref runtime) = self.acp_runtime {
+                AcpStreamingSession::spawn_with_options_and_runtime(
+                    session_id.clone(),
+                    agent_type,
+                    command,
+                    args,
+                    launch_config.env,
+                    working_dir.clone(),
+                    home_dir,
+                    mcp_servers,
+                    None,
+                    AcpSessionStartMode::New,
+                    RetryConfig::default(),
+                    Some(runtime.clone()),
+                )
+                .await
+                .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?
+            } else {
+                AcpStreamingSession::spawn(
+                    session_id.clone(),
+                    agent_type,
+                    command,
+                    args,
+                    launch_config.env,
+                    working_dir.clone(),
+                    home_dir,
+                    mcp_servers,
+                )
+                .await
+                .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?
+            };
 
             Arc::new(SessionKind::Acp(Arc::new(acp_session)))
         };
@@ -587,20 +615,38 @@ impl AgentManager {
         }
         drop(sessions);
 
-        let acp_session = AcpStreamingSession::spawn_with_start_mode(
-            session_id.clone(),
-            agent_type,
-            command,
-            args,
-            launch_config.env,
-            working_dir.clone(),
-            home_dir,
-            None,
-            start_mode,
-            acp::RetryConfig::default(),
-        )
-        .await
-        .with_context(|| format!("Failed to load ACP history session for {:?}", agent_type))?;
+        let acp_session = if let Some(ref runtime) = self.acp_runtime {
+            AcpStreamingSession::spawn_with_start_mode_and_runtime(
+                session_id.clone(),
+                agent_type,
+                command,
+                args,
+                launch_config.env,
+                working_dir.clone(),
+                home_dir,
+                None,
+                start_mode,
+                acp::RetryConfig::default(),
+                Some(runtime.clone()),
+            )
+            .await
+            .with_context(|| format!("Failed to load ACP history session for {:?}", agent_type))?
+        } else {
+            AcpStreamingSession::spawn_with_start_mode(
+                session_id.clone(),
+                agent_type,
+                command,
+                args,
+                launch_config.env,
+                working_dir.clone(),
+                home_dir,
+                None,
+                start_mode,
+                acp::RetryConfig::default(),
+            )
+            .await
+            .with_context(|| format!("Failed to load ACP history session for {:?}", agent_type))?
+        };
 
         // Store session
         let mut sessions = self.sessions.write().await;
@@ -648,16 +694,26 @@ impl AgentManager {
         if agent_type == AgentType::OpenClaw {
             return Ok(Vec::new());
         }
+
+        if let Some(cached) = self.history_cache.get(&agent_type, &working_dir) {
+            info!("[AgentManager] Returning cached history for {:?} at {}", agent_type, working_dir.display());
+            return Ok(cached);
+        }
+
         let launch_config = AgentFactory::get_acp_launch(agent_type);
-        acp::list_agent_history(
+        let entries = acp::list_agent_history(
             agent_type,
             launch_config.command,
             launch_config.args,
             launch_config.env,
-            working_dir,
+            working_dir.clone(),
             home_dir,
         )
-        .await
+        .await?;
+
+        self.history_cache.set(&agent_type, working_dir, entries.clone());
+
+        Ok(entries)
     }
 
     /// Stop an agent session
