@@ -101,6 +101,26 @@ export default {
         "slide-up": {
           "0%": { opacity: 0, transform: "translateY(8px)" },
           "100%": { opacity: 1, transform: "translateY(0)" }
+        },
+        "streaming-cursor": {
+          "0%, 100%": { opacity: 1 },
+          "50%": { opacity: 0 }
+        },
+        "typing-char": {
+          "0%": { opacity: 0, transform: "translateY(2px)" },
+          "100%": { opacity: 1, transform: "translateY(0)" }
+        },
+        "skeleton-pulse": {
+          "0%, 100%": { opacity: 0.4 },
+          "50%": { opacity: 0.7 }
+        },
+        "bounce-dot": {
+          "0%, 80%, 100%": { transform: "scale(0)" },
+          "40%": { transform: "scale(1)" }
+        },
+        "scroll-btn-in": {
+          "0%": { opacity: 0, transform: "translateY(8px) scale(0.95)" },
+          "100%": { opacity: 1, transform: "translateY(0) scale(1)" }
         }
       },
       animation: {
@@ -111,7 +131,12 @@ export default {
         "caret-blink": "caret-blink 1.25s ease-out infinite",
         "tooltip-in": "tooltip-in 0.15s ease-out forwards",
         "fade-in": "fade-in 0.2s ease-out forwards",
-        "slide-up": "slide-up 0.25s ease-out forwards"
+        "slide-up": "slide-up 0.25s ease-out forwards",
+        "streaming-cursor": "streaming-cursor 1.2s ease-in-out infinite",
+        "typing-char": "typing-char 0.15s ease-out forwards",
+        "skeleton-pulse": "skeleton-pulse 1.8s ease-in-out infinite",
+        "bounce-dot": "bounce-dot 1.4s ease-in-out infinite",
+        "scroll-btn-in": "scroll-btn-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards"
       }
     }
   },

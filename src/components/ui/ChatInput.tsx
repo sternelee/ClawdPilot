@@ -242,45 +242,47 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         props.class,
       )}
     >
-      {/* Mention/Slash Suggestions */}
+      {/* Mention/Slash Suggestions - Improved positioning with better z-index */}
       <Show when={showMentionSuggestions()}>
-        <div class="absolute left-4 right-4 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-border/50 bg-background shadow-xl max-h-[12rem] overflow-y-auto">
+        <div class="absolute left-0 right-0 bottom-full z-50 mb-2 rounded-xl border border-border/80 bg-background/98 backdrop-blur-lg shadow-2xl max-h-[12rem] overflow-y-auto animate-slide-up">
           {mentionSuggestions().map((item, index) => (
             <button
               type="button"
               class={cn(
-                "w-full px-4 py-3 text-left text-sm transition-colors min-h-[48px] flex items-center gap-2",
+                "w-full px-4 py-3 text-left text-sm transition-all min-h-[48px] flex items-center gap-2",
                 index === activeMentionIndex()
-                  ? "bg-primary/10 text-primary"
-                  : "hover:bg-muted/50",
+                  ? "bg-primary/15 text-primary font-medium ring-1 ring-primary/20"
+                  : "hover:bg-muted/60",
               )}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => props.onSelectMention?.(item.path)}
+              onMouseEnter={() => setActiveMentionIndex(index)}
             >
-              <FiFolder size={14} class="text-muted-foreground" />
-              <span class="truncate font-mono">{item.path}</span>
+              <FiFolder size={14} class="text-primary/70 shrink-0" />
+              <span class="truncate font-mono text-foreground/90">{item.path}</span>
             </button>
           ))}
         </div>
       </Show>
 
       <Show when={showSlashSuggestions()}>
-        <div class="absolute left-4 right-4 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-border/50 bg-background shadow-xl max-h-[12rem] overflow-y-auto">
+        <div class="absolute left-0 right-0 bottom-full z-50 mb-2 rounded-xl border border-border/80 bg-background/98 backdrop-blur-lg shadow-2xl max-h-[12rem] overflow-y-auto animate-slide-up">
           {slashSuggestions().map((item, index) => (
             <button
               type="button"
               class={cn(
-                "w-full px-4 py-3 text-left transition-colors min-h-[48px]",
+                "w-full px-4 py-3 text-left transition-all min-h-[48px]",
                 index === activeSlashIndex()
-                  ? "bg-primary/10 text-primary"
-                  : "hover:bg-muted/50",
+                  ? "bg-primary/15 text-primary font-medium ring-1 ring-primary/20"
+                  : "hover:bg-muted/60",
               )}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => props.onSelectSlash?.(item.value || item.name)}
+              onMouseEnter={() => setActiveSlashIndex(index)}
             >
               <div class="text-sm font-bold flex items-center gap-1">
-                <span class="text-muted-foreground">/</span>
-                {item.name}
+                <span class="text-primary/70">/</span>
+                <span class="text-foreground/90">{item.name}</span>
               </div>
               <Show when={item.description}>
                 <div class="mt-0.5 text-xs text-muted-foreground line-clamp-1">
@@ -485,12 +487,24 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             </button>
           </div>
 
-          {/* Right side: Streaming indicator */}
+          {/* Right side: Streaming indicator with bouncing dots */}
           <div class="hidden sm:flex items-center gap-2 text-xs text-muted-foreground ml-2">
-            <Show when={isStreamingNow()}>
-              <span class="text-primary font-medium animate-pulse">
-                Generating...
-              </span>
+            <Show
+              when={isStreamingNow()}
+              fallback={
+                <Show when={props.value.trim() && !props.disabled}>
+                  <span class="text-muted-foreground/60">Ready to send</span>
+                </Show>
+              }
+            >
+              <div class="flex items-center gap-1.5">
+                <span class="text-primary font-medium">Thinking</span>
+                <div class="flex items-center gap-0.5">
+                  <span class="w-1.5 h-1.5 bg-primary rounded-full animate-bounce-dot" style="animation-delay: 0ms;" />
+                  <span class="w-1.5 h-1.5 bg-primary rounded-full animate-bounce-dot" style="animation-delay: 150ms;" />
+                  <span class="w-1.5 h-1.5 bg-primary rounded-full animate-bounce-dot" style="animation-delay: 300ms;" />
+                </div>
+              </div>
             </Show>
           </div>
 

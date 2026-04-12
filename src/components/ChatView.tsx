@@ -7,6 +7,7 @@
 
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { FiAlertTriangle, FiRefreshCw } from "solid-icons/fi";
+import { cn } from "~/lib/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { Virtualizer } from "virtua/solid";
 import { chatStore } from "../stores/chatStore";
@@ -303,6 +304,24 @@ const VirtualMessageRow = (props: VirtualMessageRowProps) => {
   );
 };
 
+// Skeleton loader for streaming messages
+const MessageSkeleton: Component = () => (
+  <div class="flex flex-col gap-3 max-w-[90%] animate-fade-in">
+    <div class="inline-block rounded-2xl rounded-bl-md bg-muted/40 border border-border/50 px-4 py-3">
+      <div class="flex flex-col gap-2">
+        <div class="h-4 bg-muted/60 rounded animate-skeleton-pulse w-3/4" />
+        <div class="h-4 bg-muted/60 rounded animate-skeleton-pulse w-1/2" style="animation-delay: 200ms;" />
+      </div>
+    </div>
+    {/* Typing indicator dots */}
+    <div class="flex items-center gap-1.5 pl-4">
+      <span class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot" style="animation-delay: 0ms;" />
+      <span class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot" style="animation-delay: 150ms;" />
+      <span class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot" style="animation-delay: 300ms;" />
+    </div>
+  </div>
+);
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -338,13 +357,16 @@ export function ChatView(props: ChatViewProps) {
     const [internalRightPanelView, setInternalRightPanelView] =
       createSignal<RightPanelView>("none");
     const [tcpModalOpen, setTcpModalOpen] = createSignal(false);
-    const rightPanelView = () =>
-      props.rightPanelView ?? internalRightPanelView();
-    const toolMessageIds = new Map<string, string>();
-    const toolNameMessageIds = new Map<string, string>();
-    let scrollRafId: number | undefined;
-    let mentionDebounceTimer: number | undefined;
-    let lastScrollOffset = 0;
+  const rightPanelView = () =>
+    props.rightPanelView ?? internalRightPanelView();
+  const toolMessageIds = new Map<string, string>();
+  const toolNameMessageIds = new Map<string, string>();
+  let scrollRafId: number | undefined;
+  let mentionDebounceTimer: number | undefined;
+  let lastScrollOffset = 0;
+  // Keyboard shortcut state for "G then G" to scroll to bottom
+  const [ggKeyState, setGgKeyState] = createSignal<"idle" | "first_g">("idle");
+  let ggKeyTimeout: number | undefined;
     const pendingPermissionsForModal = () =>
       pendingPermissions().map((permission) => ({
         request_id: permission.id,
@@ -503,8 +525,34 @@ export function ChatView(props: ChatViewProps) {
       if (atBottom) {
         setShouldAutoFollow(true);
         setUnseenMessageCount(0);
+        setGgKeyState("idle");
       } else if (userMovedViewport) {
         setShouldAutoFollow(false);
+      }
+    };
+
+    // Handle keyboard shortcut "G then G" to scroll to bottom
+    const handleContainerKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      // Don't trigger when typing in input
+      if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") return;
+      
+      if (e.key === "g" || e.key === "G") {
+        if (ggKeyState() === "first_g") {
+          // Second G - scroll to bottom
+          e.preventDefault();
+          setShouldAutoFollow(true);
+          setIsScrolledToBottom(true);
+          setUnseenMessageCount(0);
+          scrollToBottom("smooth");
+          setGgKeyState("idle");
+        } else {
+          // First G
+          setGgKeyState("first_g");
+          // Clear timeout for double-tap reset
+          if (ggKeyTimeout) clearTimeout(ggKeyTimeout);
+          ggKeyTimeout = window.setTimeout(() => setGgKeyState("idle"), 500);
+        }
       }
     };
 
@@ -1856,7 +1904,10 @@ export function ChatView(props: ChatViewProps) {
           <div
             ref={setMessageScrollEl}
             onScroll={updateScrollState}
-            class="flex-1 overflow-y-auto px-4 sm:px-6 py-6 pb-32 sm:pb-24 overflow-x-hidden"
+            onKeyDown={handleContainerKeyDown}
+            tabIndex={0}
+            class="flex-1 overflow-y-auto px-4 sm:px-6 py-6 pb-32 sm:pb-24 overflow-x-hidden focus:outline-none"
+            aria-label="Chat messages"
           >
             <Show
               when={
@@ -1889,6 +1940,11 @@ export function ChatView(props: ChatViewProps) {
                     />
                   )}
                 </Virtualizer>
+              </Show>
+
+              {/* Skeleton loading when streaming and no messages yet */}
+              <Show when={isStreaming() && messages().length === 0}>
+                <MessageSkeleton />
               </Show>
 
               {/* Pending Permission Requests */}
@@ -1946,12 +2002,12 @@ export function ChatView(props: ChatViewProps) {
                 setUnseenMessageCount(0);
                 scrollToBottom("smooth");
               }}
-              class="fixed bottom-28 right-4 sm:right-6 z-30 flex items-center gap-1.5 px-3 py-2 rounded-full bg-background border border-border/50 shadow-lg backdrop-blur-md hover:shadow-xl transition-all duration-200 text-xs font-medium"
+              class="fixed bottom-28 right-4 sm:right-6 z-30 flex items-center gap-1.5 px-3 py-2 rounded-full bg-background border border-border/50 shadow-lg backdrop-blur-md hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 animate-scroll-btn-in text-xs font-medium"
               aria-label="Scroll to bottom"
               title={
                 unseenMessageCount() > 0
                   ? `${unseenMessageCount()} new messages`
-                  : "Scroll to bottom"
+                  : "Scroll to bottom (press G twice)"
               }
             >
               <Show

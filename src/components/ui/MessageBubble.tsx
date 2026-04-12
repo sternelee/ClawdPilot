@@ -9,7 +9,7 @@ import { type Component, For, Show, createMemo, createSignal } from "solid-js";
 import { Portal } from "solid-js/web";
 import { cn } from "~/lib/utils";
 import { createClipboard } from "@solid-primitives/clipboard";
-import { FiCopy, FiCheck, FiMoreVertical } from "solid-icons/fi";
+import { FiCopy, FiCheck, FiMoreVertical, FiMessageSquare } from "solid-icons/fi";
 import { SolidMarkdown } from "solid-markdown";
 import type { ChatMessage, SystemCard, ToolCall } from "~/stores/chatStore";
 import { isMobile } from "~/stores/deviceStore";
@@ -71,6 +71,10 @@ interface AssistantMessageProps {
   timestamp?: number;
 }
 
+const StreamingCursor: Component = () => (
+  <span class="inline-block ml-0.5 w-2 h-4 bg-primary animate-streaming-cursor align-middle" />
+);
+
 const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   return (
     <div class="flex flex-col gap-3 max-w-[90%]">
@@ -104,6 +108,10 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
               },
             }}
           />
+          {/* Streaming cursor */}
+          <Show when={props.isStreaming}>
+            <StreamingCursor />
+          </Show>
         </div>
       </div>
 
@@ -564,55 +572,71 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
 
   return (
     <div class={cn("group/bubble relative", props.class)}>
-      <Show
-        when={isUser()}
-        fallback={
-          <Show
-            when={isSystem()}
-            fallback={
-              <AssistantMessage
+      {/* Scale animation on hover */}
+      <div
+        class={cn(
+          "rounded-2xl transition-transform duration-200",
+          "hover:scale-[1.01]",
+          isUser() ? "" : "rounded-bl-md",
+        )}
+      >
+        <Show
+          when={isUser()}
+          fallback={
+            <Show
+              when={isSystem()}
+              fallback={
+                <AssistantMessage
+                  content={message().content}
+                  thinking={message().thinking ? "Thinking..." : undefined}
+                  toolCalls={message().toolCalls}
+                  isStreaming={message().thinking}
+                  timestamp={message().timestamp}
+                />
+              }
+            >
+              <SystemMessage
                 content={message().content}
-                thinking={message().thinking ? "Thinking..." : undefined}
-                toolCalls={message().toolCalls}
-                isStreaming={message().thinking}
+                systemCard={message().systemCard}
                 timestamp={message().timestamp}
+                onQuote={props.onQuote}
+                onToggleFileBrowser={props.onToggleFileBrowser}
+                onSyncTodoList={props.onSyncTodoList}
+                onOpenFileLocation={props.onOpenFileLocation}
+                onApplyEditReview={props.onApplyEditReview}
+                onTerminalAction={props.onTerminalAction}
               />
-            }
-          >
-            <SystemMessage
-              content={message().content}
-              systemCard={message().systemCard}
-              timestamp={message().timestamp}
-              onQuote={props.onQuote}
-              onToggleFileBrowser={props.onToggleFileBrowser}
-              onSyncTodoList={props.onSyncTodoList}
-              onOpenFileLocation={props.onOpenFileLocation}
-              onApplyEditReview={props.onApplyEditReview}
-              onTerminalAction={props.onTerminalAction}
-            />
-          </Show>
-        }
-      >
-        <UserMessage
-          content={message().content}
-          timestamp={message().timestamp}
-        />
-      </Show>
+            </Show>
+          }
+        >
+          <UserMessage
+            content={message().content}
+            timestamp={message().timestamp}
+          />
+        </Show>
+      </div>
 
-      {/* Hover action button */}
-      <button
-        type="button"
-        class="pointer-events-none absolute top-0 right-2 opacity-0 group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-100 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100 btn btn-ghost btn-xs h-7 w-7 rounded-lg bg-background/90 border border-border/50 shadow-sm"
-        onClick={(e) => {
-          e.stopPropagation();
-          triggerHaptic();
-          setShowActions(true);
-        }}
-        title="Message actions"
-        aria-label="Message actions"
-      >
-        <FiMoreVertical size={12} />
-      </button>
+      {/* Hover Actions */}
+      <div class="absolute -top-2 right-2 flex items-center gap-1 opacity-0 group-hover/bubble:opacity-100 transition-all duration-200 transform group-hover/bubble:translate-y-0 -translate-y-1">
+        <button
+          type="button"
+          onClick={quoteMessage}
+          class="p-1.5 rounded-lg bg-background/90 border border-border/50 shadow-sm hover:bg-muted hover:scale-105 transition-all duration-150"
+          title="Quote"
+          aria-label="Quote"
+        >
+          <FiMessageSquare size={12} />
+        </button>
+        <button
+          type="button"
+          onClick={copyMessage}
+          class="p-1.5 rounded-lg bg-background/90 border border-border/50 shadow-sm hover:bg-muted hover:scale-105 transition-all duration-150"
+          title="Copy"
+          aria-label="Copy"
+        >
+          <FiCopy size={12} />
+        </button>
+      </div>
 
       {/* Action menu overlay */}
       <Show when={showActions()}>
