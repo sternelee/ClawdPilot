@@ -1,9 +1,8 @@
 /**
  * Enhanced Chat Input Component
  *
- * AI-native chat input inspired by Vercel AI Elements:
+ * Clean, modern chat input inspired by OpenChamber:
  * - Auto-resizing textarea
- * - Markdown support indicator
  * - Keyboard shortcuts
  * - Loading states
  * - Tool buttons (Permission, Git, File browser)
@@ -238,81 +237,103 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
   return (
     <div
       class={cn(
-        "flex flex-col gap-1 sm:gap-1.5 px-1.5 sm:px-4 pt-1.5 sm:pt-3 pb-[max(env(safe-area-inset-bottom,0.65rem),0.65rem)] sm:pb-3 bg-base-100/95 backdrop-blur-md sticky bottom-0 md:bottom-0 z-20 transition-all duration-300 mobile-keyboard-adjust",
-        focused() && "bg-base-100",
+        "flex flex-col gap-2 px-4 pt-3 pb-3 sm:pb-4 bg-background/95 backdrop-blur-md sticky bottom-0 z-20 transition-all duration-300",
+        focused() && "bg-background",
         props.class,
       )}
     >
+      {/* Mention/Slash Suggestions */}
+      <Show when={showMentionSuggestions()}>
+        <div class="absolute left-4 right-4 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-border/50 bg-background shadow-xl max-h-[12rem] overflow-y-auto">
+          {mentionSuggestions().map((item, index) => (
+            <button
+              type="button"
+              class={cn(
+                "w-full px-4 py-3 text-left text-sm transition-colors min-h-[48px] flex items-center gap-2",
+                index === activeMentionIndex()
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-muted/50",
+              )}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => props.onSelectMention?.(item.path)}
+            >
+              <FiFolder size={14} class="text-muted-foreground" />
+              <span class="truncate font-mono">{item.path}</span>
+            </button>
+          ))}
+        </div>
+      </Show>
+
+      <Show when={showSlashSuggestions()}>
+        <div class="absolute left-4 right-4 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-border/50 bg-background shadow-xl max-h-[12rem] overflow-y-auto">
+          {slashSuggestions().map((item, index) => (
+            <button
+              type="button"
+              class={cn(
+                "w-full px-4 py-3 text-left transition-colors min-h-[48px]",
+                index === activeSlashIndex()
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-muted/50",
+              )}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => props.onSelectSlash?.(item.value || item.name)}
+            >
+              <div class="text-sm font-bold flex items-center gap-1">
+                <span class="text-muted-foreground">/</span>
+                {item.name}
+              </div>
+              <Show when={item.description}>
+                <div class="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+                  {item.description}
+                </div>
+              </Show>
+            </button>
+          ))}
+        </div>
+      </Show>
+
       {/* Input Container with Toolbar Inside */}
       <div
         class={cn(
-          "relative flex flex-col rounded-2xl border-2 bg-base-200/50 transition-all duration-300",
+          "relative flex flex-col rounded-2xl border border-border/50 bg-muted/30 transition-all duration-300",
           focused()
-            ? "border-primary/50 shadow-xl shadow-primary/5 bg-base-100"
-            : "border-base-content/10 hover:border-base-content/20 hover:bg-base-200/80",
+            ? "border-primary/50 bg-background shadow-xl shadow-primary/5 ring-1 ring-primary/10"
+            : "hover:bg-muted/40",
         )}
       >
-        <Show when={showMentionSuggestions()}>
-          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[12rem] sm:max-h-[15rem] overflow-y-auto backdrop-blur-md">
-            {mentionSuggestions().map((item, index) => (
-              <button
-                type="button"
-                class={cn(
-                  "w-full px-4 py-3 text-left text-sm transition-colors min-h-[48px] flex items-center gap-2",
-                  index === activeMentionIndex()
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
-                    : "hover:bg-base-content/5",
-                )}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => props.onSelectMention?.(item.path)}
-              >
-                <FiFolder size={14} class="opacity-50" />
-                <span class="font-medium truncate">{item.path}</span>
-              </button>
-            ))}
-          </div>
-        </Show>
-
-        <Show when={showSlashSuggestions()}>
-          <div class="absolute left-2 right-2 sm:left-3 sm:right-3 bottom-[calc(100%+0.5rem)] z-40 rounded-xl border border-base-content/10 bg-base-300/98 shadow-2xl max-h-[12rem] sm:max-h-[15rem] overflow-y-auto backdrop-blur-md">
-            {slashSuggestions().map((item, index) => (
-              <button
-                type="button"
-                class={cn(
-                  "w-full px-4 py-3 text-left transition-colors min-h-[48px]",
-                  index === activeSlashIndex()
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
-                    : "hover:bg-base-content/5",
-                )}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => props.onSelectSlash?.(item.value || item.name)}
-              >
-                <div class="text-sm font-bold flex items-center">
-                  <span class="opacity-50">/</span>
-                  {item.name}
-                </div>
-                <Show when={item.description}>
-                  <div class="mt-0.5 text-xs opacity-70 line-clamp-1">
-                    {item.description}
-                  </div>
-                </Show>
-              </button>
+        {/* Attachments List */}
+        <Show when={props.attachments && props.attachments.length > 0}>
+          <div class="flex flex-wrap gap-2 px-4 pt-3">
+            {props.attachments!.map((file) => (
+              <div class="flex items-center gap-2 px-3 py-1.5 bg-muted/80 rounded-lg text-xs border border-border/50">
+                <FiPlus size={10} class="rotate-45 text-muted-foreground" />
+                <span class="truncate max-w-[150px] font-medium">
+                  {file.name}
+                </span>
+                <button
+                  type="button"
+                  class="p-1 hover:bg-muted rounded text-muted-foreground"
+                  onClick={() => props.onAttach?.([])}
+                >
+                  <FiX size={12} />
+                </button>
+              </div>
             ))}
           </div>
         </Show>
 
         {/* Top Row: Textarea + Send Button */}
-        <div class="flex items-end gap-1 sm:gap-2 p-1 sm:p-2 pb-0.5 sm:pb-1">
-          {/* Attach Button (Hidden but kept structure) */}
+        <div class="flex items-end gap-2 p-2 sm:p-3">
+          {/* Attach Button */}
           <button
             type="button"
-            class="p-2.5 text-base-content/60 hover:text-primary hover:bg-primary/10 rounded-xl transition-all duration-200 shrink-0 hidden"
+            class="p-2.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl transition-all duration-200 shrink-0"
             title="Attach files"
             aria-label="Attach files"
             disabled={props.disabled}
             onClick={handleAttach}
           >
-            <FiPlus size={22} />
+            <FiPlus size={20} />
           </button>
 
           {/* Textarea */}
@@ -335,51 +356,30 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             onBlur={() => setFocused(false)}
             placeholder={props.placeholder || "Type your message..."}
             aria-label="Chat input"
-            class="flex-1 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-transparent border-none outline-none resize-none text-[16px] sm:text-sm max-h-[200px] min-h-[36px] sm:min-h-[44px] leading-snug sm:leading-relaxed placeholder:opacity-40"
+            class="flex-1 px-2 py-2 bg-transparent border-none outline-none resize-none text-[15px] sm:text-sm max-h-[200px] min-h-[44px] leading-relaxed placeholder:opacity-40 text-foreground"
             disabled={props.disabled}
             rows={1}
           />
         </div>
 
-        {/* Attachments List */}
-        <Show when={props.attachments && props.attachments.length > 0}>
-          <div class="flex flex-wrap gap-2 px-3 pb-2">
-            {props.attachments!.map((file) => (
-              <div class="flex items-center gap-2 px-3 py-1.5 bg-base-300/80 rounded-lg text-xs border border-base-content/5">
-                <FiPlus size={10} class="rotate-45 opacity-60" />
-                <span class="truncate max-w-[150px] font-medium">
-                  {file.name}
-                </span>
-                <button
-                  type="button"
-                  class="p-1 hover:bg-base-content/10 rounded text-base-content/60"
-                  onClick={() => props.onAttach?.([])}
-                >
-                  <FiX size={12} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </Show>
-
         {/* Bottom Toolbar */}
-        <div class="flex items-center px-1.5 sm:px-2 pb-1.5 sm:pb-2 gap-1 sm:gap-2">
+        <div class="flex items-center px-2 sm:px-3 pb-2 sm:pb-3 gap-2">
           <div class="flex items-center gap-1.5">
             {/* Settings Button with Permission Dropdown */}
             <div class="relative">
               <button
                 type="button"
                 class={cn(
-                  "btn btn-ghost btn-sm h-8 min-h-[32px] sm:h-10 sm:min-h-[40px] px-2 sm:px-3 gap-1 sm:gap-2 text-[11px] sm:text-[12px] transition-all rounded-lg sm:rounded-xl",
+                  "btn btn-ghost h-9 px-3 gap-2 text-xs transition-all rounded-xl",
                   showSettings()
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
-                    : "text-base-content/70 hover:text-primary hover:bg-primary/10",
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
                 )}
                 onClick={() => setShowSettings(!showSettings())}
                 title="Settings"
                 aria-label="Settings"
               >
-                <FiSettings class="size-4 sm:size-4.5" />
+                <FiSettings size={16} />
                 <span class="hidden sm:inline">Settings</span>
               </button>
 
@@ -393,19 +393,19 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
               {/* Settings Dropdown / Bottom Sheet */}
               <Show when={showSettings()}>
-                <div class="fixed bottom-0 left-0 right-0 z-[101] overflow-hidden rounded-t-3xl border border-base-content/10 bg-base-300 shadow-2xl transition-all duration-300 animate-slide-up sm:absolute sm:bottom-full sm:left-0 sm:right-auto sm:mb-2 sm:w-60 sm:rounded-xl">
+                <div class="fixed bottom-0 left-0 right-0 z-[101] overflow-hidden rounded-t-3xl border-t border-border/50 bg-background shadow-2xl transition-all duration-300 animate-slide-up sm:absolute sm:bottom-full sm:left-0 sm:right-auto sm:mb-2 sm:w-64 sm:rounded-2xl">
                   {/* Handle for mobile bottom sheet */}
                   <div class="flex justify-center py-3 sm:hidden">
-                    <div class="w-10 h-1 bg-base-content/20 rounded-full" />
+                    <div class="w-10 h-1 bg-muted rounded-full" />
                   </div>
 
-                  <div class="px-4 py-3 border-b border-base-content/10 flex items-center justify-between">
-                    <div class="text-[11px] font-black uppercase tracking-widest opacity-50">
+                  <div class="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+                    <div class="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       Permission Mode
                     </div>
                     <button
                       type="button"
-                      class="btn btn-ghost btn-xs btn-circle sm:hidden"
+                      class="btn btn-ghost btn-xs btn-square sm:hidden"
                       onClick={() => setShowSettings(false)}
                     >
                       <FiX size={16} />
@@ -416,10 +416,10 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                       <button
                         type="button"
                         class={cn(
-                          "w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-all active:scale-[0.98]",
+                          "w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl transition-all",
                           props.permissionMode === option.value
-                            ? "bg-primary/10 text-primary ring-1 ring-primary/15 shadow-md shadow-base-content/5"
-                            : "hover:bg-base-content/5",
+                            ? "bg-primary/10 text-primary ring-1 ring-primary/15"
+                            : "hover:bg-muted/50",
                         )}
                         onClick={() => {
                           props.onPermissionModeChange?.(option.value);
@@ -427,87 +427,71 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                         }}
                       >
                         <div class="flex-1 min-w-0">
-                          <div class="text-sm font-bold">{option.label}</div>
-                          <div
-                            class={cn(
-                              "text-[11px] truncate",
-                              props.permissionMode === option.value
-                                ? "opacity-90"
-                                : "opacity-50",
-                            )}
-                          >
+                          <div class="text-sm font-semibold">{option.label}</div>
+                          <div class="text-xs text-muted-foreground truncate">
                             {option.description}
                           </div>
                         </div>
                         <Show when={props.permissionMode === option.value}>
-                          <FiCheck size={18} class="shrink-0" />
+                          <FiCheck size={16} class="shrink-0" />
                         </Show>
                       </button>
                     ))}
                   </div>
                   {/* Extra spacing for mobile safe area */}
-                  <div class="h-8 sm:hidden" />
+                  <div class="h-6 sm:hidden" />
                 </div>
               </Show>
             </div>
 
             {/* File Browser Button */}
-            <div class="flex items-center gap-1.5">
-              <button
-                type="button"
-                class={cn(
-                  "btn btn-ghost btn-sm h-8 min-h-[32px] sm:h-10 sm:min-h-[40px] px-2 sm:px-3 gap-1 sm:gap-2 text-[11px] sm:text-[12px] transition-all rounded-lg sm:rounded-xl",
-                  props.rightPanelView === "file"
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
-                    : "text-base-content/70 hover:text-primary hover:bg-primary/10",
-                )}
-                onClick={() => {
-                  props.onToggleFileBrowser?.();
-                }}
-                title="Toggle file browser"
-                aria-label="Toggle file browser"
-                disabled={props.disabled}
-              >
-                <FiFolder class="size-4 sm:size-4.5" />
-                <span class="hidden sm:inline">Files</span>
-              </button>
+            <button
+              type="button"
+              class={cn(
+                "btn btn-ghost h-9 px-3 gap-2 text-xs transition-all rounded-xl",
+                props.rightPanelView === "file"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              )}
+              onClick={() => {
+                props.onToggleFileBrowser?.();
+              }}
+              title="Toggle file browser"
+              aria-label="Toggle file browser"
+              disabled={props.disabled}
+            >
+              <FiFolder size={16} />
+              <span class="hidden sm:inline">Files</span>
+            </button>
 
-              <button
-                type="button"
-                class={cn(
-                  "btn btn-ghost btn-sm h-8 min-h-[32px] sm:h-10 sm:min-h-[40px] px-2 sm:px-3 gap-1 sm:gap-2 text-[11px] sm:text-[12px] transition-all rounded-lg sm:rounded-xl",
-                  props.rightPanelView === "git"
-                    ? "bg-primary/10 text-primary ring-1 ring-primary/15"
-                    : "text-base-content/70 hover:text-primary hover:bg-primary/10",
-                )}
-                onClick={() => {
-                  props.onToggleGitPanel?.();
-                }}
-                title="Toggle git panel"
-                aria-label="Toggle git panel"
-                disabled={props.disabled}
-              >
-                <FiGitBranch class="size-4 sm:size-4.5" />
-                <span class="hidden sm:inline">Git</span>
-              </button>
-            </div>
+            {/* Git Button */}
+            <button
+              type="button"
+              class={cn(
+                "btn btn-ghost h-9 px-3 gap-2 text-xs transition-all rounded-xl",
+                props.rightPanelView === "git"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              )}
+              onClick={() => {
+                props.onToggleGitPanel?.();
+              }}
+              title="Toggle git panel"
+              aria-label="Toggle git panel"
+              disabled={props.disabled}
+            >
+              <FiGitBranch size={16} />
+              <span class="hidden sm:inline">Git</span>
+            </button>
           </div>
 
-          {/* Right side: Keyboard hints */}
-          <div class="hidden sm:flex items-center gap-2 text-[10px] opacity-30">
+          {/* Right side: Streaming indicator */}
+          <div class="hidden sm:flex items-center gap-2 text-xs text-muted-foreground ml-2">
             <Show when={isStreamingNow()}>
-              <span class="text-[10px] text-primary font-bold">
+              <span class="text-primary font-medium animate-pulse">
                 Generating...
               </span>
             </Show>
-            <span class="flex items-center gap-1">
-              <kbd class="kbd kbd-xs">↵</kbd>
-              <span>line</span>
-            </span>
-            <span class="flex items-center gap-1">
-              <kbd class="kbd kbd-xs">⇧↵</kbd>
-              <span>send</span>
-            </span>
           </div>
 
           {/* Send/Stop Button */}
@@ -530,8 +514,10 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               !props.isStreaming && (!props.value.trim() || props.disabled)
             }
             class={cn(
-              "btn btn-primary btn-sm h-9 w-9 sm:h-10 sm:w-auto sm:px-4 rounded-lg sm:rounded-xl shadow-lg shadow-primary/20 transition-all duration-300 ml-auto shrink-0 active:scale-90",
-              props.isStreaming && "btn-error shadow-error/20",
+              "btn h-9 w-9 sm:h-10 sm:w-auto sm:px-4 rounded-xl shadow-lg transition-all duration-300 ml-auto shrink-0",
+              props.isStreaming
+                ? "btn-error bg-red-500 hover:bg-red-600 shadow-red-500/20"
+                : "btn-primary shadow-primary/20 hover:shadow-primary/30",
             )}
             title={props.isStreaming ? "Stop generation" : "Send message"}
             aria-label={props.isStreaming ? "Stop generation" : "Send message"}
@@ -540,12 +526,12 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               when={props.isStreaming}
               fallback={
                 <div class="flex items-center gap-2">
-                  <FiSend class="size-4.5 sm:size-4" />
-                  <span class="text-sm font-bold hidden sm:inline">Send</span>
+                  <FiSend size={16} />
+                  <span class="text-sm font-semibold hidden sm:inline">Send</span>
                 </div>
               }
             >
-              <FaSolidStopCircle size={22} />
+              <FaSolidStopCircle size={20} />
             </Show>
           </button>
         </div>

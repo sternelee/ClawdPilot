@@ -1,3 +1,10 @@
+/**
+ * Message List View Component
+ *
+ * Clean, modern message list inspired by OpenChamber.
+ * Groups messages by date with subtle separators.
+ */
+
 import {
   type Component,
   Show,
@@ -61,10 +68,10 @@ const groupMessagesByDate = (messages: ChatMessage[]): DateGroup[] => {
 };
 
 const DateSeparator: Component<{ date: string }> = (props) => (
-  <div class="flex items-center gap-3 py-3 px-2">
-    <div class="flex-1 h-px bg-base-content/10" />
-    <span class="text-[10px] sm:text-xs font-medium text-base-content/50 px-2">{props.date}</span>
-    <div class="flex-1 h-px bg-base-content/10" />
+  <div class="flex items-center gap-3 py-4">
+    <div class="flex-1 h-px bg-border/50" />
+    <span class="text-[11px] font-medium text-muted-foreground/60 px-2">{props.date}</span>
+    <div class="flex-1 h-px bg-border/50" />
   </div>
 );
 
@@ -73,26 +80,26 @@ interface ChatEmptyStateProps {
 }
 
 const ChatEmptyState: Component<ChatEmptyStateProps> = (props) => (
-  <div class="flex flex-col items-center justify-center min-h-[350px] sm:min-h-[450px] px-4 sm:px-6 text-center">
-    <div class="relative mb-6 sm:mb-8">
-      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary/10 flex items-center justify-center animate-pulse">
-        <FiMessageSquare size={32} class="text-primary sm:w-10 sm:h-10" />
+  <div class="flex flex-col items-center justify-center min-h-[400px] px-4 sm:px-6 text-center">
+    <div class="relative mb-6">
+      <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary/10 flex items-center justify-center">
+        <FiMessageSquare size={28} class="text-primary sm:w-8 sm:h-8" />
       </div>
-      <div class="absolute inset-0 rounded-2xl border-2 border-primary/20 scale-110 animate-ping" />
+      <div class="absolute inset-0 rounded-2xl border-2 border-primary/20 scale-110 animate-ping opacity-50" />
     </div>
-    <h3 class="text-lg sm:text-xl font-bold mb-2 tracking-tight">Start a conversation</h3>
-    <p class="text-sm sm:text-base text-base-content/60 max-w-xs sm:max-w-sm mb-6 sm:mb-8">
+    <h3 class="text-lg sm:text-xl font-semibold tracking-tight mb-2">Start a conversation</h3>
+    <p class="text-sm text-muted-foreground max-w-xs mb-6">
       Send a message to begin chatting with{" "}
-      <span class="font-medium text-base-content/80">{props.agentType || "your AI agent"}</span>
+      <span class="font-medium text-foreground">{props.agentType || "your AI agent"}</span>
     </p>
-    <div class="flex flex-wrap gap-2 sm:gap-3 justify-center px-4">
-      <button type="button" class="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-xl bg-base-200 hover:bg-base-300 border border-base-content/10 transition-colors">
+    <div class="flex flex-wrap gap-2 justify-center px-4">
+      <button type="button" class="px-4 py-2 text-sm rounded-xl bg-muted/50 hover:bg-muted border border-border transition-colors">
         Help me code
       </button>
-      <button type="button" class="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-xl bg-base-200 hover:bg-base-300 border border-base-content/10 transition-colors">
+      <button type="button" class="px-4 py-2 text-sm rounded-xl bg-muted/50 hover:bg-muted border border-border transition-colors">
         Explain this
       </button>
-      <button type="button" class="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-xl bg-base-200 hover:bg-base-300 border border-base-content/10 transition-colors">
+      <button type="button" class="px-4 py-2 text-sm rounded-xl bg-muted/50 hover:bg-muted border border-border transition-colors">
         Debug issue
       </button>
     </div>
@@ -110,61 +117,17 @@ const ScrollToBottomButton: Component<ScrollToBottomButtonProps> = (props) => (
     <button
       type="button"
       onClick={props.onClick}
-      class="fixed bottom-24 sm:bottom-28 right-4 sm:right-6 z-30 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-base-100 border border-base-content/15 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 active:scale-95 text-xs sm:text-sm font-medium"
+      class="fixed bottom-24 right-4 sm:right-6 z-30 flex items-center gap-2 px-3 py-2 bg-background border border-border/50 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-xs font-medium"
     >
       <Show when={(props.unreadCount || 0) > 0}>
-        <span class="bg-primary text-primary-content rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold">
+        <span class="bg-primary text-primary-contrast rounded-full h-5 w-5 flex items-center justify-center text-[10px] font-bold">
           {props.unreadCount}
         </span>
       </Show>
-      <FiChevronDown size={14} class="sm:w-4 sm:h-4" />
-      <span class="hidden sm:inline">Scroll to bottom</span>
+      <FiChevronDown size={14} />
+      <span class="hidden sm:inline">Latest</span>
     </button>
   </Show>
-);
-
-const MessageBubbleContent: Component<{ message: ChatMessage }> = (props) => (
-  <div class={cn(
-    "rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5",
-    props.message.role === "user" && "bg-primary text-primary-content",
-    props.message.role === "assistant" && "bg-base-200",
-    props.message.role === "system" && "bg-base-200/50 border border-base-content/10",
-  )}>
-    <div class="text-[13px] sm:text-[14px] leading-relaxed whitespace-pre-wrap break-words">
-      {props.message.content}
-    </div>
-    <Show when={props.message.thinking}>
-      <div class="mt-1 flex items-center gap-1 text-xs opacity-60">
-        <span class="loading loading-dots loading-xs" />
-        <span>Thinking...</span>
-      </div>
-    </Show>
-  </div>
-);
-
-const MessageItem: Component<{ message: ChatMessage; index: number }> = (props) => (
-  <div class={cn(
-    "py-2 sm:py-3",
-    props.message.role === "user" && "chat chat-end",
-    props.message.role !== "user" && "chat chat-start",
-  )}>
-    <div class="chat-bubble bg-transparent p-0">
-      <Show when={props.message.role !== "user"}>
-        <div class="flex items-center gap-2 mb-1">
-          <div class="w-6 h-6 rounded-full bg-base-300 flex items-center justify-center text-[10px] font-bold">
-            {props.message.role === "assistant" ? "AI" : "SYS"}
-          </div>
-          <span class="text-[10px] font-medium text-base-content/40">
-            {props.message.role === "assistant" ? "Assistant" : "System"}
-          </span>
-        </div>
-      </Show>
-      <MessageBubbleContent message={props.message} />
-      <div class="text-[9px] sm:text-[10px] text-base-content/40 mt-1 px-1">
-        {new Date(props.message.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-      </div>
-    </div>
-  </div>
 );
 
 export const MessageListView: Component<MessageListViewProps> = (props) => {
@@ -207,10 +170,10 @@ export const MessageListView: Component<MessageListViewProps> = (props) => {
   return (
     <div class="relative flex-1 min-h-0 flex flex-col">
       <Show when={props.isLoading}>
-        <div class="absolute inset-0 flex items-center justify-center bg-base-100/80 backdrop-blur-sm z-20">
+        <div class="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-20">
           <div class="flex flex-col items-center gap-3">
             <span class="loading loading-spinner loading-lg text-primary" />
-            <span class="text-xs font-medium text-base-content/60">Loading messages...</span>
+            <span class="text-xs font-medium text-muted-foreground">Loading messages...</span>
           </div>
         </div>
       </Show>
@@ -226,7 +189,7 @@ export const MessageListView: Component<MessageListViewProps> = (props) => {
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          class="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4"
+          class="flex-1 overflow-y-auto px-4 sm:px-6 py-4"
         >
           <div class="max-w-3xl mx-auto">
             <For each={groupedMessages()}>
@@ -234,7 +197,17 @@ export const MessageListView: Component<MessageListViewProps> = (props) => {
                 <>
                   <DateSeparator date={group.label} />
                   <For each={group.messages}>
-                    {(message, index) => <MessageItem message={message} index={index()} />}
+                    {(message, index) => (
+                      <div class="py-3">
+                        {/* Simple message display - individual message components handle role-based styling */}
+                        <div class={cn(
+                          "text-sm leading-relaxed whitespace-pre-wrap break-words",
+                          message.role === "user" && "text-right",
+                        )}>
+                          {message.content}
+                        </div>
+                      </div>
+                    )}
                   </For>
                 </>
               )}

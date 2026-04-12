@@ -1,12 +1,12 @@
 /**
  * Chat Header Component
  *
- * Header for the chat view with session info and navigation.
- * Responsive design with mobile-first approach.
+ * Header for the chat view with session info and controls.
+ * Clean, minimal design inspired by OpenChamber.
  */
 
 import { type Component, Show, createMemo } from "solid-js";
-import { FiTerminal, FiSettings } from "solid-icons/fi";
+import { FiTerminal, FiSettings, FiSidebar, FiGitBranch, FiFolder } from "solid-icons/fi";
 import { sessionStore } from "../../stores/sessionStore";
 import { sessionEventRouter } from "../../stores/sessionEventRouter";
 import { navigationStore } from "../../stores/navigationStore";
@@ -26,10 +26,10 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
 
   const statusColor = createMemo(() => {
     const sess = session();
-    if (!sess?.active) return "bg-base-300";
+    if (!sess?.active) return "bg-muted";
     const routerState = sessionEventRouter.getStreamingState(props.sessionId);
-    if (routerState?.isStreaming) return "bg-info";
-    return "bg-success";
+    if (routerState?.isStreaming) return "bg-blue-500";
+    return "bg-green-500";
   });
 
   const statusText = createMemo(() => {
@@ -40,63 +40,59 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
     return "Online";
   });
 
+  const projectName = createMemo(() => {
+    const path = props.projectPath || session()?.projectPath;
+    if (!path) return null;
+    return path.split("/").pop() || path;
+  });
+
   return (
-    <header class="compact-mobile-controls z-20 flex min-h-14 shrink-0 items-center justify-between gap-2 border-b border-base-content/10 bg-base-100/80 px-3 py-2 backdrop-blur-lg sm:min-h-16 sm:px-4 lg:px-6">
-      {/* Left: Menu button (mobile) + Session info */}
-      <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-        {/* Hamburger menu - visible only on mobile */}
-        <label
-          for="drawer"
-          aria-label="Open menu"
-          class="btn btn-square btn-ghost drawer-button lg:hidden shrink-0"
+    <header class="z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border/50 bg-background/80 px-4 py-3 backdrop-blur-md sm:min-h-14">
+      {/* Left: Sidebar toggle (mobile) + Session info */}
+      <div class="flex items-center gap-3 min-w-0 flex-1">
+        {/* Sidebar toggle button */}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground shrink-0"
+          onClick={props.onToggleSidebar}
+          aria-label="Toggle sidebar"
         >
-          <svg
-            width="20"
-            height="20"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            class="inline-block h-5 w-5 stroke-current"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          </svg>
-        </label>
+          <FiSidebar size={18} />
+        </button>
 
         {/* Session info */}
         <Show when={props.agentType}>
-          <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div class="flex items-center gap-3 min-w-0">
             {/* Agent icon */}
-            <div class="hidden sm:flex w-9 h-9 rounded-xl bg-primary/10 items-center justify-center shrink-0">
-              <FiTerminal size={18} class="text-primary" />
+            <div class="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 shrink-0">
+              <FiTerminal size={17} class="text-primary" />
             </div>
 
             {/* Session details */}
             <div class="min-w-0">
               <div class="flex items-center gap-2">
-                <span class="font-mono text-sm font-medium truncate max-w-[120px] sm:max-w-[200px]">
+                <span class="font-semibold text-sm truncate max-w-[100px] sm:max-w-[180px] text-foreground">
                   {props.agentType?.charAt(0).toUpperCase() + (props.agentType?.slice(1) || "")}
                 </span>
                 {/* Status indicator */}
                 <span
                   class={cn(
-                    "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider",
-                    statusText() === "Online" && "bg-success/15 text-success",
-                    statusText() === "Streaming" && "bg-info/15 text-info",
-                    statusText() === "Offline" && "bg-base-300 text-base-content/50",
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider shrink-0",
+                    statusText() === "Online" &&
+                      "bg-green-500/10 text-green-600 dark:text-green-400",
+                    statusText() === "Streaming" &&
+                      "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                    statusText() === "Offline" &&
+                      "bg-muted text-muted-foreground",
                   )}
                 >
-                  <span class={cn("w-1.5 h-1.5 rounded-full", statusColor())} />
+                  <span class={cn("h-1.5 w-1.5 rounded-full", statusColor())} />
                   <span class="hidden xs:inline">{statusText()}</span>
                 </span>
               </div>
-              <Show when={props.projectPath}>
-                <span class="text-[10px] opacity-50 font-mono truncate block max-w-[150px] sm:max-w-[250px]">
-                  {props.projectPath?.split("/").pop()}
+              <Show when={projectName()}>
+                <span class="text-[11px] text-muted-foreground truncate block max-w-[140px] sm:max-w-[220px] font-mono">
+                  {projectName()}
                 </span>
               </Show>
             </div>
@@ -104,17 +100,27 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
         </Show>
       </div>
 
-      {/* Right: Action buttons */}
-      <div class="flex items-center gap-1 sm:gap-2">
+      {/* Right: Tool toggles + Settings */}
+      <div class="flex items-center gap-1">
+        {/* Mobile agent indicator */}
+        <Show when={!props.agentType}>
+          <span class="text-sm font-medium text-muted-foreground mr-2">
+            Chat
+          </span>
+        </Show>
+
+        {/* Settings */}
         <Button
           variant="ghost"
           size="icon"
-          class="rounded-lg sm:rounded-xl"
+          class="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
           onClick={() => navigationStore.setActiveView("settings")}
         >
-          <FiSettings size={18} />
+          <FiSettings size={17} />
         </Button>
       </div>
     </header>
   );
 };
+
+export default ChatHeader;

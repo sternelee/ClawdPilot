@@ -1,11 +1,8 @@
 /**
  * Message Bubble Components
  *
- * Dedicated components for rendering different message types:
- * - MessageBubble: Main container with role-based styling
- * - UserMessage: User's messages
- * - AssistantMessage: AI assistant messages with thinking support
- * - SystemMessage: System notifications and tool outputs
+ * Clean, modern message bubbles inspired by OpenChamber.
+ * Uses bg-primary, text-primary, border-border tokens.
  */
 
 import { type Component, For, Show, createMemo, createSignal } from "solid-js";
@@ -21,10 +18,11 @@ import {
   ToolCallList,
   ReasoningBlock,
   TerminalOutput,
+  FileEditDiff,
 } from "./EnhancedMessageComponents";
 
 // ============================================================================
-// Code Block with Copy Button (inspired by hapi)
+// Code Block with Copy Button
 // ============================================================================
 
 interface CodeBlockProps {
@@ -43,19 +41,19 @@ const CodeBlockWithCopy: Component<CodeBlockProps> = (props) => {
   };
 
   return (
-    <div class="relative min-w-0 max-w-full">
+    <div class="relative min-w-0 max-w-full rounded-xl overflow-hidden">
       <button
         type="button"
         onClick={handleCopy}
-        class="absolute right-1.5 top-1.5 rounded p-1 text-muted-foreground hover:bg-base-200 hover:text-foreground transition-colors z-10"
+        class="absolute right-2 top-2 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors z-10"
         title="Copy code"
       >
         <Show when={copied()} fallback={<FiCopy size={14} />}>
-          <FiCheck size={14} class="text-success-content" />
+          <FiCheck size={14} class="text-green-500" />
         </Show>
       </button>
-      <div class="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-base-300">
-        <pre class="m-0 w-max min-w-full p-2 pr-8 text-xs font-mono">
+      <div class="min-w-0 w-full max-w-full overflow-x-auto rounded-xl bg-muted/80 border border-border/50">
+        <pre class="m-0 p-3 pr-10 text-xs font-mono">
           <code class="block">{props.code}</code>
         </pre>
       </div>
@@ -90,9 +88,9 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (
   props,
 ) => {
   return (
-    <div class="chat chat-end">
-      <div class="chat-bubble bg-primary text-primary-content px-4 py-3 max-w-[85%] sm:max-w-[80%]">
-        <div class="prose prose-sm max-w-none text-[14px] sm:text-sm leading-relaxed sm:leading-6 selectable prose-invert wrap-anywhere">
+    <div class="flex justify-end">
+      <div class="inline-block max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-md bg-primary px-4 py-3 shadow-sm">
+        <div class="prose prose-sm max-w-none text-[14px] leading-relaxed text-primary-contrast">
           <SolidMarkdown children={props.content} />
         </div>
       </div>
@@ -114,7 +112,7 @@ interface AssistantMessageProps {
 
 const AssistantMessage: Component<AssistantMessageProps> = (props) => {
   return (
-    <div class="chat chat-start">
+    <div class="flex flex-col gap-3 max-w-[90%]">
       {/* Thinking/Reasoning */}
       <Show when={props.thinking}>
         <ReasoningBlock
@@ -124,8 +122,8 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
       </Show>
 
       {/* Content */}
-      <div class="chat-bubble bg-base-200 px-4 py-3 max-w-[85%] sm:max-w-[92%]">
-        <div class="prose prose-sm max-w-none text-[14px] sm:text-sm leading-relaxed sm:leading-6 selectable wrap-anywhere">
+      <div class="inline-block rounded-2xl rounded-bl-md bg-muted/60 px-4 py-3 border border-border/50">
+        <div class="prose prose-sm max-w-none text-[14px] leading-relaxed text-foreground">
           <SolidMarkdown
             children={props.thinking ? undefined : props.content}
             components={{
@@ -150,7 +148,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
 
       {/* Tool Calls */}
       <Show when={props.toolCalls && props.toolCalls.length > 0}>
-        <div class="mt-2.5 pt-2.5 sm:mt-3.5 sm:pt-3.5 border-t border-base-content/10">
+        <div class="mt-1 pt-3 border-t border-border/50">
           <ToolCallList toolCalls={props.toolCalls!} />
         </div>
       </Show>
@@ -179,7 +177,7 @@ interface SystemMessageProps {
 
 const SystemMessage: Component<SystemMessageProps> = (props) => {
   return (
-    <div class="chat chat-start overflow-x-hidden">
+    <div class="flex flex-col gap-2 max-w-[85%] sm:max-w-[75%]">
       <SystemMessageContent
         content={props.content}
         systemCard={props.systemCard}
@@ -215,7 +213,6 @@ const SystemMessageContent: Component<{
   ) => void;
 }> = (props) => {
   const [todoStates, setTodoStates] = createSignal<Record<number, boolean>>({});
-  const [showDiff, setShowDiff] = createSignal(false);
   const [toolOutputExpanded, setToolOutputExpanded] = createSignal(false);
   const [, , write] = createClipboard();
 
@@ -233,16 +230,16 @@ const SystemMessageContent: Component<{
 
     if (card.type === "following") {
       return (
-        <div class="space-y-2.5 rounded-lg border border-info/30 bg-info/8 p-3">
-          <div class="inline-flex items-center rounded-md bg-info/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-info ring-1 ring-info/25">
+        <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 space-y-2">
+          <div class="inline-flex items-center rounded-md bg-blue-500/15 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
             Following
           </div>
           <For each={card.locations}>
             {(loc) => (
-              <div class="flex items-center gap-2 rounded-lg border border-info/20 bg-info/12 px-3 py-2.5">
+              <div class="flex items-center gap-2 rounded-lg border border-blue-500/15 bg-blue-500/8 px-3 py-2">
                 <button
                   type="button"
-                  class="flex-1 text-left text-[13px] sm:text-sm font-mono hover:text-info transition-colors"
+                  class="flex-1 text-left text-sm font-mono hover:text-blue-500 transition-colors"
                   onClick={() => {
                     if (props.onOpenFileLocation) {
                       props.onOpenFileLocation(loc.path, loc.line);
@@ -260,7 +257,7 @@ const SystemMessageContent: Component<{
                 </button>
                 <button
                   type="button"
-                  class="btn btn-ghost btn-xs h-8 min-h-8"
+                  class="btn btn-ghost btn-xs h-7 min-h-7"
                   onClick={() =>
                     copyText(`${loc.path}${loc.line ? `:${loc.line}` : ""}`)
                   }
@@ -272,7 +269,7 @@ const SystemMessageContent: Component<{
           </For>
           <button
             type="button"
-            class="btn btn-outline btn-sm w-full sm:w-auto"
+            class="btn btn-outline btn-sm w-full"
             onClick={() => props.onToggleFileBrowser?.()}
           >
             Open File Panel
@@ -282,57 +279,14 @@ const SystemMessageContent: Component<{
     }
 
     if (card.type === "edit_review") {
-      const diffText = `--- old\n+++ new\n-${card.oldText}\n+${card.newText}`;
       return (
-        <div class="space-y-2.5 rounded-lg border border-accent/30 bg-accent/8 p-3">
-          <div class="inline-flex items-center rounded-md bg-accent/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-accent ring-1 ring-accent/25">
-            Edit Review
-          </div>
-          <div class="rounded-lg border border-accent/20 bg-accent/12 px-3 py-2 text-[13px] sm:text-sm font-mono break-all text-base-content/80">
-            {card.path}
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs h-8 min-h-8"
-              onClick={() => setShowDiff((v) => !v)}
-            >
-              {showDiff() ? "Hide Diff" : "Show Diff"}
-            </button>
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs h-8 min-h-8"
-              onClick={() => copyText(diffText)}
-            >
-              Copy Diff
-            </button>
-            <Show when={props.onApplyEditReview}>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs h-8 min-h-8"
-                onClick={() => props.onApplyEditReview?.(card.path, "accept")}
-              >
-                Accept
-              </button>
-              <button
-                type="button"
-                class="btn btn-ghost btn-xs h-8 min-h-8"
-                onClick={() => props.onApplyEditReview?.(card.path, "reject")}
-              >
-                Reject
-              </button>
-            </Show>
-          </div>
-          <Show when={showDiff()}>
-            <div class="min-w-0 w-full max-w-full overflow-x-auto overflow-y-hidden rounded-md bg-base-300">
-              <pre class="m-0 w-max min-w-full p-2.5 text-[11px] sm:text-xs font-mono">
-                <code class="block whitespace-pre-wrap break-all">
-                  {diffText}
-                </code>
-              </pre>
-            </div>
-          </Show>
-        </div>
+        <FileEditDiff
+          path={card.path}
+          oldText={card.oldText}
+          newText={card.newText}
+          onAccept={() => props.onApplyEditReview?.(card.path, "accept")}
+          onReject={() => props.onApplyEditReview?.(card.path, "reject")}
+        />
       );
     }
 
@@ -350,8 +304,8 @@ const SystemMessageContent: Component<{
       };
 
       return (
-        <div class="space-y-2.5 rounded-lg border border-primary/30 bg-primary/8 p-3">
-          <div class="inline-flex items-center rounded-md bg-primary/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-primary ring-1 ring-primary/25">
+        <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
+          <div class="inline-flex items-center rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
             TODO List
           </div>
           <div class="space-y-1">
@@ -363,10 +317,10 @@ const SystemMessageContent: Component<{
                     ? todoStates()[index()]!
                     : initialDone;
                 return (
-                  <label class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-primary/15 cursor-pointer transition-colors">
+                  <label class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-primary/10 cursor-pointer transition-colors">
                     <input
                       type="checkbox"
-                      class="checkbox checkbox-primary checkbox-sm sm:checkbox-xs"
+                      class="checkbox checkbox-primary checkbox-sm"
                       checked={checked()}
                       onChange={(e) =>
                         setTodoStates((prev) => ({
@@ -376,7 +330,7 @@ const SystemMessageContent: Component<{
                       }
                     />
                     <span
-                      class={`text-[15px] sm:text-sm ${checked() ? "line-through opacity-50" : ""}`}
+                      class={`text-sm ${checked() ? "line-through opacity-50" : ""}`}
                     >
                       {entry.content}
                     </span>
@@ -388,7 +342,7 @@ const SystemMessageContent: Component<{
           <Show when={props.onSyncTodoList}>
             <button
               type="button"
-              class="btn btn-outline btn-sm w-full sm:w-auto"
+              class="btn btn-outline btn-sm w-full"
               onClick={syncTodoToAgent}
             >
               Sync to Agent
@@ -400,14 +354,12 @@ const SystemMessageContent: Component<{
 
     if (card.type === "terminal") {
       return (
-        <div class="space-y-2.5 rounded-lg border border-secondary/30 bg-secondary/8 p-3">
-          <div class="inline-flex items-center rounded-md bg-secondary/15 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-secondary ring-1 ring-secondary/25">
+        <div class="rounded-xl border border-secondary/20 bg-secondary/5 p-3 space-y-2">
+          <div class="inline-flex items-center rounded-md bg-secondary/15 px-2 py-0.5 text-xs font-semibold text-secondary">
             Terminal
           </div>
-          <div class="rounded-lg border border-secondary/20 bg-secondary/12 px-3 py-2.5 text-[13px] sm:text-sm text-base-content/80">
-            <div class="font-mono break-all">
-              {card.terminalId || "unknown"}
-            </div>
+          <div class="rounded-lg border border-secondary/20 bg-secondary/8 px-3 py-2.5 text-sm text-foreground/80">
+            <div class="font-mono break-all">{card.terminalId || "unknown"}</div>
             <div class="mt-1 opacity-60">
               {card.mode || "interactive/background"}{" "}
               {card.status ? `· ${card.status}` : ""}
@@ -416,14 +368,14 @@ const SystemMessageContent: Component<{
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
-              class="btn btn-ghost btn-xs h-8 min-h-8"
+              class="btn btn-ghost btn-xs h-7"
               onClick={() => copyText(card.terminalId)}
             >
               Copy ID
             </button>
             <button
               type="button"
-              class="btn btn-ghost btn-xs h-8 min-h-8"
+              class="btn btn-ghost btn-xs h-7"
               onClick={() => props.onQuote?.(`terminal:${card.terminalId}`)}
             >
               Insert
@@ -431,7 +383,7 @@ const SystemMessageContent: Component<{
             <Show when={props.onTerminalAction}>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-8 min-h-8"
+                class="btn btn-ghost btn-xs h-7"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "attach")
                 }
@@ -440,7 +392,7 @@ const SystemMessageContent: Component<{
               </button>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-8 min-h-8"
+                class="btn btn-ghost btn-xs h-7"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "status")
                 }
@@ -449,7 +401,7 @@ const SystemMessageContent: Component<{
               </button>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-8 min-h-8 text-error hover:bg-error/10"
+                class="btn btn-ghost btn-xs h-7 text-red-500 hover:bg-red-500/10"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "stop")
                 }
@@ -514,8 +466,8 @@ const SystemMessageContent: Component<{
         <Show
           when={isTerminalOutput()}
           fallback={
-            <div class="chat-bubble bg-base-200/70 border border-base-content/10 px-4 py-3 max-w-[85%] sm:max-w-[80%]">
-              <div class="prose prose-sm wrap-anywhere text-[14px] sm:text-sm max-w-none leading-relaxed sm:leading-6 text-base-content/70 selectable">
+            <div class="inline-block rounded-xl bg-muted/40 border border-border/50 px-4 py-3">
+              <div class="text-sm leading-relaxed text-foreground/70 whitespace-pre-wrap break-words">
                 <SolidMarkdown
                   children={normalizeEscapedLineBreaks(props.content)}
                 />
@@ -526,8 +478,8 @@ const SystemMessageContent: Component<{
           <Show
             when={parseTerminalOutput()}
             fallback={
-              <div class="chat-bubble bg-base-200/70 border border-base-content/10 px-4 py-3 max-w-[85%] sm:max-w-[80%]">
-                <div class="prose prose-sm wrap-anywhere text-[14px] sm:text-sm max-w-none leading-relaxed sm:leading-6 text-base-content/70 selectable">
+              <div class="inline-block rounded-xl bg-muted/40 border border-border/50 px-4 py-3">
+                <div class="text-sm leading-relaxed text-foreground/70 whitespace-pre-wrap break-words">
                   <SolidMarkdown
                     children={normalizeEscapedLineBreaks(props.content)}
                   />
@@ -551,21 +503,21 @@ const SystemMessageContent: Component<{
                   />
                 }
               >
-                <div class="text-xs sm:text-sm">
+                <div class="text-sm">
                   <button
                     type="button"
                     onClick={() => setToolOutputExpanded(!toolOutputExpanded())}
-                    class="inline-flex items-center gap-1.5 hover:bg-base-content/5 rounded-md px-1 py-0.5 -ml-1 transition-colors"
+                    class="inline-flex items-center gap-2 hover:bg-muted/50 rounded-lg px-2 py-1 -ml-2 transition-colors"
                   >
-                    <span class="inline-flex items-center rounded-md bg-info/12 px-2 py-1 font-mono text-xs text-info ring-1 ring-info/15">
+                    <span class="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
                       [{parsed().toolName}]
                     </span>
-                    <span class="text-base-content/40">
+                    <span class="text-muted-foreground">
                       {toolOutputExpanded() ? "▼" : "▶"}
                     </span>
                   </button>
                   <Show when={toolOutputExpanded() && parsed().output}>
-                    <pre class="mt-1.5 sm:mt-2 text-[11px] sm:text-xs opacity-60 whitespace-pre-wrap break-all">
+                    <pre class="mt-2 text-xs opacity-60 whitespace-pre-wrap break-all">
                       {normalizeEscapedLineBreaks(parsed().output || "")}
                     </pre>
                   </Show>
@@ -686,9 +638,10 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         />
       </Show>
 
+      {/* Hover action button */}
       <button
         type="button"
-        class="pointer-events-none absolute top-1.5 right-1.5 btn btn-ghost btn-xs h-7 min-h-7 w-7 rounded-lg border border-base-content/15 bg-base-100 text-base-content shadow-md shadow-black/10 backdrop-blur-md opacity-0 transition-opacity group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-75 hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 sm:hidden"
+        class="pointer-events-none absolute top-0 right-2 opacity-0 group-hover/bubble:pointer-events-auto group-hover/bubble:opacity-100 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100 btn btn-ghost btn-xs h-7 w-7 rounded-lg bg-background/90 border border-border/50 shadow-sm"
         onClick={(e) => {
           e.stopPropagation();
           triggerHaptic();
@@ -697,23 +650,24 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         title="Message actions"
         aria-label="Message actions"
       >
-        <FiMoreVertical size={14} />
+        <FiMoreVertical size={12} />
       </button>
 
       {/* Action menu overlay */}
       <Show when={showActions()}>
         <Portal>
-          <div
-            class="modal modal-bottom sm:modal-middle"
-            classList={{ "modal-open": showActions() }}
-          >
-            <div class="modal-box p-3 sm:p-4 pb-[max(env(safe-area-inset-bottom,0px),1rem)]">
-              <h3 class="text-sm font-bold mb-3">Message actions</h3>
-              <div class="flex flex-col gap-1">
+          <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+            <button
+              type="button"
+              class="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10"
+              onClick={closeActions}
+            />
+            <div class="w-full max-w-sm rounded-t-2xl sm:rounded-2xl bg-background border border-border/50 p-4 shadow-2xl mb-safe">
+              <div class="space-y-1">
                 <Show when={isUser()}>
                   <button
                     type="button"
-                    class="btn btn-ghost justify-start"
+                    class="btn btn-ghost justify-start w-full"
                     onClick={resendMessage}
                   >
                     Resend
@@ -721,7 +675,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 </Show>
                 <button
                   type="button"
-                  class="btn btn-ghost justify-start"
+                  class="btn btn-ghost justify-start w-full"
                   onClick={quoteMessage}
                 >
                   Quote to input
@@ -729,16 +683,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 <Show when={!isUser() && firstCodeBlock()}>
                   <button
                     type="button"
-                    class="btn btn-ghost justify-start"
-                    onClick={copyCodeBlock}
-                  >
-                    Copy code block
-                  </button>
-                </Show>
-                <Show when={isUser() && firstCodeBlock()}>
-                  <button
-                    type="button"
-                    class="btn btn-ghost justify-start"
+                    class="btn btn-ghost justify-start w-full"
                     onClick={copyCodeBlock}
                   >
                     Copy code block
@@ -746,30 +691,13 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 </Show>
                 <button
                   type="button"
-                  class="btn btn-ghost justify-start"
+                  class="btn btn-ghost justify-start w-full"
                   onClick={copyMessage}
                 >
                   Copy
                 </button>
-                <button
-                  type="button"
-                  class="btn btn-ghost justify-start"
-                  onClick={copyAsMarkdown}
-                >
-                  Copy as Markdown
-                </button>
-              </div>
-              <div class="modal-action">
-                <button type="button" class="btn btn-sm" onClick={closeActions}>
-                  Close
-                </button>
               </div>
             </div>
-            <button
-              type="button"
-              class="modal-backdrop"
-              onClick={closeActions}
-            />
           </div>
         </Portal>
       </Show>

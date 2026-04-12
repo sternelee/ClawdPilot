@@ -3,6 +3,7 @@
  *
  * Main application layout integrating SessionSidebar and ChatView
  * for multi-session AI agent management.
+ * UI refactored to match OpenChamber's clean, modern design language.
  */
 
 import {
@@ -35,7 +36,7 @@ import { FiFolder, FiGitBranch, FiX } from "solid-icons/fi";
 // ============================================================================
 
 export const AppLayout: Component = () => {
-  const [sidebarOpen, setSidebarOpen] = createSignal(false);
+  const [sidebarOpen, setSidebarOpen] = createSignal(true); // Start open on desktop
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = createSignal(false);
   const [showSetupGuide, setShowSetupGuide] = createSignal(false);
   const [rightPanelView, setRightPanelView] = createSignal<
@@ -144,14 +145,15 @@ export const AppLayout: Component = () => {
   };
 
   const renderChatEmptyState = () => (
-    <div class="flex flex-col h-full min-h-0 flex-1 overflow-hidden bg-base-100">
-      {/* Empty State Header with Hamburger */}
-      <header class="compact-mobile-controls z-20 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-base-content/10 bg-base-100/80 px-4 py-3 backdrop-blur-lg md:px-6">
-        <div class="flex items-center gap-3">
-          <label
-            for="drawer"
+    <div class="flex flex-col h-full min-h-0 flex-1 overflow-hidden bg-background">
+      {/* Empty State Header */}
+      <header class="z-20 flex min-h-14 shrink-0 items-center gap-3 border-b border-border/50 bg-background/80 px-4 py-3 backdrop-blur-md sm:min-h-16 sm:px-6">
+        <Show when={mobile()}>
+          <button
+            type="button"
+            class="btn btn-square btn-ghost h-10 w-10 rounded-xl"
+            onClick={() => setSidebarOpen(true)}
             aria-label="Open menu"
-            class="btn btn-square btn-ghost drawer-button lg:hidden"
           >
             <svg
               width="20"
@@ -168,14 +170,19 @@ export const AppLayout: Component = () => {
                 d="M4 6h16M4 12h16M4 18h16"
               ></path>
             </svg>
-          </label>
-          <h1 class="text-xl font-bold">Chat</h1>
-        </div>
+          </button>
+        </Show>
+        <h1 class="text-lg font-semibold tracking-tight text-foreground">
+          Chat
+        </h1>
       </header>
       <div class="flex flex-1 items-center justify-center p-6">
         <div class="text-center">
-          <p class="text-xl font-semibold text-base-content/60">
+          <p class="text-lg font-medium text-muted-foreground">
             No agent selected
+          </p>
+          <p class="mt-2 text-sm text-muted-foreground/60">
+            Select a session from the sidebar to start chatting
           </p>
         </div>
       </div>
@@ -202,42 +209,44 @@ export const AppLayout: Component = () => {
           <Show when={rightPanelView() !== "none"}>
             <button
               type="button"
-              class="fixed inset-0 z-40 h-full w-full cursor-default border-none bg-black/60 backdrop-blur-sm"
+              class="fixed inset-0 z-40 h-full w-full cursor-default border-none bg-black/40 backdrop-blur-sm"
               onClick={closeRightPanel}
               aria-label="Close tools panel"
             />
           </Show>
           <aside
-            class={`fixed bottom-0 left-0 right-0 z-50 h-[min(86dvh,42rem)] rounded-t-3xl border-t border-base-content/10 bg-base-100 shadow-2xl
-              flex flex-col overflow-hidden pb-safe sm:top-0 sm:bottom-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-md sm:rounded-none sm:border-t-0 sm:border-l sm:pt-0 sm:pb-0 md:w-85 lg:w-90
-              transform transition-transform duration-300 ease-in-out
+            class={`fixed bottom-0 left-0 right-0 z-50 h-[min(86dvh,42rem)] rounded-t-2xl border-t border-border/50 bg-background shadow-2xl
+              flex flex-col overflow-hidden pb-safe sm:top-0 sm:bottom-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-80 md:w-96 lg:w-[28rem]
+              transform transition-transform duration-300 ease-out
               ${rightPanelView() !== "none" ? "translate-y-0 sm:translate-x-0" : "translate-y-full sm:translate-y-0 sm:translate-x-full"}
             `}
           >
-            <div class="flex justify-center py-3 sm:hidden">
-              <div class="h-1 w-10 rounded-full bg-base-content/20" />
+            {/* Mobile handle */}
+            <div class="flex justify-center py-2.5 sm:hidden">
+              <div class="h-1 w-8 rounded-full bg-muted-foreground/20" />
             </div>
-            <div class="compact-mobile-controls flex h-12 items-center justify-between border-b border-base-content/10 bg-base-200/50 px-3 sm:h-14 sm:px-4">
-              <div class="flex items-center gap-1.5 text-xs font-bold sm:gap-2 sm:text-sm">
+            {/* Panel header */}
+            <div class="flex h-12 items-center justify-between border-b border-border/50 bg-muted/30 px-4 sm:h-13">
+              <div class="flex items-center gap-2 text-sm font-semibold">
                 <Show
                   when={rightPanelView() === "file"}
                   fallback={
-                    <FiGitBranch size={14} class="text-primary sm:size-4" />
+                    <FiGitBranch size={16} class="text-primary" />
                   }
                 >
-                  <FiFolder size={14} class="text-primary sm:size-4" />
+                  <FiFolder size={16} class="text-primary" />
                 </Show>
                 <span class="tracking-tight">
-                  {rightPanelView() === "file" ? "File Browser" : "Git Changes"}
+                  {rightPanelView() === "file" ? "Files" : "Git"}
                 </span>
               </div>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs btn-square h-8 w-8 rounded-lg sm:btn-sm sm:h-10 sm:w-10 sm:rounded-xl"
+                class="btn btn-ghost btn-xs btn-square h-8 w-8 rounded-lg"
                 onClick={closeRightPanel}
                 title="Close panel"
               >
-                <FiX size={16} class="sm:size-4.5" />
+                <FiX size={16} />
               </button>
             </div>
             <div class="flex-1 overflow-auto">
@@ -280,65 +289,77 @@ export const AppLayout: Component = () => {
     }
   };
 
+  const isMobileDevice = mobile();
+  const activeSessionVal = activeSession();
+
   return (
-    <div class="app-root drawer lg:drawer-open h-full max-sm:text-sm max-sm:leading-5">
-      {/* Drawer toggle checkbox */}
-      <input
-        id="drawer"
-        type="checkbox"
-        class="drawer-toggle"
-        checked={sidebarOpen()}
-        onChange={(e) => setSidebarOpen(e.currentTarget.checked)}
+    <div class="app-root flex h-full max-sm:text-sm max-sm:leading-5 bg-background">
+      {/* Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog
+        open={shortcutsDialogOpen()}
+        onClose={() => setShortcutsDialogOpen(false)}
       />
 
-      {/* Sidebar - Desktop always visible, Mobile as drawer-side */}
-      <div class="drawer-side z-50">
-        <label
-          class="drawer-overlay lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-        <SessionSidebar
-          isOpen={sidebarOpen()}
-          onToggle={() => setSidebarOpen(!sidebarOpen())}
-        />
-      </div>
+      {/* Setup Guide - Full Screen Overlay */}
+      <Show when={showSetupGuide()}>
+        <div class="fixed inset-0 z-70 bg-background pb-safe">
+          <SetupGuide
+            onClose={() => setShowSetupGuide(false)}
+            onSkip={() => setShowSetupGuide(false)}
+          />
+        </div>
+      </Show>
 
-      {/* Main Content */}
-      <div class="drawer-content flex flex-col min-h-0 bg-base-200 h-dvh">
-        {/* Keyboard Shortcuts Dialog */}
-        <KeyboardShortcutsDialog
-          open={shortcutsDialogOpen()}
-          onClose={() => setShortcutsDialogOpen(false)}
-        />
-
-        {/* Setup Guide - Full Screen Overlay */}
-        <Show when={showSetupGuide()}>
-          <div class="fixed inset-0 z-70 bg-base-100 pb-safe">
-            <SetupGuide
-              onClose={() => setShowSetupGuide(false)}
-              onSkip={() => setShowSetupGuide(false)}
+      {/* History loading overlay */}
+      <Show when={sessionStore.state.isHistoryLoading}>
+        <div class="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div class="rounded-2xl bg-background/90 border border-border/50 px-6 py-5 shadow-2xl">
+            <SpinnerWithLabel
+              label={i18nStore.t("common.loadingHistory")}
+              size="lg"
+              variant="primary"
             />
           </div>
+        </div>
+      </Show>
+
+      {/* Session Sidebar */}
+      <Show when={!isMobileDevice || sidebarOpen()}>
+        {/* Mobile overlay backdrop */}
+        <Show when={isMobileDevice && sidebarOpen()}>
+          <button
+            type="button"
+            class="fixed inset-0 z-40 h-full w-full cursor-default border-none bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close sidebar"
+          />
         </Show>
 
-        <Show when={sessionStore.state.isHistoryLoading}>
-          <div class="fixed inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-60">
-            <div class="rounded-2xl bg-base-100/90 border border-base-content/10 px-6 py-5 shadow-2xl">
-              <SpinnerWithLabel
-                label={i18nStore.t("common.loadingHistory")}
-                size="lg"
-                variant="primary"
-              />
-            </div>
-          </div>
-        </Show>
+        <div
+          class={`flex-shrink-0 transition-all duration-300 ease-out ${
+            isMobileDevice
+              ? `fixed inset-y-0 left-0 z-50 w-[85vw] max-w-80 shadow-2xl ${
+                  sidebarOpen() ? "translate-x-0" : "-translate-x-full"
+                }`
+              : sidebarOpen()
+                ? "w-64 lg:w-68"
+                : "w-0 overflow-hidden"
+          }`}
+        >
+          <SessionSidebar
+            isOpen={sidebarOpen()}
+            onToggle={() => setSidebarOpen(!sidebarOpen())}
+          />
+        </div>
+      </Show>
 
+      {/* Main Content */}
+      <div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
         {/* Main Content Area */}
         <main class="flex-1 flex min-h-0 flex-col min-w-0">
-          <Show when={mobile()} fallback={renderMainContent()}>
-            {/* Mobile: fixed top/content structure */}
-            <div class="flex flex-1 min-h-0 flex-col overflow-hidden sm:hidden">
-              <div class="flex-1 min-h-0 overflow-hidden pb-safe">
+          <Show when={isMobileDevice} fallback={renderMainContent()}>
+            <div class="flex flex-1 min-h-0 flex-col overflow-hidden">
+              <div class="flex-1 min-h-0 overflow-hidden">
                 {renderMainContent()}
               </div>
             </div>

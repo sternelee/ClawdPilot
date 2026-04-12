@@ -1841,186 +1841,178 @@ export function ChatView(props: ChatViewProps) {
     };
 
     return (
-      <div
-        class={`drawer drawer-end h-full ${rightPanelView() !== "none" ? "drawer-open" : ""}`}
-      >
-        <input
-          type="checkbox"
-          class="drawer-toggle"
-          checked={rightPanelView() !== "none"}
-          readOnly
-        />
-        <div class="drawer-content flex h-dvh bg-base-100 relative overflow-hidden">
-          <div class="flex flex-col h-full min-w-0 flex-1">
-            {/* Header */}
-            <ChatHeader
-              sessionId={props.sessionId}
-              agentType={props.agentType}
-              sessionMode={props.sessionMode}
-              projectPath={props.projectPath}
-              onToggleSidebar={props.onToggleSidebar}
-            />
+      <div class="flex h-full flex-col min-h-0 bg-background">
+        <div class="flex flex-col h-full min-w-0 flex-1">
+          {/* Header */}
+          <ChatHeader
+            sessionId={props.sessionId}
+            agentType={props.agentType}
+            sessionMode={props.sessionMode}
+            projectPath={props.projectPath}
+            onToggleSidebar={props.onToggleSidebar}
+          />
 
-            {/* Messages Area */}
-            <div
-              ref={setMessageScrollEl}
-              onScroll={updateScrollState}
-              class="flex-1 overflow-y-auto px-3.5 sm:px-6 py-6 sm:py-8 pb-20 sm:pb-10 overflow-x-hidden bg-base-100"
-            >
-              <Show
-                when={
-                  messages().length === 0 && pendingPermissions().length === 0
-                }
-              >
-                <ChatEmptyState agentType={props.agentType} />
-              </Show>
-
-              {/* Messages */}
-              <div class="max-w-4xl 2xl:max-w-none mx-auto w-full space-y-6">
-                <Show when={messages().length > 0}>
-                  <Virtualizer
-                    scrollRef={messageScrollEl()}
-                    data={messages()}
-                    itemSize={120}
-                    bufferSize={400}
-                  >
-                    {(message: ReturnType<typeof messages>[number]) => (
-                      <VirtualMessageRow
-                        key={message.id}
-                        message={message}
-                        onQuote={handleQuoteMessage}
-                        onResend={handleResendMessage}
-                        onToggleFileBrowser={() => toggleRightPanel("file")}
-                        onSyncTodoList={handleSyncTodoList}
-                        onOpenFileLocation={handleOpenFileLocation}
-                        onApplyEditReview={handleApplyEditReview}
-                        onTerminalAction={handleTerminalAction}
-                      />
-                    )}
-                  </Virtualizer>
-                </Show>
-
-                {/* Pending Permission Requests */}
-                <Show when={pendingPermissionsForModal().length > 0}>
-                  <PermissionPanel
-                    permissions={pendingPermissionsForModal().map(p => ({
-                      id: p.request_id,
-                      sessionId: p.session_id,
-                      toolName: p.tool_name,
-                      toolParams: p.tool_params,
-                      description: p.message,
-                      requestedAt: p.created_at,
-                      status: "pending" as const,
-                    }))}
-                    permissionMode={permissionMode()}
-                    disabled={!isActive()}
-                    onApprove={(requestId, decision) => {
-                      const response =
-                        decision === "ApprovedForSession"
-                          ? "approved_for_session"
-                          : "approved";
-                      handlePermissionResponse(requestId, response);
-                    }}
-                    onDeny={(requestId) => {
-                      handlePermissionResponse(requestId, "denied");
-                    }}
-                  />
-                </Show>
-
-                {/* Pending User Questions */}
-                <Show when={pendingQuestions().length > 0}>
-                  <UserQuestionPanel
-                    questions={pendingQuestions()}
-                    disabled={!isActive()}
-                    onSelect={(questionId, option) => {
-                      chatStore.answerQuestion(props.sessionId, questionId, option);
-                      chatStore.clearQuestion(props.sessionId, questionId);
-                      chatStore.addMessage(props.sessionId, {
-                        role: "user",
-                        content: option,
-                      });
-                    }}
-                  />
-                </Show>
-              </div>
-            </div>
-
-            {/* Scroll to bottom button */}
-            <Show when={!isScrolledToBottom() && messages().length > 0}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShouldAutoFollow(true);
-                  setIsScrolledToBottom(true);
-                  setUnseenMessageCount(0);
-                  scrollToBottom("smooth");
-                }}
-                class="fixed bottom-30 right-4 sm:right-8 z-30 btn btn-circle btn-sm h-10 w-10 bg-base-100/90 shadow-2xl border-base-content/10 backdrop-blur-sm"
-                aria-label="Scroll to bottom"
-                title={
-                  unseenMessageCount() > 0
-                    ? `${unseenMessageCount()} new messages`
-                    : "Scroll to bottom"
-                }
-              >
-                <Show
-                  when={unseenMessageCount() > 0}
-                  fallback={
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-5 w-5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <title>Scroll to bottom</title>
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2.5"
-                        d="M19 14l-7 7m0 0l-7-7m7 7V3"
-                      />
-                    </svg>
-                  }
-                >
-                  <span class="text-[11px] font-black text-primary">
-                    {Math.min(unseenMessageCount(), 99)}
-                  </span>
-                </Show>
-              </button>
-            </Show>
-
-            {/* Input Area */}
+          {/* Messages Area */}
+          <div
+            ref={setMessageScrollEl}
+            onScroll={updateScrollState}
+            class="flex-1 overflow-y-auto px-4 sm:px-6 py-6 pb-32 sm:pb-24 overflow-x-hidden"
+          >
             <Show
-              when={isActive()}
-              fallback={
-                <div class="alert alert-warning m-4 mb-8">
-                  <FiAlertTriangle size={20} />
-                  <span class="text-sm">
-                    Session inactive. Connection might be lost.
-                  </span>
-                  <button
-                    type="button"
-                    class="btn btn-sm"
-                    onClick={handleReconnect}
-                    disabled={isReconnecting()}
-                  >
-                    <Show
-                      when={isReconnecting()}
-                      fallback={
-                        <>
-                          <FiRefreshCw size={16} />
-                          Reconnect
-                        </>
-                      }
-                    >
-                      <span class="loading loading-spinner loading-sm" />
-                    </Show>
-                  </button>
-                </div>
+              when={
+                messages().length === 0 && pendingPermissions().length === 0
               }
             >
-              <ChatInput
+              <ChatEmptyState agentType={props.agentType} />
+            </Show>
+
+            {/* Messages */}
+            <div class="max-w-3xl 2xl:max-w-4xl mx-auto w-full space-y-5">
+              <Show when={messages().length > 0}>
+                <Virtualizer
+                  scrollRef={messageScrollEl()}
+                  data={messages()}
+                  itemSize={120}
+                  bufferSize={400}
+                >
+                  {(message: ReturnType<typeof messages>[number]) => (
+                    <VirtualMessageRow
+                      key={message.id}
+                      message={message}
+                      onQuote={handleQuoteMessage}
+                      onResend={handleResendMessage}
+                      onToggleFileBrowser={() => toggleRightPanel("file")}
+                      onSyncTodoList={handleSyncTodoList}
+                      onOpenFileLocation={handleOpenFileLocation}
+                      onApplyEditReview={handleApplyEditReview}
+                      onTerminalAction={handleTerminalAction}
+                    />
+                  )}
+                </Virtualizer>
+              </Show>
+
+              {/* Pending Permission Requests */}
+              <Show when={pendingPermissionsForModal().length > 0}>
+                <PermissionPanel
+                  permissions={pendingPermissionsForModal().map(p => ({
+                    id: p.request_id,
+                    sessionId: p.session_id,
+                    toolName: p.tool_name,
+                    toolParams: p.tool_params,
+                    description: p.message,
+                    requestedAt: p.created_at,
+                    status: "pending" as const,
+                  }))}
+                  permissionMode={permissionMode()}
+                  disabled={!isActive()}
+                  onApprove={(requestId, decision) => {
+                    const response =
+                      decision === "ApprovedForSession"
+                        ? "approved_for_session"
+                        : "approved";
+                    handlePermissionResponse(requestId, response);
+                  }}
+                  onDeny={(requestId) => {
+                    handlePermissionResponse(requestId, "denied");
+                  }}
+                />
+              </Show>
+
+              {/* Pending User Questions */}
+              <Show when={pendingQuestions().length > 0}>
+                <UserQuestionPanel
+                  questions={pendingQuestions()}
+                  disabled={!isActive()}
+                  onSelect={(questionId, option) => {
+                    chatStore.answerQuestion(props.sessionId, questionId, option);
+                    chatStore.clearQuestion(props.sessionId, questionId);
+                    chatStore.addMessage(props.sessionId, {
+                      role: "user",
+                      content: option,
+                    });
+                  }}
+                />
+              </Show>
+            </div>
+          </div>
+
+          {/* Scroll to bottom button */}
+          <Show when={!isScrolledToBottom() && messages().length > 0}>
+            <button
+              type="button"
+              onClick={() => {
+                setShouldAutoFollow(true);
+                setIsScrolledToBottom(true);
+                setUnseenMessageCount(0);
+                scrollToBottom("smooth");
+              }}
+              class="fixed bottom-28 right-4 sm:right-6 z-30 flex items-center gap-1.5 px-3 py-2 rounded-full bg-background border border-border/50 shadow-lg backdrop-blur-md hover:shadow-xl transition-all duration-200 text-xs font-medium"
+              aria-label="Scroll to bottom"
+              title={
+                unseenMessageCount() > 0
+                  ? `${unseenMessageCount()} new messages`
+                  : "Scroll to bottom"
+              }
+            >
+              <Show
+                when={unseenMessageCount() > 0}
+                fallback={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <title>Scroll to bottom</title>
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2.5"
+                      d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                    />
+                  </svg>
+                }
+              >
+                <span class="bg-primary text-primary-content rounded-full h-5 w-5 flex items-center justify-center text-[10px] font-bold">
+                  {Math.min(unseenMessageCount(), 99)}
+                </span>
+                <span>New messages</span>
+              </Show>
+            </button>
+          </Show>
+
+          {/* Input Area */}
+          <Show
+            when={isActive()}
+            fallback={
+              <div class="flex items-center justify-center gap-3 px-4 py-4 border-t border-border/50 bg-muted/30">
+                <div class="flex items-center gap-2 text-sm text-muted-foreground">
+                  <FiAlertTriangle size={16} class="text-yellow-500" />
+                  <span>Session inactive. Connection might be lost.</span>
+                </div>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline rounded-xl"
+                  onClick={handleReconnect}
+                  disabled={isReconnecting()}
+                >
+                  <Show
+                    when={isReconnecting()}
+                    fallback={
+                      <>
+                        <FiRefreshCw size={14} />
+                        Reconnect
+                      </>
+                    }
+                  >
+                    <span class="loading loading-spinner loading-xs" />
+                  </Show>
+                </button>
+              </div>
+            }
+          >
+            <ChatInput
                 value={inputValue()}
                 onInput={(value) => {
                   setSessionInputValue(value);
@@ -2057,8 +2049,7 @@ export function ChatView(props: ChatViewProps) {
                 onSelectSlash={handleSelectSlash}
                 onDismissSlash={() => setSlashSuggestions([])}
               />
-            </Show>
-          </div>
+          </Show>
           <Show when={tcpModalOpen()}>
             <TcpForwardingModal
               sessionId={session()?.controlSessionId || props.sessionId}

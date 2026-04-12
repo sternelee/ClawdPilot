@@ -1,11 +1,12 @@
 /**
  * SessionSidebar Component
  *
- * Left navigation sidebar for desktop (md and above)
- * Acts as navigation menu - no session list
+ * Left navigation sidebar inspired by OpenChamber's clean design.
+ * Shows navigation menu with session-aware indicators.
+ * Uses bg-sidebar, bg-background, and border tokens for consistency.
  */
 
-import { Show, type Component } from "solid-js";
+import { Show, For, type Component, createMemo } from "solid-js";
 import {
   FiX,
   FiActivity,
@@ -13,12 +14,14 @@ import {
   FiMessageSquare,
   FiBox,
   FiSettings,
+  FiChevronRight,
 } from "solid-icons/fi";
 import {
   navigationStore,
   type NavigationView,
 } from "../stores/navigationStore";
 import { sessionStore } from "../stores/sessionStore";
+import { cn } from "~/lib/utils";
 
 // ============================================================================
 // Navigation Items
@@ -28,6 +31,7 @@ interface NavItem {
   id: NavigationView;
   label: string;
   icon: typeof FiActivity;
+  description?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -37,6 +41,43 @@ const NAV_ITEMS: NavItem[] = [
   { id: "proxies", label: "Preview", icon: FiBox },
   { id: "settings", label: "Settings", icon: FiSettings },
 ];
+
+// ============================================================================
+// Connection Status Badge
+// ============================================================================
+
+const ConnectionBadge: Component = () => {
+  const connectionState = () => sessionStore.state.connectionState;
+  const isConnected = () => connectionState() === "connected";
+  const isReconnecting = () => connectionState() === "reconnecting";
+
+  return (
+    <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
+      <span
+        class={cn(
+          "relative inline-flex h-2.5 w-2.5 rounded-full",
+          isConnected() && "bg-green-500",
+          isReconnecting() && "bg-yellow-500",
+          !isConnected() && !isReconnecting() && "bg-muted-foreground/40",
+        )}
+      >
+        <Show when={isConnected()}>
+          <span class="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
+        </Show>
+        <Show when={isReconnecting()}>
+          <span class="absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75 animate-ping" />
+        </Show>
+      </span>
+      <span class="text-xs font-medium text-muted-foreground">
+        {isConnected()
+          ? "Connected"
+          : isReconnecting()
+            ? "Reconnecting..."
+            : "Disconnected"}
+      </span>
+    </div>
+  );
+};
 
 // ============================================================================
 // Nav Item Component
@@ -50,28 +91,54 @@ interface NavItemButtonProps {
 
 const NavItemButton: Component<NavItemButtonProps> = (props) => {
   const Icon = props.item.icon;
+  const hasActiveSession =
+    props.item.id === "chat" &&
+    sessionStore.getActiveSessions().length > 0;
 
   return (
     <button
       type="button"
-      class={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 border
-        ${
-          props.isActive
-            ? "bg-primary/10 text-primary border-primary/20"
-            : "text-base-content/60 hover:bg-base-content/5 hover:text-base-content border-transparent"
-        }`}
       onClick={props.onClick}
+      class={cn(
+        "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-150",
+        "hover:bg-muted/60",
+        props.isActive
+          ? "bg-primary/10 text-primary"
+          : "text-muted-foreground hover:text-foreground",
+      )}
     >
-      <Icon size={20} class={props.isActive ? "text-primary" : ""} />
-      <span class="font-medium text-sm">{props.item.label}</span>
-      <Show
-        when={
-          props.item.id === "chat" &&
-          sessionStore.getActiveSessions().length > 0
-        }
-      >
-        <span class="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" />
+      {/* Active indicator bar */}
+      <span
+        class={cn(
+          "absolute left-0 h-8 w-1 rounded-r-full bg-primary transition-all duration-200",
+          props.isActive ? "opacity-100" : "opacity-0 -translate-x-1",
+        )}
+      />
+
+      <Icon
+        size={18}
+        class={cn(
+          "transition-colors flex-shrink-0",
+          props.isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+        )}
+      />
+      <span class="flex-1 text-left text-sm font-medium">{props.item.label}</span>
+
+      {/* Active session indicator */}
+      <Show when={hasActiveSession}>
+        <span class="flex h-2 w-2">
+          <span class="absolute h-2 w-2 rounded-full bg-primary opacity-75 animate-ping" />
+          <span class="relative h-2 w-2 rounded-full bg-primary" />
+        </span>
       </Show>
+
+      <FiChevronRight
+        size={14}
+        class={cn(
+          "transition-all text-muted-foreground/40",
+          props.isActive && "text-primary/60 rotate-90",
+        )}
+      />
     </button>
   );
 };
@@ -87,67 +154,113 @@ interface SessionSidebarProps {
 
 export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   const activeView = () => navigationStore.state.activeView;
+  const sessions = createMemo(() => sessionStore.getSessions());
+  const activeSession = createMemo(() => sessionStore.getActiveSession());
 
   const handleNavClick = (view: NavigationView) => {
     navigationStore.setActiveView(view);
+    // Close sidebar on mobile after navigation
+    if (window.innerWidth < 768) {
+      props.onToggle();
+    }
   };
 
   return (
-    <aside class="w-64 bg-base-200 h-full flex flex-col shadow-2xl">
+    <aside class="flex h-full w-full flex-col bg-sidebar border-r border-border/50">
       {/* Header */}
-      <div class="flex items-center justify-between px-5 py-4 border-b border-base-content/10 bg-base-100/50 backdrop-blur">
+      <div class="flex items-center justify-between px-4 py-4 border-b border-border/50">
         <div class="flex items-center gap-3">
           {/* App Logo */}
-          <div class="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
-            <span class="text-primary-content font-black text-lg">P</span>
+          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/20">
+            <span class="text-primary-content font-black text-base">P</span>
           </div>
           <div>
-            <h1 class="text-sm font-black tracking-tight uppercase leading-none">
+            <h1 class="text-sm font-bold tracking-tight text-foreground leading-none">
               Irogen
             </h1>
-            <p class="text-[10px] opacity-40 mt-0.5 font-bold uppercase tracking-wider">
-              Navigation
+            <p class="text-[10px] text-muted-foreground mt-0.5 font-medium uppercase tracking-wider">
+              Agent Control
             </p>
           </div>
         </div>
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm btn-square"
-            onClick={props.onToggle}
-            title="Close"
-          >
-            <FiX size={18} />
-          </button>
-        </div>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square h-9 w-9 rounded-lg text-muted-foreground hover:text-foreground"
+          onClick={props.onToggle}
+          title="Close sidebar"
+        >
+          <FiX size={18} />
+        </button>
       </div>
 
-      {/* Navigation Items */}
-      <div class="flex-1 overflow-y-auto p-3 space-y-1">
-        <div class="px-4 py-2 text-[10px] font-black text-base-content/30 uppercase tracking-[0.15em]">
-          Menu
+      {/* Navigation */}
+      <div class="flex-1 overflow-y-auto px-3 py-4">
+        {/* Section label */}
+        <div class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Navigation
         </div>
-        {NAV_ITEMS.map((item) => (
-          <NavItemButton
-            item={item}
-            isActive={activeView() === item.id}
-            onClick={() => handleNavClick(item.id)}
-          />
-        ))}
+
+        {/* Nav items */}
+        <nav class="relative space-y-0.5">
+          {NAV_ITEMS.map((item) => (
+            <NavItemButton
+              item={item}
+              isActive={activeView() === item.id}
+              onClick={() => handleNavClick(item.id)}
+            />
+          ))}
+        </nav>
+
+        {/* Active Sessions Quick View */}
+        <Show when={sessions().length > 0}>
+          <div class="mt-6">
+            <div class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+              Active Sessions
+            </div>
+            <div class="space-y-1">
+              <For each={sessions().slice(0, 3)}>
+                {(session) => (
+                  <button
+                    type="button"
+                    class={cn(
+                      "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all duration-150",
+                      activeSession()?.sessionId === session.sessionId
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                    onClick={() => {
+                      sessionStore.setActiveSession(session.sessionId);
+                      navigationStore.setActiveView("chat");
+                    }}
+                  >
+                    {/* Status dot */}
+                    <span
+                      class={cn(
+                        "h-2 w-2 rounded-full flex-shrink-0",
+                        session.active
+                          ? "bg-green-500"
+                          : "bg-muted-foreground/40",
+                      )}
+                    />
+                    <div class="min-w-0 flex-1">
+                      <div class="truncate text-sm font-medium">
+                        {session.agentType}
+                      </div>
+                      <div class="truncate text-[10px] text-muted-foreground/70">
+                        {session.projectPath.split("/").pop()}
+                      </div>
+                    </div>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
       </div>
 
       {/* Footer - Connection Status */}
-      <div class="px-4 py-3 border-t border-base-content/10 bg-base-100/50">
-        <div class="flex items-center gap-2">
-          <span class="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-tighter opacity-40">
-            <span
-              class={`w-2 h-2 rounded-full ${sessionStore.state.connectionState === "connected" ? "bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-base-content/30"}`}
-            />
-            {sessionStore.state.connectionState === "connected"
-              ? "Connected"
-              : "Disconnected"}
-          </span>
-        </div>
+      <div class="border-t border-border/50 p-3">
+        <ConnectionBadge />
       </div>
     </aside>
   );
