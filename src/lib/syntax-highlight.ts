@@ -11,7 +11,7 @@ let highlighterPromise: Promise<Highlighter> | null = null;
 export async function getHighlighter(): Promise<Highlighter> {
   if (!highlighterPromise) {
     highlighterPromise = createHighlighter({
-      themes: [pierreLight, pierreDark],
+      themes: [pierreLight as any, pierreDark as any],
       langs: [
         "javascript",
         "typescript",
@@ -67,11 +67,13 @@ export interface HighlightResult {
 
 export async function highlightCode(
   code: string,
-  lang: string = "plaintext"
+  lang: string = "plaintext",
 ): Promise<HighlightResult> {
   try {
     const highlighter = await getHighlighter();
-    const validLang = highlighter.getLoadedLanguages().includes(lang as any) ? lang : "plaintext";
+    const validLang = highlighter.getLoadedLanguages().includes(lang as any)
+      ? lang
+      : "plaintext";
 
     const html = highlighter.codeToHtml(code, {
       lang: validLang,
@@ -90,11 +92,13 @@ export async function highlightCode(
 
 export async function highlightCodeMultiline(
   code: string,
-  lang: string = "plaintext"
+  lang: string = "plaintext",
 ): Promise<string> {
   try {
     const highlighter = await getHighlighter();
-    const validLang = highlighter.getLoadedLanguages().includes(lang as any) ? lang : "plaintext";
+    const validLang = highlighter.getLoadedLanguages().includes(lang as any)
+      ? lang
+      : "plaintext";
 
     const html = highlighter.codeToHtml(code, {
       lang: validLang,
@@ -123,7 +127,8 @@ export function detectLanguage(code: string): string {
   if (code.includes("fn ") && code.includes("->")) return "rust";
   if (code.includes("package ") && code.includes("func ")) return "go";
   if (code.includes("<template>") || code.includes("</template>")) return "vue";
-  if (code.includes("import React") || code.includes("from 'react'")) return "tsx";
+  if (code.includes("import React") || code.includes("from 'react'"))
+    return "tsx";
   if (code.includes("interface ") && code.includes(": ")) return "typescript";
   if (code.startsWith("{") || code.startsWith("[")) return "json";
   if (code.includes("---") || code.includes(": ")) return "yaml";

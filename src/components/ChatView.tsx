@@ -5,9 +5,15 @@
  * Displays messages, handles user input, shows permission requests, and supports slash commands.
  */
 
-import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
+import {
+  Show,
+  createEffect,
+  createSignal,
+  on,
+  onCleanup,
+  type Component,
+} from "solid-js";
 import { FiAlertTriangle, FiRefreshCw } from "solid-icons/fi";
-import { cn } from "~/lib/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { Virtualizer } from "virtua/solid";
 import { chatStore } from "../stores/chatStore";
@@ -310,14 +316,26 @@ const MessageSkeleton: Component = () => (
     <div class="inline-block rounded-2xl rounded-bl-md bg-muted/40 border border-border/50 px-4 py-3">
       <div class="flex flex-col gap-2">
         <div class="h-4 bg-muted/60 rounded animate-skeleton-pulse w-3/4" />
-        <div class="h-4 bg-muted/60 rounded animate-skeleton-pulse w-1/2" style="animation-delay: 200ms;" />
+        <div
+          class="h-4 bg-muted/60 rounded animate-skeleton-pulse w-1/2"
+          style="animation-delay: 200ms;"
+        />
       </div>
     </div>
     {/* Typing indicator dots */}
     <div class="flex items-center gap-1.5 pl-4">
-      <span class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot" style="animation-delay: 0ms;" />
-      <span class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot" style="animation-delay: 150ms;" />
-      <span class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot" style="animation-delay: 300ms;" />
+      <span
+        class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot"
+        style="animation-delay: 0ms;"
+      />
+      <span
+        class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot"
+        style="animation-delay: 150ms;"
+      />
+      <span
+        class="w-2 h-2 bg-primary/50 rounded-full animate-bounce-dot"
+        style="animation-delay: 300ms;"
+      />
     </div>
   </div>
 );
@@ -357,16 +375,18 @@ export function ChatView(props: ChatViewProps) {
     const [internalRightPanelView, setInternalRightPanelView] =
       createSignal<RightPanelView>("none");
     const [tcpModalOpen, setTcpModalOpen] = createSignal(false);
-  const rightPanelView = () =>
-    props.rightPanelView ?? internalRightPanelView();
-  const toolMessageIds = new Map<string, string>();
-  const toolNameMessageIds = new Map<string, string>();
-  let scrollRafId: number | undefined;
-  let mentionDebounceTimer: number | undefined;
-  let lastScrollOffset = 0;
-  // Keyboard shortcut state for "G then G" to scroll to bottom
-  const [ggKeyState, setGgKeyState] = createSignal<"idle" | "first_g">("idle");
-  let ggKeyTimeout: number | undefined;
+    const rightPanelView = () =>
+      props.rightPanelView ?? internalRightPanelView();
+    const toolMessageIds = new Map<string, string>();
+    const toolNameMessageIds = new Map<string, string>();
+    let scrollRafId: number | undefined;
+    let mentionDebounceTimer: number | undefined;
+    let lastScrollOffset = 0;
+    // Keyboard shortcut state for "G then G" to scroll to bottom
+    const [ggKeyState, setGgKeyState] = createSignal<"idle" | "first_g">(
+      "idle",
+    );
+    let ggKeyTimeout: number | undefined;
     const pendingPermissionsForModal = () =>
       pendingPermissions().map((permission) => ({
         request_id: permission.id,
@@ -536,7 +556,7 @@ export function ChatView(props: ChatViewProps) {
       const target = e.target as HTMLElement;
       // Don't trigger when typing in input
       if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") return;
-      
+
       if (e.key === "g" || e.key === "G") {
         if (ggKeyState() === "first_g") {
           // Second G - scroll to bottom
@@ -1950,7 +1970,7 @@ export function ChatView(props: ChatViewProps) {
               {/* Pending Permission Requests */}
               <Show when={pendingPermissionsForModal().length > 0}>
                 <PermissionPanel
-                  permissions={pendingPermissionsForModal().map(p => ({
+                  permissions={pendingPermissionsForModal().map((p) => ({
                     id: p.request_id,
                     sessionId: p.session_id,
                     toolName: p.tool_name,
@@ -1980,7 +2000,11 @@ export function ChatView(props: ChatViewProps) {
                   questions={pendingQuestions()}
                   disabled={!isActive()}
                   onSelect={(questionId, option) => {
-                    chatStore.answerQuestion(props.sessionId, questionId, option);
+                    chatStore.answerQuestion(
+                      props.sessionId,
+                      questionId,
+                      option,
+                    );
                     chatStore.clearQuestion(props.sessionId, questionId);
                     chatStore.addMessage(props.sessionId, {
                       role: "user",
@@ -2069,42 +2093,41 @@ export function ChatView(props: ChatViewProps) {
             }
           >
             <ChatInput
-                value={inputValue()}
-                onInput={(value) => {
-                  setSessionInputValue(value);
-                  if (!value.includes("@")) {
-                    clearMentionSuggestions();
-                  }
-                  if (!value.startsWith("/")) {
-                    setSlashSuggestions([]);
-                  }
-                }}
-                onSubmit={handleSend}
-                onInterrupt={handleAbort}
-                onAttach={handleAttachFiles}
-                attachments={chatStore
-                  .getAttachments(props.sessionId)
-                  .map((a) => {
-                    const file = new File([], a.filename, { type: a.mimeType });
-                    (file as File & { path?: string; id?: string }).path =
-                      a.path;
-                    (file as File & { path?: string; id?: string }).id = a.id;
-                    return file;
-                  })}
-                isStreaming={isStreaming()}
-                disabled={!isActive()}
-                permissionMode={permissionMode()}
-                onPermissionModeChange={handlePermissionModeChange}
-                rightPanelView={rightPanelView()}
-                onToggleFileBrowser={() => toggleRightPanel("file")}
-                onToggleGitPanel={() => toggleRightPanel("git")}
-                mentionSuggestions={mentionSuggestions()}
-                onSelectMention={applyMentionSelection}
-                onDismissMentions={clearMentionSuggestions}
-                slashSuggestions={slashSuggestions()}
-                onSelectSlash={handleSelectSlash}
-                onDismissSlash={() => setSlashSuggestions([])}
-              />
+              value={inputValue()}
+              onInput={(value) => {
+                setSessionInputValue(value);
+                if (!value.includes("@")) {
+                  clearMentionSuggestions();
+                }
+                if (!value.startsWith("/")) {
+                  setSlashSuggestions([]);
+                }
+              }}
+              onSubmit={handleSend}
+              onInterrupt={handleAbort}
+              onAttach={handleAttachFiles}
+              attachments={chatStore
+                .getAttachments(props.sessionId)
+                .map((a) => {
+                  const file = new File([], a.filename, { type: a.mimeType });
+                  (file as File & { path?: string; id?: string }).path = a.path;
+                  (file as File & { path?: string; id?: string }).id = a.id;
+                  return file;
+                })}
+              isStreaming={isStreaming()}
+              disabled={!isActive()}
+              permissionMode={permissionMode()}
+              onPermissionModeChange={handlePermissionModeChange}
+              rightPanelView={rightPanelView()}
+              onToggleFileBrowser={() => toggleRightPanel("file")}
+              onToggleGitPanel={() => toggleRightPanel("git")}
+              mentionSuggestions={mentionSuggestions()}
+              onSelectMention={applyMentionSelection}
+              onDismissMentions={clearMentionSuggestions}
+              slashSuggestions={slashSuggestions()}
+              onSelectSlash={handleSelectSlash}
+              onDismissSlash={() => setSlashSuggestions([])}
+            />
           </Show>
           <Show when={tcpModalOpen()}>
             <TcpForwardingModal

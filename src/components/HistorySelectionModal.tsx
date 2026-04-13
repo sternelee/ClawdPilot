@@ -247,16 +247,6 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
     }
   };
 
-  const formatTime = (timestamp: string | undefined) => {
-    if (!timestamp) return "Unknown";
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleString();
-    } catch {
-      return timestamp;
-    }
-  };
-
   const formatCwd = (cwd: string | undefined) => {
     if (!cwd) return "Unknown directory";
     const parts = cwd.split("/");
@@ -338,7 +328,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
                 </>
               }
             >
-              <SpinnerWithLabel label="Loading..." size="sm" />
+              <SpinnerWithLabel text="Loading..." size="sm" />
             </Show>
           </Button>
         </Show>
@@ -447,7 +437,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
             disabled={isLoadingSession()}
           >
             <Show when={isLoadingSession()} fallback="Load Selected Session">
-              <SpinnerWithLabel label="Loading Session..." size="sm" />
+              <SpinnerWithLabel text="Loading Session..." size="sm" />
             </Show>
           </Button>
         </Show>

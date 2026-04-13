@@ -9,7 +9,7 @@ import { type Component, For, Show, createMemo, createSignal } from "solid-js";
 import { Portal } from "solid-js/web";
 import { cn } from "~/lib/utils";
 import { createClipboard } from "@solid-primitives/clipboard";
-import { FiCopy, FiCheck, FiMoreVertical, FiMessageSquare } from "solid-icons/fi";
+import { FiCopy, FiMessageSquare } from "solid-icons/fi";
 import { SolidMarkdown } from "solid-markdown";
 import type { ChatMessage, SystemCard, ToolCall } from "~/stores/chatStore";
 import { isMobile } from "~/stores/deviceStore";
@@ -102,9 +102,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
                     </code>
                   );
                 }
-                return (
-                  <ShikiCodeBlock code={codeString} language={match[1]} />
-                );
+                return <ShikiCodeBlock code={codeString} language={match[1]} />;
               },
             }}
           />
@@ -328,7 +326,9 @@ const SystemMessageContent: Component<{
             Terminal
           </div>
           <div class="rounded-lg border border-secondary/20 bg-secondary/8 px-3 py-2.5 text-sm text-foreground/80">
-            <div class="font-mono break-all">{card.terminalId || "unknown"}</div>
+            <div class="font-mono break-all">
+              {card.terminalId || "unknown"}
+            </div>
             <div class="mt-1 opacity-60">
               {card.mode || "interactive/background"}{" "}
               {card.status ? `· ${card.status}` : ""}
@@ -524,17 +524,6 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
   };
 
   const copyMessage = async () => {
-    triggerHaptic();
-    try {
-      await navigator.clipboard.writeText(message().content);
-    } catch {
-      // ignore clipboard failures
-    } finally {
-      closeActions();
-    }
-  };
-
-  const copyAsMarkdown = async () => {
     triggerHaptic();
     try {
       await navigator.clipboard.writeText(message().content);

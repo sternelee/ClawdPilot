@@ -14,14 +14,12 @@
  * - Session search functionality
  */
 
+import { For, Show, createSignal, createMemo, type Component } from "solid-js";
 import {
-  For,
-  Show,
-  createSignal,
-  createMemo,
-  type Component,
-} from "solid-js";
-import { sessionStore, type AgentSessionMetadata, type AgentType } from "../stores/sessionStore";
+  sessionStore,
+  type AgentSessionMetadata,
+  type AgentType,
+} from "../stores/sessionStore";
 import { sessionEventRouter } from "../stores/sessionEventRouter";
 import { notificationStore } from "../stores/notificationStore";
 import { HistorySelectionModal } from "./HistorySelectionModal";
@@ -40,7 +38,6 @@ import {
   FiCalendar,
   FiChevronDown,
   FiChevronRight,
-  FiWifi,
   FiCpu,
   FiFolder,
   FiActivity,
@@ -89,14 +86,24 @@ const getAgentIcon = (agentType: AgentType, className?: string) => {
 
   if (iconPath) {
     return (
-      <div class={cn("w-8 h-8 rounded-lg flex items-center justify-center bg-base-200", className)}>
+      <div
+        class={cn(
+          "w-8 h-8 rounded-lg flex items-center justify-center bg-base-200",
+          className,
+        )}
+      >
         <img src={iconPath} alt={agentType} class="w-5 h-5" />
       </div>
     );
   }
 
   return (
-    <div class={cn("w-8 h-8 rounded-lg flex items-center justify-center bg-base-200", className)}>
+    <div
+      class={cn(
+        "w-8 h-8 rounded-lg flex items-center justify-center bg-base-200",
+        className,
+      )}
+    >
       <span class="text-sm">🤖</span>
     </div>
   );
@@ -114,16 +121,6 @@ const formatTime = (timestamp: number) => {
   return date.toLocaleDateString();
 };
 
-const formatDetailedTime = (timestamp: number) => {
-  const date = new Date(timestamp);
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
 const getProjectName = (projectPath: string) => {
   const parts = projectPath.split("/");
   return parts[parts.length - 1] || projectPath;
@@ -133,7 +130,9 @@ const getProjectName = (projectPath: string) => {
 // Time-based Grouping
 // ========================================================================
 
-const groupSessionsByTime = (sessions: AgentSessionMetadata[]): SessionGroup[] => {
+const groupSessionsByTime = (
+  sessions: AgentSessionMetadata[],
+): SessionGroup[] => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
@@ -166,10 +165,18 @@ const groupSessionsByTime = (sessions: AgentSessionMetadata[]): SessionGroup[] =
     result.push({ title: "Today", icon: FiCalendar, sessions: groups.today });
   }
   if (groups.yesterday.length > 0) {
-    result.push({ title: "Yesterday", icon: FiCalendar, sessions: groups.yesterday });
+    result.push({
+      title: "Yesterday",
+      icon: FiCalendar,
+      sessions: groups.yesterday,
+    });
   }
   if (groups.thisWeek.length > 0) {
-    result.push({ title: "This Week", icon: FiFolder, sessions: groups.thisWeek });
+    result.push({
+      title: "This Week",
+      icon: FiFolder,
+      sessions: groups.thisWeek,
+    });
   }
   if (groups.older.length > 0) {
     result.push({ title: "Older", icon: FiInbox, sessions: groups.older });
@@ -265,9 +272,7 @@ const SessionCardSkeleton: Component = () => {
 const SessionListSkeleton: Component = () => {
   return (
     <div class="space-y-3">
-      <For each={[1, 2, 3, 4, 5]}>
-        {() => <SessionCardSkeleton />}
-      </For>
+      <For each={[1, 2, 3, 4, 5]}>{() => <SessionCardSkeleton />}</For>
     </div>
   );
 };
@@ -315,7 +320,10 @@ const SessionActionsMenu: Component<SessionActionsMenuProps> = (props) => {
             class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-base-content/80 hover:bg-base-200/60 hover:text-base-content transition-colors"
             onClick={() => handleAction(() => props.onPin?.())}
           >
-            <FiBookmark size={14} class={props.isPinned ? "text-primary" : ""} />
+            <FiBookmark
+              size={14}
+              class={props.isPinned ? "text-primary" : ""}
+            />
             {props.isPinned ? "Unpin" : "Pin"}
           </button>
           <button
@@ -466,11 +474,15 @@ const SessionCard: Component<SessionCardProps> = (props) => {
 
   const projectName = () => getProjectName(props.session.projectPath);
 
-  const handleCopyUrl = (e: MouseEvent) => {
-    e.stopPropagation();
+  const copySessionUrl = () => {
     const url = `irogen://session/${props.session.sessionId}`;
     navigator.clipboard.writeText(url);
     notificationStore.success("Session URL copied to clipboard", "Copied");
+  };
+
+  const handleCopyUrl = (e: MouseEvent) => {
+    e.stopPropagation();
+    copySessionUrl();
   };
 
   return (
@@ -510,7 +522,10 @@ const SessionCard: Component<SessionCardProps> = (props) => {
           />
 
           {/* Path */}
-          <p class="text-xs text-muted-foreground truncate max-w-[250px]" title={props.session.currentDir}>
+          <p
+            class="text-xs text-muted-foreground truncate max-w-[250px]"
+            title={props.session.currentDir}
+          >
             {props.session.currentDir}
           </p>
 
@@ -596,7 +611,7 @@ const SessionCard: Component<SessionCardProps> = (props) => {
           session={props.session}
           onPin={props.onPin}
           onDelete={props.onDelete}
-          onCopyUrl={handleCopyUrl}
+          onCopyUrl={copySessionUrl}
           onShare={props.onShare}
           isPinned={props.isPinned}
         />
@@ -639,7 +654,9 @@ const SessionGroupItem: Component<SessionGroupItemProps> = (props) => {
         </Show>
         <props.group.icon size={12} />
         <span>{props.group.title}</span>
-        <span class="text-muted-foreground/40">({props.group.sessions.length})</span>
+        <span class="text-muted-foreground/40">
+          ({props.group.sessions.length})
+        </span>
       </button>
 
       {/* Sessions in group */}
@@ -651,14 +668,15 @@ const SessionGroupItem: Component<SessionGroupItemProps> = (props) => {
                 session={session}
                 isActive={props.activeSessionId === session.sessionId}
                 isStreaming={
-                  sessionEventRouter.getStreamingState(session.sessionId).isStreaming
+                  sessionEventRouter.getStreamingState(session.sessionId)
+                    .isStreaming
                 }
                 isPinned={props.pinnedSessions.has(session.sessionId)}
                 onSelect={() => props.onSelectSession(session.sessionId)}
                 onStop={() => props.onStopSession(session.sessionId)}
                 onPin={() => props.onPinSession(session.sessionId)}
                 onDelete={() => props.onDeleteSession(session.sessionId)}
-                onHistory={(path) => props.onHistorySession?.(session)}
+                onHistory={() => props.onHistorySession?.(session)}
                 onRename={(title) => {
                   // Handle rename - in a real app this would update the session
                   console.log("Rename session", session.sessionId, "to", title);
@@ -732,11 +750,14 @@ const EmptyState: Component<EmptyStateProps> = (props) => {
 export function SessionListView(props: SessionListViewProps) {
   const [filter, setFilter] = createSignal<"all" | "active">("all");
   const [searchQuery, setSearchQuery] = createSignal("");
-  const [isLoading, setIsLoading] = createSignal(false);
-  const [pinnedSessions, setPinnedSessions] = createSignal<Set<string>>(new Set());
+  const [isLoading] = createSignal(false);
+  const [pinnedSessions, setPinnedSessions] = createSignal<Set<string>>(
+    new Set(),
+  );
   const [historyModalOpen, setHistoryModalOpen] = createSignal(false);
   const [historyModalPath, setHistoryModalPath] = createSignal<string>("");
-  const [historyModalAgentType, setHistoryModalAgentType] = createSignal<AgentType>("claude");
+  const [historyModalAgentType, setHistoryModalAgentType] =
+    createSignal<AgentType>("claude");
 
   const sessions = createMemo(() => {
     let allSessions = sessionStore.getSessions();
@@ -754,7 +775,7 @@ export function SessionListView(props: SessionListViewProps) {
           s.agentType.toLowerCase().includes(query) ||
           s.projectPath.toLowerCase().includes(query) ||
           s.currentDir.toLowerCase().includes(query) ||
-          s.gitBranch?.toLowerCase().includes(query)
+          s.gitBranch?.toLowerCase().includes(query),
       );
     }
 
@@ -788,10 +809,7 @@ export function SessionListView(props: SessionListViewProps) {
 
   const handleDeleteSession = (sessionId: string) => {
     // In a real app, this would show a confirmation dialog
-    notificationStore.info(
-      `Delete session: ${sessionId}`,
-      "Delete Session"
-    );
+    notificationStore.info(`Delete session: ${sessionId}`, "Delete Session");
   };
 
   const handleLoadHistory = (session: AgentSessionMetadata) => {
@@ -894,16 +912,23 @@ export function SessionListView(props: SessionListViewProps) {
               <div class="flex items-center gap-2 mb-2 px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
                 <FiBookmark size={12} class="text-primary" />
                 <span>Pinned</span>
-                <span class="text-muted-foreground/40">({pinnedSessions().size})</span>
+                <span class="text-muted-foreground/40">
+                  ({pinnedSessions().size})
+                </span>
               </div>
               <div class="space-y-2 pl-2">
-                <For each={sessions().filter((s) => pinnedSessions().has(s.sessionId))}>
+                <For
+                  each={sessions().filter((s) =>
+                    pinnedSessions().has(s.sessionId),
+                  )}
+                >
                   {(session) => (
                     <SessionCard
                       session={session}
                       isActive={activeSessionId() === session.sessionId}
                       isStreaming={
-                        sessionEventRouter.getStreamingState(session.sessionId).isStreaming
+                        sessionEventRouter.getStreamingState(session.sessionId)
+                          .isStreaming
                       }
                       isPinned={true}
                       onSelect={() => handleSelectSession(session.sessionId)}

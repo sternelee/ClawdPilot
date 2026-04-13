@@ -16,14 +16,12 @@ import {
 import { cn } from "~/lib/utils";
 import type { ChatMessage } from "~/stores/chatStore";
 import {
-  FiMessageSquare,
   FiTerminal,
   FiFile,
   FiAlertTriangle,
   FiCode,
   FiEye,
-  FiZap,
-  FiKeyboard,
+  FiChevronDown,
 } from "solid-icons/fi";
 
 interface MessageListViewProps {
@@ -36,7 +34,10 @@ interface MessageListViewProps {
   onSyncTodoList?: (content: string) => void;
   onOpenFileLocation?: (path: string, line?: number) => void;
   onApplyEditReview?: (path: string, action: "accept" | "reject") => void;
-  onTerminalAction?: (terminalId: string, action: "attach" | "stop" | "status") => void;
+  onTerminalAction?: (
+    terminalId: string,
+    action: "attach" | "stop" | "status",
+  ) => void;
 }
 
 interface DateGroup {
@@ -79,7 +80,9 @@ const groupMessagesByDate = (messages: ChatMessage[]): DateGroup[] => {
 const DateSeparator: Component<{ date: string }> = (props) => (
   <div class="flex items-center gap-3 py-4">
     <div class="flex-1 h-px bg-border/50" />
-    <span class="text-[11px] font-medium text-muted-foreground/60 px-2">{props.date}</span>
+    <span class="text-[11px] font-medium text-muted-foreground/60 px-2">
+      {props.date}
+    </span>
     <div class="flex-1 h-px bg-border/50" />
   </div>
 );
@@ -120,7 +123,9 @@ const ChatEmptyState: Component<ChatEmptyStateProps> = (props) => {
       {/* Description */}
       <p class="text-sm text-muted-foreground max-w-md mb-6 leading-relaxed">
         Send a message to start chatting with{" "}
-        <span class="font-medium text-foreground">{props.agentType || "your AI agent"}</span>
+        <span class="font-medium text-foreground">
+          {props.agentType || "your AI agent"}
+        </span>
       </p>
 
       {/* Conversation Starters */}
@@ -140,7 +145,9 @@ const ChatEmptyState: Component<ChatEmptyStateProps> = (props) => {
               </div>
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-medium truncate">{starter.text}</p>
-                <p class="text-[10px] text-muted-foreground/60">{starter.hint}</p>
+                <p class="text-[10px] text-muted-foreground/60">
+                  {starter.hint}
+                </p>
               </div>
             </button>
           ))}
@@ -209,7 +216,10 @@ export const MessageListView: Component<MessageListViewProps> = (props) => {
 
   const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
     if (!scrollContainerRef) return;
-    scrollContainerRef.scrollTo({ top: scrollContainerRef.scrollHeight, behavior });
+    scrollContainerRef.scrollTo({
+      top: scrollContainerRef.scrollHeight,
+      behavior,
+    });
     setShowScrollButton(false);
   };
 
@@ -232,7 +242,9 @@ export const MessageListView: Component<MessageListViewProps> = (props) => {
         <div class="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-20">
           <div class="flex flex-col items-center gap-3">
             <span class="loading loading-spinner loading-lg text-primary" />
-            <span class="text-xs font-medium text-muted-foreground">Loading messages...</span>
+            <span class="text-xs font-medium text-muted-foreground">
+              Loading messages...
+            </span>
           </div>
         </div>
       </Show>
@@ -256,13 +268,15 @@ export const MessageListView: Component<MessageListViewProps> = (props) => {
                 <>
                   <DateSeparator date={group.label} />
                   <For each={group.messages}>
-                    {(message, index) => (
+                    {(message) => (
                       <div class="py-3">
                         {/* Simple message display - individual message components handle role-based styling */}
-                        <div class={cn(
-                          "text-sm leading-relaxed whitespace-pre-wrap break-words",
-                          message.role === "user" && "text-right",
-                        )}>
+                        <div
+                          class={cn(
+                            "text-sm leading-relaxed whitespace-pre-wrap break-words",
+                            message.role === "user" && "text-right",
+                          )}
+                        >
                           {message.content}
                         </div>
                       </div>

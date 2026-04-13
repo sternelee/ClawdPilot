@@ -89,7 +89,6 @@ export const AppLayout: Component = () => {
 
   // Navigation state
   const activeView = createMemo(() => navigationStore.state.activeView);
-  const mobile = createMemo(() => isMobile());
 
   // Auto-expand sidebar on desktop (md and above)
   createEffect(() => {
@@ -285,9 +284,6 @@ export const AppLayout: Component = () => {
     }
   };
 
-  const isMobileDevice = mobile();
-  const activeSessionVal = activeSession();
-
   return (
     <div class="app-root flex h-full max-sm:text-sm max-sm:leading-5 bg-background">
       {/* Keyboard Shortcuts Dialog */}
@@ -311,7 +307,7 @@ export const AppLayout: Component = () => {
         <div class="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div class="rounded-2xl bg-background/90 border border-border/50 px-6 py-5 shadow-2xl">
             <SpinnerWithLabel
-              label={i18nStore.t("common.loadingHistory")}
+              text={i18nStore.t("common.loadingHistory")}
               size="lg"
               variant="primary"
             />

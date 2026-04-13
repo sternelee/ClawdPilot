@@ -5,7 +5,8 @@
  * Supports animations, tips, and action buttons.
  */
 
-import { type Component, Show, For, type JSX } from "solid-js";
+import { type Component, Show, For } from "solid-js";
+import { Dynamic } from "solid-js/web";
 import { cn } from "~/lib/utils";
 
 type AnimationType = "float" | "pulse" | "bounce" | "none";
@@ -13,11 +14,11 @@ type AnimationType = "float" | "pulse" | "bounce" | "none";
 interface EmptyStateAction {
   label: string;
   onClick: () => void;
-  icon?: (props: { size?: number; class?: string }) => JSX.Element;
+  icon?: Component<{ size?: number; class?: string }>;
 }
 
 interface EnhancedEmptyStateProps {
-  icon: (props: { size?: number; class?: string }) => JSX.Element;
+  icon: Component<{ size?: number; class?: string }>;
   title: string;
   description: string;
   tips?: string[];
@@ -50,32 +51,39 @@ let floatAnimationInjected = false;
 const injectFloatAnimation = () => {
   if (floatAnimationInjected) return;
   floatAnimationInjected = true;
-  
+
   const style = document.createElement("style");
   style.textContent = FloatKeyframes;
   document.head.appendChild(style);
 };
 
-export const EnhancedEmptyState: Component<EnhancedEmptyStateProps> = (props) => {
+export const EnhancedEmptyState: Component<EnhancedEmptyStateProps> = (
+  props,
+) => {
   const animation = () => props.animation || "float";
-  
+
   // Inject float animation on first render
   if (animation() === "float") {
     injectFloatAnimation();
   }
 
   return (
-    <div class={cn("flex flex-col items-center justify-center px-4 py-12 text-center", props.class)}>
+    <div
+      class={cn(
+        "flex flex-col items-center justify-center px-4 py-12 text-center",
+        props.class,
+      )}
+    >
       {/* Animated Icon Container */}
       <div class={cn("relative mb-6", animationClasses[animation()])}>
         {/* Background glow */}
         <div class="absolute inset-0 bg-primary/10 rounded-3xl blur-xl" />
-        
+
         {/* Main icon container */}
         <div class="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center shadow-lg shadow-primary/10">
           <props.icon size={36} class="text-primary" />
         </div>
-        
+
         {/* Decorative elements */}
         <div class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
           <span class="text-primary text-xs">✨</span>
@@ -125,11 +133,15 @@ export const EnhancedEmptyState: Component<EnhancedEmptyStateProps> = (props) =>
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
                   index() === 0
                     ? "bg-primary text-primary-contrast shadow-lg shadow-primary/20 hover:shadow-xl"
-                    : "bg-muted/50 hover:bg-muted border border-border"
+                    : "bg-muted/50 hover:bg-muted border border-border",
                 )}
               >
                 <Show when={action.icon}>
-                  <action.icon size={14} class="inline mr-1.5 -mt-0.5" />
+                  <Dynamic
+                    component={action.icon}
+                    size={14}
+                    class="inline mr-1.5 -mt-0.5"
+                  />
                 </Show>
                 {action.label}
               </button>

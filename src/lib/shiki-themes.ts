@@ -4,9 +4,7 @@
  * https://github.com/pierrecomputer/theme
  */
 
-import type { ShikiTheme } from "shiki";
-
-export const pierreLight: ShikiTheme = {
+export const pierreLight = {
   name: "pierre-light",
   type: "light",
   colors: {
@@ -88,9 +86,9 @@ export const pierreLight: ShikiTheme = {
       settings: { foreground: "#84848A" },
     },
   ],
-};
+} as const;
 
-export const pierreDark: ShikiTheme = {
+export const pierreDark = {
   name: "pierre-dark",
   type: "dark",
   colors: {
@@ -172,7 +170,7 @@ export const pierreDark: ShikiTheme = {
       settings: { foreground: "#84848A" },
     },
   ],
-};
+} as const;
 
 // Re-export themes for easy import
 export const themes = {

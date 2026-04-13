@@ -6,7 +6,7 @@
  */
 
 import { type Component, Show, createMemo } from "solid-js";
-import { FiTerminal, FiSettings, FiSidebar, FiGitBranch, FiFolder } from "solid-icons/fi";
+import { FiTerminal, FiSettings, FiSidebar } from "solid-icons/fi";
 import { sessionStore } from "../../stores/sessionStore";
 import { sessionEventRouter } from "../../stores/sessionEventRouter";
 import { navigationStore } from "../../stores/navigationStore";
@@ -72,7 +72,8 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
             <div class="min-w-0">
               <div class="flex items-center gap-2">
                 <span class="font-semibold text-sm truncate max-w-[100px] sm:max-w-[180px] text-foreground">
-                  {props.agentType?.charAt(0).toUpperCase() + (props.agentType?.slice(1) || "")}
+                  {props.agentType?.charAt(0).toUpperCase() +
+                    (props.agentType?.slice(1) || "")}
                 </span>
                 {/* Status indicator */}
                 <span

@@ -8,7 +8,13 @@
  * - Portal rendering for proper z-index
  */
 
-import { type Component, Show, createSignal, onCleanup, type JSX } from "solid-js";
+import {
+  type Component,
+  Show,
+  createSignal,
+  onCleanup,
+  type JSX,
+} from "solid-js";
 import { Portal } from "solid-js/web";
 import { cn } from "~/lib/utils";
 
@@ -49,17 +55,11 @@ export const Tooltip: Component<TooltipProps> = (props) => {
   // Improved arrow classes with proper borders
   const arrowClasses = {
     top: "top-full left-1/2 -translate-x-1/2 border-t-base-content/20 border-x-transparent border-b-transparent",
-    bottom: "bottom-full left-1/2 -translate-x-1/2 border-b-base-content/20 border-x-transparent border-t-transparent",
+    bottom:
+      "bottom-full left-1/2 -translate-x-1/2 border-b-base-content/20 border-x-transparent border-t-transparent",
     left: "left-full top-1/2 -translate-y-1/2 border-l-base-content/20 border-y-transparent border-r-transparent",
-    right: "right-full top-1/2 -translate-y-1/2 border-r-base-content/20 border-y-transparent border-l-transparent",
-  };
-
-  // Arrow position adjustments
-  const arrowTranslate = {
-    top: "-translate-x-1/2 -translate-y-full",
-    bottom: "-translate-x-1/2 translate-y-full",
-    left: "-translate-y-1/2 -translate-x-full",
-    right: "-translate-y-1/2 translate-x-full",
+    right:
+      "right-full top-1/2 -translate-y-1/2 border-r-base-content/20 border-y-transparent border-l-transparent",
   };
 
   const handleMouseEnter = () => {
@@ -82,7 +82,7 @@ export const Tooltip: Component<TooltipProps> = (props) => {
     const rect = triggerRef.getBoundingClientRect();
     const scrollX = window.scrollX;
     const scrollY = window.scrollY;
-    
+
     setCoords({
       top: rect.top + scrollY,
       left: rect.left + scrollX,
@@ -114,7 +114,7 @@ export const Tooltip: Component<TooltipProps> = (props) => {
               "bg-base-300/95 backdrop-blur-sm border border-base-content/10",
               "rounded-lg shadow-lg",
               "animate-tooltip-in", // fade + zoom animation
-              positionClasses[position]
+              positionClasses[position],
             )}
             style={{
               top: `${coords().top}px`,
@@ -126,7 +126,7 @@ export const Tooltip: Component<TooltipProps> = (props) => {
             <div
               class={cn(
                 "absolute w-0 h-0 border-[6px]",
-                arrowClasses[position]
+                arrowClasses[position],
               )}
             />
           </div>

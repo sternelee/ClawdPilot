@@ -520,7 +520,7 @@ const DashboardEmptyState: Component<DashboardEmptyStateProps> = (props) => {
             Quick Tips
           </p>
           <ul class="space-y-1.5">
-            {props.tips.map((tip) => (
+            {(props.tips ?? []).map((tip) => (
               <li class="flex items-start gap-2 text-xs text-base-content/60">
                 <span class="text-primary mt-0.5">•</span>
                 <span>{tip}</span>

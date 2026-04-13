@@ -125,7 +125,7 @@ const ToastItem: Component<ToastItemProps> = (props) => {
         isVisible()
           ? "translate-x-0 opacity-100 scale-100"
           : "translate-x-full opacity-0 scale-95",
-        props.stackIndex > 0 && "mt-2"
+        props.stackIndex > 0 && "mt-2",
       )}
     >
       {/* Icon */}
@@ -193,7 +193,7 @@ export const ToastContainer: Component<ToastContainerProps> = (props) => {
         "toast toast-top toast-end z-[100]",
         "flex flex-col gap-2",
         "max-h-[calc(100vh-2rem)]",
-        props.class
+        props.class,
       )}
     >
       <For each={props.toasts}>
@@ -224,7 +224,7 @@ export function createToast(options: UseToastOptions = {}) {
     type: ToastType,
     title: string,
     description?: string,
-    action?: ToastAction
+    action?: ToastAction,
   ) => {
     const id = Math.random().toString(36).slice(2);
     const toast: Toast = {
@@ -267,5 +267,3 @@ export function createToast(options: UseToastOptions = {}) {
     info,
   };
 }
-
-export type { Toast, ToastAction, ToastType };

@@ -19,7 +19,7 @@ import { cn } from "~/lib/utils";
 export interface SkeletonProps {
   width?: string;
   height?: string;
-  rounded?: "none" | "sm" | "md" | "lg" | "full";
+  rounded?: "none" | "sm" | "md" | "lg" | "xl" | "full" | "btn" | "textarea";
   class?: string;
 }
 
@@ -29,7 +29,10 @@ export const Skeleton: Component<SkeletonProps> = (props) => {
     sm: "rounded",
     md: "rounded-md",
     lg: "rounded-lg",
+    xl: "rounded-xl",
     full: "rounded-full",
+    btn: "rounded-btn",
+    textarea: "rounded-lg",
   };
 
   return (
@@ -37,7 +40,7 @@ export const Skeleton: Component<SkeletonProps> = (props) => {
       class={cn(
         "animate-pulse bg-base-200/70",
         roundedClass[props.rounded || "md"],
-        props.class
+        props.class,
       )}
       style={{
         width: props.width || "100%",
@@ -53,7 +56,9 @@ export const Skeleton: Component<SkeletonProps> = (props) => {
 
 export const CardSkeleton: Component<{ class?: string }> = (props) => {
   return (
-    <div class={cn("card bg-base-100 shadow border border-base-300", props.class)}>
+    <div
+      class={cn("card bg-base-100 shadow border border-base-300", props.class)}
+    >
       <div class="card-body gap-3">
         <div class="flex items-center gap-3">
           <Skeleton width="40px" height="40px" rounded="full" />
@@ -76,9 +81,18 @@ export const CardSkeleton: Component<{ class?: string }> = (props) => {
 // Message Bubble Skeleton
 // ============================================================================
 
-export const MessageBubbleSkeleton: Component<{ isUser?: boolean; class?: string }> = (props) => {
+export const MessageBubbleSkeleton: Component<{
+  isUser?: boolean;
+  class?: string;
+}> = (props) => {
   return (
-    <div class={cn("flex items-start gap-2", props.isUser && "flex-row-reverse", props.class)}>
+    <div
+      class={cn(
+        "flex items-start gap-2",
+        props.isUser && "flex-row-reverse",
+        props.class,
+      )}
+    >
       <Skeleton width="32px" height="32px" rounded="full" class="shrink-0" />
       <div class="space-y-2 max-w-[70%]">
         <Skeleton width="120px" height="16px" rounded="lg" />
@@ -117,7 +131,12 @@ export const ChatViewSkeleton: Component<{ class?: string }> = (props) => {
         <MessageBubbleSkeleton isUser />
         <MessageBubbleSkeleton />
         <div class="flex items-start gap-2">
-          <Skeleton width="32px" height="32px" rounded="full" class="shrink-0" />
+          <Skeleton
+            width="32px"
+            height="32px"
+            rounded="full"
+            class="shrink-0"
+          />
           <div class="space-y-2 max-w-[70%]">
             <Skeleton width="150px" height="16px" rounded="lg" />
             <Skeleton width="100%" height="120px" rounded="xl" />
@@ -129,7 +148,12 @@ export const ChatViewSkeleton: Component<{ class?: string }> = (props) => {
       {/* Input */}
       <div class="p-4 border-t border-base-300">
         <div class="flex items-end gap-2">
-          <Skeleton width="100%" height="44px" rounded="textarea" class="flex-1" />
+          <Skeleton
+            width="100%"
+            height="44px"
+            rounded="textarea"
+            class="flex-1"
+          />
           <Skeleton width="44px" height="44px" rounded="btn" />
         </div>
       </div>
@@ -190,17 +214,19 @@ export const DashboardSkeleton: Component<{ class?: string }> = (props) => {
 // Content Skeleton (Generic)
 // ============================================================================
 
-export const ContentSkeleton: Component<{ lines?: number; class?: string }> = (props) => {
+export const ContentSkeleton: Component<{ lines?: number; class?: string }> = (
+  props,
+) => {
   const lines = () => props.lines || 5;
 
   return (
     <div class={cn("space-y-3", props.class)}>
       <For each={Array(lines()).fill(0)}>
         {(_, i) => (
-          <Skeleton 
-            width={i() === lines() - 1 ? "60%" : "100%"} 
-            height="14px" 
-            rounded="md" 
+          <Skeleton
+            width={i() === lines() - 1 ? "60%" : "100%"}
+            height="14px"
+            rounded="md"
           />
         )}
       </For>
@@ -226,7 +252,13 @@ export const Spinner: Component<SpinnerProps> = (props) => {
   };
 
   return (
-    <span class={cn("loading loading-spinner text-primary", sizeClass[props.size || "md"], props.class)} />
+    <span
+      class={cn(
+        "loading loading-spinner text-primary",
+        sizeClass[props.size || "md"],
+        props.class,
+      )}
+    />
   );
 };
 
@@ -247,7 +279,13 @@ export const LoadingDots: Component<LoadingDotsProps> = (props) => {
   };
 
   return (
-    <span class={cn("loading loading-dots", sizeClass[props.size || "md"], props.class)} />
+    <span
+      class={cn(
+        "loading loading-dots",
+        sizeClass[props.size || "md"],
+        props.class,
+      )}
+    />
   );
 };
 
@@ -273,15 +311,33 @@ export const LoadingBar: Component<LoadingBarProps> = (props) => {
 
 export interface LoadingTextProps {
   text?: string;
+  label?: string;
+  size?: "xs" | "sm" | "md" | "lg";
+  variant?: "default" | "primary";
   class?: string;
 }
 
 export const LoadingText: Component<LoadingTextProps> = (props) => {
+  const sizeClass = {
+    xs: "loading-xs",
+    sm: "loading-sm",
+    md: "loading-md",
+    lg: "loading-lg",
+  };
+
   return (
     <div class={cn("flex items-center gap-2", props.class)}>
-      <span class="loading loading-spinner loading-sm text-primary" />
-      <Show when={props.text}>
-        <span class="text-sm text-base-content/60">{props.text}</span>
+      <span
+        class={cn(
+          "loading loading-spinner",
+          sizeClass[props.size || "sm"],
+          props.variant === "primary" ? "text-primary" : "text-base-content/60",
+        )}
+      />
+      <Show when={props.text || props.label}>
+        <span class="text-sm text-base-content/60">
+          {props.text || props.label}
+        </span>
       </Show>
     </div>
   );

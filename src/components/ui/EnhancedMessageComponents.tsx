@@ -68,7 +68,8 @@ const statusConfig = {
     icon: FiLoader,
     label: "Started",
     iconClass: "text-blue-500",
-    badgeClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
+    badgeClass:
+      "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20",
     animate: true,
     spinnerClass: "animate-spin",
   },
@@ -76,7 +77,8 @@ const statusConfig = {
     icon: FiPlay,
     label: "Running",
     iconClass: "text-amber-500",
-    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
+    badgeClass:
+      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20",
     animate: true,
     spinnerClass: "animate-pulse",
   },
@@ -84,7 +86,8 @@ const statusConfig = {
     icon: FiCheckCircle,
     label: "Completed",
     iconClass: "text-emerald-500",
-    badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
+    badgeClass:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20",
     animate: false,
     spinnerClass: "",
   },
@@ -92,7 +95,8 @@ const statusConfig = {
     icon: FiAlertCircle,
     label: "Failed",
     iconClass: "text-red-500",
-    badgeClass: "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
+    badgeClass:
+      "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20",
     animate: false,
     spinnerClass: "",
   },
@@ -111,11 +115,21 @@ const formatTimestamp = (ts: number) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-const detectOutputType = (output: string): "json" | "error" | "success" | "plain" => {
+const detectOutputType = (
+  output: string,
+): "json" | "error" | "success" | "plain" => {
   const trimmed = output.trim();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) return "json";
-  if (trimmed.toLowerCase().includes("error") || trimmed.toLowerCase().includes("failed")) return "error";
-  if (trimmed.toLowerCase().includes("success") || trimmed.toLowerCase().includes("done")) return "success";
+  if (
+    trimmed.toLowerCase().includes("error") ||
+    trimmed.toLowerCase().includes("failed")
+  )
+    return "error";
+  if (
+    trimmed.toLowerCase().includes("success") ||
+    trimmed.toLowerCase().includes("done")
+  )
+    return "success";
   return "plain";
 };
 
@@ -140,7 +154,10 @@ const SyntaxHighlightedOutput: Component<{ output: string }> = (props) => {
         return formatted
           .replace(/(".*?")\s*:/g, '<span class="text-blue-400">$1</span>:')
           .replace(/:\s*(".*?")/g, ': <span class="text-emerald-400">$1</span>')
-          .replace(/:\s*(true|false)/g, ': <span class="text-amber-400">$1</span>')
+          .replace(
+            /:\s*(true|false)/g,
+            ': <span class="text-amber-400">$1</span>',
+          )
           .replace(/:\s*(\d+)/g, ': <span class="text-violet-400">$1</span>');
       } catch {
         return output;
@@ -148,9 +165,18 @@ const SyntaxHighlightedOutput: Component<{ output: string }> = (props) => {
     }
 
     return output
-      .replace(/\b(error|failed|failure)\b/gi, '<span class="text-red-400 font-medium">$1</span>')
-      .replace(/\b(success|completed|done|ok)\b/gi, '<span class="text-emerald-400 font-medium">$1</span>')
-      .replace(/\b(warning|warn)\b/gi, '<span class="text-amber-400 font-medium">$1</span>');
+      .replace(
+        /\b(error|failed|failure)\b/gi,
+        '<span class="text-red-400 font-medium">$1</span>',
+      )
+      .replace(
+        /\b(success|completed|done|ok)\b/gi,
+        '<span class="text-emerald-400 font-medium">$1</span>',
+      )
+      .replace(
+        /\b(warning|warn)\b/gi,
+        '<span class="text-amber-400 font-medium">$1</span>',
+      );
   });
 
   return (
@@ -159,7 +185,8 @@ const SyntaxHighlightedOutput: Component<{ output: string }> = (props) => {
         class={cn(
           "text-xs font-mono p-3 overflow-x-auto whitespace-pre-wrap break-all max-h-64 rounded-lg",
           outputType() === "error" && "bg-red-500/5 border border-red-500/20",
-          outputType() === "success" && "bg-emerald-500/5 border border-emerald-500/20",
+          outputType() === "success" &&
+            "bg-emerald-500/5 border border-emerald-500/20",
           outputType() === "plain" && "bg-muted/50",
           outputType() === "json" && "bg-blue-500/5 border border-blue-500/20",
         )}
@@ -181,7 +208,9 @@ const SyntaxHighlightedOutput: Component<{ output: string }> = (props) => {
 
 export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
   const [isExpanded, setIsExpanded] = createSignal(props.expanded ?? true);
-  const config = createMemo(() => statusConfig[props.toolCall.status] || statusConfig.started);
+  const config = createMemo(
+    () => statusConfig[props.toolCall.status] || statusConfig.started,
+  );
   const StatusIcon = config().icon;
   const hasOutput = () => !!props.toolCall.output;
 
@@ -199,10 +228,12 @@ export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
     <div
       class={cn(
         "rounded-xl border overflow-hidden transition-all duration-200",
-        props.toolCall.status === "in_progress" && "border-amber-500/30 bg-amber-500/5",
+        props.toolCall.status === "in_progress" &&
+          "border-amber-500/30 bg-amber-500/5",
         props.toolCall.status === "failed" && "border-red-500/30 bg-red-500/5",
         props.toolCall.status === "completed" && "border-border bg-muted/20",
-        props.toolCall.status === "started" && "border-blue-500/30 bg-blue-500/5",
+        props.toolCall.status === "started" &&
+          "border-blue-500/30 bg-blue-500/5",
         props.class,
       )}
     >
@@ -228,7 +259,10 @@ export const ToolCallItem: Component<ToolCallItemProps> = (props) => {
             </span>
             <Show when={hasOutput()}>
               <span class="text-[10px] text-muted-foreground truncate">
-                {truncateMiddle(normalizeMultiline(props.toolCall.output || ""), 50)}
+                {truncateMiddle(
+                  normalizeMultiline(props.toolCall.output || ""),
+                  50,
+                )}
               </span>
             </Show>
           </div>
@@ -291,10 +325,10 @@ export interface ToolCallListProps {
 
 export const ToolCallList: Component<ToolCallListProps> = (props) => {
   const inProgressCount = createMemo(
-    () => props.toolCalls.filter((tc) => tc.status === "in_progress").length
+    () => props.toolCalls.filter((tc) => tc.status === "in_progress").length,
   );
   const completedCount = createMemo(
-    () => props.toolCalls.filter((tc) => tc.status === "completed").length
+    () => props.toolCalls.filter((tc) => tc.status === "completed").length,
   );
 
   return (
@@ -334,7 +368,9 @@ export interface ReasoningBlockProps {
 }
 
 // Parse thinking into logical steps
-const parseThinkingSteps = (thinking: string): { step: string; indent: number }[] => {
+const parseThinkingSteps = (
+  thinking: string,
+): { step: string; indent: number }[] => {
   const lines = normalizeMultiline(thinking).split("\n");
   return lines
     .filter((line) => line.trim())
@@ -359,7 +395,7 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
   createSignal(true);
 
   const steps = createMemo(() =>
-    props.thinking ? parseThinkingSteps(props.thinking) : []
+    props.thinking ? parseThinkingSteps(props.thinking) : [],
   );
 
   const stepCount = createMemo(() => steps().length);
@@ -410,9 +446,18 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
           {/* Streaming Indicator */}
           <Show when={props.isStreaming}>
             <div class="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-              <div class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ "animation-delay": "0ms" }} />
-              <div class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ "animation-delay": "150ms" }} />
-              <div class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ "animation-delay": "300ms" }} />
+              <div
+                class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce"
+                style={{ "animation-delay": "0ms" }}
+              />
+              <div
+                class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce"
+                style={{ "animation-delay": "150ms" }}
+              />
+              <div
+                class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce"
+                style={{ "animation-delay": "300ms" }}
+              />
             </div>
           </Show>
 
@@ -433,7 +478,7 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
                   <div
                     class={cn(
                       "flex items-start gap-3 py-1 px-2 rounded-lg transition-colors hover:bg-muted/30",
-                      item.indent > 0 && "ml-4"
+                      item.indent > 0 && "ml-4",
                     )}
                   >
                     {/* Step indicator */}
@@ -447,7 +492,11 @@ export const ReasoningBlock: Component<ReasoningBlockProps> = (props) => {
                     <div class="flex-1 min-w-0">
                       <p class="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
                         {item.step}
-                        <Show when={props.isStreaming && index() === stepCount() - 1}>
+                        <Show
+                          when={
+                            props.isStreaming && index() === stepCount() - 1
+                          }
+                        >
                           <ThinkingCursor />
                         </Show>
                       </p>
@@ -486,7 +535,10 @@ export interface FileEditDiffProps {
   class?: string;
 }
 
-const LineNumber: Component<{ num: number; type?: "added" | "removed" | "unchanged" }> = (props) => (
+const LineNumber: Component<{
+  num: number;
+  type?: "added" | "removed" | "unchanged";
+}> = (props) => (
   <span
     class={cn(
       "inline-block w-10 text-right pr-3 select-none text-[11px] font-mono",
@@ -502,48 +554,16 @@ const LineNumber: Component<{ num: number; type?: "added" | "removed" | "unchang
 export const FileEditDiff: Component<FileEditDiffProps> = (props) => {
   const [isExpanded, setIsExpanded] = createSignal(true);
   const [viewMode, setViewMode] = createSignal<"unified" | "split">("unified");
-  const [copied, setCopied] = createSignal(false);
-
-  const handleCopy = async () => {
-    const diff = `--- a/${props.path}\n+++ b/${props.path}\n${generateDiff()}
-`;
-    await navigator.clipboard.writeText(diff);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const generateDiff = () => {
-    const oldLines = props.oldText.split("\n");
-    const newLines = props.newText.split("\n");
-    let result = "";
-
-    // Simple line-by-line diff
-    const maxLen = Math.max(oldLines.length, newLines.length);
-    for (let i = 0; i < maxLen; i++) {
-      const oldLine = oldLines[i];
-      const newLine = newLines[i];
-
-      if (oldLine === undefined) {
-        result += `+ ${newLine}\n`;
-      } else if (newLine === undefined) {
-        result += `- ${oldLine}\n`;
-      } else if (oldLine !== newLine) {
-        result += `- ${oldLine}\n`;
-        result += `+ ${newLine}\n`;
-      } else {
-        result += `  ${oldLine}\n`;
-      }
-    }
-    return result;
-  };
 
   const diffLines = createMemo(() => {
     const oldLines = props.oldText.split("\n");
     const newLines = props.newText.split("\n");
-    const lines: { type: "added" | "removed" | "unchanged"; content: string }[] = [];
+    const lines: {
+      type: "added" | "removed" | "unchanged";
+      content: string;
+    }[] = [];
 
     // Compute LCS-based diff for better display
-    const maxLen = Math.max(oldLines.length, newLines.length);
     let oldIdx = 0;
     let newIdx = 0;
 
@@ -693,7 +713,8 @@ export const FileEditDiff: Component<FileEditDiffProps> = (props) => {
                           <span
                             class={cn(
                               "flex-1 px-2 py-0.5 whitespace-pre",
-                              line.type === "removed" && "text-red-600 dark:text-red-400",
+                              line.type === "removed" &&
+                                "text-red-600 dark:text-red-400",
                             )}
                           >
                             {line.type === "removed" ? "- " : "  "}
@@ -719,7 +740,8 @@ export const FileEditDiff: Component<FileEditDiffProps> = (props) => {
                           <span
                             class={cn(
                               "flex-1 px-2 py-0.5 whitespace-pre",
-                              line.type === "added" && "text-emerald-600 dark:text-emerald-400",
+                              line.type === "added" &&
+                                "text-emerald-600 dark:text-emerald-400",
                             )}
                           >
                             {line.type === "added" ? "+ " : "  "}
@@ -747,11 +769,17 @@ export const FileEditDiff: Component<FileEditDiffProps> = (props) => {
                       <span
                         class={cn(
                           "flex-1 px-2 py-0.5 whitespace-pre",
-                          line.type === "added" && "text-emerald-600 dark:text-emerald-400",
-                          line.type === "removed" && "text-red-600 dark:text-red-400",
+                          line.type === "added" &&
+                            "text-emerald-600 dark:text-emerald-400",
+                          line.type === "removed" &&
+                            "text-red-600 dark:text-red-400",
                         )}
                       >
-                        {line.type === "added" ? "+ " : line.type === "removed" ? "- " : "  "}
+                        {line.type === "added"
+                          ? "+ "
+                          : line.type === "removed"
+                            ? "- "
+                            : "  "}
                         {line.content}
                       </span>
                     </div>
