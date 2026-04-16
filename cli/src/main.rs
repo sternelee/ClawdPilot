@@ -5,7 +5,7 @@ mod message_server;
 mod shell;
 use message_server::CliMessageServer;
 use shared::QuicMessageServerConfig;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -51,6 +51,8 @@ enum Commands {
         #[arg(long)]
         daemon: bool,
     },
+    /// Stop a running daemon
+    Stop,
 }
 
 #[tokio::main]
@@ -80,6 +82,7 @@ async fn main() -> Result<()> {
             )
             .await
         }
+        Some(Commands::Stop) => run_stop(),
         None => {
             // 默认启动 host
             run_host(None, 50, "0.0.0.0:61103".to_string(), None, false, false).await
@@ -169,17 +172,40 @@ async fn run_host(
 
     // 如果是守护进程模式，在打印完信息后后台运行
     if daemon {
+        // 检查是否已有守护进程在运行
+        #[cfg(unix)]
+        if let Ok(pid_str) = std::fs::read_to_string("irogen.pid") {
+            if let Ok(pid) = pid_str.trim().parse::<i32>() {
+                unsafe {
+                    if libc::kill(pid, 0) == 0 {
+                        return Err(anyhow::anyhow!(
+                            "Daemon already running (PID: {}). Use 'irogen stop' to stop it first.",
+                            pid
+                        ));
+                    }
+                }
+            }
+        }
+
         info!("Daemon mode enabled, detaching to background...");
         daemonize()?;
         // 后台进程需要重新初始化日志到文件
         setup_daemon_logging()?;
         info!("Daemon process started");
+
+        // 写入 PID 文件
+        let pid = std::process::id();
+        if let Err(e) = std::fs::write("irogen.pid", pid.to_string()) {
+            warn!("Failed to write PID file: {}", e);
+        } else {
+            info!("Daemon PID written to irogen.pid: {}", pid);
+        }
     }
 
-    // 设置 Ctrl+C 处理
+    // 设置关闭信号处理
     let server_ref = &server;
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {
+        _ = wait_for_shutdown_signal() => {
             info!("Received shutdown signal");
             // 使用超时保护防止关闭过程无限挂起
             match tokio::time::timeout(std::time::Duration::from_secs(30), server_ref.shutdown()).await {
@@ -204,6 +230,9 @@ async fn run_host(
             unreachable!()
         }
     }
+
+    // 清理 PID 文件
+    std::fs::remove_file("irogen.pid").ok();
 
     Ok(())
 }
@@ -293,6 +322,88 @@ async fn run_server_status_loop(server: &CliMessageServer) {
             last_connection_count = connections;
         }
     }
+}
+
+/// Wait for shutdown signal (Ctrl+C or SIGTERM)
+#[cfg(unix)]
+async fn wait_for_shutdown_signal() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let mut sigterm = signal(SignalKind::terminate())
+        .expect("Failed to create SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt())
+        .expect("Failed to create SIGINT handler");
+
+    tokio::select! {
+        _ = sigterm.recv() => {
+            info!("Received SIGTERM");
+        }
+        _ = sigint.recv() => {
+            info!("Received SIGINT");
+        }
+    }
+}
+
+#[cfg(not(unix))]
+async fn wait_for_shutdown_signal() {
+    tokio::signal::ctrl_c().await.ok();
+    info!("Received shutdown signal");
+}
+
+/// Stop a running daemon process
+#[cfg(unix)]
+fn run_stop() -> Result<()> {
+    let pid_file = std::path::PathBuf::from("irogen.pid");
+    if !pid_file.exists() {
+        return Err(anyhow::anyhow!(
+            "No PID file found. Is the daemon running?"
+        ));
+    }
+
+    let pid_str = std::fs::read_to_string(&pid_file)?;
+    let pid: i32 = pid_str
+        .trim()
+        .parse()
+        .map_err(|e| anyhow::anyhow!("Invalid PID in file: {}", e))?;
+
+    println!("Stopping Irogen daemon (PID: {})...", pid);
+
+    unsafe {
+        if libc::kill(pid, libc::SIGTERM) != 0 {
+            return Err(anyhow::anyhow!(
+                "Failed to send signal: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+
+    // 等待进程退出（最多 10 秒）
+    let start = std::time::Instant::now();
+    while start.elapsed() < std::time::Duration::from_secs(10) {
+        unsafe {
+            if libc::kill(pid, 0) != 0 {
+                println!("🛑 Stopped");
+                std::fs::remove_file(&pid_file).ok();
+                return Ok(());
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+
+    println!("Daemon did not stop in time, forcing kill...");
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+    std::fs::remove_file(&pid_file).ok();
+    println!("🛑 Stopped");
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn run_stop() -> Result<()> {
+    Err(anyhow::anyhow!(
+        "Stop command is only supported on Unix-like systems"
+    ))
 }
 
 /// Daemonize the current process by forking (Unix-only).
