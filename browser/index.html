@@ -1,37 +1,544 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Irogen Web Terminal</title>
-...
-        <div class="header">
-            <h1>Irogen Web Terminal</h1>
-            <p>Connect to remote terminal sessions from your browser</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Irogen Browser Client</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #0f172a;
+        color: #e2e8f0;
+        line-height: 1.5;
+      }
+      .container {
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        color: #38bdf8;
+      }
+      .subtitle {
+        color: #94a3b8;
+        margin-bottom: 20px;
+      }
+      .card {
+        background: #1e293b;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+        border: 1px solid #334155;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .row > * {
+        flex: 1 1 140px;
+      }
+      label {
+        font-size: 12px;
+        color: #94a3b8;
+        display: block;
+        margin-bottom: 4px;
+      }
+      input,
+      select,
+      textarea,
+      button {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 14px;
+      }
+      button {
+        background: #2563eb;
+        border-color: #2563eb;
+        cursor: pointer;
+        font-weight: 500;
+      }
+      button:hover {
+        background: #1d4ed8;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: #334155;
+        border-color: #334155;
+      }
+      button.secondary:hover {
+        background: #475569;
+      }
+      button.danger {
+        background: #dc2626;
+        border-color: #dc2626;
+      }
+      button.danger:hover {
+        background: #b91c1c;
+      }
+      .status {
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #334155;
+        display: inline-block;
+      }
+      .status.connected {
+        background: #166534;
+        color: #bbf7d0;
+      }
+      .status.error {
+        background: #7f1d1d;
+        color: #fecaca;
+      }
+      .events {
+        height: 360px;
+        overflow-y: auto;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 12px;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      .event-line {
+        margin-bottom: 6px;
+        border-bottom: 1px solid #1e293b;
+        padding-bottom: 6px;
+      }
+      .event-type {
+        color: #38bdf8;
+        font-weight: 600;
+      }
+      .event-meta {
+        color: #94a3b8;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        background: #334155;
+        margin-right: 6px;
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .toolbar button {
+        flex: 0 0 auto;
+        width: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Irogen Browser Client</h1>
+      <p class="subtitle">P2P remote agent test page via Iroh + WASM</p>
+
+      <div class="card">
+        <div class="row" style="align-items: flex-end">
+          <div style="flex: 3 1 240px">
+            <label for="ticket">Session Ticket</label>
+            <input
+              id="ticket"
+              type="text"
+              placeholder="Paste base64 ticket here..."
+            />
+          </div>
+          <div style="flex: 1 1 120px">
+            <button id="connectBtn">Connect</button>
+          </div>
+          <div style="flex: 0 0 auto; min-width: auto">
+            <span id="status" class="status">Disconnected</span>
+          </div>
         </div>
-...
-            <div class="terminal-output" id="output">
-Irogen Web Terminal v0.1.0
-=========================
-Waiting for connection...
-            </div>
-...
+        <div class="row" style="margin-top: 10px">
+          <div>
+            <label>Node ID</label>
+            <input id="nodeId" type="text" readonly placeholder="-" />
+          </div>
+          <div>
+            <label>Session ID</label>
+            <input id="sessionId" type="text" readonly placeholder="-" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="align-items: flex-end">
+          <div style="flex: 3 1 240px">
+            <label for="messageInput">Message</label>
+            <input
+              id="messageInput"
+              type="text"
+              placeholder="Type a message to the agent..."
+            />
+          </div>
+          <div style="flex: 1 1 120px">
+            <button id="sendBtn" disabled>Send</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <button id="interruptBtn" class="secondary" disabled>
+            Interrupt
+          </button>
+          <button id="spawnBtn" class="secondary" disabled>Spawn Remote</button>
+          <select id="permMode" style="width: auto; min-width: 140px">
+            <option value="alwaysAsk">Always Ask</option>
+            <option value="acceptEdits">Accept Edits</option>
+            <option value="autoApprove">Auto Approve</option>
+            <option value="plan">Plan</option>
+          </select>
+          <button id="setPermBtn" class="secondary" disabled>
+            Set Permission
+          </button>
+          <button id="clearBtn" class="secondary">Clear Events</button>
+          <button id="closeBtn" class="danger" disabled>Close Session</button>
+        </div>
+
+        <div class="row" style="margin-top: 10px">
+          <div>
+            <label for="agentType">Agent Type</label>
+            <select id="agentType">
+              <option value="claude">Claude</option>
+              <option value="codex">Codex</option>
+              <option value="opencode">OpenCode</option>
+              <option value="gemini">Gemini</option>
+              <option value="openclaw">OpenClaw</option>
+            </select>
+          </div>
+          <div>
+            <label for="projectPath">Project Path</label>
+            <input id="projectPath" type="text" value="~" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <label>Events Stream</label>
+        <div id="events" class="events"></div>
+      </div>
+
+      <div id="pendingPermission" class="card" style="display: none">
+        <div class="row" style="align-items: center">
+          <div style="flex: 1 1 300px">
+            <strong>Permission Request</strong>
+            <div
+              id="permDetails"
+              style="color: #94a3b8; font-size: 12px; margin-top: 4px"
+            ></div>
+          </div>
+          <div style="flex: 0 0 auto; display: flex; gap: 8px">
+            <button
+              id="approveBtn"
+              class="secondary"
+              style="background: #166534; border-color: #166534"
+            >
+              Approve
+            </button>
+            <button id="denyBtn" class="danger">Deny</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module">
-        import init, { TerminalNode } from './pkg/irogen_browser.js';
-...
-        clearBtn.addEventListener('click', () => {
-            outputEl.textContent = 'Irogen Web Terminal v0.1.0\n=========================\nOutput cleared.\n';
-        });
+      import * as wasmMod from "./pkg/browser.js";
+      const { IrogenNodeWasm } = wasmMod;
+      const initWasm = wasmMod.init || wasmMod.default || null;
 
-        inputEl.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                sendInput();
+      const $ = (id) => document.getElementById(id);
+      let node = null;
+      let session = null;
+      let eventsReader = null;
+      let activePerm = null;
+
+      function setStatus(text, cls) {
+        const el = $("status");
+        el.textContent = text;
+        el.className = "status" + (cls ? " " + cls : "");
+      }
+
+      function logEvent(type, meta, extra = "") {
+        const el = $("events");
+        const line = document.createElement("div");
+        line.className = "event-line";
+        line.innerHTML = `<span class="event-type">${escapeHtml(type)}</span> <span class="event-meta">${escapeHtml(meta)}</span>${extra ? '<div style="margin-top:4px;color:#cbd5e1;">' + extra + "</div>" : ""}`;
+        el.appendChild(line);
+        el.scrollTop = el.scrollHeight;
+      }
+
+      function escapeHtml(str) {
+        if (str == null) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      function setConnected(enabled) {
+        $("sendBtn").disabled = !enabled;
+        $("interruptBtn").disabled = !enabled;
+        $("spawnBtn").disabled = !enabled;
+        $("setPermBtn").disabled = !enabled;
+        $("closeBtn").disabled = !enabled;
+        $("connectBtn").disabled = enabled;
+        $("ticket").disabled = enabled;
+      }
+
+      async function initialize() {
+        if (typeof initWasm === "function") {
+          await initWasm();
+        }
+        logEvent("system", "WASM module initialized");
+
+        node = await IrogenNodeWasm.spawn();
+        $("nodeId").value = node.node_id();
+        logEvent("system", `Node spawned: ${node.node_id()}`);
+      }
+
+      $("connectBtn").addEventListener("click", async () => {
+        const ticket = $("ticket").value.trim();
+        if (!ticket) {
+          alert("Please paste a ticket");
+          return;
+        }
+        try {
+          setStatus("Connecting...");
+          logEvent("system", `Connecting with ticket...`);
+          const res = await node.connect(ticket);
+          session = res.session;
+          $("sessionId").value = res.sessionId;
+          setStatus("Connected", "connected");
+          setConnected(true);
+          logEvent("system", `Session started: ${res.sessionId}`);
+
+          // consume events
+          eventsReader = res.events.getReader();
+          readLoop();
+        } catch (e) {
+          setStatus("Error: " + e, "error");
+          logEvent("error", String(e));
+        }
+      });
+
+      async function readLoop() {
+        try {
+          while (true) {
+            if (!eventsReader) break;
+            const { value, done } = await eventsReader.read();
+            if (done) {
+              logEvent("system", "Event stream closed");
+              break;
             }
-        });
+            handleEvent(value);
+          }
+        } catch (e) {
+          logEvent("error", "Event read error: " + e);
+        } finally {
+          setStatus("Disconnected");
+          setConnected(false);
+          session = null;
+          eventsReader = null;
+        }
+      }
 
-        // Initialize on load
-        initialize().catch(console.error);
+      function handleEvent(ev) {
+        const type = ev.type;
+        const sid = ev.session_id || "";
+        switch (type) {
+          case "text:delta":
+            logEvent("text", sid, escapeHtml(ev.text));
+            break;
+          case "reasoning:delta":
+            logEvent("reasoning", sid, escapeHtml(ev.text));
+            break;
+          case "turn:started":
+            logEvent("turn:started", `turnId=${ev.turn_id}`);
+            break;
+          case "turn:completed":
+            logEvent(
+              "turn:completed",
+              sid,
+              ev.result ? JSON.stringify(ev.result) : "",
+            );
+            break;
+          case "turn:error":
+            logEvent("turn:error", sid, escapeHtml(ev.error));
+            break;
+          case "tool:started":
+            logEvent("tool:started", `${ev.tool_name} (${ev.tool_id})`);
+            break;
+          case "tool:completed":
+            logEvent(
+              "tool:completed",
+              `${ev.tool_name || ev.tool_id}`,
+              ev.output ? JSON.stringify(ev.output) : ev.error || "",
+            );
+            break;
+          case "approval:request":
+            showPermission(ev);
+            logEvent("approval:request", `${ev.tool_name} | ${ev.request_id}`);
+            break;
+          case "notification":
+            logEvent("notification", `${ev.level}`, escapeHtml(ev.message));
+            break;
+          case "session:started":
+            logEvent("session:started", `agent=${ev.agent}`);
+            break;
+          case "session:ended":
+            logEvent("session:ended", sid);
+            break;
+          case "raw":
+            logEvent("raw", sid, JSON.stringify(ev.data));
+            break;
+          default:
+            logEvent(type || "unknown", sid, JSON.stringify(ev));
+        }
+      }
+
+      function showPermission(ev) {
+        activePerm = ev;
+        $("pendingPermission").style.display = "block";
+        $("permDetails").textContent =
+          `${ev.tool_name}${ev.message ? " | " + ev.message : ""}`;
+      }
+
+      function hidePermission() {
+        activePerm = null;
+        $("pendingPermission").style.display = "none";
+        $("permDetails").textContent = "";
+      }
+
+      $("sendBtn").addEventListener("click", async () => {
+        if (!session) return;
+        const text = $("messageInput").value.trim();
+        if (!text) return;
+        try {
+          await session.send_message(text);
+          logEvent("send", text);
+          $("messageInput").value = "";
+        } catch (e) {
+          logEvent("error", "Send failed: " + e);
+        }
+      });
+
+      $("messageInput").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") $("sendBtn").click();
+      });
+
+      $("interruptBtn").addEventListener("click", async () => {
+        if (!session) return;
+        try {
+          await session.interrupt();
+          logEvent("system", "Interrupt sent");
+        } catch (e) {
+          logEvent("error", "Interrupt failed: " + e);
+        }
+      });
+
+      $("spawnBtn").addEventListener("click", async () => {
+        if (!session) return;
+        try {
+          await session.spawn_remote_session(
+            $("agentType").value,
+            $("projectPath").value,
+            [],
+          );
+          logEvent(
+            "system",
+            `Spawn requested: ${$("agentType").value} @ ${$("projectPath").value}`,
+          );
+        } catch (e) {
+          logEvent("error", "Spawn failed: " + e);
+        }
+      });
+
+      $("setPermBtn").addEventListener("click", async () => {
+        if (!session) return;
+        try {
+          await session.set_permission_mode($("permMode").value);
+          logEvent("system", `Permission mode set to ${$("permMode").value}`);
+        } catch (e) {
+          logEvent("error", "Set permission failed: " + e);
+        }
+      });
+
+      $("approveBtn").addEventListener("click", async () => {
+        if (!session || !activePerm) return;
+        try {
+          await session.respond_to_permission(
+            activePerm.request_id,
+            true,
+            null,
+          );
+          logEvent("system", `Approved ${activePerm.request_id}`);
+          hidePermission();
+        } catch (e) {
+          logEvent("error", "Approve failed: " + e);
+        }
+      });
+
+      $("denyBtn").addEventListener("click", async () => {
+        if (!session || !activePerm) return;
+        try {
+          await session.respond_to_permission(
+            activePerm.request_id,
+            false,
+            "Denied by user",
+          );
+          logEvent("system", `Denied ${activePerm.request_id}`);
+          hidePermission();
+        } catch (e) {
+          logEvent("error", "Deny failed: " + e);
+        }
+      });
+
+      $("closeBtn").addEventListener("click", async () => {
+        if (!session) return;
+        try {
+          await session.close();
+          logEvent("system", "Session closed");
+        } catch (e) {
+          logEvent("error", "Close failed: " + e);
+        }
+        setStatus("Disconnected");
+        setConnected(false);
+        session = null;
+        eventsReader = null;
+      });
+
+      $("clearBtn").addEventListener("click", () => {
+        $("events").innerHTML = "";
+      });
+
+      initialize().catch(console.error);
     </script>
-</body>
+  </body>
 </html>

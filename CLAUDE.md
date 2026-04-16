@@ -43,6 +43,7 @@ cargo build --workspace
 cargo build -p cli --release
 cargo run -p cli -- host
 cargo run -p cli -- host --daemon    # Unix-like systems only
+cargo run -p cli -- stop             # Stop a running daemon (Unix-like)
 cargo test --workspace
 cargo test -p <crate> <test_name>          # Example: cargo test -p shared message_protocol
 cargo test -p <crate> --test <test_file>   # Example: cargo test -p shared --test integration
@@ -51,6 +52,8 @@ cargo test -- --nocapture
 cargo fmt --all
 cargo clippy --workspace -- -D warnings
 ```
+
+`browser/` is a WASM crate; running its tests may require the `wasm32-unknown-unknown` target or `wasm-pack`.
 
 ### Repository-specific helpers
 
@@ -146,10 +149,11 @@ cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc
   - `shared/src/agent/acp_permission.rs`
 - If you add a new agent type, the integration path spans protocol, factory, runtime management, backend exposure, and frontend session/UI handling.
 
-### 5. Frontend state model
+### 5. Frontend state and navigation model
 
 - `src/stores/sessionStore.ts` owns session metadata, connected hosts, active session, connection lifecycle, and new-session modal state.
 - `src/stores/chatStore.ts` owns per-session messages, tool-call state, pending permission requests, user questions, attachments, slash commands, and custom prompts.
+- `src/stores/navigationStore.ts` drives view switching in the root app. The frontend does **not** use a URL router; views (`home`, `sessions`, `devices`, `settings`, `chat`, etc.) are rendered conditionally based on navigation store state.
 - `src/components/ChatView.tsx` and `src/components/Dashboard.tsx` consume `sessionEventRouter` state rather than talking directly to backend events.
 - `docs/SESSION_MANAGEMENT.md` explains the intended local-vs-remote session model and sidebar behavior.
 
@@ -178,6 +182,15 @@ cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc
 - Permission modes exposed across the product are: `AlwaysAsk`, `AcceptEdits`, `Plan`, `AutoApprove`.
 - The app supports both `local` and `remote` session modes; do not assume a session is always tied to a live remote control connection.
 - `browser/` is a real workspace crate, not just generated output; changes there affect browser-based clients.
+- i18n in the root frontend uses `@solid-primitives/i18n`. Dictionaries and locale state live in `src/stores/i18nStore.ts` (supported locales: `en`, `zh-CN`).
+
+## Dependency notes
+
+The workspace `Cargo.toml` patches two important dependencies:
+- `tokio-tungstenite` points to a custom fork for OpenClaw WebSocket compatibility.
+- `agent-client-protocol-schema` points to a patched crate that handles nullable `used` fields in UsageUpdate.
+
+Do not change these revisions without verifying OpenClaw and ACP runtime behavior.
 
 ## When adding a new agent integration
 

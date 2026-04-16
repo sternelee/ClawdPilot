@@ -5,14 +5,7 @@
   "main": "pkg/irogen_browser.js",
   "types": "pkg/irogen_browser.d.ts",
   "scripts": {
-    "build": "wasm-pack build --target web --out-dir pkg",
-    "dev": "wasm-pack build --target web --out-dir pkg --dev",
-    "serve": "python3 -m http.server 8080",
-    "build:wasm": "wasm-pack build ./ --dev --weak-refs --reference-types -t bundler -d pkg",
-    "build:wasm:release": "wasm-pack build ./ --release -t bundler -d pkg",
+    "build:wasm:release": "cargo build --target=wasm32-unknown-unknown --release && wasm-bindgen ../target/wasm32-unknown-unknown/release/browser.wasm --out-dir=./pkg --weak-refs --target=web",
     "clean": "rm -rf pkg"
-  },
-  "devDependencies": {
-    "wasm-pack": "^0.12.1"
   }
 }
