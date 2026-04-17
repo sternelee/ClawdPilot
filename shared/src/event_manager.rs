@@ -30,6 +30,12 @@ pub enum EventType {
     /// 连接事件
     PeerConnected,
     PeerDisconnected,
+    /// Agent 事件
+    AgentMessageReceived,
+    AgentSessionStarted,
+    AgentSessionStopped,
+    AgentPermissionRequested,
+    AgentControlReceived,
 }
 
 /// 事件数据
@@ -150,17 +156,13 @@ impl EventManager {
 
                 for listener in current_listeners {
                     let event_clone = event.clone();
-                    let listener_clone = listener.clone();
-
-                    tokio::spawn(async move {
-                        let listener_name = listener_clone.name();
-                        if let Err(e) = listener_clone.handle_event(&event_clone).await {
-                            error!(
-                                "Event listener {} failed to handle event: {}",
-                                listener_name, e
-                            );
-                        }
-                    });
+                    let listener_name = listener.name();
+                    if let Err(e) = listener.handle_event(&event_clone).await {
+                        error!(
+                            "Event listener {} failed to handle event: {}",
+                            listener_name, e
+                        );
+                    }
                 }
             }
 
@@ -277,6 +279,61 @@ impl MessageToEventConverter {
                 );
                 self.event_manager.publish_event(event).await?;
             }
+            MessagePayload::AgentSession(msg) => {
+                let event_type = match &msg.action {
+                    crate::message_protocol::AgentSessionAction::Register { .. } => {
+                        EventType::AgentSessionStarted
+                    }
+                    crate::message_protocol::AgentSessionAction::StopSession { .. } => {
+                        EventType::AgentSessionStopped
+                    }
+                    _ => EventType::AgentMessageReceived,
+                };
+                let event = Event::new(
+                    event_type,
+                    self.sender_id.clone(),
+                    serde_json::json!({
+                        "message_id": message.id,
+                        "request_id": msg.request_id,
+                        "session_id": message.session_id,
+                    }),
+                );
+                self.event_manager.publish_event(event).await?;
+            }
+            MessagePayload::AgentMessage(msg) => {
+                let event = Event::new(
+                    EventType::AgentMessageReceived,
+                    self.sender_id.clone(),
+                    serde_json::json!({
+                        "session_id": msg.session_id,
+                        "message_id": message.id,
+                    }),
+                );
+                self.event_manager.publish_event(event).await?;
+            }
+            MessagePayload::AgentPermission(_msg) => {
+                let event = Event::new(
+                    EventType::AgentPermissionRequested,
+                    self.sender_id.clone(),
+                    serde_json::json!({
+                        "session_id": message.session_id,
+                        "message_id": message.id,
+                    }),
+                );
+                self.event_manager.publish_event(event).await?;
+            }
+            MessagePayload::AgentControl(msg) => {
+                let event = Event::new(
+                    EventType::AgentControlReceived,
+                    self.sender_id.clone(),
+                    serde_json::json!({
+                        "session_id": msg.session_id,
+                        "action": format!("{:?}", msg.action),
+                        "message_id": message.id,
+                    }),
+                );
+                self.event_manager.publish_event(event).await?;
+            }
             _ => {}
         }
 
@@ -289,18 +346,11 @@ pub struct CommunicationManager {
     message_router: Arc<MessageRouter>,
     event_manager: Arc<EventManager>,
     message_converter: Arc<MessageToEventConverter>,
-    _incoming_message_tx: mpsc::UnboundedSender<Message>, // Kept for potential future use
-    outgoing_message_tx: mpsc::UnboundedSender<Message>,
-    /// Receiver for outgoing messages (stored for potential future use)
-    outgoing_message_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<Message>>>>,
     node_id: String,
 }
 
 impl CommunicationManager {
     pub fn new(node_id: String) -> Self {
-        let (incoming_message_tx, _) = mpsc::unbounded_channel();
-        let (outgoing_message_tx, outgoing_message_rx) = mpsc::unbounded_channel();
-
         let event_manager = Arc::new(EventManager::new());
         let message_converter = Arc::new(MessageToEventConverter::new(
             event_manager.clone(),
@@ -311,9 +361,6 @@ impl CommunicationManager {
             message_router: Arc::new(MessageRouter::new()),
             event_manager,
             message_converter,
-            _incoming_message_tx: incoming_message_tx,
-            outgoing_message_tx,
-            outgoing_message_rx: Arc::new(RwLock::new(Some(outgoing_message_rx))),
             node_id,
         }
     }
@@ -328,9 +375,6 @@ impl CommunicationManager {
         // 启动事件管理器
         self.event_manager.start_event_loop().await?;
 
-        // 启动消息处理循环
-        self.start_message_processing_loop().await?;
-
         info!("Communication manager initialized successfully");
         Ok(())
     }
@@ -343,21 +387,6 @@ impl CommunicationManager {
     /// 注册事件监听器
     pub async fn register_event_listener(&self, listener: Arc<dyn EventListener>) {
         self.event_manager.register_listener(listener).await;
-    }
-
-    /// 发送消息
-    pub async fn send_message(&self, message: Message) -> Result<()> {
-        debug!(
-            "Sending message: {:?} from {}",
-            message.message_type, message.sender_id
-        );
-
-        if let Err(e) = self.outgoing_message_tx.send(message) {
-            error!("Failed to send message: {}", e);
-            return Err(anyhow::anyhow!("Failed to send message: {}", e));
-        }
-
-        Ok(())
     }
 
     /// 接收传入的消息
@@ -389,28 +418,7 @@ impl CommunicationManager {
             }
         }
 
-        // 注意：incoming_message_tx 通道的接收端被丢弃，这里不再尝试发送
-        // 消息已经通过 message_converter 和 message_router 处理了
-
         Ok(response)
-    }
-
-    /// 获取传出消息接收器
-    ///
-    /// 注意：此方法只能调用一次，接收器会被移出。
-    /// 如果需要多个接收器，请考虑使用 broadcast channel。
-    pub fn get_outgoing_message_receiver(&self) -> Option<mpsc::UnboundedReceiver<Message>> {
-        let mut rx_lock = self.outgoing_message_rx.blocking_write();
-        rx_lock.take()
-    }
-
-    /// 获取传入消息接收器
-    ///
-    /// 注意：当前实现中传入消息直接由 receive_incoming_message 处理，
-    /// 此方法返回 None，因为传入消息通道未实现。
-    /// 如需监听传入消息，请注册事件监听器。
-    pub fn get_incoming_message_receiver(&self) -> Option<mpsc::UnboundedReceiver<Message>> {
-        None
     }
 
     /// 获取事件管理器
@@ -421,43 +429,6 @@ impl CommunicationManager {
     /// 获取节点ID
     pub fn get_node_id(&self) -> &str {
         &self.node_id
-    }
-
-    /// 初始化消息处理
-    ///
-    /// 注意：此方法保留用于向后兼容，但不再启动无用的心跳循环。
-    /// outgoing_message_tx 的生命周期现在由结构体自身管理。
-    async fn start_message_processing_loop(&self) -> Result<()> {
-        // outgoing_message_tx 由 CommunicationManager 持有，
-        // 只要 CommunicationManager 存活，发送器就有效。
-        // 不再需要额外的循环任务来保持发送器存活。
-        debug!("Message processing initialized for node: {}", self.node_id);
-        Ok(())
-    }
-
-    /// 创建心跳任务
-    pub async fn start_heartbeat_task(&self) -> Result<()> {
-        let outgoing_tx = self.outgoing_message_tx.clone();
-        let node_id = self.node_id.clone();
-
-        tokio::spawn(async move {
-            let mut sequence = 0;
-            loop {
-                let heartbeat =
-                    MessageBuilder::heartbeat(node_id.clone(), sequence, "active".to_string());
-
-                if let Err(e) = outgoing_tx.send(heartbeat) {
-                    error!("Failed to send heartbeat: {}", e);
-                    break;
-                }
-
-                sequence += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-            }
-        });
-
-        info!("Heartbeat task started");
-        Ok(())
     }
 }
 

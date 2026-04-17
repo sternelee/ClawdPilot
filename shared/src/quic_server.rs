@@ -194,6 +194,7 @@ fn is_valid_base64(s: &str) -> bool {
         .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
 }
 
+use bytes::BytesMut;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -257,7 +258,7 @@ impl Default for QuicMessageServerConfig {
 }
 
 /// QUIC连接状态
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct QuicConnection {
     pub id: String,
     pub node_id: EndpointId,
@@ -265,6 +266,19 @@ pub struct QuicConnection {
     pub established_at: std::time::SystemTime,
     pub last_activity: std::time::SystemTime,
     pub connection: iroh::endpoint::Connection, // 存储实际的连接对象
+    pub cancel_token: CancellationToken,
+}
+
+impl std::fmt::Debug for QuicConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QuicConnection")
+            .field("id", &self.id)
+            .field("node_id", &self.node_id)
+            .field("endpoint_addr", &self.endpoint_addr)
+            .field("established_at", &self.established_at)
+            .field("last_activity", &self.last_activity)
+            .finish_non_exhaustive()
+    }
 }
 
 /// 连接信息用于状态显示
@@ -405,6 +419,23 @@ impl QuicMessageServer {
         // 启动连接接受器
         server.start_connection_acceptor(shutdown_rx).await?;
 
+        // 启动定期清理不活跃连接的任务
+        let cleanup_server = server.clone();
+        let cleanup_timeout = server.config.timeout;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                interval.tick().await;
+                let count = cleanup_server
+                    .cleanup_inactive_connections(cleanup_timeout)
+                    .await;
+                if count > 0 {
+                    debug!("Cleaned up {} inactive connections", count);
+                }
+            }
+        });
+
         Ok(server)
     }
 
@@ -422,6 +453,7 @@ impl QuicMessageServer {
         let connections = self.connections.clone();
         let comm_manager = self.communication_manager.clone();
         let tcp_handler = self.tcp_stream_handler.clone();
+        let max_connections = self.config.max_connections;
 
         tokio::spawn(async move {
             let mut shutdown_rx = shutdown_rx;
@@ -443,6 +475,7 @@ impl QuicMessageServer {
                                         conn,
                                         cm,
                                         handler,
+                                        max_connections,
                                     ).await {
                                         error!("Error handling message connection: {}", e);
                                     }
@@ -471,6 +504,7 @@ impl QuicMessageServer {
         connections: Arc<RwLock<HashMap<String, QuicConnection>>>,
         communication_manager: Arc<CommunicationManager>,
         tcp_stream_handler: Arc<RwLock<Option<TcpStreamHandler>>>,
+        max_connections: usize,
     ) -> Result<()> {
         // 执行握手（30s超时，防止慢连接或恶意对端长期占用资源）
         let connection = tokio::time::timeout(std::time::Duration::from_secs(30), incoming)
@@ -480,8 +514,18 @@ impl QuicMessageServer {
         let endpoint_addr = format!("{:?}", remote_endpoint_id);
 
         // 检查是否已有相同endpoint_id的连接
-        let connection_id = {
+        let (connection_id, cancel_token) = {
             let mut conns = connections.write().await;
+
+            // 检查最大连接数限制
+            if conns.len() >= max_connections {
+                warn!(
+                    "Too many connections ({} >= {}), rejecting node {:?}",
+                    conns.len(), max_connections, remote_endpoint_id
+                );
+                connection.close(0u32.into(), b"Too many connections");
+                return Ok(());
+            }
 
             info!(
                 "Message connection established with: {:?}",
@@ -494,15 +538,19 @@ impl QuicMessageServer {
                 .find(|(_, conn)| conn.node_id == remote_endpoint_id);
 
             if let Some((existing_id, existing_conn)) = existing_conn {
-                // 找到相同endpoint_id的连接，更新连接信息但保持相同ID
+                // 找到相同endpoint_id的连接，取消旧任务并更新连接信息
                 info!("🔄 Reconnected from same node: {:?}", remote_endpoint_id);
+                existing_conn.cancel_token.cancel();
+                let new_token = CancellationToken::new();
+                existing_conn.cancel_token = new_token.clone();
                 existing_conn.connection = connection.clone();
                 existing_conn.last_activity = std::time::SystemTime::now();
                 existing_conn.endpoint_addr = endpoint_addr.clone();
-                existing_id.clone()
+                (existing_id.clone(), new_token)
             } else {
                 // 新连接，创建新的连接状态
                 let new_connection_id = format!("conn_{}", uuid::Uuid::new_v4());
+                let cancel_token = CancellationToken::new();
                 let conn_state = QuicConnection {
                     id: new_connection_id.clone(),
                     node_id: remote_endpoint_id,
@@ -510,10 +558,11 @@ impl QuicMessageServer {
                     established_at: std::time::SystemTime::now(),
                     last_activity: std::time::SystemTime::now(),
                     connection: connection.clone(),
+                    cancel_token: cancel_token.clone(),
                 };
 
                 conns.insert(new_connection_id.clone(), conn_state);
-                new_connection_id
+                (new_connection_id, cancel_token)
             }
         };
 
@@ -521,12 +570,14 @@ impl QuicMessageServer {
         let connection_for_streaming = connection.clone();
         let connection_id_for_streaming = connection_id.clone();
         let communication_manager_for_streaming = communication_manager.clone();
+        let cancel_token_for_streaming = cancel_token.clone();
 
         tokio::spawn(async move {
             let _ = Self::accept_streaming_messages(
                 connection_for_streaming,
                 connection_id_for_streaming,
                 communication_manager_for_streaming,
+                cancel_token_for_streaming,
             )
             .await;
         });
@@ -537,6 +588,7 @@ impl QuicMessageServer {
             connection_id,
             communication_manager,
             tcp_stream_handler,
+            cancel_token,
         )
         .await
     }
@@ -547,12 +599,20 @@ impl QuicMessageServer {
         connection_id: String,
         communication_manager: Arc<CommunicationManager>,
         tcp_stream_handler: Arc<RwLock<Option<TcpStreamHandler>>>,
+        cancel_token: CancellationToken,
     ) -> Result<()> {
         let remote_endpoint_id = connection.remote_id();
 
         // 接受双向流用于消息通信
         loop {
-            match connection.accept_bi().await {
+            tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => {
+                    debug!("handle_message_streams cancelled for connection: {}", connection_id);
+                    break;
+                }
+                bi_result = connection.accept_bi() => {
+            match bi_result {
                 Ok((send_stream, mut recv_stream)) => {
                     let cm = communication_manager.clone();
                     let conn_id = connection_id.clone();
@@ -647,6 +707,8 @@ impl QuicMessageServer {
                     break;
                 }
             }
+                }
+            }
         }
 
         Ok(())
@@ -661,8 +723,8 @@ impl QuicMessageServer {
         initial_data: Vec<u8>,
     ) -> Result<()> {
         let mut buffer = vec![0u8; 8192];
-        // 累积缓冲区：支持半包/粘包
-        let mut pending_data = initial_data;
+        // 累积缓冲区：支持半包/粘包，使用 BytesMut 实现 O(1) 拆分
+        let mut pending_data = BytesMut::from(&initial_data[..]);
         debug!(
             "message-stream start: connection_id={}, initial_data_len={}",
             connection_id,
@@ -684,10 +746,10 @@ impl QuicMessageServer {
                     break;
                 }
 
-                let message_bytes = pending_data[4..4 + length].to_vec();
-                pending_data.drain(..4 + length);
+                let frame = pending_data.split_to(4 + length);
+                let message_bytes = &frame[4..];
 
-                match Message::from_bytes(&message_bytes) {
+                match Message::from_bytes(message_bytes) {
                     Ok(message) => {
                         info!(
                             "📨 Received message: connection_id={}, type={:?}, sender={}, requires_response={}, frame_len={}",
@@ -749,7 +811,7 @@ impl QuicMessageServer {
                         }
                     }
                     Err(e) => {
-                        let preview = message_bytes
+                        let _preview = message_bytes
                             .iter()
                             .take(24)
                             .map(|b| format!("{:02x}", b))
@@ -842,6 +904,7 @@ impl QuicMessageServer {
         connection: iroh::endpoint::Connection,
         connection_id: String,
         communication_manager: Arc<CommunicationManager>,
+        cancel_token: CancellationToken,
     ) -> Result<()> {
         let remote_id = connection.remote_id();
         info!(
@@ -850,24 +913,33 @@ impl QuicMessageServer {
         );
 
         loop {
-            match connection.accept_uni().await {
-                Ok(recv) => {
-                    let cm = communication_manager.clone();
-                    let conn_id = connection_id.clone();
-                    let remote = remote_id;
-
-                    tokio::spawn(async move {
-                        debug!("📨 Accepted streaming stream from {:?}", remote);
-                        if let Err(e) =
-                            Self::handle_streaming_stream_static(recv, conn_id, cm).await
-                        {
-                            error!("Error handling streaming stream: {}", e);
-                        }
-                    });
-                }
-                Err(e) => {
-                    debug!("accept_uni error for {}: {}", connection_id, e);
+            tokio::select! {
+                biased;
+                _ = cancel_token.cancelled() => {
+                    debug!("accept_streaming_messages cancelled for connection: {}", connection_id);
                     break;
+                }
+                uni_result = connection.accept_uni() => {
+                    match uni_result {
+                        Ok(recv) => {
+                            let cm = communication_manager.clone();
+                            let conn_id = connection_id.clone();
+                            let remote = remote_id;
+
+                            tokio::spawn(async move {
+                                debug!("📨 Accepted streaming stream from {:?}", remote);
+                                if let Err(e) =
+                                    Self::handle_streaming_stream_static(recv, conn_id, cm).await
+                                {
+                                    error!("Error handling streaming stream: {}", e);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            debug!("accept_uni error for {}: {}", connection_id, e);
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -926,6 +998,49 @@ impl QuicMessageServer {
             debug!("Stream finish returned error (may be expected): {}", e);
         }
         Ok(())
+    }
+
+    /// 从 RecvStream 读取一个带帧长度的消息：[len:4be][payload:len]
+    async fn read_framed_message(
+        mut recv_stream: iroh::endpoint::RecvStream,
+        timeout: std::time::Duration,
+    ) -> Result<Option<Message>> {
+        let result = tokio::time::timeout(timeout, async {
+            let mut header = [0u8; 4];
+            match recv_stream.read_exact(&mut header).await {
+                Ok(()) => {}
+                Err(e) => {
+                    debug!("read_framed_message: stream closed while reading header: {}", e);
+                    return Ok(None);
+                }
+            }
+            let length = u32::from_be_bytes(header) as usize;
+            const MAX_MESSAGE_SIZE: usize = 16 * 1024 * 1024;
+            if length > MAX_MESSAGE_SIZE {
+                return Err(anyhow::anyhow!(
+                    "Frame length {} exceeds max message size",
+                    length
+                ));
+            }
+            let mut payload = vec![0u8; length];
+            match recv_stream.read_exact(&mut payload).await {
+                Ok(()) => {}
+                Err(e) => {
+                    debug!("read_framed_message: stream closed while reading payload: {}", e);
+                    return Ok(None);
+                }
+            }
+            match MessageSerializer::deserialize_from_network(&payload) {
+                Ok(message) => Ok(Some(message)),
+                Err(e) => Err(e),
+            }
+        })
+        .await;
+
+        match result {
+            Ok(inner) => inner,
+            Err(_) => Err(anyhow::anyhow!("read_framed_message timeout")),
+        }
     }
 
     /// 判断消息类型是否应该使用独立 stream 发送
@@ -1032,25 +1147,38 @@ impl QuicMessageServer {
                 .collect()
         };
 
-        // 无锁发送
-        let mut failed_node_ids: Vec<(String, EndpointId)> = Vec::new();
-
-        for (conn_id, node_id, connection) in &connection_snapshots {
-            match connection.open_bi().await {
-                Ok((mut send_stream, _recv_stream)) => {
-                    if let Err(e) = Self::send_message(&mut send_stream, &message).await {
-                        error!("Failed to send message to node {:?}: {}", node_id, e);
-                        failed_node_ids.push((conn_id.clone(), node_id.clone()));
+        // 并发发送，避免头阻塞
+        let message = Arc::new(message);
+        let send_futures: Vec<_> = connection_snapshots
+            .into_iter()
+            .map(|(conn_id, node_id, connection)| {
+                let msg = message.clone();
+                async move {
+                    match connection.open_bi().await {
+                        Ok((mut send_stream, _recv_stream)) => {
+                            if let Err(e) = Self::send_message(&mut send_stream, &msg).await {
+                                error!("Failed to send message to node {:?}: {}", node_id, e);
+                                Err((conn_id, node_id))
+                            } else {
+                                Ok(())
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to open stream to node {:?}: {}", node_id, e);
+                            Err((conn_id, node_id))
+                        }
                     }
                 }
-                Err(e) => {
-                    error!("Failed to open stream to node {:?}: {}", node_id, e);
-                    failed_node_ids.push((conn_id.clone(), node_id.clone()));
-                }
-            }
-        }
+            })
+            .collect();
 
-        // 清理发送失败的连接
+        let results = futures::future::join_all(send_futures).await;
+        let failed_node_ids: Vec<(String, EndpointId)> = results
+            .into_iter()
+            .filter_map(|r| r.err())
+            .collect();
+
+        // 批量清理发送失败的连接
         if !failed_node_ids.is_empty() {
             let mut connections = self.connections.write().await;
             for (conn_id, node_id) in failed_node_ids {
@@ -1275,14 +1403,18 @@ impl QuicMessageServer {
         // 发送关闭信号
         let _ = self.shutdown_tx.send(()).await;
 
-        // 优雅关闭所有连接（通知对端），然后清除
+        // 优雅关闭所有连接：先取消任务，再通知对端，然后清除
         {
             let mut connections = self.connections.write().await;
             for (conn_id, conn) in connections.drain() {
                 info!("Closing connection {} during shutdown", conn_id);
+                conn.cancel_token.cancel();
                 conn.connection.close(0u32.into(), b"Server shutdown");
             }
         }
+
+        // 关闭 endpoint
+        self.endpoint.close().await;
 
         Ok(())
     }
@@ -1541,7 +1673,7 @@ impl QuicMessageClient {
         let connections = self.server_connections.read().await;
         if let Some(connection) = connections.get(connection_id) {
             // 打开双向流
-            let (mut send_stream, mut recv_stream) = connection.open_bi().await?;
+            let (mut send_stream, recv_stream) = connection.open_bi().await?;
 
             // 发送消息
             let data = MessageSerializer::serialize_for_network(&message)?;
@@ -1559,43 +1691,29 @@ impl QuicMessageClient {
             // 如果消息需要响应，等待读取响应（带超时）
             if message.requires_response {
                 debug!("Waiting for response to message: {}", message.id);
-                let mut response_data = Vec::new();
-                let _ = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-                    loop {
-                        let mut buffer = vec![0u8; 8192];
-                        match recv_stream.read(&mut buffer).await {
-                            Ok(Some(n)) => {
-                                response_data.extend_from_slice(&buffer[..n]);
-                            }
-                            Ok(None) => break,
-                            Err(e) => {
-                                error!("Error reading response: {}", e);
-                                break;
-                            }
+                match QuicMessageServer::read_framed_message(
+                    recv_stream,
+                    std::time::Duration::from_secs(30),
+                )
+                .await
+                {
+                    Ok(Some(response)) => {
+                        debug!(
+                            "Received response: type={:?}, broadcasting to {} subscribers",
+                            response.message_type,
+                            self.message_tx.receiver_count()
+                        );
+                        // 广播接收到的响应
+                        if let Err(e) = self.message_tx.send(response) {
+                            error!("Failed to broadcast response: {} (no receivers?)", e);
                         }
                     }
-                })
-                .await;
-
-                if !response_data.is_empty() {
-                    match MessageSerializer::deserialize_from_network(&response_data) {
-                        Ok(response) => {
-                            debug!(
-                                "Received response: type={:?}, broadcasting to {} subscribers",
-                                response.message_type,
-                                self.message_tx.receiver_count()
-                            );
-                            // 广播接收到的响应
-                            if let Err(e) = self.message_tx.send(response) {
-                                error!("Failed to broadcast response: {} (no receivers?)", e);
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to deserialize response: {}", e);
-                        }
+                    Ok(None) => {
+                        debug!("Response stream closed by server");
                     }
-                } else {
-                    debug!("Response stream closed by server");
+                    Err(e) => {
+                        error!("Failed to read or deserialize response: {}", e);
+                    }
                 }
             }
 
@@ -1860,7 +1978,7 @@ impl QuicMessageClientHandle {
                 .ok_or_else(|| anyhow::anyhow!("Connection not found: {}", connection_id))?
         };
 
-        let (mut send_stream, mut recv_stream) = connection.open_bi().await?;
+        let (mut send_stream, recv_stream) = connection.open_bi().await?;
         let data = MessageSerializer::serialize_for_network(&message)?;
         debug!(
             "send_message_to_server(handle): connection_id={}, message_id={}, message_type={:?}, requires_response={}, wire_len={}",
@@ -1877,37 +1995,13 @@ impl QuicMessageClientHandle {
             return Ok(None);
         }
 
-        let mut response_data = Vec::new();
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-            loop {
-                let mut buffer = vec![0u8; 8192];
-                match recv_stream.read(&mut buffer).await {
-                    Ok(Some(n)) => response_data.extend_from_slice(&buffer[..n]),
-                    Ok(None) => break,
-                    Err(e) => {
-                        error!(
-                            "send_message_to_server(handle) read response error: connection_id={}, message_id={}, error={}",
-                            connection_id,
-                            message.id,
-                            e
-                        );
-                        break;
-                    }
-                }
-            }
-        })
-        .await;
-
-        if response_data.is_empty() {
-            warn!(
-                "send_message_to_server(handle) response stream closed without data: connection_id={}, message_id={}, message_type={:?}",
-                connection_id, message.id, message.message_type
-            );
-            return Ok(None);
-        }
-
-        match MessageSerializer::deserialize_from_network(&response_data) {
-            Ok(response) => {
+        match QuicMessageServer::read_framed_message(
+            recv_stream,
+            std::time::Duration::from_secs(30),
+        )
+        .await
+        {
+            Ok(Some(response)) => {
                 if let MessagePayload::Response(resp) = &response.payload {
                     info!(
                         "send_message_to_server(handle) received response: connection_id={}, request_id={}, success={}",
@@ -1926,20 +2020,17 @@ impl QuicMessageClientHandle {
 
                 Ok(Some(response))
             }
+            Ok(None) => {
+                warn!(
+                    "send_message_to_server(handle) response stream closed without data: connection_id={}, message_id={}, message_type={:?}",
+                    connection_id, message.id, message.message_type
+                );
+                Ok(None)
+            }
             Err(e) => {
-                let preview = response_data
-                    .iter()
-                    .take(24)
-                    .map(|b| format!("{:02x}", b))
-                    .collect::<Vec<_>>()
-                    .join(" ");
                 error!(
-                    "send_message_to_server(handle) failed to deserialize direct response: connection_id={}, message_id={}, data_len={}, data_hex=[{}], error={}",
-                    connection_id,
-                    message.id,
-                    response_data.len(),
-                    preview,
-                    e
+                    "send_message_to_server(handle) failed to read direct response: connection_id={}, message_id={}, error={}",
+                    connection_id, message.id, e
                 );
                 Err(e)
             }

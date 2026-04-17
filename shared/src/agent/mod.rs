@@ -209,7 +209,7 @@ impl AgentManager {
     /// * `source` - Source identifier (e.g., "local", "remote")
     ///
     /// # Returns
-    /// Session ID if successful, error otherwise
+    /// (Session ID, event receiver) if successful, error otherwise
     #[allow(clippy::too_many_arguments)]
     pub async fn start_session(
         &self,
@@ -220,25 +220,28 @@ impl AgentManager {
         home_dir: Option<String>,
         mcp_servers: Option<serde_json::Value>,
         _source: String,
-    ) -> Result<String> {
+    ) -> Result<(String, tokio::sync::broadcast::Receiver<AgentTurnEvent>)> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        self.start_session_with_id(
-            session_id.clone(),
-            agent_type,
-            binary_path,
-            extra_args,
-            working_dir,
-            home_dir,
-            mcp_servers,
-            _source,
-        )
-        .await?;
-        Ok(session_id)
+        let rx = self
+            .start_session_with_id(
+                session_id.clone(),
+                agent_type,
+                binary_path,
+                extra_args,
+                working_dir,
+                home_dir,
+                mcp_servers,
+                _source,
+            )
+            .await?;
+        Ok((session_id, rx))
     }
 
     /// Start an agent session with specific session ID
     ///
     /// For all external agents, this creates an ACP-based session.
+    /// Returns a broadcast receiver for agent events, guaranteed to be subscribed
+    /// before the session is visible to other tasks.
     #[allow(clippy::too_many_arguments)]
     pub async fn start_session_with_id(
         &self,
@@ -250,7 +253,7 @@ impl AgentManager {
         home_dir: Option<String>,
         mcp_servers: Option<serde_json::Value>,
         _source: String,
-    ) -> Result<()> {
+    ) -> Result<tokio::sync::broadcast::Receiver<AgentTurnEvent>> {
         info!("Starting {:?} session with ID: {}", agent_type, session_id);
 
         // Perform availability check before starting to provide better error messages
@@ -466,9 +469,13 @@ impl AgentManager {
             Arc::new(SessionKind::Acp(Arc::new(acp_session)))
         };
 
-        // Store session
+        // Store session and subscribe to events while holding the write lock.
+        // This guarantees that by the time we return, the session exists and
+        // the caller has a receiver that will not miss early events.
         let mut sessions = self.sessions.write().await;
+        let event_rx = session.subscribe();
         sessions.insert(session_id.clone(), session);
+        drop(sessions);
 
         // Store session metadata
         let project_path_str = working_dir.to_string_lossy().to_string();
@@ -493,7 +500,6 @@ impl AgentManager {
             machine_id,
         };
 
-        drop(sessions); // Release lock before acquiring metadata lock
         let mut metadata_map = self.session_metadata.write().await;
         metadata_map.insert(session_id.clone(), metadata);
 
@@ -503,7 +509,7 @@ impl AgentManager {
             "ACP (External Agent)"
         };
         info!("✅ {} session started: {}", protocol_name, session_id);
-        Ok(())
+        Ok(event_rx)
     }
 
     /// Start an agent session from a history entry (ACP load/resume)
@@ -517,24 +523,26 @@ impl AgentManager {
         home_dir: Option<String>,
         _source: String,
         resume: bool,
-    ) -> Result<String> {
+    ) -> Result<(String, tokio::sync::broadcast::Receiver<AgentTurnEvent>)> {
         let session_id = uuid::Uuid::new_v4().to_string();
-        self.start_session_from_history_with_id(
-            session_id.clone(),
-            agent_type,
-            history_session_id,
-            binary_path,
-            extra_args,
-            working_dir,
-            home_dir,
-            _source,
-            resume,
-        )
-        .await?;
-        Ok(session_id)
+        let rx = self
+            .start_session_from_history_with_id(
+                session_id.clone(),
+                agent_type,
+                history_session_id,
+                binary_path,
+                extra_args,
+                working_dir,
+                home_dir,
+                _source,
+                resume,
+            )
+            .await?;
+        Ok((session_id, rx))
     }
 
     /// Start an agent session from a history entry with a specific session ID (ACP load/resume)
+    /// Returns a broadcast receiver for agent events.
     pub async fn start_session_from_history_with_id(
         &self,
         session_id: String,
@@ -546,7 +554,7 @@ impl AgentManager {
         home_dir: Option<String>,
         _source: String,
         resume: bool,
-    ) -> Result<()> {
+    ) -> Result<tokio::sync::broadcast::Receiver<AgentTurnEvent>> {
         info!(
             "Starting {:?} history session with ID: {} (history={})",
             agent_type, session_id, history_session_id
@@ -648,12 +656,12 @@ impl AgentManager {
             .with_context(|| format!("Failed to load ACP history session for {:?}", agent_type))?
         };
 
-        // Store session
+        // Store session and subscribe while holding the write lock
+        let session = Arc::new(SessionKind::Acp(Arc::new(acp_session)));
         let mut sessions = self.sessions.write().await;
-        sessions.insert(
-            session_id.clone(),
-            Arc::new(SessionKind::Acp(Arc::new(acp_session))),
-        );
+        let event_rx = session.subscribe();
+        sessions.insert(session_id.clone(), session);
+        drop(sessions);
 
         let project_path_str = working_dir.to_string_lossy().to_string();
         let hostname = gethostname::gethostname().to_string_lossy().to_string();
@@ -677,12 +685,11 @@ impl AgentManager {
             machine_id,
         };
 
-        drop(sessions);
         let mut metadata_map = self.session_metadata.write().await;
         metadata_map.insert(session_id.clone(), metadata);
 
         info!("✅ ACP history session started: {}", session_id);
-        Ok(())
+        Ok(event_rx)
     }
 
     pub async fn list_agent_history(

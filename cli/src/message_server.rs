@@ -29,6 +29,11 @@ use uuid::Uuid;
 use crate::shell::ShellDetector;
 use shared::{AgentFactory, AgentManager};
 
+/// 共享的 event forwarders 映射类型
+type EventForwarders = Arc<
+    tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>,
+>;
+
 /// Connection information for status display
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -135,6 +140,8 @@ pub struct CliMessageServer {
     system_status: Arc<RwLock<SystemStatus>>,
     /// AI Agent 管理器
     agent_manager: Arc<AgentManager>,
+    /// 活跃的事件转发任务（按 session_id）
+    event_forwarders: EventForwarders,
 }
 
 impl CliMessageServer {
@@ -162,6 +169,7 @@ impl CliMessageServer {
                 memory_usage: 0,
             })),
             agent_manager: Arc::new(AgentManager::new()),
+            event_forwarders: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         };
 
         // 注册消息处理器
@@ -351,6 +359,7 @@ impl CliMessageServer {
             self.communication_manager.clone(),
             self.agent_manager.clone(),
             self.quic_server.clone(),
+            self.event_forwarders.clone(),
         ));
         self.communication_manager
             .register_message_handler(remote_spawn_handler)
@@ -378,6 +387,7 @@ impl CliMessageServer {
             self.communication_manager.clone(),
             self.agent_manager.clone(),
             self.quic_server.clone(),
+            self.event_forwarders.clone(),
         ));
         self.communication_manager
             .register_message_handler(agent_control_handler)
@@ -453,6 +463,15 @@ impl CliMessageServer {
     /// 关闭服务器
     pub async fn shutdown(&self) -> Result<()> {
         info!("Shutting down CLI message server");
+
+        // 先中止所有事件转发任务，避免在停止 session 后仍尝试广播
+        {
+            let mut forwarders = self.event_forwarders.write().await;
+            for (session_id, handle) in forwarders.drain() {
+                handle.abort();
+                info!("Aborted event forwarder for session: {}", session_id);
+            }
+        }
 
         // 停止所有 agent sessions，防止 ACP 子进程泄漏
         let sessions = self.agent_manager.list_sessions().await;
@@ -2326,9 +2345,8 @@ pub struct RemoteSpawnMessageHandler {
     communication_manager: Arc<CommunicationManager>,
     agent_manager: Arc<AgentManager>,
     quic_server: QuicMessageServer,
-    /// Active event forwarding tasks by session_id
-    event_forwarders:
-        Arc<tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// Active event forwarding tasks by session_id (shared with AgentControlMessageHandler)
+    event_forwarders: EventForwarders,
 }
 
 impl RemoteSpawnMessageHandler {
@@ -2336,21 +2354,20 @@ impl RemoteSpawnMessageHandler {
         communication_manager: Arc<CommunicationManager>,
         agent_manager: Arc<AgentManager>,
         quic_server: QuicMessageServer,
+        event_forwarders: EventForwarders,
     ) -> Self {
         Self {
             communication_manager,
             agent_manager,
             quic_server,
-            event_forwarders: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            event_forwarders,
         }
     }
 
     /// Start forwarding agent events to P2P clients
     fn start_event_forwarder(
         quic_server: QuicMessageServer,
-        forwarders: Arc<
-            tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>,
-        >,
+        forwarders: EventForwarders,
         session_id: String,
         mut event_receiver: tokio::sync::broadcast::Receiver<shared::AgentTurnEvent>,
     ) {
@@ -2491,7 +2508,8 @@ impl RemoteSpawnMessageHandler {
         };
 
         // 使用 AgentManager 启动新的 agent 会话（使用指定的 session_id）
-        self.agent_manager
+        let event_rx = self
+            .agent_manager
             .start_session_with_id(
                 session_id.clone(),
                 agent_type,
@@ -2513,39 +2531,17 @@ impl RemoteSpawnMessageHandler {
                 anyhow::anyhow!("Failed to start agent session: {}", e)
             })?;
 
-        // Subscribe to agent events and start forwarding
-        let agent_manager = self.agent_manager.clone();
-        let quic_server = self.quic_server.clone();
-        let event_forwarders = self.event_forwarders.clone();
-        let deferred_session_id = session_id.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            tracing::info!(
-                "[handle_spawn_session] Deferred subscribe attempt for session: {}",
-                deferred_session_id
-            );
-            if let Some(event_rx) = agent_manager.subscribe(&deferred_session_id).await {
-                tracing::info!(
-                    "[handle_spawn_session] Deferred subscribe successful, starting forwarder for session: {}",
-                    deferred_session_id
-                );
-                RemoteSpawnMessageHandler::start_event_forwarder(
-                    quic_server,
-                    event_forwarders,
-                    deferred_session_id.clone(),
-                    event_rx,
-                );
-                tracing::info!(
-                    "[event_forwarder] Started forwarding events for session: {}",
-                    deferred_session_id
-                );
-            } else {
-                tracing::warn!(
-                    "[event_forwarder] Could not subscribe to session events: {}",
-                    deferred_session_id
-                );
-            }
-        });
+        // Start forwarding agent events immediately (receiver is guaranteed valid)
+        RemoteSpawnMessageHandler::start_event_forwarder(
+            self.quic_server.clone(),
+            self.event_forwarders.clone(),
+            session_id.clone(),
+            event_rx,
+        );
+        tracing::info!(
+            "[event_forwarder] Started forwarding events for session: {}",
+            session_id
+        );
 
         // 构建响应
         let response_data = serde_json::json!({
@@ -2779,8 +2775,8 @@ pub struct AgentControlMessageHandler {
     communication_manager: Arc<CommunicationManager>,
     agent_manager: Arc<AgentManager>,
     quic_server: QuicMessageServer,
-    event_forwarders:
-        Arc<tokio::sync::RwLock<std::collections::HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// Active event forwarding tasks by session_id (shared with RemoteSpawnMessageHandler)
+    event_forwarders: EventForwarders,
 }
 
 impl AgentControlMessageHandler {
@@ -2788,62 +2784,46 @@ impl AgentControlMessageHandler {
         communication_manager: Arc<CommunicationManager>,
         agent_manager: Arc<AgentManager>,
         quic_server: QuicMessageServer,
+        event_forwarders: EventForwarders,
     ) -> Self {
         Self {
             communication_manager,
             agent_manager,
             quic_server,
-            event_forwarders: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            event_forwarders,
         }
     }
 
-    async fn attach_event_forwarder(&self, session_id: String) {
-        const MAX_SUBSCRIBE_ATTEMPTS: usize = 10;
-        const SUBSCRIBE_RETRY_DELAY_MS: u64 = 25;
-
-        for attempt in 0..MAX_SUBSCRIBE_ATTEMPTS {
-            if let Some(event_rx) = self.agent_manager.subscribe(&session_id).await {
-                for event in self.agent_manager.drain_event_buffer(&session_id).await {
-                    let message = shared::message_adapter::build_agent_message(
-                        "cli".to_string(),
-                        session_id.clone(),
-                        &event.event,
-                        None,
-                    );
-
-                    if let Err(e) = self.quic_server.broadcast_message(message).await {
-                        tracing::warn!(
-                            "[event_forwarder] Failed to broadcast buffered event for session {}: {}",
-                            session_id,
-                            e
-                        );
-                    }
-                }
-
-                RemoteSpawnMessageHandler::start_event_forwarder(
-                    self.quic_server.clone(),
-                    self.event_forwarders.clone(),
-                    session_id.clone(),
-                    event_rx,
-                );
-                tracing::info!(
-                    "[event_forwarder] Attached after history load for session: {}",
-                    session_id
-                );
-                return;
-            }
-
-            tracing::debug!(
-                "[event_forwarder] Subscribe retry {}/{} for session {}",
-                attempt + 1,
-                MAX_SUBSCRIBE_ATTEMPTS,
-                session_id
+    async fn attach_event_forwarder(
+        &self,
+        session_id: String,
+        event_rx: tokio::sync::broadcast::Receiver<shared::AgentTurnEvent>,
+    ) {
+        for event in self.agent_manager.drain_event_buffer(&session_id).await {
+            let message = shared::message_adapter::build_agent_message(
+                "cli".to_string(),
+                session_id.clone(),
+                &event.event,
+                None,
             );
-            tokio::time::sleep(std::time::Duration::from_millis(SUBSCRIBE_RETRY_DELAY_MS)).await;
+
+            if let Err(e) = self.quic_server.broadcast_message(message).await {
+                tracing::warn!(
+                    "[event_forwarder] Failed to broadcast buffered event for session {}: {}",
+                    session_id,
+                    e
+                );
+            }
         }
 
-        tracing::warn!(
-            "[event_forwarder] Could not subscribe to history-loaded session events: {}",
+        RemoteSpawnMessageHandler::start_event_forwarder(
+            self.quic_server.clone(),
+            self.event_forwarders.clone(),
+            session_id.clone(),
+            event_rx,
+        );
+        tracing::info!(
+            "[event_forwarder] Attached after history load for session: {}",
             session_id
         );
     }
@@ -2891,7 +2871,7 @@ impl AgentControlMessageHandler {
                 let agent_type = parse_agent_type(agent_type)?;
                 let working_dir = expand_path(project_path);
 
-                let new_session_id = self
+                let event_rx = self
                     .agent_manager
                     .start_session_from_history_with_id(
                         target_session_id.clone(),
@@ -2906,11 +2886,11 @@ impl AgentControlMessageHandler {
                     )
                     .await?;
 
-                self.attach_event_forwarder(target_session_id.clone()).await;
+                self.attach_event_forwarder(target_session_id.clone(), event_rx).await;
 
                 Ok(serde_json::json!({
                     "type": "session_loaded",
-                    "session_id": new_session_id,
+                    "session_id": target_session_id,
                 }))
             }
             AgentControlAction::SendInput {
