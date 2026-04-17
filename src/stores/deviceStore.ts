@@ -70,8 +70,25 @@ function detectCapabilities(): DeviceCapabilities {
 }
 
 // 全局设备信息状态
+const defaultDeviceCapabilities: DeviceCapabilities = {
+  isMobile: false,
+  isTablet: false,
+  isDesktop: true,
+  supportsTouch: false,
+  supportsHaptic: false,
+  supportsFullscreen: false,
+  supportsOrientation: false,
+  screenSize: "lg",
+  hasPhysicalKeyboard: true,
+  platform: "web",
+};
+
 const [deviceCapabilities, setDeviceCapabilities] =
-  createSignal<DeviceCapabilities>(detectCapabilities());
+  createSignal<DeviceCapabilities>(
+    typeof window !== "undefined" && typeof navigator !== "undefined"
+      ? detectCapabilities()
+      : defaultDeviceCapabilities,
+  );
 
 // 导出只读的 getter
 export function getDeviceCapabilities(): DeviceCapabilities {

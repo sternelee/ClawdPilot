@@ -3509,7 +3509,7 @@ async fn local_start_agent(
         ));
     }
 
-    manager
+    let mut event_rx = manager
         .start_session_with_id(
             session_id.clone(),
             agent_type,
@@ -3523,45 +3523,40 @@ async fn local_start_agent(
         .await
         .map_err(|e| format!("Failed to start local agent: {}", e))?;
 
-    // Subscribe to agent events for broadcasting to frontend
-    if let Some(mut event_rx) = manager.subscribe(&session_id).await {
-        // Clone session_id for use in the spawn closure
-        let session_id_for_spawn = session_id.clone();
-        tokio::spawn(async move {
-            // Convert agent events to frontend format
-            while let Ok(event) = event_rx.recv().await {
-                // Convert AgentTurnEvent to frontend-expected JSON
-                let event_payload = match &event.event {
-                    shared::agent::AgentEvent::ApprovalRequest {
-                        request_id,
-                        tool_name,
-                        input,
-                        message,
-                        ..
-                    } => serde_json::json!({
-                        "type": "approval_request",
-                        "request_id": request_id,
-                        "tool_name": tool_name,
-                        "input": input,
-                        "message": message,
-                    }),
-                    _ => serde_json::to_value(shared::message_adapter::event_to_message_content(
-                        &event.event,
-                        None,
-                    ))
-                    .unwrap_or_else(|_| serde_json::json!({ "type": "unknown" })),
-                };
-                let session_id_clone = session_id_for_spawn.clone();
-                let frontend_event = serde_json::json!({
-                    "sessionId": session_id_clone.clone(),
-                    "turnId": event.turn_id,
-                    "event": event_payload,
-                });
+    // Broadcast agent events to frontend
+    let session_id_for_spawn = session_id.clone();
+    tokio::spawn(async move {
+        while let Ok(event) = event_rx.recv().await {
+            let event_payload = match &event.event {
+                shared::agent::AgentEvent::ApprovalRequest {
+                    request_id,
+                    tool_name,
+                    input,
+                    message,
+                    ..
+                } => serde_json::json!({
+                    "type": "approval_request",
+                    "request_id": request_id,
+                    "tool_name": tool_name,
+                    "input": input,
+                    "message": message,
+                }),
+                _ => serde_json::to_value(shared::message_adapter::event_to_message_content(
+                    &event.event,
+                    None,
+                ))
+                .unwrap_or_else(|_| serde_json::json!({ "type": "unknown" })),
+            };
+            let session_id_clone = session_id_for_spawn.clone();
+            let frontend_event = serde_json::json!({
+                "sessionId": session_id_clone.clone(),
+                "turnId": event.turn_id,
+                "event": event_payload,
+            });
 
-                let _ = app_handle.emit("local-agent-event", &frontend_event);
-            }
-        });
-    }
+            let _ = app_handle.emit("local-agent-event", &frontend_event);
+        }
+    });
 
     Ok(session_id)
 }
@@ -3871,7 +3866,7 @@ async fn local_load_agent_history(
 
     let session_id = if let Some(target_session_id) = target_session_id.clone() {
         let history_id = history_session_id.clone();
-        manager
+        let _ = manager
             .start_session_from_history_with_id(
                 target_session_id.clone(),
                 agent_type,
@@ -3888,7 +3883,7 @@ async fn local_load_agent_history(
         target_session_id
     } else {
         let history_id = history_session_id.clone();
-        manager
+        let (sid, _rx) = manager
             .start_session_from_history(
                 agent_type,
                 history_id,
@@ -3900,7 +3895,8 @@ async fn local_load_agent_history(
                 resume,
             )
             .await
-            .map_err(|e| format!("Failed to load agent history: {}", e))?
+            .map_err(|e| format!("Failed to load agent history: {}", e))?;
+        sid
     };
 
     // For Codex and OpenCode, load history since ACP adapter might not support resume_session

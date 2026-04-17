@@ -1,11 +1,57 @@
 {
   "name": "irogen-browser",
   "version": "0.1.0",
-  "description": "Irogen browser WASM client",
-  "main": "pkg/irogen_browser.js",
-  "types": "pkg/irogen_browser.d.ts",
+  "type": "module",
   "scripts": {
-    "build:wasm:release": "cargo build --target=wasm32-unknown-unknown --release && wasm-bindgen ../target/wasm32-unknown-unknown/release/browser.wasm --out-dir=./pkg --weak-refs --target=web",
-    "clean": "rm -rf pkg"
+    "dev": "vinxi dev",
+    "build": "vinxi build",
+    "start": "vinxi start",
+    "preview": "vinxi build && wrangler dev",
+    "deploy": "vinxi build && wrangler deploy",
+    "build:wasm": "cd crate && wasm-pack build --target web --out-dir ../src/wasm",
+    "build:wasm:release": "cd crate && wasm-pack build --target web --release --out-dir ../src/wasm"
+  },
+  "dependencies": {
+    "@kobalte/core": "^0.13.11",
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.15.0",
+    "@solidjs/start": "^1.1.0",
+    "@solid-primitives/clipboard": "^1.6.2",
+    "@solid-primitives/i18n": "^2.2.1",
+    "@solid-primitives/scroll": "^2.1.3",
+    "@tauri-apps/api": "2.9.1",
+    "lucide-solid": "^0.540.0",
+    "prismjs": "^1.30.0",
+    "shiki": "^4.0.2",
+    "solid-icons": "^1.2.0",
+    "solid-js": "^1.9.11",
+    "solid-markdown": "^2.1.1",
+    "solid-transition-group": "^0.3.0",
+    "virtua": "^0.48.6",
+    "vinxi": "^0.5.7",
+    "vite-plugin-wasm": "^3.5.0",
+    "vite-plugin-top-level-await": "^1.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.0",
+    "@types/node": "^24.3.0",
+    "@types/prismjs": "^1.26.6",
+    "autoprefixer": "^10.4.23",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "daisyui": "^5.5.18",
+    "postcss": "^8.5.6",
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2",
+    "tailwind-merge": "^3.4.1",
+    "tailwindcss": "^4.2.0",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vite-plugin-solid": "^2.11.10",
+    "wrangler": "^4.40.3"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

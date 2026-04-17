@@ -12,6 +12,7 @@ const MAX_PROJECT_PATH_HISTORY_SIZE = 10;
  * Save a ticket to localStorage
  */
 export function saveTicket(ticket: string): void {
+  if (typeof localStorage === "undefined") return;
   try {
     // Save current ticket
     localStorage.setItem(STORAGE_KEY_LAST_TICKET, ticket);
@@ -37,6 +38,7 @@ export function saveTicket(ticket: string): void {
  * Get the last saved ticket from localStorage
  */
 export function getLastTicket(): string | null {
+  if (typeof localStorage === "undefined") return null;
   try {
     const ticket = localStorage.getItem(STORAGE_KEY_LAST_TICKET);
     return ticket?.trim() ? ticket : null;
@@ -50,6 +52,7 @@ export function getLastTicket(): string | null {
  * Get ticket history from localStorage
  */
 export function getTicketHistory(): string[] {
+  if (typeof localStorage === "undefined") return [];
   try {
     const historyJson = localStorage.getItem(STORAGE_KEY_TICKET_HISTORY);
     if (!historyJson) return [];
@@ -68,6 +71,7 @@ export function getTicketHistory(): string[] {
  * Save a project path to localStorage history
  */
 export function saveProjectPath(path: string): void {
+  if (typeof localStorage === "undefined") return;
   const trimmed = path.trim();
   if (!trimmed) return;
 
@@ -91,6 +95,7 @@ export function saveProjectPath(path: string): void {
  * Get project path history from localStorage
  */
 export function getProjectPathHistory(): string[] {
+  if (typeof localStorage === "undefined") return [];
   try {
     const historyJson = localStorage.getItem(STORAGE_KEY_PROJECT_PATH_HISTORY);
     if (!historyJson) return [];
@@ -109,6 +114,7 @@ export function getProjectPathHistory(): string[] {
  * Clear all stored tickets from localStorage
  */
 export function clearStoredTickets(): void {
+  if (typeof localStorage === "undefined") return;
   try {
     localStorage.removeItem(STORAGE_KEY_LAST_TICKET);
     localStorage.removeItem(STORAGE_KEY_TICKET_HISTORY);
@@ -122,6 +128,7 @@ export function clearStoredTickets(): void {
  * Check if localStorage is available
  */
 export function isLocalStorageAvailable(): boolean {
+  if (typeof localStorage === "undefined") return false;
   try {
     const test = "__test__";
     localStorage.setItem(test, test);

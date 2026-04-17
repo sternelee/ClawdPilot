@@ -75,6 +75,7 @@ const normalizeTheme = (theme: unknown): ThemeType => {
 
 // Load settings from localStorage
 const loadSettings = (): UserSettings => {
+  if (typeof localStorage === "undefined") return defaultSettings;
   try {
     const stored = localStorage.getItem(SETTINGS_KEY);
     if (stored) {
@@ -93,6 +94,7 @@ const loadSettings = (): UserSettings => {
 
 // Save settings to localStorage
 const saveSettings = (settings: UserSettings) => {
+  if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   } catch (error) {
@@ -104,29 +106,31 @@ const saveSettings = (settings: UserSettings) => {
 const [settings, setSettings] = createSignal<UserSettings>(loadSettings());
 
 // Auto-save settings whenever they change
-createEffect(() => {
-  const currentSettings = settings();
-  saveSettings(currentSettings);
+if (typeof document !== "undefined") {
+  createEffect(() => {
+    const currentSettings = settings();
+    saveSettings(currentSettings);
 
-  // Apply theme to document
-  document.documentElement.setAttribute("data-theme", currentSettings.theme);
+    // Apply theme to document
+    document.documentElement.setAttribute("data-theme", currentSettings.theme);
 
-  // Apply font size class to body
-  document.body.classList.remove("text-sm", "text-base", "text-lg", "text-xl");
-  const fontSizeClass = {
-    small: "text-sm",
-    medium: "text-base",
-    large: "text-lg",
-    "extra-large": "text-xl",
-  }[currentSettings.fontSize];
-  document.body.classList.add(fontSizeClass);
+    // Apply font size class to body
+    document.body.classList.remove("text-sm", "text-base", "text-lg", "text-xl");
+    const fontSizeClass = {
+      small: "text-sm",
+      medium: "text-base",
+      large: "text-lg",
+      "extra-large": "text-xl",
+    }[currentSettings.fontSize];
+    document.body.classList.add(fontSizeClass);
 
-  // Toggle animations
-  document.body.classList.toggle(
-    "reduce-motion",
-    !currentSettings.enableAnimations,
-  );
-});
+    // Toggle animations
+    document.body.classList.toggle(
+      "reduce-motion",
+      !currentSettings.enableAnimations,
+    );
+  });
+}
 
 // Helper functions to update specific settings
 export const settingsStore = {
@@ -354,4 +358,6 @@ export const t = (key: string, lang?: LanguageType): string => {
 };
 
 // Initialize theme on app start
-document.documentElement.setAttribute("data-theme", settings().theme);
+if (typeof document !== "undefined") {
+  document.documentElement.setAttribute("data-theme", settings().theme);
+}

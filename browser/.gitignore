@@ -1,0 +1,17 @@
+# Build outputs
+.output/
+dist/
+.vinxi/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+
+# Misc
+.DS_Store
