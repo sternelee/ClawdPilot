@@ -31,8 +31,7 @@ export type AgentType =
   | "gemini"
   | "cline"
   | "pi"
-  | "qwen"
-  | "openclaw";
+  | "qwen";
 
 export type SessionMode = "remote" | "local";
 
@@ -87,7 +86,6 @@ export const normalizeAgentType = (type: string): AgentType => {
   if (lower === "gemini-cli") return "gemini";
   if (lower === "qwencode" || lower === "qwen_code" || lower === "qwen-code")
     return "qwen";
-  if (lower === "open-claw") return "openclaw";
   return lower as AgentType;
 };
 
@@ -507,10 +505,6 @@ export const createSessionStore = () => {
   };
 
   const buildExtraArgs = (): string[] => {
-    if (state.newSessionAgent === "openclaw") {
-      return [];
-    }
-
     const raw = state.newSessionArgs.trim();
     if (!raw) return [];
 

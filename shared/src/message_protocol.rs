@@ -543,8 +543,6 @@ pub enum AgentType {
     Pi,
     /// Qwen Code CLI — ACP
     QwenCode,
-    /// OpenClaw (OpenClaw) — uses WebSocket Gateway
-    OpenClaw,
 }
 
 /// AI Agent 会话元数据

@@ -364,7 +364,6 @@ pub enum AgentType {
     Codex,
     Cursor,
     Gemini,
-    OpenClaw,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

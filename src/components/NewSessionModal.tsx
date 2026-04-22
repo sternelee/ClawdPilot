@@ -325,12 +325,6 @@ export const NewSessionModal: Component = () => {
             'e.g. --model gpt-5 --provider openai or ["--model","gpt-5"]',
           hint: "Passed to OpenCode process. Supports JSON array or space-separated args.",
         };
-      case "openclaw":
-        return {
-          supported: false,
-          placeholder: "",
-          hint: "OpenClaw does not support custom Agent Args.",
-        };
       case "cline":
         return {
           supported: true,
@@ -567,9 +561,6 @@ export const NewSessionModal: Component = () => {
                   onChange={(val) => {
                     const nextAgent = val as AgentType;
                     sessionStore.setNewSessionAgent(nextAgent);
-                    if (nextAgent === "openclaw") {
-                      sessionStore.setNewSessionArgs("");
-                    }
                   }}
                 >
                   <Show
@@ -585,7 +576,6 @@ export const NewSessionModal: Component = () => {
                         <option value="cline">Cline</option>
                         <option value="pi">Pi</option>
                         <option value="qwen">Qwen Code</option>
-                        <option value="openclaw">OpenClaw</option>
                         <option value="opencode">OpenCode</option>
                         <option value="gemini">Gemini CLI</option>
                       </>
@@ -688,13 +678,7 @@ export const NewSessionModal: Component = () => {
               <p class="text-xs text-muted-foreground">{t("newSession.typeToAutocomplete")}</p>
             </div>
 
-            <Show
-              when={
-                agentArgsConfig().supported ||
-                sessionStore.state.newSessionAgent !== "openclaw"
-              }
-              fallback={<div class="h-4" />}
-            >
+            <Show when={agentArgsConfig().supported} fallback={<div class="h-4" />}>
               <div class="space-y-3">
                 <button
                   type="button"
@@ -726,25 +710,21 @@ export const NewSessionModal: Component = () => {
                       </p>
                     </div>
                   </Show>
-                  <Show
-                    when={sessionStore.state.newSessionAgent !== "openclaw"}
-                  >
-                    <div class="space-y-1.5">
-                      <Label for="mcp-servers" class="text-xs">{t("newSession.mcpServers")}</Label>
-                      <Textarea
-                        id="mcp-servers"
-                        class="min-h-[120px] text-xs font-mono"
-                        placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
-                        value={sessionStore.state.newSessionMcpServers}
-                        onInput={(e) => {
-                          sessionStore.setNewSessionMcpServers(
-                            e.currentTarget.value,
-                          );
-                        }}
-                      />
-                      <p class="text-xs text-muted-foreground">{t("newSession.mcpServersHint")}</p>
-                    </div>
-                  </Show>
+                  <div class="space-y-1.5">
+                    <Label for="mcp-servers" class="text-xs">{t("newSession.mcpServers")}</Label>
+                    <Textarea
+                      id="mcp-servers"
+                      class="min-h-[120px] text-xs font-mono"
+                      placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
+                      value={sessionStore.state.newSessionMcpServers}
+                      onInput={(e) => {
+                        sessionStore.setNewSessionMcpServers(
+                          e.currentTarget.value,
+                        );
+                      }}
+                    />
+                    <p class="text-xs text-muted-foreground">{t("newSession.mcpServersHint")}</p>
+                  </div>
                 </Show>
               </div>
             </Show>

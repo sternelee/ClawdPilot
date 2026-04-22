@@ -1179,11 +1179,6 @@ export function ChatView(props: ChatViewProps) {
         case "notification": {
           const notifLevel = parsed.level || "Info";
           const notifMessage = parsed.message || "";
-          const isOpenClawHealth =
-            session()?.agentType === "openclaw" &&
-            notifLevel === "Info" &&
-            notifMessage.trim().toLowerCase() === "health";
-          if (isOpenClawHealth) return;
           if (notifLevel === "Info" && (!notifMessage || !notifMessage.trim()))
             return;
           chatStore.addMessage(props.sessionId, {

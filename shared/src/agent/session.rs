@@ -25,10 +25,6 @@ pub struct AgentConfig {
     pub custom_args: Option<String>,
     /// Permission mode
     pub permission_mode: PermissionMode,
-    /// OpenClaw Gateway token (for WebSocket mode)
-    pub gateway_token: Option<String>,
-    /// OpenClaw Agent ID (for WebSocket mode, default: "main")
-    pub gateway_agent_id: Option<String>,
 }
 
 /// Trait for managing agent sessions

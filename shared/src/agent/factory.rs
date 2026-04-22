@@ -82,7 +82,6 @@ fn agent_key(agent_type: AgentType) -> &'static str {
         AgentType::Cline => "cline",
         AgentType::Pi => "pi",
         AgentType::QwenCode => "qwen-code",
-        AgentType::OpenClaw => "openclaw",
     }
 }
 
@@ -658,60 +657,6 @@ impl Agent for QwenCodeAgent {
     }
 }
 
-/// OpenClaw Agent — WebSocket Gateway mode
-///
-/// OpenClaw uses WebSocket Gateway mode to communicate.
-/// Requires running `openclaw gateway` to start the gateway.
-pub struct OpenClawAgent;
-
-impl Agent for OpenClawAgent {
-    fn agent_type(&self) -> AgentType {
-        AgentType::OpenClaw
-    }
-
-    fn command(&self) -> &str {
-        "openclaw"
-    }
-
-    fn default_args(&self) -> Vec<String> {
-        // OpenClaw uses "gateway" subcommand for WebSocket Gateway mode
-        vec!["gateway".to_string()]
-    }
-
-    fn check_available(&self) -> Result<AgentAvailability> {
-        let output = Command::new(self.command())
-            .arg("--version")
-            .env("PATH", get_extended_path())
-            .output()?;
-
-        let available = output.status.success();
-        let version = if available {
-            Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-        } else {
-            None
-        };
-
-        Ok(AgentAvailability {
-            available,
-            version,
-            executable: self.command().to_string(),
-        })
-    }
-
-    fn get_version(&self) -> Result<String> {
-        let output = Command::new(self.command())
-            .arg("--version")
-            .env("PATH", get_extended_path())
-            .output()?;
-
-        if !output.status.success() {
-            return Err(anyhow::anyhow!("Failed to get OpenClaw version"));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    }
-}
-
 /// Agent 工厂
 pub struct AgentFactory;
 
@@ -730,7 +675,6 @@ impl AgentFactory {
             AgentType::Cline => Box::new(ClineAgent),
             AgentType::Pi => Box::new(PiAgent),
             AgentType::QwenCode => Box::new(QwenCodeAgent),
-            AgentType::OpenClaw => Box::new(OpenClawAgent),
         }
     }
 
@@ -747,7 +691,6 @@ impl AgentFactory {
             AgentType::Cline,
             AgentType::Pi,
             AgentType::QwenCode,
-            AgentType::OpenClaw,
         ];
 
         for agent_type in agent_types {
@@ -780,7 +723,7 @@ impl AgentFactory {
     pub fn get_default() -> Option<AgentType> {
         let available = Self::check_all_available().ok()?;
 
-        // Priority: ClaudeCode > Codex > Cursor > Cline > Pi > QwenCode > OpenCode > OpenClaw > Gemini
+        // Priority: ClaudeCode > Codex > Cursor > Cline > Pi > QwenCode > OpenCode > Gemini
         if available.contains_key(&AgentType::ClaudeCode) {
             return Some(AgentType::ClaudeCode);
         }
@@ -801,9 +744,6 @@ impl AgentFactory {
         }
         if available.contains_key(&AgentType::OpenCode) {
             return Some(AgentType::OpenCode);
-        }
-        if available.contains_key(&AgentType::OpenClaw) {
-            return Some(AgentType::OpenClaw);
         }
         if available.contains_key(&AgentType::Gemini) {
             return Some(AgentType::Gemini);

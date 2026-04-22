@@ -4,7 +4,7 @@
 
 A multi-agent local/remote management platform.
 
-Irogen provides a unified session management experience for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, OpenClaw) across local and remote modes.
+Irogen provides a unified session management experience for running and controlling multiple AI agents (Claude, Codex, Gemini, OpenCode, Cline, Pi, Qwen Code) across local and remote modes.
 
 ## Core Capabilities
 

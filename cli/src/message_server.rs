@@ -632,21 +632,6 @@ impl MessageHandler for SystemControlMessageHandler {
                                     })),
                                 ));
                                 }
-                                "openclaw" => {
-                                    return Ok(Some(
-                                        message.create_response(MessagePayload::Response(
-                                            ResponseMessage {
-                                                request_id: response_request_id.clone(),
-                                                success: false,
-                                                data: None,
-                                                message: Some(
-                                                    "OpenClaw does not require ACP installation"
-                                                        .to_string(),
-                                                ),
-                                            },
-                                        )),
-                                    ));
-                                }
                                 _ => {
                                     return Ok(Some(message.create_response(
                                         MessagePayload::Response(ResponseMessage {
@@ -3300,7 +3285,6 @@ fn parse_agent_type(agent_type_str: &str) -> Result<AgentType> {
         "cline" => Ok(AgentType::Cline),
         "pi" => Ok(AgentType::Pi),
         "qwen" | "qwen-code" | "qwen_code" => Ok(AgentType::QwenCode),
-        "openclaw" | "open-claw" => Ok(AgentType::OpenClaw),
         _ => Err(anyhow::anyhow!("Unknown agent type: {}", agent_type_str)),
     }
 }

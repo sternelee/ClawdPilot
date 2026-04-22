@@ -13,7 +13,6 @@ export type AgentType =
   | 'opencode'
   | 'codex'
   | 'gemini'
-  | 'openclaw'
 
 export type SessionMode = 'remote' | 'local'
 

@@ -75,7 +75,6 @@ pub enum AgentType {
     OpenCode,
     Codex,
     Gemini,
-    OpenClaw,
     Cursor,
 }
 

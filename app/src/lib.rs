@@ -2896,7 +2896,6 @@ async fn remote_spawn_session(
         "cline" => AgentType::Cline,
         "pi" => AgentType::Pi,
         "qwen" | "qwen-code" | "qwen_code" => AgentType::QwenCode,
-        "openclaw" | "open-claw" => AgentType::OpenClaw,
         _ => return Err(format!("Unknown agent type: {}", agent_type)),
     };
 
@@ -3338,7 +3337,6 @@ async fn install_acp_package_local(agent_type: String) -> Result<String, String>
         "qwen" | "qwen-code" | "qwen_code" => {
             return Err("Qwen Code does not support ACP auto-install in Irogen".to_string());
         }
-        "openclaw" => return Err("OpenClaw does not require ACP installation".to_string()),
         _ => return Err(format!("Unsupported agent type for ACP: {}", agent_type)),
     };
 
@@ -3446,7 +3444,6 @@ async fn local_start_agent(
         "cline" => AgentType::Cline,
         "pi" => AgentType::Pi,
         "qwen" | "qwen-code" | "qwen_code" => AgentType::QwenCode,
-        "openclaw" | "open-claw" => AgentType::OpenClaw,
         _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };
 
@@ -3782,7 +3779,6 @@ async fn local_list_agent_history(
         "cline" => AgentType::Cline,
         "pi" => AgentType::Pi,
         "qwen" | "qwen-code" | "qwen_code" => AgentType::QwenCode,
-        "openclaw" | "open-claw" => AgentType::OpenClaw,
         _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };
 
@@ -3845,7 +3841,6 @@ async fn local_load_agent_history(
         "cline" => AgentType::Cline,
         "pi" => AgentType::Pi,
         "qwen" | "qwen-code" | "qwen_code" => AgentType::QwenCode,
-        "openclaw" | "open-claw" => AgentType::OpenClaw,
         _ => return Err(format!("Unknown agent type: {}", agent_type_str)),
     };
 
