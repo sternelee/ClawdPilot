@@ -325,11 +325,26 @@ export const NewSessionModal: Component = () => {
             'e.g. --model gpt-5 --provider openai or ["--model","gpt-5"]',
           hint: "Passed to OpenCode process. Supports JSON array or space-separated args.",
         };
-      case "openclaw":
+      case "cline":
         return {
-          supported: false,
-          placeholder: "",
-          hint: "OpenClaw does not support custom Agent Args.",
+          supported: true,
+          placeholder:
+            'e.g. --model sonnet or ["--model","sonnet"]',
+          hint: "Passed to Cline ACP process (`cline acp`). Supports JSON array or space-separated args.",
+        };
+      case "pi":
+        return {
+          supported: true,
+          placeholder:
+            'e.g. --model default or ["--model","default"]',
+          hint: "Passed to Pi ACP process (`pi acp`). Supports JSON array or space-separated args.",
+        };
+      case "qwen":
+        return {
+          supported: true,
+          placeholder:
+            'e.g. --model qwen3-coder-plus or ["--model","qwen3-coder-plus"]',
+          hint: "Passed to Qwen Code ACP process (`qwen acp`). Supports JSON array or space-separated args.",
         };
       default:
         return {
@@ -546,9 +561,6 @@ export const NewSessionModal: Component = () => {
                   onChange={(val) => {
                     const nextAgent = val as AgentType;
                     sessionStore.setNewSessionAgent(nextAgent);
-                    if (nextAgent === "openclaw") {
-                      sessionStore.setNewSessionArgs("");
-                    }
                   }}
                 >
                   <Show
@@ -561,7 +573,9 @@ export const NewSessionModal: Component = () => {
                         <option value="claude">Claude Code</option>
                         <option value="codex">Codex</option>
                         <option value="cursor">Cursor</option>
-                        <option value="openclaw">OpenClaw</option>
+                        <option value="cline">Cline</option>
+                        <option value="pi">Pi</option>
+                        <option value="qwen">Qwen Code</option>
                         <option value="opencode">OpenCode</option>
                         <option value="gemini">Gemini CLI</option>
                       </>
@@ -664,13 +678,7 @@ export const NewSessionModal: Component = () => {
               <p class="text-xs text-muted-foreground">{t("newSession.typeToAutocomplete")}</p>
             </div>
 
-            <Show
-              when={
-                agentArgsConfig().supported ||
-                sessionStore.state.newSessionAgent !== "openclaw"
-              }
-              fallback={<div class="h-4" />}
-            >
+            <Show when={agentArgsConfig().supported} fallback={<div class="h-4" />}>
               <div class="space-y-3">
                 <button
                   type="button"
@@ -702,25 +710,21 @@ export const NewSessionModal: Component = () => {
                       </p>
                     </div>
                   </Show>
-                  <Show
-                    when={sessionStore.state.newSessionAgent !== "openclaw"}
-                  >
-                    <div class="space-y-1.5">
-                      <Label for="mcp-servers" class="text-xs">{t("newSession.mcpServers")}</Label>
-                      <Textarea
-                        id="mcp-servers"
-                        class="min-h-[120px] text-xs font-mono"
-                        placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
-                        value={sessionStore.state.newSessionMcpServers}
-                        onInput={(e) => {
-                          sessionStore.setNewSessionMcpServers(
-                            e.currentTarget.value,
-                          );
-                        }}
-                      />
-                      <p class="text-xs text-muted-foreground">{t("newSession.mcpServersHint")}</p>
-                    </div>
-                  </Show>
+                  <div class="space-y-1.5">
+                    <Label for="mcp-servers" class="text-xs">{t("newSession.mcpServers")}</Label>
+                    <Textarea
+                      id="mcp-servers"
+                      class="min-h-[120px] text-xs font-mono"
+                      placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
+                      value={sessionStore.state.newSessionMcpServers}
+                      onInput={(e) => {
+                        sessionStore.setNewSessionMcpServers(
+                          e.currentTarget.value,
+                        );
+                      }}
+                    />
+                    <p class="text-xs text-muted-foreground">{t("newSession.mcpServersHint")}</p>
+                  </div>
                 </Show>
               </div>
             </Show>

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Tauri 2 for desktop and mobile packaging
 - A separate `web/` app built with TanStack Start + Cloudflare Workers
 
-The product centers on managing AI agent sessions (Claude, Codex, Gemini, OpenCode, OpenClaw) in both **local** and **remote** modes, with permission workflows and structured chat/tool-call UI.
+The product centers on managing AI agent sessions (Claude, Codex, Gemini, OpenCode, Cline, Pi, Qwen Code) in both **local** and **remote** modes, with permission workflows and structured chat/tool-call UI.
 
 ## Prerequisites
 
@@ -141,9 +141,7 @@ cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc
 ### 4. Agent runtime model
 
 - `shared/src/agent/mod.rs` defines `AgentManager`, the central registry for agent sessions.
-- `SessionKind` abstracts over the two runtime backends:
-  - ACP subprocess-backed sessions
-  - OpenClaw WebSocket-backed sessions
+- `SessionKind` uses ACP subprocess-backed sessions.
 - Permission handling is centralized in:
   - `shared/src/agent/permission_handler.rs`
   - `shared/src/agent/acp_permission.rs`
@@ -186,11 +184,7 @@ cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc
 
 ## Dependency notes
 
-The workspace `Cargo.toml` patches two important dependencies:
-- `tokio-tungstenite` points to a custom fork for OpenClaw WebSocket compatibility.
-- `agent-client-protocol-schema` points to a patched crate that handles nullable `used` fields in UsageUpdate.
-
-Do not change these revisions without verifying OpenClaw and ACP runtime behavior.
+The workspace `Cargo.toml` patches `agent-client-protocol-schema` to handle nullable `used` fields in UsageUpdate.
 
 ## When adding a new agent integration
 

@@ -40,8 +40,6 @@ export function SessionSidebar(props: SessionSidebarProps) {
         return 'Codex'
       case 'gemini':
         return 'Gemini'
-      case 'openclaw':
-        return 'OpenClaw'
       default:
         return agentType
     }

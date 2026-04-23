@@ -4,7 +4,7 @@
 
 一个多 Agent 本地/远程管理平台。
 
-Irogen 提供统一会话管理体验，用于在本地与远程模式下运行和控制多个 AI Agent（Claude、Codex、Gemini、OpenCode、OpenClaw）。
+Irogen 提供统一会话管理体验，用于在本地与远程模式下运行和控制多个 AI Agent（Claude、Codex、Gemini、OpenCode、Cline、Pi、Qwen Code）。
 
 ## 核心能力
 

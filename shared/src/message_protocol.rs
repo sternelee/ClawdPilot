@@ -537,8 +537,12 @@ pub enum AgentType {
     Cursor,
     /// Gemini CLI (Google)
     Gemini,
-    /// OpenClaw (OpenClaw) — uses WebSocket Gateway
-    OpenClaw,
+    /// Cline CLI — ACP
+    Cline,
+    /// Pi CLI — ACP
+    Pi,
+    /// Qwen Code CLI — ACP
+    QwenCode,
 }
 
 /// AI Agent 会话元数据

@@ -58,7 +58,6 @@ function Home() {
     { name: 'Codex', color: 'from-green-500 to-emerald-500' },
     { name: 'Gemini', color: 'from-blue-500 to-cyan-500' },
     { name: 'OpenCode', color: 'from-purple-500 to-pink-500' },
-    { name: 'OpenClaw', color: 'from-yellow-500 to-orange-500' },
   ]
 
   return (
@@ -86,8 +85,8 @@ function Home() {
             Multi-Agent Remote Management Platform
           </p>
           <p class="text-lg text-neutral max-w-2xl mx-auto mb-8">
-            Control multiple AI agents (Claude, Codex, Gemini, OpenCode,
-            OpenClaw) from anywhere. Secure P2P connections with end-to-end
+            Control multiple AI agents (Claude, Codex, Gemini, OpenCode) from
+            anywhere. Secure P2P connections with end-to-end
             encryption.
           </p>
 

@@ -9,7 +9,6 @@ pub mod acp_permission;
 pub mod events;
 pub mod factory;
 pub mod message_adapter;
-pub mod openclaw_ws;
 pub mod permission_handler;
 pub mod slash_commands;
 
@@ -34,7 +33,6 @@ pub use acp_permission::{AcpPermissionHandler, AcpPermissionState};
 pub use events::{AgentEvent, AgentTurnEvent, PendingPermission, PermissionResponse};
 pub use factory::{Agent, AgentAvailability, AgentFactory};
 pub use message_adapter::event_to_message_content;
-pub use openclaw_ws::OpenClawWsSession;
 pub use permission_handler::{
     ApprovalDecision, AutoApprovalDecision, CompletedPermissionEntry, PendingPermissionEntry,
     PermissionHandler, PermissionHandlerState, PermissionMode, PermissionStatus,
@@ -43,13 +41,11 @@ pub use slash_commands::{BuiltinCommandResult, parse_slash_command, process_buil
 
 /// Session kind enum for unified agent management.
 ///
-/// This enum wraps ACP-based external agents and OpenClaw gateway sessions.
+/// This enum wraps ACP-based external agents.
 #[derive(Clone)]
 pub enum SessionKind {
     /// ACP-based session (Claude Agent, Codex CLI, Gemini CLI, OpenCode, etc.)
     Acp(Arc<AcpStreamingSession>),
-    /// OpenClaw Gateway WebSocket session
-    OpenClawWs(Arc<OpenClawWsSession>),
 }
 
 impl SessionKind {
@@ -57,7 +53,6 @@ impl SessionKind {
     pub fn session_id(&self) -> &str {
         match self {
             SessionKind::Acp(s) => s.session_id(),
-            SessionKind::OpenClawWs(s) => s.session_id(),
         }
     }
 
@@ -65,7 +60,6 @@ impl SessionKind {
     pub fn agent_type(&self) -> AgentType {
         match self {
             SessionKind::Acp(s) => s.agent_type(),
-            SessionKind::OpenClawWs(s) => s.agent_type(),
         }
     }
 
@@ -73,7 +67,6 @@ impl SessionKind {
     pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<AgentTurnEvent> {
         match self {
             SessionKind::Acp(s) => s.subscribe(),
-            SessionKind::OpenClawWs(s) => s.subscribe(),
         }
     }
 
@@ -81,7 +74,6 @@ impl SessionKind {
     pub async fn drain_event_buffer(&self) -> Vec<AgentTurnEvent> {
         match self {
             SessionKind::Acp(s) => s.drain_event_buffer().await,
-            SessionKind::OpenClawWs(_) => Vec::new(),
         }
     }
 
@@ -94,7 +86,6 @@ impl SessionKind {
     ) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.send_message(text, turn_id, attachments).await,
-            SessionKind::OpenClawWs(s) => s.send_message(text, turn_id, attachments).await,
         }
     }
 
@@ -102,7 +93,6 @@ impl SessionKind {
     pub async fn interrupt(&self) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.interrupt().await,
-            SessionKind::OpenClawWs(s) => s.interrupt().await,
         }
     }
 
@@ -112,7 +102,6 @@ impl SessionKind {
     ) -> std::result::Result<Vec<PendingPermission>, String> {
         match self {
             SessionKind::Acp(s) => s.get_pending_permissions().await,
-            SessionKind::OpenClawWs(s) => s.get_pending_permissions().await,
         }
     }
 
@@ -129,10 +118,6 @@ impl SessionKind {
                 s.respond_to_permission(request_id, approved, approve_for_session, reason)
                     .await
             }
-            SessionKind::OpenClawWs(s) => {
-                s.respond_to_permission(request_id, approved, approve_for_session, reason)
-                    .await
-            }
         }
     }
 
@@ -146,7 +131,6 @@ impl SessionKind {
                 s.set_permission_mode(mode).await;
                 Ok(())
             }
-            SessionKind::OpenClawWs(s) => s.set_permission_mode(mode).await,
         }
     }
 
@@ -154,7 +138,6 @@ impl SessionKind {
     pub async fn get_permission_mode(&self) -> std::result::Result<PermissionMode, String> {
         match self {
             SessionKind::Acp(s) => Ok(s.get_permission_mode().await),
-            SessionKind::OpenClawWs(s) => Ok(s.get_permission_mode().await),
         }
     }
 
@@ -162,7 +145,6 @@ impl SessionKind {
     pub async fn shutdown(&self) -> std::result::Result<(), String> {
         match self {
             SessionKind::Acp(s) => s.shutdown().await,
-            SessionKind::OpenClawWs(s) => s.shutdown().await,
         }
     }
 }
@@ -356,7 +338,18 @@ impl AgentManager {
                                     return Err(anyhow!(error_msg));
                                 }
                             }
-                            _ => {}
+                            AgentType::Cline => {
+                                error_msg += " Install Cline CLI so 'cline acp' is available, or pass an explicit --binary-path.";
+                                return Err(anyhow!(error_msg));
+                            }
+                            AgentType::Pi => {
+                                error_msg += " Install Pi CLI so 'pi acp' is available, or pass an explicit --binary-path.";
+                                return Err(anyhow!(error_msg));
+                            }
+                            AgentType::QwenCode => {
+                                error_msg += " Install Qwen Code CLI so 'qwen acp' is available, or pass an explicit --binary-path.";
+                                return Err(anyhow!(error_msg));
+                            }
                         }
 
                         return Err(anyhow!(error_msg));
@@ -382,7 +375,9 @@ impl AgentManager {
                         AgentType::OpenCode => task::spawn_blocking(|| try_install_opencode())
                             .await
                             .unwrap_or_else(|_| Ok(false))?,
-                        _ => false,
+                        AgentType::Cline => false,
+                        AgentType::Pi => false,
+                        AgentType::QwenCode => false,
                     };
 
                     if installed {
@@ -403,6 +398,9 @@ impl AgentManager {
                             | AgentType::Cursor
                             | AgentType::Gemini
                             | AgentType::OpenCode
+                            | AgentType::Cline
+                            | AgentType::Pi
+                            | AgentType::QwenCode
                     ) {
                         return Err(anyhow!(
                             "Agent auto-install failed. Install the agent CLI or pass an explicit --binary-path."
@@ -412,62 +410,43 @@ impl AgentManager {
             }
         }
 
-        let session: Arc<SessionKind> = if agent_type == AgentType::OpenClaw {
-            let command = binary_path.unwrap_or(launch_config.command);
-            let mut args = launch_config.args;
-            args.extend(extra_args);
+        let command = binary_path.unwrap_or(launch_config.command);
+        let mut args = launch_config.args;
+        args.extend(extra_args);
 
-            let openclaw_session = OpenClawWsSession::spawn(
+        let acp_session = if let Some(ref runtime) = self.acp_runtime {
+            AcpStreamingSession::spawn_with_options_and_runtime(
                 session_id.clone(),
                 agent_type,
                 command,
                 args,
+                launch_config.env,
                 working_dir.clone(),
                 home_dir,
+                mcp_servers,
+                None,
+                AcpSessionStartMode::New,
+                RetryConfig::default(),
+                Some(runtime.clone()),
             )
             .await
-            .with_context(|| format!("Failed to start OpenClaw WebSocket session"))?;
-
-            Arc::new(SessionKind::OpenClawWs(Arc::new(openclaw_session)))
+            .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?
         } else {
-            let command = binary_path.unwrap_or(launch_config.command);
-            let mut args = launch_config.args;
-            args.extend(extra_args);
-
-            let acp_session = if let Some(ref runtime) = self.acp_runtime {
-                AcpStreamingSession::spawn_with_options_and_runtime(
-                    session_id.clone(),
-                    agent_type,
-                    command,
-                    args,
-                    launch_config.env,
-                    working_dir.clone(),
-                    home_dir,
-                    mcp_servers,
-                    None,
-                    AcpSessionStartMode::New,
-                    RetryConfig::default(),
-                    Some(runtime.clone()),
-                )
-                .await
-                .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?
-            } else {
-                AcpStreamingSession::spawn(
-                    session_id.clone(),
-                    agent_type,
-                    command,
-                    args,
-                    launch_config.env,
-                    working_dir.clone(),
-                    home_dir,
-                    mcp_servers,
-                )
-                .await
-                .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?
-            };
-
-            Arc::new(SessionKind::Acp(Arc::new(acp_session)))
+            AcpStreamingSession::spawn(
+                session_id.clone(),
+                agent_type,
+                command,
+                args,
+                launch_config.env,
+                working_dir.clone(),
+                home_dir,
+                mcp_servers,
+            )
+            .await
+            .with_context(|| format!("Failed to start ACP session for {:?}", agent_type))?
         };
+
+        let session: Arc<SessionKind> = Arc::new(SessionKind::Acp(Arc::new(acp_session)));
 
         // Store session and subscribe to events while holding the write lock.
         // This guarantees that by the time we return, the session exists and
@@ -503,12 +482,7 @@ impl AgentManager {
         let mut metadata_map = self.session_metadata.write().await;
         metadata_map.insert(session_id.clone(), metadata);
 
-        let protocol_name = if agent_type == AgentType::OpenClaw {
-            "OpenClaw (WebSocket Gateway)"
-        } else {
-            "ACP (External Agent)"
-        };
-        info!("✅ {} session started: {}", protocol_name, session_id);
+        info!("✅ ACP (External Agent) session started: {}", session_id);
         Ok(event_rx)
     }
 
@@ -583,6 +557,15 @@ impl AgentManager {
                             AgentType::Gemini => {
                                 error_msg += " Install the Gemini CLI (e.g. npm install -g @google/gemini-cli) or pass an explicit --binary-path.";
                             }
+                            AgentType::Cline => {
+                                error_msg += " Install Cline CLI so 'cline acp' is available, or pass an explicit --binary-path.";
+                            }
+                            AgentType::Pi => {
+                                error_msg += " Install Pi CLI so 'pi acp' is available, or pass an explicit --binary-path.";
+                            }
+                            AgentType::QwenCode => {
+                                error_msg += " Install Qwen Code CLI so 'qwen acp' is available, or pass an explicit --binary-path.";
+                            }
                             _ => {}
                         }
                         return Err(anyhow!(error_msg));
@@ -595,10 +578,6 @@ impl AgentManager {
                     );
                 }
             }
-        }
-
-        if agent_type == AgentType::OpenClaw {
-            return Err(anyhow!("OpenClaw does not support history load"));
         }
 
         let command = binary_path.unwrap_or(launch_config.command);
@@ -698,10 +677,6 @@ impl AgentManager {
         working_dir: PathBuf,
         home_dir: Option<String>,
     ) -> Result<Vec<AgentHistoryEntry>> {
-        if agent_type == AgentType::OpenClaw {
-            return Ok(Vec::new());
-        }
-
         if let Some(cached) = self.history_cache.get(&agent_type, &working_dir) {
             info!(
                 "[AgentManager] Returning cached history for {:?} at {}",

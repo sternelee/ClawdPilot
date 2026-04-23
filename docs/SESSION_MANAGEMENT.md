@@ -7,7 +7,7 @@
 会话由 `sessionStore` 管理，核心维度如下：
 
 - `sessionId`：会话唯一标识
-- `agentType`：Agent 类型（如 `claude`、`codex`、`gemini`、`opencode`、`openclaw`）
+- `agentType`：Agent 类型（如 `claude`、`codex`、`gemini`、`opencode`、`cline`、`pi`、`qwen`）
 - `mode`：`local` 或 `remote`
 - `projectPath/currentDir`：会话关联目录
 - `active`：是否活跃

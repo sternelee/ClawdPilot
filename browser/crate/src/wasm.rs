@@ -147,7 +147,6 @@ impl IrogenSessionWasm {
             "opencode" => crate::protocol::AgentType::OpenCode,
             "codex" => crate::protocol::AgentType::Codex,
             "gemini" => crate::protocol::AgentType::Gemini,
-            "openclaw" => crate::protocol::AgentType::OpenClaw,
             "cursor" => crate::protocol::AgentType::Cursor,
             _ => crate::protocol::AgentType::ClaudeCode,
         };

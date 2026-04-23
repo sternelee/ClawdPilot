@@ -375,7 +375,6 @@ fn map_agent_type(agent: crate::protocol::AgentType) -> crate::AgentType {
         crate::protocol::AgentType::OpenCode => crate::AgentType::OpenCode,
         crate::protocol::AgentType::Codex => crate::AgentType::Codex,
         crate::protocol::AgentType::Gemini => crate::AgentType::Gemini,
-        crate::protocol::AgentType::OpenClaw => crate::AgentType::OpenClaw,
         crate::protocol::AgentType::Cursor => crate::AgentType::Cursor,
     }
 }
