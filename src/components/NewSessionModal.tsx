@@ -651,32 +651,34 @@ export const NewSessionModal: Component = () => {
               </Show>
             </div>
 
-            <div class="space-y-1.5">
-              <Label for="project-path" class="text-xs">{t("newSession.path")}</Label>
-              <Combobox
-                value={sessionStore.state.newSessionPath}
-                onChange={(value) => {
-                  sessionStore.setNewSessionPath(value);
-                }}
-                onFocus={() => {
-                  setPathHistory(getProjectPathHistory());
-                }}
-                onInputChange={(value) => {
-                  sessionStore.setNewSessionPath(value);
-                  if (value.includes("/")) {
-                    loadDirectory(value);
-                  } else {
-                    setDirEntries([]);
-                    setRawDirEntries([]);
-                    setListedDirectory("");
-                  }
-                }}
-                items={pathComboboxItems()}
-                placeholder={t("newSession.projectPath")}
-                class="font-mono text-sm"
-              />
-              <p class="text-xs text-muted-foreground">{t("newSession.typeToAutocomplete")}</p>
-            </div>
+            <Show when={!sessionStore.state.newSessionProjectPathLocked}>
+              <div class="space-y-1.5">
+                <Label for="project-path" class="text-xs">{t("newSession.path")}</Label>
+                <Combobox
+                  value={sessionStore.state.newSessionPath}
+                  onChange={(value) => {
+                    sessionStore.setNewSessionPath(value);
+                  }}
+                  onFocus={() => {
+                    setPathHistory(getProjectPathHistory());
+                  }}
+                  onInputChange={(value) => {
+                    sessionStore.setNewSessionPath(value);
+                    if (value.includes("/")) {
+                      loadDirectory(value);
+                    } else {
+                      setDirEntries([]);
+                      setRawDirEntries([]);
+                      setListedDirectory("");
+                    }
+                  }}
+                  items={pathComboboxItems()}
+                  placeholder={t("newSession.projectPath")}
+                  class="font-mono text-sm"
+                />
+                <p class="text-xs text-muted-foreground">{t("newSession.typeToAutocomplete")}</p>
+              </div>
+            </Show>
 
             <Show when={agentArgsConfig().supported} fallback={<div class="h-4" />}>
               <div class="space-y-3">

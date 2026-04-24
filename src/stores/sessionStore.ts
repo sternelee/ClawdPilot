@@ -141,6 +141,7 @@ interface SessionState {
   isNewSessionModalOpen: boolean;
   newSessionMode: SessionMode;
   newSessionModeFromHost: boolean; // true if opened from a specific host
+  newSessionProjectPathLocked: boolean;
   newSessionAgent: AgentType;
   newSessionPath: string;
   newSessionArgs: string;
@@ -167,6 +168,7 @@ const initialState: SessionState = {
   isNewSessionModalOpen: false,
   newSessionMode: "remote",
   newSessionModeFromHost: false,
+  newSessionProjectPathLocked: false,
   newSessionAgent: "claude",
   newSessionPath: "",
   newSessionArgs: "",
@@ -266,10 +268,44 @@ export const createSessionStore = () => {
       produce((s: SessionState) => {
         delete s.sessions[sessionId];
         if (s.activeSessionId === sessionId) {
-          s.activeSessionId = null;
+          const nextSession = Object.values(s.sessions)
+            .filter((session) => session.active)
+            .sort((a, b) => b.startedAt - a.startedAt)[0];
+          s.activeSessionId = nextSession?.sessionId ?? null;
         }
       }),
     );
+  };
+
+  const archiveSession = (sessionId: string) => {
+    removeSession(sessionId);
+  };
+
+  const stopSession = async (sessionId: string): Promise<void> => {
+    const session = getSession(sessionId);
+    if (!session) {
+      notificationStore.error("Session not found", "Stop Session");
+      return;
+    }
+
+    try {
+      if (session.mode === "local") {
+        await invoke("local_stop_agent", { sessionId });
+      } else {
+        await invoke("remote_stop_agent", {
+          sessionId,
+          controlSessionId: session.controlSessionId,
+        });
+      }
+
+      updateSession(sessionId, { active: false });
+      notificationStore.success("Thread stopped", "Parallel Agents");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      notificationStore.error(errorMessage, "Failed to stop thread");
+      throw error;
+    }
   };
 
   const removeConnectedHost = (controlSessionId: string) => {
@@ -295,12 +331,18 @@ export const createSessionStore = () => {
     mode: SessionMode = "remote",
     controlSessionId?: string | null,
     fromHost: boolean = false,
+    projectPath?: string,
+    lockProjectPath: boolean = false,
   ) => {
     setState(
       produce((s: SessionState) => {
         s.isNewSessionModalOpen = true;
         s.newSessionMode = mode;
         s.newSessionModeFromHost = fromHost;
+        s.newSessionProjectPathLocked = lockProjectPath;
+        if (projectPath !== undefined) {
+          s.newSessionPath = projectPath;
+        }
         // Only update targetControlSessionId if explicitly provided
         // This preserves the existing connection when reopening the modal
         if (controlSessionId !== undefined) {
@@ -319,6 +361,7 @@ export const createSessionStore = () => {
       produce((s: SessionState) => {
         s.isNewSessionModalOpen = false;
         s.newSessionModeFromHost = false;
+        s.newSessionProjectPathLocked = false;
       }),
     );
   };
@@ -750,6 +793,8 @@ export const createSessionStore = () => {
     updateConnectedHost,
     updateSession,
     removeSession,
+    archiveSession,
+    stopSession,
     removeConnectedHost,
     setActiveSession,
 
