@@ -2,6 +2,7 @@ import { createSignal, createMemo, Show, type Component } from "solid-js";
 import { ChatView } from "./ChatView";
 import { FileBrowserView } from "./FileBrowserView";
 import { GitDiffView } from "./GitDiffView";
+import { PermissionHistory } from "./ui/PermissionHistory";
 import { sessionStore } from "../stores/sessionStore";
 import { navigationStore } from "../stores/navigationStore";
 import {
@@ -11,15 +12,16 @@ import {
   FiPlus,
   FiServer,
   FiMessageSquare,
+  FiShield,
 } from "solid-icons/fi";
 import { notificationStore } from "../stores/notificationStore";
 
 export const WorkspaceShell: Component = () => {
   const [rightPanelView, setRightPanelView] = createSignal<
-    "none" | "file" | "git"
+    "none" | "file" | "git" | "permissions"
   >("none");
 
-  const toggleRightPanel = (view: "file" | "git") => {
+  const toggleRightPanel = (view: "file" | "git" | "permissions") => {
     setRightPanelView((prev) => (prev === view ? "none" : view));
   };
   const closeRightPanel = () => setRightPanelView("none");
@@ -127,6 +129,7 @@ export const WorkspaceShell: Component = () => {
             rightPanelView={rightPanelView()}
             onToggleFileBrowser={() => toggleRightPanel("file")}
             onToggleGitPanel={() => toggleRightPanel("git")}
+            onTogglePermissions={() => toggleRightPanel("permissions")}
           />
           <Show when={rightPanelView() !== "none"}>
             <button
@@ -148,15 +151,18 @@ export const WorkspaceShell: Component = () => {
             </div>
             <div class="flex h-12 items-center justify-between border-b border-border/50 bg-muted/30 px-4 sm:h-13">
               <div class="flex items-center gap-2 text-sm font-semibold">
-                <Show
-                  when={rightPanelView() === "file"}
-                  fallback={<FiGitBranch size={16} class="text-primary" />}
-                >
+                <Show when={rightPanelView() === "file"}>
                   <FiFolder size={16} class="text-primary" />
+                  <span class="tracking-tight">Files</span>
                 </Show>
-                <span class="tracking-tight">
-                  {rightPanelView() === "file" ? "Files" : "Git"}
-                </span>
+                <Show when={rightPanelView() === "git"}>
+                  <FiGitBranch size={16} class="text-primary" />
+                  <span class="tracking-tight">Git</span>
+                </Show>
+                <Show when={rightPanelView() === "permissions"}>
+                  <FiShield size={16} class="text-primary" />
+                  <span class="tracking-tight">Permissions</span>
+                </Show>
               </div>
               <button
                 type="button"
@@ -182,6 +188,12 @@ export const WorkspaceShell: Component = () => {
                   projectPath={session()?.projectPath}
                   sessionMode={session()?.mode}
                   controlSessionId={session()?.controlSessionId}
+                />
+              </Show>
+              <Show when={rightPanelView() === "permissions"}>
+                <PermissionHistory
+                  class="h-full"
+                  sessionId={session()?.sessionId ?? ""}
                 />
               </Show>
             </div>

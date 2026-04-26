@@ -6,11 +6,12 @@
  */
 
 import { type Component, Show, createMemo } from "solid-js";
-import { FiTerminal, FiSettings, FiSidebar } from "solid-icons/fi";
-import { sessionStore } from "../../stores/sessionStore";
+import { FiTerminal, FiSettings, FiSidebar, FiShield } from "solid-icons/fi";
+import { sessionStore, type PermissionMode } from "../../stores/sessionStore";
 import { sessionEventRouter } from "../../stores/sessionEventRouter";
 import { navigationStore } from "../../stores/navigationStore";
 import { Button } from "../ui/primitives";
+import { PermissionModeSwitcher } from "../ui/PermissionModeSwitcher";
 import { cn } from "~/lib/utils";
 
 interface ChatHeaderProps {
@@ -19,10 +20,14 @@ interface ChatHeaderProps {
   agentType?: string;
   sessionMode?: "remote" | "local";
   projectPath?: string;
+  onTogglePermissions?: () => void;
+  isPermissionsOpen?: boolean;
+  onPermissionModeChange?: (mode: PermissionMode) => void;
 }
 
 export const ChatHeader: Component<ChatHeaderProps> = (props) => {
   const session = createMemo(() => sessionStore.getSession(props.sessionId));
+  const permissionMode = createMemo(() => sessionStore.getPermissionMode(props.sessionId));
 
   const connectedHost = createMemo(() => {
     const sess = session();
@@ -142,12 +147,39 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
       </div>
 
       {/* Right: Tool toggles + Settings */}
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1.5">
         {/* Mobile agent indicator */}
         <Show when={!props.agentType}>
           <span class="text-sm font-medium text-muted-foreground mr-2">
             Chat
           </span>
+        </Show>
+
+        {/* Permission mode switcher */}
+        <Show when={props.agentType && props.onPermissionModeChange}>
+          <PermissionModeSwitcher
+            mode={permissionMode()}
+            compact
+            onChange={(mode) => props.onPermissionModeChange?.(mode)}
+          />
+        </Show>
+
+        {/* Permission history toggle */}
+        <Show when={props.agentType && props.onTogglePermissions}>
+          <button
+            type="button"
+            class={cn(
+              "btn btn-ghost btn-xs h-8 w-8 rounded-lg flex items-center justify-center",
+              "border border-border/50 hover:border-border",
+              props.isPermissionsOpen
+                ? "text-primary border-primary/30 bg-primary/5"
+                : "text-base-content/50 hover:text-base-content",
+            )}
+            onClick={props.onTogglePermissions}
+            title="Permission history"
+          >
+            <FiShield size={14} />
+          </button>
         </Show>
 
         {/* Settings */}

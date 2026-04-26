@@ -141,6 +141,15 @@ impl SessionKind {
         }
     }
 
+    /// Get full permission handler state (mode, pending, completed, allowed tools).
+    pub async fn get_permission_state(
+        &self,
+    ) -> std::result::Result<permission_handler::PermissionHandlerState, String> {
+        match self {
+            SessionKind::Acp(s) => Ok(s.get_permission_state().await),
+        }
+    }
+
     /// Gracefully shut down the session.
     pub async fn shutdown(&self) -> std::result::Result<(), String> {
         match self {
@@ -922,6 +931,23 @@ impl AgentManager {
                 .get_permission_mode()
                 .await
                 .map_err(|e| anyhow!("Failed to get permission mode: {}", e))
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Get full permission state for a session (mode + pending + completed + allowed tools)
+    pub async fn get_permission_state(
+        &self,
+        session_id: &str,
+    ) -> Result<permission_handler::PermissionHandlerState> {
+        let sessions = self.sessions.read().await;
+
+        if let Some(session) = sessions.get(session_id) {
+            session
+                .get_permission_state()
+                .await
+                .map_err(|e| anyhow!("Failed to get permission state: {}", e))
         } else {
             Err(anyhow!("Session not found: {}", session_id))
         }

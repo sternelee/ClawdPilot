@@ -21,6 +21,7 @@ import { chatStore } from "../stores/chatStore";
 import {
   sessionStore,
   type BackendSessionMetadata,
+  type PermissionMode,
 } from "../stores/sessionStore";
 import {
   sessionEventRouter,
@@ -233,9 +234,10 @@ interface ChatViewProps {
   projectPath?: string;
   sessionMode?: "remote" | "local"; // Added session mode
   // Right panel (managed by parent)
-  rightPanelView?: "none" | "file" | "git";
+  rightPanelView?: "none" | "file" | "git" | "permissions";
   onToggleFileBrowser?: () => void;
   onToggleGitPanel?: () => void;
+  onTogglePermissions?: () => void;
 }
 
 interface MentionCandidate {
@@ -278,7 +280,7 @@ interface SlashSuggestionItem {
 const normalizeSlashName = (value: string): string =>
   value.trim().replace(/^\/+/, "");
 
-type RightPanelView = "none" | "file" | "git";
+type RightPanelView = "none" | "file" | "git" | "permissions";
 
 interface VirtualMessageRowProps {
   key?: string;
@@ -376,9 +378,11 @@ export function ChatView(props: ChatViewProps) {
     const [shouldAutoFollow, setShouldAutoFollow] = createSignal(true);
     const [isStreaming, setIsStreaming] = createSignal(false);
     const [unseenMessageCount, setUnseenMessageCount] = createSignal(0);
-    const [permissionMode, setPermissionMode] = createSignal<
-      "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove"
-    >("AlwaysAsk");
+    // Permission mode sourced from sessionStore (persisted per session)
+    const permissionMode = () =>
+      sessionStore.getPermissionMode(props.sessionId);
+    const setPermissionMode = (mode: PermissionMode) =>
+      sessionStore.setPermissionMode(props.sessionId, mode);
     const [mentionSuggestions, setMentionSuggestions] = createSignal<
       MentionCandidate[]
     >([]);
@@ -1422,38 +1426,17 @@ export function ChatView(props: ChatViewProps) {
         });
     });
 
-    // Load permission mode from backend
+    // Load permission mode from backend on session change
     createEffect(() => {
       if (!props.sessionId) return;
-      // const sessionId = props.sessionId;
-
-      // Avoid showing previous session's mode while loading the current session mode.
-      setPermissionMode("AlwaysAsk");
-
-      // const controlSessionId =
-      //   props.sessionMode === "remote"
-      //     ? sessionStore.getSession(sessionId)?.controlSessionId
-      //     : undefined;
-
-      // invoke<string>("get_permission_mode", {
-      //   sessionId,
-      //   controlSessionId,
-      // })
-      //   .then((mode) => {
-      //     // Ignore stale async responses when user has switched sessions.
-      //     if (props.sessionId !== sessionId) return;
-      //     if (
-      //       mode === "AlwaysAsk" ||
-      //       mode === "AcceptEdits" ||
-      //       mode === "Plan" ||
-      //       mode === "AutoApprove"
-      //     ) {
-      //       setPermissionMode(mode);
-      //     }
-      //   })
-      //   .catch((error) => {
-      //     console.error("Failed to load permission mode:", error);
-      //   });
+      const sessionId = props.sessionId;
+      const mode = props.sessionMode ?? "local";
+      // Load from backend if mode not already cached
+      if (!sessionStore.state.permissionModes[sessionId]) {
+        sessionStore.loadPermissionMode(sessionId, mode).catch((error) => {
+          console.error("Failed to load permission mode:", error);
+        });
+      }
     });
 
     const scrollToBottom = (behavior: "auto" | "smooth" = "auto") => {
@@ -1879,7 +1862,7 @@ export function ChatView(props: ChatViewProps) {
     };
 
     const handlePermissionModeChange = async (
-      mode: "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove",
+      mode: PermissionMode,
     ) => {
       setPermissionMode(mode);
       try {
@@ -1911,6 +1894,8 @@ export function ChatView(props: ChatViewProps) {
           props.onToggleFileBrowser?.();
         } else if (view === "git") {
           props.onToggleGitPanel?.();
+        } else if (view === "permissions") {
+          props.onTogglePermissions?.();
         }
       } else {
         setInternalRightPanelView((prev) => (prev === view ? "none" : view));
@@ -1927,6 +1912,9 @@ export function ChatView(props: ChatViewProps) {
             sessionMode={props.sessionMode}
             projectPath={props.projectPath}
             onToggleSidebar={props.onToggleSidebar}
+            onTogglePermissions={() => toggleRightPanel("permissions")}
+            isPermissionsOpen={rightPanelView() === "permissions"}
+            onPermissionModeChange={handlePermissionModeChange}
           />
 
           {/* Disconnect / Reconnecting Banner */}

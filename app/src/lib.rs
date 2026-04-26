@@ -202,6 +202,27 @@ struct PendingPermissionDto {
     created_at: u64,
 }
 
+#[derive(Serialize)]
+struct CompletedPermissionDto {
+    request_id: String,
+    tool_name: String,
+    tool_params: Option<Value>,
+    status: String,
+    decision: Option<String>,
+    reason: Option<String>,
+    allowed_tools: Option<Vec<String>>,
+    created_at: u64,
+    completed_at: u64,
+}
+
+#[derive(Serialize)]
+struct PermissionStateDto {
+    mode: String,
+    allowed_tools: Vec<String>,
+    pending_requests: Vec<PendingPermissionDto>,
+    completed_requests: Vec<CompletedPermissionDto>,
+}
+
 /// App Event Listener that converts events to Tauri emissions
 pub struct AppEventListener {
     app_handle: tauri::AppHandle,
@@ -3671,7 +3692,61 @@ async fn local_get_pending_permissions(
         .collect())
 }
 
-/// Subscribe to ACP inspector events for a session
+/// Get full permission state for a local agent session (mode + pending + completed + allowed tools)
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command(rename_all = "camelCase")]
+async fn local_get_permission_state(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<PermissionStateDto, String> {
+    let agent_manager_guard = state.agent_manager.read().await;
+    let manager = agent_manager_guard
+        .as_ref()
+        .ok_or("Agent manager not initialized")?
+        .clone();
+
+    let permission_state = manager
+        .get_permission_state(&session_id)
+        .await
+        .map_err(|e| format!("Failed to get permission state: {}", e))?;
+
+    let mode_str = format!("{:?}", permission_state.mode);
+
+    let pending = permission_state
+        .pending_requests
+        .into_iter()
+        .map(|p| PendingPermissionDto {
+            request_id: p.request_id,
+            tool_name: p.tool_name,
+            tool_params: p.input.unwrap_or(Value::Null),
+            message: None,
+            created_at: p.created_at,
+        })
+        .collect();
+
+    let completed = permission_state
+        .completed_requests
+        .into_iter()
+        .map(|c| CompletedPermissionDto {
+            request_id: c.request_id,
+            tool_name: c.tool_name,
+            tool_params: c.input,
+            status: format!("{:?}", c.status),
+            decision: c.decision.map(|d| format!("{:?}", d)),
+            reason: c.reason,
+            allowed_tools: c.allowed_tools,
+            created_at: c.created_at,
+            completed_at: c.completed_at,
+        })
+        .collect();
+
+    Ok(PermissionStateDto {
+        mode: mode_str,
+        allowed_tools: permission_state.allowed_tools,
+        pending_requests: pending,
+        completed_requests: completed,
+    })
+}
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command(rename_all = "camelCase")]
 async fn subscribe_acp_inspector(
@@ -4281,6 +4356,8 @@ pub fn run() {
             local_list_agents,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_get_pending_permissions,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            local_get_permission_state,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             local_list_agent_history,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]

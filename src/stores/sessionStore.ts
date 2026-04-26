@@ -126,6 +126,27 @@ export type ConnectionState =
   | "reconnecting"
   | "error";
 
+export type PermissionMode = "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove";
+
+export interface CompletedPermission {
+  requestId: string;
+  toolName: string;
+  toolParams: unknown;
+  status: "Approved" | "Denied" | "Canceled";
+  decision: "Approved" | "ApprovedForSession" | "Abort" | null;
+  reason: string | null;
+  allowedTools: string[] | null;
+  createdAt: number;
+  completedAt: number;
+}
+
+export interface PermissionState {
+  mode: PermissionMode;
+  allowedTools: string[];
+  pendingCount: number;
+  completedRequests: CompletedPermission[];
+}
+
 // ============================================================================
 // Store
 // ============================================================================
@@ -136,6 +157,9 @@ interface SessionState {
   activeSessionId: string | null;
   connectionState: ConnectionState;
   lastConnected: number | null;
+
+  // Permission mode per session
+  permissionModes: Record<string, PermissionMode>;
 
   // New Session Modal State
   isNewSessionModalOpen: boolean;
@@ -165,6 +189,8 @@ const initialState: SessionState = {
   connectionState: "disconnected",
   lastConnected: null,
 
+  permissionModes: {},
+
   isNewSessionModalOpen: false,
   newSessionMode: "remote",
   newSessionModeFromHost: false,
@@ -182,6 +208,32 @@ const initialState: SessionState = {
   connectionError: null,
   nodeId: null,
   isHistoryLoading: false,
+};
+
+// ============================================================================
+// Utility helpers
+// ============================================================================
+
+const normalizePermissionMode = (raw: string): PermissionMode => {
+  switch (raw) {
+    case "AcceptEdits": return "AcceptEdits";
+    case "Plan": return "Plan";
+    case "AutoApprove": return "AutoApprove";
+    default: return "AlwaysAsk";
+  }
+};
+
+const normalizeStatus = (raw: string): CompletedPermission["status"] => {
+  if (raw === "Approved") return "Approved";
+  if (raw === "Denied") return "Denied";
+  return "Canceled";
+};
+
+const normalizeDecision = (raw: string | null): CompletedPermission["decision"] => {
+  if (raw === "Approved") return "Approved";
+  if (raw === "ApprovedForSession") return "ApprovedForSession";
+  if (raw === "Abort") return "Abort";
+  return null;
 };
 
 export const createSessionStore = () => {
@@ -767,6 +819,78 @@ export const createSessionStore = () => {
   };
 
   // ========================================================================
+  // Permission Management
+  // ========================================================================
+
+  const getPermissionMode = (sessionId: string): PermissionMode => {
+    return state.permissionModes[sessionId] ?? "AlwaysAsk";
+  };
+
+  const setPermissionMode = (sessionId: string, mode: PermissionMode) => {
+    setState("permissionModes", sessionId, mode);
+  };
+
+  const loadPermissionMode = async (sessionId: string, sessionMode: "local" | "remote") => {
+    try {
+      if (sessionMode === "local") {
+        const mode = await invoke<string>("get_permission_mode", { sessionId });
+        const normalized = normalizePermissionMode(mode);
+        setPermissionMode(sessionId, normalized);
+        return normalized;
+      }
+    } catch (error) {
+      console.warn("Failed to load permission mode for", sessionId, error);
+    }
+    return getPermissionMode(sessionId);
+  };
+
+  const loadPermissionState = async (
+    sessionId: string,
+  ): Promise<PermissionState | null> => {
+    try {
+      const raw = await invoke<{
+        mode: string;
+        allowed_tools: string[];
+        pending_requests: unknown[];
+        completed_requests: Array<{
+          request_id: string;
+          tool_name: string;
+          tool_params: unknown;
+          status: string;
+          decision: string | null;
+          reason: string | null;
+          allowed_tools: string[] | null;
+          created_at: number;
+          completed_at: number;
+        }>;
+      }>("local_get_permission_state", { sessionId });
+
+      const mode = normalizePermissionMode(raw.mode);
+      setPermissionMode(sessionId, mode);
+
+      return {
+        mode,
+        allowedTools: raw.allowed_tools,
+        pendingCount: raw.pending_requests.length,
+        completedRequests: raw.completed_requests.map((c) => ({
+          requestId: c.request_id,
+          toolName: c.tool_name,
+          toolParams: c.tool_params,
+          status: normalizeStatus(c.status),
+          decision: normalizeDecision(c.decision),
+          reason: c.reason,
+          allowedTools: c.allowed_tools,
+          createdAt: c.created_at,
+          completedAt: c.completed_at,
+        })),
+      };
+    } catch (error) {
+      console.warn("Failed to load permission state for", sessionId, error);
+      return null;
+    }
+  };
+
+  // ========================================================================
   // Derived State
   // ========================================================================
 
@@ -825,6 +949,12 @@ export const createSessionStore = () => {
     handleCreateSession,
     handleRemoteConnect,
     handleRemoteSpawn,
+
+    // Permission Management
+    getPermissionMode,
+    setPermissionMode,
+    loadPermissionMode,
+    loadPermissionState,
 
     // Derived
     getActiveSessions,

@@ -38,7 +38,7 @@ export type PermissionMode =
   | "AcceptEdits"
   | "Plan"
   | "AutoApprove";
-export type RightPanelView = "none" | "file" | "git";
+export type RightPanelView = "none" | "file" | "git" | "permissions";
 
 export interface ChatInputProps {
   value: string;

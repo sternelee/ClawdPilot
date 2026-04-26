@@ -777,6 +777,12 @@ impl AcpStreamingSession {
         handler.mode()
     }
 
+    /// Get full permission handler state (mode + pending + completed + allowed tools)
+    pub async fn get_permission_state(&self) -> super::permission_handler::PermissionHandlerState {
+        let handler = self.permission_handler.read().await;
+        handler.get_state()
+    }
+
     /// Query agent capabilities or status
     pub async fn query(&self, query: String) -> std::result::Result<serde_json::Value, String> {
         debug!(
