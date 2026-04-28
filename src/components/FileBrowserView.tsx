@@ -1,13 +1,15 @@
 /**
  * File Browser View
  *
- * P2P file browser using @pierre/trees for the directory tree
- * and @pierre/diffs File renderer for syntax-highlighted file preview.
+ * VS Code-style lazy file tree using @pierre/trees.
+ * Directories expand in-place; their children are fetched on first open
+ * and cached for the lifetime of the component.
+ *
+ * File preview uses @pierre/diffs File renderer (Shiki syntax highlighting).
  */
 
 import {
   Component,
-  For,
   Show,
   createEffect,
   createMemo,
@@ -17,6 +19,7 @@ import {
 } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { FileTree } from "@pierre/trees";
+import type { FileTreeBatchOperation } from "@pierre/trees";
 import { File as PierreFile } from "@pierre/diffs";
 import { fileBrowserStore } from "../stores/fileBrowserStore";
 import type { FileEntry } from "../stores/fileBrowserStore";
@@ -40,42 +43,34 @@ interface FileBrowserViewProps {
 }
 
 // ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Build @pierre/trees path list from a flat FileEntry array.
- * Trailing slash on directories tells the tree they are folders
- * (per normalizeInputPath spec: "Trailing slashes explicitly mark directories").
- */
-const buildTreePaths = (entries: FileEntry[]): string[] =>
-  entries.map((e) => (e.isDir ? `${e.name}/` : e.name));
-
-// ============================================================================
 // Icons
 // ============================================================================
 
-const HomeIcon = () => (
+const SearchIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     class="h-4 w-4"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
-    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+    <path
+      fill-rule="evenodd"
+      d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+      clip-rule="evenodd"
+    />
   </svg>
 );
 
-const ChevronRightIcon = () => (
+const RefreshIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    class="h-3.5 w-3.5 sm:h-4 sm:w-4"
+    class="h-4 w-4"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
     <path
       fill-rule="evenodd"
-      d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+      d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
       clip-rule="evenodd"
     />
   </svg>
@@ -101,35 +96,43 @@ const FileIcon = () => (
 // ============================================================================
 
 export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
-  const {
-    state,
-    navigateToPath,
-    setEntries,
-    setLoading,
-    setError,
-    viewFile,
-    closeFile,
-    clearOpenRequest,
-  } = fileBrowserStore;
+  const { state, setError, setLoading, viewFile, closeFile, clearOpenRequest } =
+    fileBrowserStore;
 
-  let lastRootPath: string | null = null;
+  // ── DOM refs ────────────────────────────────────────────────────────────────
   let treeContainerRef: HTMLDivElement | undefined;
-
-  // Use a signal for the file preview container so createEffect can react
-  // when the Dialog's Show block renders and sets the ref.
+  // Signal-based ref so createEffect re-runs when the Dialog Show block mounts
   const [filePreviewContainer, setFilePreviewContainer] = createSignal<
     HTMLDivElement | undefined
   >(undefined);
+
+  // ── Local reactive state ────────────────────────────────────────────────────
   const [targetLine, setTargetLine] = createSignal<number | undefined>(
     undefined,
   );
+  // True once at least one directory has finished loading
+  const [hasLoadedAny, setHasLoadedAny] = createSignal(false);
+  // Counts of active directory fetches (for the loading overlay)
+  const [activeFetches, setActiveFetches] = createSignal(0);
 
-  // Pierre instances — stable across re-renders
+  // ── Pierre instances (stable across re-renders) ─────────────────────────────
   let fileTreeInstance: FileTree;
   let pierreFileInstance: PierreFile;
 
+  // ── Cache ───────────────────────────────────────────────────────────────────
+  /**
+   * Maps tree-relative dir path → its loaded FileEntry children.
+   * Root directory is keyed as "".
+   * Cleared when projectPath changes.
+   */
+  const dirCache = new Map<string, FileEntry[]>();
+  /**
+   * Tracks in-flight requests so we never double-fetch the same directory.
+   */
+  const inFlight = new Set<string>();
+
   // ============================================================================
-  // Path helpers
+  // Path utilities
   // ============================================================================
 
   const rootPath = createMemo(() => {
@@ -139,11 +142,34 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     return raw.replace(/\/+$/, "");
   });
 
-  const resolvePath = (path: string): string =>
-    path === "." ? rootPath() : path;
+  /** Absolute filesystem path → tree-relative path (root = "") */
+  const toRelPath = (absPath: string): string => {
+    const root = rootPath();
+    if (absPath === root || absPath === ".") return "";
+    const prefix = root === "/" ? "/" : `${root}/`;
+    return absPath.startsWith(prefix) ? absPath.slice(prefix.length) : absPath;
+  };
 
-  const joinPath = (base: string, name: string): string =>
-    base === "/" ? `/${name}` : `${base}/${name}`;
+  /** Tree-relative path → absolute filesystem path */
+  const toAbsPath = (relPath: string): string => {
+    if (relPath === "") return rootPath();
+    const root = rootPath();
+    return root === "/" ? `/${relPath}` : `${root}/${relPath}`;
+  };
+
+  /**
+   * Build the tree path for a single entry.
+   * Directories get a trailing "/" per @pierre/trees normalizeInputPath spec:
+   * "Trailing slashes explicitly mark directories".
+   */
+  const entryTreePath = (
+    dirRelPath: string,
+    name: string,
+    isDir: boolean,
+  ): string => {
+    const prefix = dirRelPath ? `${dirRelPath}/` : "";
+    return isDir ? `${prefix}${name}/` : `${prefix}${name}`;
+  };
 
   const getRemoteControlSessionId = (): string => {
     if (!props.controlSessionId)
@@ -155,51 +181,93 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
   // Data fetching
   // ============================================================================
 
-  const loadDirectory = async (path: string) => {
-    const resolvedPath = resolvePath(path);
-    setLoading(true);
+  const fetchEntries = async (absPath: string): Promise<FileEntry[]> => {
+    const res =
+      props.sessionMode === "remote"
+        ? await invoke<{
+            success: boolean;
+            entries?: FileEntry[];
+            error?: string;
+          }>("remote_file_browser_list", {
+            controlSessionId: getRemoteControlSessionId(),
+            path: absPath,
+          })
+        : await invoke<{
+            success: boolean;
+            entries?: FileEntry[];
+            error?: string;
+          }>("file_browser_list", { path: absPath });
+
+    if (!res?.success)
+      throw new Error(res?.error || "Failed to load directory");
+    return res.entries || [];
+  };
+
+  /**
+   * Load a directory's children into the FileTree.
+   *
+   * - Skips if already cached or currently in-flight.
+   * - Adds all children at once via `batch()` for a single DOM update.
+   * - Caches the result for future expand/collapse cycles.
+   *
+   * @param dirRelPath  Tree-relative path, e.g. "src", "" for root.
+   */
+  const loadDir = async (dirRelPath: string): Promise<void> => {
+    if (dirCache.has(dirRelPath) || inFlight.has(dirRelPath)) return;
+
+    inFlight.add(dirRelPath);
+    setActiveFetches((n) => n + 1);
     setError(null);
 
     try {
-      const response =
-        props.sessionMode === "remote"
-          ? await invoke<{
-              success: boolean;
-              entries?: FileEntry[];
-              error?: string;
-            }>("remote_file_browser_list", {
-              controlSessionId: getRemoteControlSessionId(),
-              path: resolvedPath,
-            })
-          : await invoke<{
-              success: boolean;
-              entries?: FileEntry[];
-              error?: string;
-            }>("file_browser_list", { path: resolvedPath });
+      const entries = await fetchEntries(toAbsPath(dirRelPath));
+      dirCache.set(dirRelPath, entries);
+      setHasLoadedAny(true);
 
-      if (response?.success) {
-        setEntries(response.entries || []);
-        navigateToPath(resolvedPath);
-        props.onPathChange?.(resolvedPath);
-      } else {
-        throw new Error(response?.error || "Failed to load directory");
+      if (fileTreeInstance && entries.length > 0) {
+        const ops: FileTreeBatchOperation[] = entries.map((e) => ({
+          type: "add" as const,
+          path: entryTreePath(dirRelPath, e.name, e.isDir),
+        }));
+        fileTreeInstance.batch(ops);
+      }
+
+      // Notify parent of path change (only for root load)
+      if (dirRelPath === "") {
+        props.onPathChange?.(rootPath());
       }
     } catch (err) {
-      const errorMsg =
+      const msg =
         err instanceof Error ? err.message : "Failed to load directory";
-      setError(errorMsg);
-      notificationStore.error(errorMsg, "File Browser Error");
+      setError(msg);
+      notificationStore.error(msg, "File Browser Error");
     } finally {
-      setLoading(false);
+      inFlight.delete(dirRelPath);
+      setActiveFetches((n) => n - 1);
     }
   };
 
-  const loadFile = async (path: string, jumpToLine?: number) => {
+  /**
+   * Reload all previously-loaded directories.
+   * Called by the Refresh button.
+   */
+  const refresh = async () => {
+    if (!fileTreeInstance) return;
+    const previouslyLoaded = [...dirCache.keys()];
+    dirCache.clear();
+    inFlight.clear();
+    setHasLoadedAny(false);
+    fileTreeInstance.resetPaths([]);
+    // Reload all in parallel (breadth-first would be nicer but fine for typical trees)
+    await Promise.all(previouslyLoaded.map(loadDir));
+  };
+
+  const loadFile = async (absPath: string, jumpToLine?: number) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response =
+      const res =
         props.sessionMode === "remote"
           ? await invoke<{
               success: boolean;
@@ -207,16 +275,16 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               error?: string;
             }>("remote_file_browser_read", {
               controlSessionId: getRemoteControlSessionId(),
-              path,
+              path: absPath,
             })
           : await invoke<{
               success: boolean;
               content?: string;
               error?: string;
-            }>("file_browser_read", { path });
+            }>("file_browser_read", { path: absPath });
 
-      if (response?.success) {
-        viewFile(path, response.content || "");
+      if (res?.success) {
+        viewFile(absPath, res.content || "");
         setTargetLine(
           typeof jumpToLine === "number" &&
             Number.isFinite(jumpToLine) &&
@@ -225,13 +293,12 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
             : undefined,
         );
       } else {
-        throw new Error(response?.error || "Failed to read file");
+        throw new Error(res?.error || "Failed to read file");
       }
     } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to read file";
-      setError(errorMsg);
-      notificationStore.error(errorMsg, "File Read Error");
+      const msg = err instanceof Error ? err.message : "Failed to read file";
+      setError(msg);
+      notificationStore.error(msg, "File Read Error");
     } finally {
       setLoading(false);
     }
@@ -242,40 +309,23 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
   // ============================================================================
 
   /**
-   * Fired by FileTree when the user selects an item.
-   * Paths ending with "/" are directories (per @pierre/trees normalizeInputPath).
+   * Fired by FileTree on every selection change.
+   *
+   * - Directory path (trailing "/"):  load children if not cached, let the
+   *   tree expand/collapse naturally.
+   * - File path: open the file in the preview dialog.
    */
   const handleTreeSelection = (selectedPaths: readonly string[]) => {
     if (!selectedPaths.length) return;
     const selected = selectedPaths[0];
-    const basePath = resolvePath(state.currentPath);
 
     if (selected.endsWith("/")) {
-      // Directory — navigate into it
-      const dirName = selected.slice(0, -1);
-      void loadDirectory(joinPath(basePath, dirName));
+      // Strip trailing slash to get the cache key
+      const dirRelPath = selected.slice(0, -1);
+      void loadDir(dirRelPath);
     } else {
-      // File — open preview
-      void loadFile(joinPath(basePath, selected));
+      void loadFile(toAbsPath(selected));
     }
-  };
-
-  // ============================================================================
-  // Navigation helpers
-  // ============================================================================
-
-  const refresh = () => void loadDirectory(resolvePath(state.currentPath));
-
-  const goUp = () => {
-    const current = resolvePath(state.currentPath);
-    const root = rootPath();
-    if (current === root) return;
-    const parts = current.split("/").filter(Boolean);
-    parts.pop();
-    const parentPath = current.startsWith("/")
-      ? `/${parts.join("/")}` || "/"
-      : parts.join("/") || ".";
-    void loadDirectory(parentPath);
   };
 
   // ============================================================================
@@ -283,30 +333,29 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
   // ============================================================================
 
   onMount(() => {
-    // Create the FileTree instance with whatever entries are already cached
     fileTreeInstance = new FileTree({
-      paths: buildTreePaths(state.entries),
+      paths: [],
       icons: "complete",
       onSelectionChange: handleTreeSelection,
-      // Show all items expanded (flat directory listing mode)
+      // Start fully expanded so children are visible immediately after load
       initialExpansion: "open",
-      // Directories have no pre-loaded children, so keep them as-is
+      // Keep empty dirs visible as expandable nodes (don't flatten them away)
       flattenEmptyDirectories: false,
+      // Enable built-in search (Ctrl+F / keyboard shortcut)
+      search: true,
     });
+
     if (treeContainerRef) {
       fileTreeInstance.render({ containerWrapper: treeContainerRef });
     }
 
-    // Create the Pierre File renderer for syntax-highlighted file preview
     pierreFileInstance = new PierreFile({
       theme: "pierre-dark",
       disableFileHeader: false,
     });
 
-    // Load the initial directory
-    const pathToLoad =
-      state.entries.length > 0 ? resolvePath(state.currentPath) : rootPath();
-    void loadDirectory(pathToLoad);
+    // Kick off root directory load
+    void loadDir("");
   });
 
   onCleanup(() => {
@@ -314,13 +363,47 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     pierreFileInstance?.cleanUp();
   });
 
-  // Sync FileTree paths whenever store entries change
+  // Re-init when projectPath changes
+  let lastRootPath: string | null = null;
   createEffect(() => {
-    const paths = buildTreePaths(state.entries);
-    fileTreeInstance?.resetPaths(paths);
+    const nextRoot = rootPath();
+    if (lastRootPath === null) {
+      lastRootPath = nextRoot;
+      return;
+    }
+    if (lastRootPath !== nextRoot) {
+      lastRootPath = nextRoot;
+      dirCache.clear();
+      inFlight.clear();
+      setHasLoadedAny(false);
+      fileTreeInstance?.resetPaths([]);
+      void loadDir("");
+    }
   });
 
-  // Render file preview using @pierre/diffs File whenever the file or container changes
+  // Handle external open-file requests (e.g. chat card click with line number)
+  createEffect(() => {
+    const req = state.openRequest;
+    if (!req) return;
+
+    const open = async () => {
+      const relPath = toRelPath(req.path);
+      // Ensure every ancestor directory is loaded first
+      const parts = relPath.split("/").filter(Boolean);
+      parts.pop(); // remove the file itself
+      for (let i = 0; i <= parts.length; i++) {
+        await loadDir(parts.slice(0, i).join("/"));
+      }
+      await loadFile(req.path, req.line);
+      // Scroll the tree to reveal the file
+      fileTreeInstance?.focusPath(relPath);
+      clearOpenRequest();
+    };
+
+    void open();
+  });
+
+  // Render file preview whenever file or container changes
   createEffect(() => {
     const vf = state.viewingFile;
     const container = filePreviewContainer();
@@ -332,171 +415,64 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     });
   });
 
-  // Scroll to target line after the preview renders
+  // Scroll to target line inside the preview
   createEffect(() => {
     const line = targetLine();
     const container = filePreviewContainer();
-    if (!state.viewingFile || !line || !container) return;
-    const lineHeight = 20;
-    container.scrollTo({ top: Math.max((line - 1) * lineHeight - 80, 0), behavior: "smooth" });
+    if (!line || !container) return;
+    container.scrollTo({
+      top: Math.max((line - 1) * 20 - 80, 0),
+      behavior: "smooth",
+    });
   });
-
-  // React to projectPath changes (re-load from new root)
-  createEffect(() => {
-    const nextRoot = rootPath();
-    if (lastRootPath === null) {
-      lastRootPath = nextRoot;
-      return;
-    }
-    if (lastRootPath !== nextRoot) {
-      lastRootPath = nextRoot;
-      void loadDirectory(nextRoot);
-    }
-  });
-
-  // Handle external open-file requests (e.g. from chat card click)
-  createEffect(() => {
-    const req = state.openRequest;
-    if (!req) return;
-
-    const openRequestedFile = async () => {
-      const normalizedPath = req.path;
-      const lastSlash = normalizedPath.lastIndexOf("/");
-      const parentPath =
-        lastSlash > 0
-          ? normalizedPath.slice(0, lastSlash)
-          : normalizedPath.startsWith("/")
-            ? "/"
-            : ".";
-      try {
-        await loadDirectory(parentPath);
-        await loadFile(normalizedPath, req.line);
-      } finally {
-        clearOpenRequest();
-      }
-    };
-
-    void openRequestedFile();
-  });
-
-  // ============================================================================
-  // Breadcrumb
-  // ============================================================================
-
-  const pathSegments = () => {
-    const root = rootPath();
-    const current = resolvePath(state.currentPath);
-    if (current === root) return [];
-    const rootWithSlash = root.endsWith("/") ? root : `${root}/`;
-    if (!current.startsWith(rootWithSlash)) return [];
-    const relative = current.slice(rootWithSlash.length);
-    const segments = relative.split("/").filter(Boolean);
-    return segments.map((seg, i) => ({
-      name: seg,
-      path: joinPath(root, segments.slice(0, i + 1).join("/")),
-    }));
-  };
 
   // ============================================================================
   // Render
   // ============================================================================
 
+  const isLoading = () => activeFetches() > 0 || state.isLoading;
+
   return (
     <div class={`flex flex-col h-full bg-base-200 ${props.class || ""}`}>
-      {/* Header — navigation bar + breadcrumb */}
+      {/* Header */}
       <div class="flex-none border-b border-border/50 bg-base-200/80 backdrop-blur-sm">
         <div class="flex items-center gap-1.5 p-2 sm:p-3">
-          {/* Up / Refresh / Home buttons */}
-          <div class="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="xs"
-              class="h-7 w-7 rounded-lg"
-              disabled={resolvePath(state.currentPath) === rootPath()}
-              onClick={goUp}
-              title="Go up one level"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path d="M3.293 9.707a1 1 0 010-1.414l6-6a1 1 0 011.414 0l6 6a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L4.707 9.707a1 1 0 01-1.414 0z" />
-              </svg>
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              class="h-7 w-7 rounded-lg"
-              onClick={refresh}
-              title="Refresh"
-            >
-              <Show
-                when={state.isLoading}
-                fallback={
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                }
-              >
-                <Spinner size="sm" />
-              </Show>
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              class="h-7 w-7 rounded-lg"
-              onClick={() => loadDirectory(rootPath())}
-              title="Go to root"
-            >
-              <HomeIcon />
-            </Button>
-          </div>
+          {/* Root label */}
+          <span class="flex-1 text-xs font-semibold text-muted-foreground truncate min-w-0">
+            {rootPath().split("/").pop() || rootPath()}
+          </span>
 
-          <div class="h-4 w-px bg-border/50 mx-1" />
+          {/* Search toggle */}
+          <Button
+            variant="ghost"
+            size="xs"
+            class="h-7 w-7 rounded-lg"
+            onClick={() => fileTreeInstance?.openSearch()}
+            title="Search files (Ctrl+F)"
+          >
+            <SearchIcon />
+          </Button>
 
-          {/* Breadcrumb */}
-          <div class="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-hide gap-0.5">
-            <button
-              class="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              onClick={() => loadDirectory(rootPath())}
-              title="Root"
-            >
-              <HomeIcon />
-            </button>
-            <For each={pathSegments()}>
-              {(segment) => (
-                <div class="flex items-center shrink-0">
-                  <span class="text-muted-foreground/40">
-                    <ChevronRightIcon />
-                  </span>
-                  <button
-                    class="max-w-28 truncate rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                    onClick={() => loadDirectory(segment.path)}
-                  >
-                    {segment.name}
-                  </button>
-                </div>
-              )}
-            </For>
-          </div>
+          {/* Refresh */}
+          <Button
+            variant="ghost"
+            size="xs"
+            class="h-7 w-7 rounded-lg"
+            onClick={refresh}
+            disabled={isLoading()}
+            title="Refresh"
+          >
+            <Show when={isLoading()} fallback={<RefreshIcon />}>
+              <Spinner size="sm" />
+            </Show>
+          </Button>
         </div>
       </div>
 
       {/* Main content — @pierre/trees fills this area */}
       <div class="flex-1 overflow-hidden relative">
-        {/* Loading overlay (only on initial load with no cached data) */}
-        <Show when={state.isLoading && !state.entries.length}>
+        {/* Initial loading overlay — shown only before the first load completes */}
+        <Show when={!hasLoadedAny() && isLoading()}>
           <div class="absolute inset-0 flex items-center justify-center bg-base-200/70 z-10">
             <Spinner size="lg" class="text-primary" />
           </div>
@@ -522,11 +498,11 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           </Alert>
         </Show>
 
-        {/* @pierre/trees container — FileTree renders its shadow DOM here */}
+        {/* @pierre/trees mounts its shadow DOM here */}
         <div ref={treeContainerRef} class="h-full" />
       </div>
 
-      {/* File preview Dialog — uses @pierre/diffs File renderer */}
+      {/* File preview Dialog — @pierre/diffs File renderer */}
       <Show when={state.viewingFile}>
         <Dialog
           open={!!state.viewingFile}
@@ -535,25 +511,20 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
         >
           <div class="flex flex-col h-full min-h-0">
             {/* Dialog header */}
-            <div class="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-base-200/50 shrink-0">
-              <h3 class="font-medium text-sm text-foreground flex items-center gap-2 min-w-0">
-                <span class="shrink-0">
-                  <FileIcon />
-                </span>
-                <span class="truncate">
-                  {state.viewingFile?.path.split("/").pop() || "File"}
-                </span>
-                <span class="text-muted-foreground/50 font-normal text-xs hidden sm:block truncate">
-                  {state.viewingFile?.path}
-                </span>
-              </h3>
+            <div class="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-base-200/50 shrink-0 min-w-0">
+              <span class="shrink-0 text-muted-foreground">
+                <FileIcon />
+              </span>
+              <span class="font-medium text-sm text-foreground truncate">
+                {state.viewingFile?.path.split("/").pop() || "File"}
+              </span>
+              <span class="text-muted-foreground/50 font-normal text-xs hidden sm:block truncate">
+                {state.viewingFile?.path}
+              </span>
             </div>
 
-            {/* @pierre/diffs File renderer container */}
-            <div
-              ref={setFilePreviewContainer}
-              class="flex-1 overflow-auto"
-            />
+            {/* @pierre/diffs File renderer — signal ref ensures effect re-runs after Show mounts */}
+            <div ref={setFilePreviewContainer} class="flex-1 overflow-auto" />
           </div>
         </Dialog>
       </Show>
