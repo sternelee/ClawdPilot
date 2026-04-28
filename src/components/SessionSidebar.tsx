@@ -145,73 +145,78 @@ interface ThreadGroupSectionProps {
 const ThreadGroupSection: Component<ThreadGroupSectionProps> = (props) => {
   const [isCollapsed, setIsCollapsed] = createSignal(false);
 
-  const activeCount = () => props.group.sessions.filter(s => s.active).length;
+  const group = () => props.group;
+  const sessions = () => group()?.sessions ?? [];
+  const activeCount = () => sessions().filter(s => s.active).length;
 
   return (
-    <div class="border border-black/10 dark:border-white/10">
-      <button
-        type="button"
-        class="flex w-full items-center justify-between gap-2 px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-        onClick={() => setIsCollapsed(c => !c)}
-      >
-        <div class="flex items-center gap-2 min-w-0">
-          <FiFolder size={12} class="text-zinc-400 shrink-0" />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-semibold text-foreground truncate">
-                {props.group.projectName}
-              </span>
-              <Show when={activeCount() > 0}>
-                <span class="text-[10px] font-medium text-green-600 dark:text-green-400">
-                  {activeCount()}
+    <Show when={group()} fallback={<div>Loading...</div>}>
+      <div class="border border-black/10 dark:border-white/10">
+        <button
+          type="button"
+          class="flex w-full items-center justify-between gap-2 px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+          onClick={() => setIsCollapsed(c => !c)}
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <FiFolder size={12} class="text-zinc-400 shrink-0" />
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-foreground truncate">
+                  {group()?.projectName}
                 </span>
-              </Show>
-            </div>
-            <div class="text-[10px] text-zinc-400 truncate">
-              {props.group.projectPath}
+                <Show when={activeCount() > 0}>
+                  <span class="text-[10px] font-medium text-green-600 dark:text-green-400">
+                    {activeCount()}
+                  </span>
+                </Show>
+              </div>
+              <div class="text-[10px] text-zinc-400 truncate">
+                {group()?.projectPath}
+              </div>
             </div>
           </div>
-        </div>
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            class="text-zinc-400 hover:text-foreground p-1"
-            onClick={(event) => {
-              event.stopPropagation();
-              if (props.group.sessions[0]) {
-                props.onNewThread(props.group.sessions[0]);
-              }
-            }}
-            title="New thread"
-            aria-label="New thread in this project"
-          >
-            <FiPlus size={11} />
-          </button>
-          <FiChevronDown
-            size={11}
-            class={cn(
-              "text-zinc-400",
-              isCollapsed() && "-rotate-90"
-            )}
-          />
-        </div>
-      </button>
-      <Show when={!isCollapsed()}>
-        <div>
-          <For each={props.group.sessions}>
-            {(session) => (
-              <ThreadItem
-                session={session}
-                isActive={props.activeSessionId === session.sessionId}
-                onSelect={() => props.onSelectThread(session.sessionId)}
-                onStop={() => props.onStopThread(session.sessionId)}
-                onArchive={() => props.onArchiveThread(session.sessionId)}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
-    </div>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              class="text-zinc-400 hover:text-foreground p-1"
+              onClick={(event) => {
+                event.stopPropagation();
+                const firstSession = sessions()[0];
+                if (firstSession) {
+                  props.onNewThread(firstSession);
+                }
+              }}
+              title="New thread"
+              aria-label="New thread in this project"
+            >
+              <FiPlus size={11} />
+            </button>
+            <FiChevronDown
+              size={11}
+              class={cn(
+                "text-zinc-400",
+                isCollapsed() && "-rotate-90"
+              )}
+            />
+          </div>
+        </button>
+        <Show when={!isCollapsed()}>
+          <div>
+            <For each={sessions()}>
+              {(session) => (
+                <ThreadItem
+                  session={session}
+                  isActive={props.activeSessionId === session.sessionId}
+                  onSelect={() => props.onSelectThread(session.sessionId)}
+                  onStop={() => props.onStopThread(session.sessionId)}
+                  onArchive={() => props.onArchiveThread(session.sessionId)}
+                />
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+    </Show>
   );
 };
 
@@ -310,11 +315,11 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     for (const session of sessions()) {
       const existing = groups.get(session.projectPath);
       if (existing) {
-        existing.sessions.push(session);
-        existing.lastStartedAt = Math.max(
-          existing.lastStartedAt,
-          session.startedAt,
-        );
+        groups.set(session.projectPath, {
+          ...existing,
+          sessions: [...existing.sessions, session],
+          lastStartedAt: Math.max(existing.lastStartedAt, session.startedAt),
+        });
       } else {
         groups.set(session.projectPath, {
           projectPath: session.projectPath,
@@ -328,7 +333,7 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     return Array.from(groups.values())
       .map((group) => ({
         ...group,
-        sessions: group.sessions.sort((a, b) => b.startedAt - a.startedAt),
+        sessions: [...group.sessions].sort((a, b) => b.startedAt - a.startedAt),
       }))
       .sort((a, b) => b.lastStartedAt - a.lastStartedAt);
   });

@@ -26,7 +26,9 @@ interface ChatHeaderProps {
 
 export const ChatHeader: Component<ChatHeaderProps> = (props) => {
   const session = createMemo(() => sessionStore.getSession(props.sessionId));
-  const permissionMode = createMemo(() => sessionStore.getPermissionMode(props.sessionId));
+  const permissionMode = createMemo(() =>
+    sessionStore.getPermissionMode(props.sessionId),
+  );
 
   const connectedHost = createMemo(() => {
     const sess = session();
@@ -78,7 +80,7 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
   });
 
   return (
-    <header class="z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-black/10 bg-white px-4 py-3 sm:min-h-14">
+    <header class="z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-black/10 px-4 py-3 sm:min-h-14">
       {/* Left: Sidebar toggle (mobile) + Session info */}
       <div class="flex items-center gap-3 min-w-0 flex-1">
         {/* Sidebar toggle button */}
@@ -114,8 +116,7 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
                       "bg-green-500/10 text-green-600",
                     statusText() === "Streaming" &&
                       "bg-blue-500/10 text-blue-600",
-                    statusText() === "Offline" &&
-                      "bg-zinc-200 text-zinc-600",
+                    statusText() === "Offline" && "bg-zinc-200 text-zinc-600",
                   )}
                 >
                   <span class={cn("h-1.5 w-1.5", statusColor())} />
@@ -149,9 +150,7 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
       <div class="flex items-center gap-1.5">
         {/* Mobile agent indicator */}
         <Show when={!props.agentType}>
-          <span class="text-sm font-medium text-zinc-500 mr-2">
-            Chat
-          </span>
+          <span class="text-sm font-medium text-zinc-500 mr-2">Chat</span>
         </Show>
 
         {/* Permission mode switcher */}
