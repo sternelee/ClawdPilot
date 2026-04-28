@@ -86,7 +86,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
       </Show>
 
       {/* Content */}
-      <div class="inline-block bg-zinc-100 px-4 py-3 border border-black/10">
+      <div class="inline-block px-4 py-3 border border-black/10">
         <div class="prose prose-sm max-w-none text-[14px] leading-relaxed text-foreground">
           <SolidMarkdown
             children={props.thinking ? undefined : props.content}

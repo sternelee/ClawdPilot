@@ -139,84 +139,94 @@ interface ThreadGroupSectionProps {
   onSelectThread: (sessionId: string) => void;
   onStopThread: (sessionId: string) => void;
   onArchiveThread: (sessionId: string) => void;
-  onNewThread: (session: AgentSessionMetadata) => void;
 }
 
 const ThreadGroupSection: Component<ThreadGroupSectionProps> = (props) => {
   const [isCollapsed, setIsCollapsed] = createSignal(false);
 
-  const activeCount = () => props.group?.sessions?.filter(s => s.active).length ?? 0;
+  const activeCount = () => {
+    const g = props.group;
+    return g?.sessions?.filter(s => s.active).length ?? 0;
+  };
 
-  const handleNewThread = (event: MouseEvent) => {
-    event.stopPropagation();
-    const sessions = props.group?.sessions;
-    if (sessions?.[0]) {
-      props.onNewThread(sessions[0]);
+  const handleNewThreadClick = () => {
+    const g = props.group;
+    const first = g?.sessions?.[0];
+    if (first) {
+      const session = first;
+      sessionStore.openNewSessionModal(
+        session.mode || "local",
+        session.controlSessionId,
+        false,
+        session.projectPath,
+        true,
+      );
+      sessionStore.setNewSessionAgent(session.agentType);
     }
   };
 
   return (
-    <Show when={props.group} fallback={<div>Loading...</div>}>
-      <div class="border border-black/10 dark:border-white/10">
-        <button
-          type="button"
-          class="flex w-full items-center justify-between gap-2 px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
-          onClick={() => setIsCollapsed(c => !c)}
-        >
-          <div class="flex items-center gap-2 min-w-0">
-            <FiFolder size={12} class="text-zinc-400 shrink-0" />
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-semibold text-foreground truncate">
-                  {props.group.projectName}
+    <div class="border border-black/10 dark:border-white/10">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between gap-2 px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+        onClick={() => setIsCollapsed(c => !c)}
+      >
+        <div class="flex items-center gap-2 min-w-0">
+          <FiFolder size={12} class="text-zinc-400 shrink-0" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-foreground truncate">
+                {props.group?.projectName ?? ""}
+              </span>
+              <Show when={activeCount() > 0}>
+                <span class="text-[10px] font-medium text-green-600 dark:text-green-400">
+                  {activeCount()}
                 </span>
-                <Show when={activeCount() > 0}>
-                  <span class="text-[10px] font-medium text-green-600 dark:text-green-400">
-                    {activeCount()}
-                  </span>
-                </Show>
-              </div>
-              <div class="text-[10px] text-zinc-400 truncate">
-                {props.group.projectPath}
-              </div>
+              </Show>
+            </div>
+            <div class="text-[10px] text-zinc-400 truncate">
+              {props.group?.projectPath ?? ""}
             </div>
           </div>
-          <div class="flex items-center gap-1">
+        </div>
+        <div class="flex items-center gap-1">
+          <Show when={props.group?.sessions?.length}>
             <button
               type="button"
               class="text-zinc-400 hover:text-foreground p-1"
-              onClick={handleNewThread}
+              onClick={handleNewThreadClick}
               title="New thread"
               aria-label="New thread in this project"
             >
               <FiPlus size={11} />
             </button>
-            <FiChevronDown
-              size={11}
-              class={cn(
-                "text-zinc-400",
-                isCollapsed() && "-rotate-90"
-              )}
-            />
-          </div>
-        </button>
-        <Show when={!isCollapsed()}>
-          <div>
-            <For each={props.group.sessions ?? []}>
-              {(session) => (
-                <ThreadItem
-                  session={session}
-                  isActive={props.activeSessionId === session.sessionId}
-                  onSelect={() => props.onSelectThread(session.sessionId)}
-                  onStop={() => props.onStopThread(session.sessionId)}
-                  onArchive={() => props.onArchiveThread(session.sessionId)}
-                />
-              )}
-            </For>
-          </div>
-        </Show>
-      </div>
-    </Show>
+          </Show>
+          <FiChevronDown
+            size={11}
+            class={cn(
+              "text-zinc-400",
+              isCollapsed() && "-rotate-90"
+            )}
+          />
+        </div>
+      </button>
+      <Show when={!isCollapsed()}>
+        <div>
+          <For each={props.group?.sessions ?? []}>
+            {(session) => (
+              <ThreadItem
+                session={session}
+                isActive={props.activeSessionId === session.sessionId}
+                onSelect={() => props.onSelectThread(session.sessionId)}
+                onStop={() => props.onStopThread(session.sessionId)}
+                onArchive={() => props.onArchiveThread(session.sessionId)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
   );
 };
 
@@ -353,17 +363,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     }
   };
 
-  const startThreadForProject = (session: AgentSessionMetadata) => {
-    sessionStore.openNewSessionModal(
-      session.mode || "remote",
-      session.controlSessionId,
-      false,
-      session.projectPath,
-      true,
-    );
-    sessionStore.setNewSessionAgent(session.agentType);
-  };
-
   return (
     <aside class="flex h-full w-full flex-col bg-zinc-50 dark:bg-zinc-950 border-r border-black/10">
       {/* Header */}
@@ -437,7 +436,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
                     onSelectThread={openThread}
                     onStopThread={(sessionId) => void sessionStore.stopSession(sessionId)}
                     onArchiveThread={(sessionId) => sessionStore.archiveSession(sessionId)}
-                    onNewThread={startThreadForProject}
                   />
                 )}
               </For>

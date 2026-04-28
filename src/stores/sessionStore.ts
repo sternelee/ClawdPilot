@@ -98,7 +98,7 @@ export const mapBackendSessionMetadata = (
   sessionId: session.session_id,
   agentType: normalizeAgentType(session.agent_type),
   projectPath: session.project_path,
-  additionalProjectPaths: [],  // 跨项目线程：附加项目列表
+  additionalProjectPaths: [], // 跨项目线程：附加项目列表
   startedAt: session.started_at,
   active: session.active,
   controlledByRemote: session.controlled_by_remote,
@@ -128,7 +128,11 @@ export type ConnectionState =
   | "reconnecting"
   | "error";
 
-export type PermissionMode = "AlwaysAsk" | "AcceptEdits" | "Plan" | "AutoApprove";
+export type PermissionMode =
+  | "AlwaysAsk"
+  | "AcceptEdits"
+  | "Plan"
+  | "AutoApprove";
 
 export interface CompletedPermission {
   requestId: string;
@@ -218,10 +222,14 @@ const initialState: SessionState = {
 
 const normalizePermissionMode = (raw: string): PermissionMode => {
   switch (raw) {
-    case "AcceptEdits": return "AcceptEdits";
-    case "Plan": return "Plan";
-    case "AutoApprove": return "AutoApprove";
-    default: return "AlwaysAsk";
+    case "AcceptEdits":
+      return "AcceptEdits";
+    case "Plan":
+      return "Plan";
+    case "AutoApprove":
+      return "AutoApprove";
+    default:
+      return "AlwaysAsk";
   }
 };
 
@@ -231,7 +239,9 @@ const normalizeStatus = (raw: string): CompletedPermission["status"] => {
   return "Canceled";
 };
 
-const normalizeDecision = (raw: string | null): CompletedPermission["decision"] => {
+const normalizeDecision = (
+  raw: string | null,
+): CompletedPermission["decision"] => {
   if (raw === "Approved") return "Approved";
   if (raw === "ApprovedForSession") return "ApprovedForSession";
   if (raw === "Abort") return "Abort";
@@ -347,9 +357,8 @@ export const createSessionStore = () => {
       produce((s: SessionState) => {
         const session = s.sessions[sessionId];
         if (session) {
-          session.additionalProjectPaths = session.additionalProjectPaths.filter(
-            (p) => p !== path,
-          );
+          session.additionalProjectPaths =
+            session.additionalProjectPaths.filter((p) => p !== path);
         }
       }),
     );
@@ -789,7 +798,7 @@ export const createSessionStore = () => {
         sessionId: undefined,
         extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
         mcpServers,
-        additionalProjectPaths: undefined,  // 跨项目线程：创建时暂无附加项目
+        additionalProjectPaths: undefined, // 跨项目线程：创建时暂无附加项目
       });
 
       saveProjectPath(state.newSessionPath);
@@ -798,7 +807,7 @@ export const createSessionStore = () => {
         sessionId,
         agentType: state.newSessionAgent,
         projectPath: state.newSessionPath,
-        additionalProjectPaths: [],  // 跨项目线程：附加项目列表
+        additionalProjectPaths: [], // 跨项目线程：附加项目列表
         startedAt: Date.now(),
         active: true,
         controlledByRemote: false,
@@ -858,7 +867,10 @@ export const createSessionStore = () => {
     setState("permissionModes", sessionId, mode);
   };
 
-  const loadPermissionMode = async (sessionId: string, sessionMode: "local" | "remote") => {
+  const loadPermissionMode = async (
+    sessionId: string,
+    sessionMode: "local" | "remote",
+  ) => {
     try {
       if (sessionMode === "local") {
         const mode = await invoke<string>("get_permission_mode", { sessionId });
