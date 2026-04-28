@@ -1,8 +1,8 @@
-import { createSignal, createEffect, onMount, For, Show } from "solid-js";
+import { createSignal, onMount, For, Show } from "solid-js";
 import { cn } from "~/lib/utils";
 import { FiChevronDown } from "solid-icons/fi";
 import { i18nStore } from "../../stores/i18nStore";
-import { settingsStore, type LanguageType } from "../../stores/settingsStore";
+import { settingsStore, type LanguageType, type ThemeType } from "../../stores/settingsStore";
 
 interface ThemeSwitcherProps {
   class?: string;
@@ -22,38 +22,18 @@ const themes = [
   { id: "luxury", name: "Luxury" },
 ];
 
-const normalizeTheme = (theme: string) => {
-  if (theme === "forest") return "abyss";
-  if (theme === "dracula") return "black";
-  return theme;
-};
-
 export function ThemeSwitcher(props: ThemeSwitcherProps) {
-  const [currentTheme, setCurrentTheme] = createSignal("sunset");
   const [isOpen, setIsOpen] = createSignal(false);
+
+  // Get current theme from settingsStore
+  const currentTheme = () => settingsStore.get().theme;
 
   // Get current theme info
   const currentThemeInfo = () =>
     themes.find((t) => t.id === currentTheme()) || themes[0];
 
-  // Load theme from localStorage on mount
-  onMount(() => {
-    const savedTheme = normalizeTheme(
-      localStorage.getItem("theme") || "sunset",
-    );
-    setCurrentTheme(savedTheme);
-    document.documentElement.setAttribute("data-theme", savedTheme);
-  });
-
-  // Save theme to localStorage and update DOM when theme changes
-  createEffect(() => {
-    const theme = normalizeTheme(currentTheme());
-    localStorage.setItem("theme", theme);
-    document.documentElement.setAttribute("data-theme", theme);
-  });
-
   const handleThemeChange = (theme: string) => {
-    setCurrentTheme(theme);
+    settingsStore.setTheme(theme as ThemeType);
     setIsOpen(false);
   };
 
