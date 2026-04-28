@@ -1,17 +1,14 @@
 /**
  * SessionSidebar Component
  *
- * Left navigation sidebar inspired by OpenChamber's clean design.
- * Shows navigation menu with session-aware indicators.
- * Uses bg-sidebar, bg-background, and border tokens for consistency.
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
  */
 
-import { Show, For, type Component, createMemo } from "solid-js";
+import { Show, For, type Component, createMemo, createSignal } from "solid-js";
 import {
   FiActivity,
-  FiArchive,
   FiSettings,
-  FiChevronRight,
+  FiChevronDown,
   FiFolder,
   FiHome,
   FiList,
@@ -19,6 +16,7 @@ import {
   FiMonitor,
   FiPlus,
   FiStopCircle,
+  FiX,
 } from "solid-icons/fi";
 import {
   navigationStore,
@@ -55,6 +53,10 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+// ============================================================================
+// Types
+// ============================================================================
+
 interface ThreadGroup {
   projectPath: string;
   projectName: string;
@@ -62,14 +64,158 @@ interface ThreadGroup {
   lastStartedAt: number;
 }
 
+// ============================================================================
+// Thread Item Component
+// ============================================================================
+
+interface ThreadItemProps {
+  session: AgentSessionMetadata;
+  isActive: boolean;
+  onSelect: () => void;
+  onStop: () => void;
+  onArchive: () => void;
+}
+
+const ThreadItem: Component<ThreadItemProps> = (props) => {
+  return (
+    <div
+      class={cn(
+        "flex items-center gap-2 px-2 py-1.5 border-b border-black/5",
+        props.isActive
+          ? "bg-zinc-100 dark:bg-zinc-800 text-foreground"
+          : "text-zinc-500 hover:text-foreground hover:bg-zinc-50 dark:hover:bg-zinc-900",
+      )}
+    >
+      <span
+        class={cn(
+          "w-2 h-2 rounded-full shrink-0",
+          props.session.active ? "bg-green-500" : "bg-zinc-300 dark:bg-zinc-600",
+        )}
+      />
+      <button
+        type="button"
+        class="flex-1 min-w-0 text-left text-xs font-medium truncate capitalize"
+        onClick={props.onSelect}
+      >
+        {props.session.agentType}
+      </button>
+      <Show when={props.session.active}>
+        <button
+          type="button"
+          class="text-zinc-400 hover:text-yellow-600"
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onStop();
+          }}
+          title="Stop"
+          aria-label="Stop thread"
+        >
+          <FiStopCircle size={11} />
+        </button>
+      </Show>
+      <button
+        type="button"
+        class="text-zinc-400 hover:text-red-500"
+        onClick={(event) => {
+          event.stopPropagation();
+          props.onArchive();
+        }}
+        title="Close"
+        aria-label="Close thread"
+      >
+        <FiX size={11} />
+      </button>
+    </div>
+  );
+};
+
+// ============================================================================
+// Thread Group Component (Collapsible)
+// ============================================================================
+
+interface ThreadGroupSectionProps {
+  group: ThreadGroup;
+  activeSessionId: string | null;
+  onSelectThread: (sessionId: string) => void;
+  onStopThread: (sessionId: string) => void;
+  onArchiveThread: (sessionId: string) => void;
+  onNewThread: (session: AgentSessionMetadata) => void;
+}
+
+const ThreadGroupSection: Component<ThreadGroupSectionProps> = (props) => {
+  const [isCollapsed, setIsCollapsed] = createSignal(false);
+
+  const activeCount = () => props.group.sessions.filter(s => s.active).length;
+
+  return (
+    <div class="border border-black/10 dark:border-white/10">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between gap-2 px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+        onClick={() => setIsCollapsed(c => !c)}
+      >
+        <div class="flex items-center gap-2 min-w-0">
+          <FiFolder size={12} class="text-zinc-400 shrink-0" />
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-foreground truncate">
+                {props.group.projectName}
+              </span>
+              <Show when={activeCount() > 0}>
+                <span class="text-[10px] font-medium text-green-600 dark:text-green-400">
+                  {activeCount()}
+                </span>
+              </Show>
+            </div>
+            <div class="text-[10px] text-zinc-400 truncate">
+              {props.group.projectPath}
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            class="text-zinc-400 hover:text-foreground p-1"
+            onClick={(event) => {
+              event.stopPropagation();
+              props.onNewThread(props.group.sessions[0]);
+            }}
+            title="New thread"
+            aria-label="New thread in this project"
+          >
+            <FiPlus size={11} />
+          </button>
+          <FiChevronDown
+            size={11}
+            class={cn(
+              "text-zinc-400",
+              isCollapsed() && "-rotate-90"
+            )}
+          />
+        </div>
+      </button>
+      <Show when={!isCollapsed()}>
+        <div>
+          <For each={props.group.sessions}>
+            {(session) => (
+              <ThreadItem
+                session={session}
+                isActive={props.activeSessionId === session.sessionId}
+                onSelect={() => props.onSelectThread(session.sessionId)}
+                onStop={() => props.onStopThread(session.sessionId)}
+                onArchive={() => props.onArchiveThread(session.sessionId)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
 const getProjectName = (projectPath: string) => {
   const parts = projectPath.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] || projectPath || "Untitled";
-};
-
-const getThreadScope = (session: AgentSessionMetadata) => {
-  if (session.mode === "local") return "Local";
-  return session.hostname || session.controlSessionId?.slice(0, 8) || "Remote";
 };
 
 // ============================================================================
@@ -82,23 +228,16 @@ const ConnectionBadge: Component = () => {
   const isReconnecting = () => connectionState() === "reconnecting";
 
   return (
-    <div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
+    <div class="flex items-center gap-2 px-2 py-1.5 border-t border-black/10">
       <span
         class={cn(
-          "relative inline-flex h-2.5 w-2.5 rounded-full",
+          "w-2 h-2 rounded-full",
           isConnected() && "bg-green-500",
           isReconnecting() && "bg-yellow-500",
-          !isConnected() && !isReconnecting() && "bg-muted-foreground/40",
+          !isConnected() && !isReconnecting() && "bg-zinc-300",
         )}
-      >
-        <Show when={isConnected()}>
-          <span class="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping" />
-        </Show>
-        <Show when={isReconnecting()}>
-          <span class="absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75 animate-ping" />
-        </Show>
-      </span>
-      <span class="text-xs font-medium text-muted-foreground">
+      />
+      <span class="text-[11px] text-zinc-500">
         {isConnected()
           ? t("sidebar.connected")
           : isReconnecting()
@@ -130,49 +269,22 @@ const NavItemButton: Component<NavItemButtonProps> = (props) => {
       type="button"
       onClick={props.onClick}
       class={cn(
-        "group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all duration-150",
-        "hover:bg-muted/60",
+        "flex w-full items-center gap-3 px-3 py-2 text-sm font-medium border-l-2",
         props.isActive
-          ? "bg-primary/10 text-primary"
-          : "text-muted-foreground hover:text-foreground",
+          ? "border-l-primary bg-zinc-100 dark:bg-zinc-800 text-foreground"
+          : "border-l-transparent text-zinc-500 hover:text-foreground hover:bg-zinc-50 dark:hover:bg-zinc-900",
       )}
     >
-      {/* Active indicator bar */}
-      <span
-        class={cn(
-          "absolute left-0 h-8 w-1 rounded-r-full bg-primary transition-all duration-200",
-          props.isActive ? "opacity-100" : "opacity-0 -translate-x-1",
-        )}
-      />
-
       <Icon
-        size={18}
+        size={16}
         class={cn(
-          "transition-colors shrink-0",
-          props.isActive
-            ? "text-primary"
-            : "text-muted-foreground group-hover:text-foreground",
+          props.isActive ? "text-primary" : "text-zinc-400",
         )}
       />
-      <span class="flex-1 text-left text-sm font-medium">
-        {props.item.label()}
-      </span>
-
-      {/* Active session indicator */}
+      <span class="flex-1 text-left">{props.item.label()}</span>
       <Show when={hasActiveSession}>
-        <span class="flex h-2 w-2">
-          <span class="absolute h-2 w-2 rounded-full bg-primary opacity-75 animate-ping" />
-          <span class="relative h-2 w-2 rounded-full bg-primary" />
-        </span>
+        <span class="w-2 h-2 rounded-full bg-primary" />
       </Show>
-
-      <FiChevronRight
-        size={14}
-        class={cn(
-          "transition-all text-muted-foreground/40",
-          props.isActive && "text-primary/60 rotate-90",
-        )}
-      />
     </button>
   );
 };
@@ -221,7 +333,6 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
 
   const handleNavClick = (view: NavigationView) => {
     navigationStore.setActiveView(view);
-    // Close sidebar on mobile after navigation
     if (window.innerWidth < 768) {
       props.onToggle();
     }
@@ -247,34 +358,32 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
   };
 
   return (
-    <aside class="flex h-full w-full flex-col bg-sidebar border-r border-border/50">
+    <aside class="flex h-full w-full flex-col bg-zinc-50 dark:bg-zinc-950 border-r border-black/10">
       {/* Header */}
-      <div class="flex items-center justify-between px-4 py-4 border-b border-border/50">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-black/10">
         <div class="flex items-center gap-3">
-          {/* App Logo */}
-          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/20">
-            <span class="text-primary-content font-black text-base">P</span>
+          <div class="flex h-8 w-8 items-center justify-center bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
+            P
           </div>
           <div>
-            <h1 class="text-sm font-bold tracking-tight text-foreground leading-none">
+            <h1 class="text-sm font-bold text-foreground leading-none">
               Irogen
             </h1>
-            <p class="text-[10px] text-muted-foreground mt-0.5 font-medium uppercase tracking-wider">
-              {t("sidebar.agentControl")}
+            <p class="text-[10px] text-zinc-500 mt-0.5 uppercase tracking-wider">
+              Agent Control
             </p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <div class="flex-1 overflow-y-auto px-3 py-4">
-        {/* Section label */}
-        <div class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-          {t("sidebar.navigation")}
+      <div class="flex-1 overflow-y-auto py-2">
+        <div class="px-3 py-2">
+          <span class="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">
+            Navigation
+          </span>
         </div>
-
-        {/* Nav items */}
-        <nav class="relative space-y-0.5">
+        <nav>
           {NAV_ITEMS.map((item) => (
             <NavItemButton
               item={item}
@@ -284,135 +393,45 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
           ))}
         </nav>
 
-        <div class="mt-6">
-          <div class="mb-2 flex items-center justify-between gap-2 px-3">
-            <div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-              <FiMessageSquare size={12} />
-              <span>Threads</span>
+        <div class="mt-4">
+          <div class="flex items-center justify-between px-3 py-2">
+            <div class="flex items-center gap-2">
+              <FiMessageSquare size={11} class="text-zinc-400" />
+              <span class="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">
+                Threads
+              </span>
             </div>
             <button
               type="button"
-              class="btn btn-ghost btn-xs btn-square h-7 w-7 rounded-lg"
+              class="text-zinc-400 hover:text-foreground p-1"
               onClick={() => sessionStore.openNewSessionModal()}
               title="New thread"
               aria-label="New thread"
             >
-              <FiPlus size={14} />
+              <FiPlus size={13} />
             </button>
           </div>
           <Show
             when={threadGroups().length > 0}
             fallback={
-              <div class="rounded-xl border border-dashed border-border/60 bg-muted/20 px-3 py-4 text-center">
-                <p class="text-xs font-medium text-foreground">
+              <div class="px-3 py-6 text-center">
+                <p class="text-xs text-zinc-500">
                   No threads yet
-                </p>
-                <p class="mt-1 text-[11px] leading-4 text-muted-foreground">
-                  Start a session to run agents in parallel.
                 </p>
               </div>
             }
           >
-            <div class="space-y-3">
+            <div class="space-y-2 px-3">
               <For each={threadGroups()}>
                 {(group) => (
-                  <section class="rounded-xl border border-border/50 bg-background/50 p-2">
-                    <div class="mb-1.5 flex items-center justify-between gap-2 px-1">
-                      <div class="flex min-w-0 items-center gap-1.5">
-                        <FiFolder size={13} class="shrink-0 text-primary/70" />
-                        <div class="min-w-0">
-                          <div class="truncate text-xs font-semibold text-foreground">
-                            {group.projectName}
-                          </div>
-                          <div class="truncate text-[10px] text-muted-foreground/70">
-                            {group.projectPath}
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        class="btn btn-ghost btn-xs btn-square h-7 w-7 rounded-lg"
-                        onClick={() => startThreadForProject(group.sessions[0])}
-                        title="New thread in this project"
-                        aria-label="New thread in this project"
-                      >
-                        <FiPlus size={13} />
-                      </button>
-                    </div>
-                    <div class="space-y-1">
-                      <For each={group.sessions}>
-                        {(session) => {
-                          const isActive =
-                            activeSession()?.sessionId === session.sessionId;
-                          return (
-                            <div
-                              class={cn(
-                                "group/thread flex items-stretch gap-1 rounded-lg transition-all duration-150",
-                                isActive
-                                  ? "bg-primary/10 text-primary ring-1 ring-primary/15"
-                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                              )}
-                            >
-                              <button
-                                type="button"
-                                class="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-2 text-left"
-                                onClick={() => openThread(session.sessionId)}
-                              >
-                                <span
-                                  class={cn(
-                                    "h-2 w-2 shrink-0 rounded-full",
-                                    session.active
-                                      ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.35)]"
-                                      : "bg-muted-foreground/40",
-                                  )}
-                                />
-                                <div class="min-w-0 flex-1">
-                                  <div class="truncate text-xs font-semibold capitalize">
-                                    {session.agentType}
-                                  </div>
-                                  <div class="truncate text-[10px] text-muted-foreground/70">
-                                    {getThreadScope(session)}
-                                  </div>
-                                </div>
-                              </button>
-                              <div class="flex shrink-0 items-center pr-1 opacity-0 transition-opacity group-hover/thread:opacity-100 group-focus-within/thread:opacity-100">
-                                <Show when={session.active}>
-                                  <button
-                                    type="button"
-                                    class="btn btn-ghost btn-xs btn-square h-7 w-7 rounded-md text-muted-foreground hover:text-warning"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      void sessionStore.stopSession(
-                                        session.sessionId,
-                                      );
-                                    }}
-                                    title="Stop thread"
-                                    aria-label="Stop thread"
-                                  >
-                                    <FiStopCircle size={13} />
-                                  </button>
-                                </Show>
-                                <button
-                                  type="button"
-                                  class="btn btn-ghost btn-xs btn-square h-7 w-7 rounded-md text-muted-foreground hover:text-error"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    sessionStore.archiveSession(
-                                      session.sessionId,
-                                    );
-                                  }}
-                                  title="Archive thread"
-                                  aria-label="Archive thread"
-                                >
-                                  <FiArchive size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        }}
-                      </For>
-                    </div>
-                  </section>
+                  <ThreadGroupSection
+                    group={group}
+                    activeSessionId={activeSession()?.sessionId ?? null}
+                    onSelectThread={openThread}
+                    onStopThread={(sessionId) => void sessionStore.stopSession(sessionId)}
+                    onArchiveThread={(sessionId) => sessionStore.archiveSession(sessionId)}
+                    onNewThread={startThreadForProject}
+                  />
                 )}
               </For>
             </div>
@@ -420,31 +439,27 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
         </div>
 
         <Show when={sessions().length > 0}>
-          <div class="mt-6">
-            <div class="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-              Library
+          <div class="mt-4">
+            <div class="px-3 py-2">
+              <span class="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest">
+                Library
+              </span>
             </div>
             <button
               type="button"
-              class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-muted-foreground transition-all duration-150 hover:bg-muted/60 hover:text-foreground"
+              class="flex w-full items-center gap-2 px-3 py-2 text-sm text-zinc-500 hover:text-foreground hover:bg-zinc-50 dark:hover:bg-zinc-900"
               onClick={() => handleNavClick("sessions")}
             >
-              <FiList size={15} />
-              <span class="flex-1 text-sm font-medium">
-                {t("sidebar.sessions")}
-              </span>
-              <span class="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                {sessions().length}
-              </span>
+              <FiList size={14} />
+              <span class="flex-1 text-left">{t("sidebar.sessions")}</span>
+              <span class="text-xs text-zinc-400">{sessions().length}</span>
             </button>
           </div>
         </Show>
       </div>
 
       {/* Footer - Connection Status */}
-      <div class="border-t border-border/50 p-3">
-        <ConnectionBadge />
-      </div>
+      <ConnectionBadge />
     </aside>
   );
 };

@@ -206,3 +206,29 @@ git push origin v0.x.y
 ```
 
 The publishing workflow is `.github/workflows/publish-to-auto-release.yml`.
+
+## Recent Changes (v0.6.1+)
+
+### Parallel Agents Workspace
+- Multiple agent sessions in tabbed interface
+- `AgentPanel.tsx` - tab-based multi-session UI
+- `ThreadGroupSection` in sidebar - collapsible thread groups
+- `TabBar` component with close/new functionality
+
+### Cross-Project Threads
+- One agent can work across multiple project paths
+- `additionalProjectPaths: string[]` in `AgentSessionMetadata`
+- Rust backend `local_start_agent` accepts `additional_project_paths`
+- UI component: `AdditionalProjects` for runtime project management
+
+### UI Style (Zed-inspired)
+- Hard lines, high contrast, no gradients/shadows/animations
+- Flat design with solid colors
+- `border border-black/10` for borders
+- `bg-zinc-900` for active states
+- `text-zinc-500` for muted text
+- No `rounded-2xl`, `rounded-xl`, `shadow-*`, `transition-*`, `animate-*`
+
+Design specs:
+- `docs/superpowers/specs/2026-04-27-parallel-agents-design.md`
+- `docs/superpowers/specs/2026-04-28-cross-project-threads-design.md`

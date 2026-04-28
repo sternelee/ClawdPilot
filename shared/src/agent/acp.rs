@@ -613,75 +613,75 @@ impl AcpStreamingSession {
         let _ = shared_runtime;
         let thread_name = format!("irogen-acp-{}", &session_id[..session_id.len().min(8)]);
 
-            std::thread::Builder::new()
-                .name(thread_name)
-                .spawn(move || {
-                    let runtime = match tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
+        std::thread::Builder::new()
+            .name(thread_name)
+            .spawn(move || {
+                let runtime = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(runtime) => runtime,
+                    Err(err) => {
+                        let _ = ready_tx.send(Err(format!("Failed to build ACP runtime: {err}")));
+                        return;
+                    }
+                };
+
+                let local_set = tokio::task::LocalSet::new();
+                runtime.block_on(local_set.run_until(async move {
+                    if let Err(err) = run_acp_runtime(AcpRuntimeParams {
+                        session_id: runtime_session_id,
+                        agent_type,
+                        command,
+                        args,
+                        env,
+                        working_dir,
+                        home_dir,
+                        mcp_servers,
+                        start_mode,
+                        event_sender: runtime_event_sender,
+                        event_buffer: runtime_event_buffer,
+                        command_tx: runtime_command_tx,
+                        command_rx,
+                        manager_tx: runtime_manager_tx,
+                        manager_rx,
+                        ready_tx,
+                        retry_config: runtime_retry_config,
+                        permission_handler: runtime_permission_handler,
+                        pending_tool_names: runtime_pending_tool_names,
+                        session_update_count: runtime_session_update_count,
+                        processed_update_count: runtime_processed_update_count,
+                        suppress_session_updates: runtime_suppress_session_updates,
+                        session_options: runtime_session_options,
+                    })
+                    .await
                     {
-                        Ok(runtime) => runtime,
-                        Err(err) => {
-                            let _ = ready_tx.send(Err(format!("Failed to build ACP runtime: {err}")));
-                            return;
-                        }
-                    };
+                        error!("ACP runtime exited with error: {err}");
+                    }
+                }));
+            })
+            .with_context(|| format!("Failed to spawn ACP thread for session {session_id}"))?;
 
-                    let local_set = tokio::task::LocalSet::new();
-                    runtime.block_on(local_set.run_until(async move {
-                        if let Err(err) = run_acp_runtime(AcpRuntimeParams {
-                            session_id: runtime_session_id,
-                            agent_type,
-                            command,
-                            args,
-                            env,
-                            working_dir,
-                            home_dir,
-                            mcp_servers,
-                            start_mode,
-                            event_sender: runtime_event_sender,
-                            event_buffer: runtime_event_buffer,
-                            command_tx: runtime_command_tx,
-                            command_rx,
-                            manager_tx: runtime_manager_tx,
-                            manager_rx,
-                            ready_tx,
-                            retry_config: runtime_retry_config,
-                            permission_handler: runtime_permission_handler,
-                            pending_tool_names: runtime_pending_tool_names,
-                            session_update_count: runtime_session_update_count,
-                            processed_update_count: runtime_processed_update_count,
-                            suppress_session_updates: runtime_suppress_session_updates,
-                            session_options: runtime_session_options,
-                        })
-                        .await
-                        {
-                            error!("ACP runtime exited with error: {err}");
-                        }
-                    }));
-                })
-                .with_context(|| format!("Failed to spawn ACP thread for session {session_id}"))?;
-
-            match ready_rx.await {
-                Ok(Ok(())) => Ok(Self {
-                    session_id,
-                    agent_type,
-                    event_sender,
-                    event_buffer,
-                    command_tx,
-                    manager_tx,
-                    retry_config,
-                    permission_handler,
-                    pending_tool_names,
-                    session_update_count,
-                    processed_update_count,
-                    suppress_session_updates,
-                }),
-                Ok(Err(err)) => Err(anyhow!(err)),
-                Err(_) => Err(anyhow!(
-                    "ACP startup channel closed before session became ready"
-                )),
-            }
+        match ready_rx.await {
+            Ok(Ok(())) => Ok(Self {
+                session_id,
+                agent_type,
+                event_sender,
+                event_buffer,
+                command_tx,
+                manager_tx,
+                retry_config,
+                permission_handler,
+                pending_tool_names,
+                session_update_count,
+                processed_update_count,
+                suppress_session_updates,
+            }),
+            Ok(Err(err)) => Err(anyhow!(err)),
+            Err(_) => Err(anyhow!(
+                "ACP startup channel closed before session became ready"
+            )),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1295,11 +1295,17 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
     let sessions_dir = format!("{}/.codex/sessions", home);
 
-    info!("[Codex history] Searching for session {} in {}", session_id, sessions_dir);
+    info!(
+        "[Codex history] Searching for session {} in {}",
+        session_id, sessions_dir
+    );
 
     let session_dir = std::path::Path::new(&sessions_dir);
     if !session_dir.exists() {
-        debug!("[Codex history] Sessions directory does not exist: {}", sessions_dir);
+        debug!(
+            "[Codex history] Sessions directory does not exist: {}",
+            sessions_dir
+        );
         return Ok(Vec::new());
     }
 
@@ -1353,7 +1359,11 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
                         let file_path = file.path();
                         if file_path.extension().map_or(false, |e| e == "jsonl") {
                             if let Ok(content) = std::fs::read_to_string(&file_path) {
-                                if content.lines().take(10).any(|line| line.contains(session_id)) {
+                                if content
+                                    .lines()
+                                    .take(10)
+                                    .any(|line| line.contains(session_id))
+                                {
                                     matching_files.push(file_path);
                                 }
                             }
@@ -1370,7 +1380,10 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
     }
 
     if matching_files.len() > 1 {
-        warn!("[Codex history] Multiple files match session {}: {:?}, using first", session_id, matching_files);
+        warn!(
+            "[Codex history] Multiple files match session {}: {:?}, using first",
+            session_id, matching_files
+        );
     }
 
     let file_path = &matching_files[0];
@@ -1389,7 +1402,10 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
 
     let first_line = content.lines().next().unwrap_or("");
     if !first_line.contains(session_id) {
-        warn!("[Codex history] File may not contain session {}: {:?}", session_id, file_path);
+        warn!(
+            "[Codex history] File may not contain session {}: {:?}",
+            session_id, file_path
+        );
     }
 
     let mut messages = Vec::new();
@@ -1405,7 +1421,11 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
             Err(e) => {
                 parse_errors += 1;
                 if parse_errors <= 3 {
-                    warn!("[Codex history] Parse error at line {}: {}", line_num + 1, e);
+                    warn!(
+                        "[Codex history] Parse error at line {}: {}",
+                        line_num + 1,
+                        e
+                    );
                 }
                 continue;
             }
@@ -1434,7 +1454,11 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
                                 });
 
                             let msg = CodexHistoryMessage {
-                                role: if role == "developer" { "assistant".to_string() } else { role.to_string() },
+                                role: if role == "developer" {
+                                    "assistant".to_string()
+                                } else {
+                                    role.to_string()
+                                },
                                 content: text.to_string(),
                                 timestamp,
                             };
@@ -1447,15 +1471,26 @@ pub async fn load_codex_session_history(session_id: &str) -> Result<Vec<CodexHis
     }
 
     if parse_errors > 3 {
-        warn!("[Codex history] {} additional parse errors suppressed", parse_errors - 3);
+        warn!(
+            "[Codex history] {} additional parse errors suppressed",
+            parse_errors - 3
+        );
     }
 
-    info!("[Codex history] Loaded {} messages from session {} ({} parse errors)", messages.len(), session_id, parse_errors);
+    info!(
+        "[Codex history] Loaded {} messages from session {} ({} parse errors)",
+        messages.len(),
+        session_id,
+        parse_errors
+    );
     Ok(messages)
 }
 
 pub async fn load_opencode_session_history(session_id: &str) -> Result<Vec<CodexHistoryMessage>> {
-    info!("[OpenCode history] Loading session {} via opencode export", session_id);
+    info!(
+        "[OpenCode history] Loading session {} via opencode export",
+        session_id
+    );
 
     let output = tokio::process::Command::new("opencode")
         .arg("export")
@@ -1474,10 +1509,17 @@ pub async fn load_opencode_session_history(session_id: &str) -> Result<Vec<Codex
     let json: serde_json::Value = match serde_json::from_str(&stdout) {
         Ok(v) => v,
         Err(e) => {
-            warn!("[OpenCode] Full JSON parse failed: {}, attempting recovery", e);
+            warn!(
+                "[OpenCode] Full JSON parse failed: {}, attempting recovery",
+                e
+            );
             let truncated = truncate_large_strings(&stdout, 50000);
             serde_json::from_str(&truncated).map_err(|e2| {
-                anyhow::anyhow!("Failed to parse opencode export output: {} (recovery also failed: {})", e, e2)
+                anyhow::anyhow!(
+                    "Failed to parse opencode export output: {} (recovery also failed: {})",
+                    e,
+                    e2
+                )
             })?
         }
     };
@@ -1522,7 +1564,11 @@ pub async fn load_opencode_session_history(session_id: &str) -> Result<Vec<Codex
         })
         .unwrap_or_default();
 
-    info!("[OpenCode history] Loaded {} messages from session {}", messages.len(), session_id);
+    info!(
+        "[OpenCode history] Loaded {} messages from session {}",
+        messages.len(),
+        session_id
+    );
     Ok(messages)
 }
 

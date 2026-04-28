@@ -1,8 +1,7 @@
 /**
  * Message Bubble Components
  *
- * Clean, modern message bubbles inspired by OpenChamber.
- * Uses bg-primary, text-primary, border-border tokens.
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
  */
 
 import { type Component, For, Show, createMemo, createSignal } from "solid-js";
@@ -50,8 +49,8 @@ const UserMessage: Component<{ content: string; timestamp?: number }> = (
 ) => {
   return (
     <div class="flex justify-end">
-      <div class="inline-block max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-md bg-primary px-4 py-3 shadow-sm">
-        <div class="prose prose-sm max-w-none text-[14px] leading-relaxed text-primary-contrast">
+      <div class="inline-block max-w-[85%] sm:max-w-[75%] bg-zinc-900 px-4 py-3">
+        <div class="prose prose-sm max-w-none text-[14px] leading-relaxed text-white">
           <SolidMarkdown children={props.content} />
         </div>
       </div>
@@ -72,7 +71,7 @@ interface AssistantMessageProps {
 }
 
 const StreamingCursor: Component = () => (
-  <span class="inline-block ml-0.5 w-2 h-4 bg-primary animate-streaming-cursor align-middle" />
+  <span class="inline-block ml-0.5 w-2 h-4 bg-zinc-400 align-middle" />
 );
 
 const AssistantMessage: Component<AssistantMessageProps> = (props) => {
@@ -87,7 +86,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
       </Show>
 
       {/* Content */}
-      <div class="inline-block rounded-2xl rounded-bl-md bg-muted/60 px-4 py-3 border border-border/50">
+      <div class="inline-block bg-zinc-100 px-4 py-3 border border-black/10">
         <div class="prose prose-sm max-w-none text-[14px] leading-relaxed text-foreground">
           <SolidMarkdown
             children={props.thinking ? undefined : props.content}
@@ -115,7 +114,7 @@ const AssistantMessage: Component<AssistantMessageProps> = (props) => {
 
       {/* Tool Calls */}
       <Show when={props.toolCalls && props.toolCalls.length > 0}>
-        <div class="mt-1 pt-3 border-t border-border/50">
+        <div class="mt-1 pt-3 border-t border-black/10">
           <ToolCallList toolCalls={props.toolCalls!} />
         </div>
       </Show>
@@ -197,16 +196,16 @@ const SystemMessageContent: Component<{
 
     if (card.type === "following") {
       return (
-        <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 space-y-2">
-          <div class="inline-flex items-center rounded-md bg-blue-500/15 px-2 py-0.5 text-xs font-semibold text-blue-600 dark:text-blue-400">
+        <div class="border border-blue-500/20 p-3 space-y-2">
+          <div class="inline-flex items-center px-2 py-0.5 text-xs font-semibold text-blue-600 border border-blue-500/20">
             Following
           </div>
           <For each={card.locations}>
             {(loc) => (
-              <div class="flex items-center gap-2 rounded-lg border border-blue-500/15 bg-blue-500/8 px-3 py-2">
+              <div class="flex items-center gap-2 border border-blue-500/15 px-3 py-2">
                 <button
                   type="button"
-                  class="flex-1 text-left text-sm font-mono hover:text-blue-500 transition-colors"
+                  class="flex-1 text-left text-sm font-mono text-zinc-700 hover:text-blue-600"
                   onClick={() => {
                     if (props.onOpenFileLocation) {
                       props.onOpenFileLocation(loc.path, loc.line);
@@ -219,12 +218,12 @@ const SystemMessageContent: Component<{
                 >
                   {loc.path}
                   <Show when={loc.line !== undefined}>
-                    <span class="ml-1 opacity-50">:{loc.line}</span>
+                    <span class="ml-1 text-zinc-400">:{loc.line}</span>
                   </Show>
                 </button>
                 <button
                   type="button"
-                  class="btn btn-ghost btn-xs h-7 min-h-7"
+                  class="border border-black/10 px-2 py-1 text-xs hover:bg-zinc-100"
                   onClick={() =>
                     copyText(`${loc.path}${loc.line ? `:${loc.line}` : ""}`)
                   }
@@ -236,7 +235,7 @@ const SystemMessageContent: Component<{
           </For>
           <button
             type="button"
-            class="btn btn-outline btn-sm w-full"
+            class="border border-black/10 px-3 py-1.5 text-sm w-full hover:bg-zinc-100"
             onClick={() => props.onToggleFileBrowser?.()}
           >
             Open File Panel
@@ -271,8 +270,8 @@ const SystemMessageContent: Component<{
       };
 
       return (
-        <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2">
-          <div class="inline-flex items-center rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+        <div class="border border-black/10 p-3 space-y-2">
+          <div class="inline-flex items-center px-2 py-0.5 text-xs font-semibold text-zinc-600 border border-black/10">
             TODO List
           </div>
           <div class="space-y-1">
@@ -284,10 +283,10 @@ const SystemMessageContent: Component<{
                     ? todoStates()[index()]!
                     : initialDone;
                 return (
-                  <label class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-primary/10 cursor-pointer transition-colors">
+                  <label class="flex items-center gap-2.5 px-2.5 py-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      class="checkbox checkbox-primary checkbox-sm"
+                      class="w-4 h-4 border border-black/20"
                       checked={checked()}
                       onChange={(e) =>
                         setTodoStates((prev) => ({
@@ -297,7 +296,7 @@ const SystemMessageContent: Component<{
                       }
                     />
                     <span
-                      class={`text-sm ${checked() ? "line-through opacity-50" : ""}`}
+                      class={`text-sm ${checked() ? "line-through text-zinc-400" : ""}`}
                     >
                       {entry.content}
                     </span>
@@ -309,7 +308,7 @@ const SystemMessageContent: Component<{
           <Show when={props.onSyncTodoList}>
             <button
               type="button"
-              class="btn btn-outline btn-sm w-full"
+              class="border border-black/10 px-3 py-1.5 text-sm w-full hover:bg-zinc-100"
               onClick={syncTodoToAgent}
             >
               Sync to Agent
@@ -321,15 +320,15 @@ const SystemMessageContent: Component<{
 
     if (card.type === "terminal") {
       return (
-        <div class="rounded-xl border border-secondary/20 bg-secondary/5 p-3 space-y-2">
-          <div class="inline-flex items-center rounded-md bg-secondary/15 px-2 py-0.5 text-xs font-semibold text-secondary">
+        <div class="border border-zinc-300 p-3 space-y-2">
+          <div class="inline-flex items-center px-2 py-0.5 text-xs font-semibold text-zinc-600 border border-zinc-300">
             Terminal
           </div>
-          <div class="rounded-lg border border-secondary/20 bg-secondary/8 px-3 py-2.5 text-sm text-foreground/80">
+          <div class="border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
             <div class="font-mono break-all">
               {card.terminalId || "unknown"}
             </div>
-            <div class="mt-1 opacity-60">
+            <div class="mt-1 text-zinc-500">
               {card.mode || "interactive/background"}{" "}
               {card.status ? `· ${card.status}` : ""}
             </div>
@@ -337,14 +336,14 @@ const SystemMessageContent: Component<{
           <div class="flex flex-wrap gap-2">
             <button
               type="button"
-              class="btn btn-ghost btn-xs h-7"
+              class="border border-black/10 px-2 py-1 text-xs hover:bg-zinc-100"
               onClick={() => copyText(card.terminalId)}
             >
               Copy ID
             </button>
             <button
               type="button"
-              class="btn btn-ghost btn-xs h-7"
+              class="border border-black/10 px-2 py-1 text-xs hover:bg-zinc-100"
               onClick={() => props.onQuote?.(`terminal:${card.terminalId}`)}
             >
               Insert
@@ -352,7 +351,7 @@ const SystemMessageContent: Component<{
             <Show when={props.onTerminalAction}>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-7"
+                class="border border-black/10 px-2 py-1 text-xs hover:bg-zinc-100"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "attach")
                 }
@@ -361,7 +360,7 @@ const SystemMessageContent: Component<{
               </button>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-7"
+                class="border border-black/10 px-2 py-1 text-xs hover:bg-zinc-100"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "status")
                 }
@@ -370,7 +369,7 @@ const SystemMessageContent: Component<{
               </button>
               <button
                 type="button"
-                class="btn btn-ghost btn-xs h-7 text-red-500 hover:bg-red-500/10"
+                class="border border-red-500/20 px-2 py-1 text-xs text-red-500 hover:bg-red-500 hover:text-white"
                 onClick={() =>
                   props.onTerminalAction?.(card.terminalId, "stop")
                 }
@@ -435,8 +434,8 @@ const SystemMessageContent: Component<{
         <Show
           when={isTerminalOutput()}
           fallback={
-            <div class="inline-block rounded-xl bg-muted/40 border border-border/50 px-4 py-3">
-              <div class="text-sm leading-relaxed text-foreground/70 whitespace-pre-wrap break-words">
+            <div class="inline-block bg-zinc-100 border border-black/10 px-4 py-3">
+              <div class="text-sm leading-relaxed text-zinc-600 whitespace-pre-wrap break-words">
                 <SolidMarkdown
                   children={normalizeEscapedLineBreaks(props.content)}
                 />
@@ -447,8 +446,8 @@ const SystemMessageContent: Component<{
           <Show
             when={parseTerminalOutput()}
             fallback={
-              <div class="inline-block rounded-xl bg-muted/40 border border-border/50 px-4 py-3">
-                <div class="text-sm leading-relaxed text-foreground/70 whitespace-pre-wrap break-words">
+              <div class="inline-block bg-zinc-100 border border-black/10 px-4 py-3">
+                <div class="text-sm leading-relaxed text-zinc-600 whitespace-pre-wrap break-words">
                   <SolidMarkdown
                     children={normalizeEscapedLineBreaks(props.content)}
                   />
@@ -476,17 +475,17 @@ const SystemMessageContent: Component<{
                   <button
                     type="button"
                     onClick={() => setToolOutputExpanded(!toolOutputExpanded())}
-                    class="inline-flex items-center gap-2 hover:bg-muted/50 rounded-lg px-2 py-1 -ml-2 transition-colors"
+                    class="inline-flex items-center gap-2 hover:bg-zinc-100 px-2 py-1 -ml-2"
                   >
-                    <span class="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600 dark:text-blue-400">
+                    <span class="inline-flex items-center bg-blue-500/10 px-2 py-0.5 font-mono text-xs text-blue-600">
                       [{parsed().toolName}]
                     </span>
-                    <span class="text-muted-foreground">
+                    <span class="text-zinc-500">
                       {toolOutputExpanded() ? "▼" : "▶"}
                     </span>
                   </button>
                   <Show when={toolOutputExpanded() && parsed().output}>
-                    <pre class="mt-2 text-xs opacity-60 whitespace-pre-wrap break-all">
+                    <pre class="mt-2 text-xs text-zinc-500 whitespace-pre-wrap break-all">
                       {normalizeEscapedLineBreaks(parsed().output || "")}
                     </pre>
                   </Show>
@@ -561,14 +560,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
 
   return (
     <div class={cn("group/bubble relative", props.class)}>
-      {/* Scale animation on hover */}
-      <div
-        class={cn(
-          "rounded-2xl transition-transform duration-200",
-          "hover:scale-[1.01]",
-          isUser() ? "" : "rounded-bl-md",
-        )}
-      >
+      <div>
         <Show
           when={isUser()}
           fallback={
@@ -606,11 +598,11 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
       </div>
 
       {/* Hover Actions */}
-      <div class="absolute -top-2 right-2 flex items-center gap-1 opacity-0 group-hover/bubble:opacity-100 transition-all duration-200 transform group-hover/bubble:translate-y-0 -translate-y-1">
+      <div class="absolute -top-2 right-2 flex items-center gap-1 opacity-0 group-hover/bubble:opacity-100">
         <button
           type="button"
           onClick={quoteMessage}
-          class="p-1.5 rounded-lg bg-background/90 border border-border/50 shadow-sm hover:bg-muted hover:scale-105 transition-all duration-150"
+          class="p-1.5 bg-white border border-black/10 hover:bg-zinc-100"
           title="Quote"
           aria-label="Quote"
         >
@@ -619,7 +611,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
         <button
           type="button"
           onClick={copyMessage}
-          class="p-1.5 rounded-lg bg-background/90 border border-border/50 shadow-sm hover:bg-muted hover:scale-105 transition-all duration-150"
+          class="p-1.5 bg-white border border-black/10 hover:bg-zinc-100"
           title="Copy"
           aria-label="Copy"
         >
@@ -633,15 +625,15 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
           <div class="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
             <button
               type="button"
-              class="fixed inset-0 bg-black/40 backdrop-blur-sm -z-10"
+              class="fixed inset-0 bg-black/50 -z-10"
               onClick={closeActions}
             />
-            <div class="w-full max-w-sm rounded-t-2xl sm:rounded-2xl bg-background border border-border/50 p-4 shadow-2xl mb-safe">
+            <div class="w-full max-w-sm border-t border-black/10 bg-white p-4 mb-safe">
               <div class="space-y-1">
                 <Show when={isUser()}>
                   <button
                     type="button"
-                    class="btn btn-ghost justify-start w-full"
+                    class="block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100"
                     onClick={resendMessage}
                   >
                     Resend
@@ -649,7 +641,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 </Show>
                 <button
                   type="button"
-                  class="btn btn-ghost justify-start w-full"
+                  class="block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100"
                   onClick={quoteMessage}
                 >
                   Quote to input
@@ -657,7 +649,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 <Show when={!isUser() && firstCodeBlock()}>
                   <button
                     type="button"
-                    class="btn btn-ghost justify-start w-full"
+                    class="block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100"
                     onClick={copyCodeBlock}
                   >
                     Copy code block
@@ -665,7 +657,7 @@ export const MessageBubble: Component<MessageBubbleProps> = (props) => {
                 </Show>
                 <button
                   type="button"
-                  class="btn btn-ghost justify-start w-full"
+                  class="block w-full text-left px-3 py-2 text-sm hover:bg-zinc-100"
                   onClick={copyMessage}
                 >
                   Copy

@@ -1,8 +1,7 @@
 /**
- * Chat Header Component
+ * ChatHeader Component
  *
- * Header for the chat view with session info and controls.
- * Clean, minimal design inspired by OpenChamber.
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
  */
 
 import { type Component, Show, createMemo } from "solid-js";
@@ -48,17 +47,17 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
       case "online":
         return "bg-green-500";
       case "reconnecting":
-        return "bg-yellow-500 animate-pulse";
+        return "bg-yellow-500";
       case "offline":
         return "bg-red-500";
       default:
-        return "bg-muted-foreground/40";
+        return "bg-zinc-400";
     }
   });
 
   const statusColor = createMemo(() => {
     const sess = session();
-    if (!sess?.active) return "bg-muted";
+    if (!sess?.active) return "bg-zinc-400";
     const routerState = sessionEventRouter.getStreamingState(props.sessionId);
     if (routerState?.isStreaming) return "bg-blue-500";
     return "bg-green-500";
@@ -79,13 +78,13 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
   });
 
   return (
-    <header class="z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-border/50 bg-background/80 px-4 py-3 backdrop-blur-md sm:min-h-14">
+    <header class="z-20 flex min-h-14 shrink-0 items-center justify-between gap-3 border-b border-black/10 bg-white px-4 py-3 sm:min-h-14">
       {/* Left: Sidebar toggle (mobile) + Session info */}
       <div class="flex items-center gap-3 min-w-0 flex-1">
         {/* Sidebar toggle button */}
         <button
           type="button"
-          class="btn btn-ghost btn-sm btn-square h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground shrink-0"
+          class="h-9 w-9 border border-black/10 flex items-center justify-center text-zinc-500 hover:text-foreground hover:border-zinc-400 shrink-0"
           onClick={props.onToggleSidebar}
           aria-label="Toggle sidebar"
         >
@@ -96,8 +95,8 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
         <Show when={props.agentType}>
           <div class="flex items-center gap-3 min-w-0">
             {/* Agent icon */}
-            <div class="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 shrink-0">
-              <FiTerminal size={17} class="text-primary" />
+            <div class="hidden sm:flex h-9 w-9 items-center justify-center border border-black/10 shrink-0">
+              <FiTerminal size={17} class="text-zinc-600" />
             </div>
 
             {/* Session details */}
@@ -110,21 +109,21 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
                 {/* Status indicator */}
                 <span
                   class={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider shrink-0",
+                    "inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider shrink-0",
                     statusText() === "Online" &&
-                      "bg-green-500/10 text-green-600 dark:text-green-400",
+                      "bg-green-500/10 text-green-600",
                     statusText() === "Streaming" &&
-                      "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                      "bg-blue-500/10 text-blue-600",
                     statusText() === "Offline" &&
-                      "bg-muted text-muted-foreground",
+                      "bg-zinc-200 text-zinc-600",
                   )}
                 >
-                  <span class={cn("h-1.5 w-1.5 rounded-full", statusColor())} />
+                  <span class={cn("h-1.5 w-1.5", statusColor())} />
                   <span class="hidden xs:inline">{statusText()}</span>
                 </span>
               </div>
               <Show when={projectName()}>
-                <span class="text-[11px] text-muted-foreground truncate block max-w-[140px] sm:max-w-[220px] font-mono">
+                <span class="text-[11px] text-zinc-500 truncate block max-w-[140px] sm:max-w-[220px] font-mono">
                   {projectName()}
                 </span>
               </Show>
@@ -132,11 +131,11 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
                 <span class="flex items-center gap-1 mt-0.5">
                   <span
                     class={cn(
-                      "h-1.5 w-1.5 rounded-full shrink-0",
-                      hostStatusDot() ?? "bg-muted-foreground/40",
+                      "h-1.5 w-1.5 shrink-0",
+                      hostStatusDot() ?? "bg-zinc-400",
                     )}
                   />
-                  <span class="text-[11px] text-muted-foreground/70 font-medium truncate max-w-[120px] sm:max-w-[180px]">
+                  <span class="text-[11px] text-zinc-500 font-medium truncate max-w-[120px] sm:max-w-[180px]">
                     {hostName()}
                   </span>
                 </span>
@@ -150,7 +149,7 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
       <div class="flex items-center gap-1.5">
         {/* Mobile agent indicator */}
         <Show when={!props.agentType}>
-          <span class="text-sm font-medium text-muted-foreground mr-2">
+          <span class="text-sm font-medium text-zinc-500 mr-2">
             Chat
           </span>
         </Show>
@@ -169,11 +168,11 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
           <button
             type="button"
             class={cn(
-              "btn btn-ghost btn-xs h-8 w-8 rounded-lg flex items-center justify-center",
-              "border border-border/50 hover:border-border",
+              "h-8 w-8 flex items-center justify-center",
+              "border",
               props.isPermissionsOpen
-                ? "text-primary border-primary/30 bg-primary/5"
-                : "text-base-content/50 hover:text-base-content",
+                ? "text-zinc-900 border-zinc-900"
+                : "text-zinc-500 border-black/10 hover:border-zinc-400",
             )}
             onClick={props.onTogglePermissions}
             title="Permission history"
@@ -186,7 +185,7 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
         <Button
           variant="ghost"
           size="icon"
-          class="h-9 w-9 rounded-xl text-muted-foreground hover:text-foreground"
+          class="h-9 w-9 border border-black/10 text-zinc-500 hover:text-foreground hover:border-zinc-400"
           onClick={() => navigationStore.setActiveView("settings")}
         >
           <FiSettings size={17} />

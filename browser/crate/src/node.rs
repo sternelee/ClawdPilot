@@ -237,7 +237,9 @@ fn message_to_events(msg: &Message) -> Vec<AgentEvent> {
             AgentMessageContent::TurnCompleted { content } => {
                 vec![AgentEvent::TurnCompleted {
                     session_id: session_id.clone(),
-                    result: content.as_ref().map(|c| serde_json::json!({ "content": c })),
+                    result: content
+                        .as_ref()
+                        .map(|c| serde_json::json!({ "content": c })),
                 }]
             }
             AgentMessageContent::TurnError { error } => {
@@ -343,7 +345,10 @@ fn message_to_events(msg: &Message) -> Vec<AgentEvent> {
             session_id: fallback_session.clone(),
             level: crate::NotificationLevel::Error,
             message: err.message.clone(),
-            details: err.details.as_ref().map(|d| serde_json::json!({ "details": d })),
+            details: err
+                .details
+                .as_ref()
+                .map(|d| serde_json::json!({ "details": d })),
         }],
         MessagePayload::Response(resp) => vec![AgentEvent::Notification {
             session_id: fallback_session.clone(),
@@ -353,7 +358,10 @@ fn message_to_events(msg: &Message) -> Vec<AgentEvent> {
                 crate::NotificationLevel::Error
             },
             message: resp.message.clone().unwrap_or_default(),
-            details: resp.data.as_ref().and_then(|d| serde_json::from_str(d).ok()),
+            details: resp
+                .data
+                .as_ref()
+                .and_then(|d| serde_json::from_str(d).ok()),
         }],
         _ => {
             if let Ok(data) = serde_json::to_value(&msg.payload) {

@@ -8,6 +8,8 @@ Irogen provides a unified session management experience for running and controll
 
 ## Core Capabilities
 
+- **Parallel Agents Workspace**: Multiple agent sessions in one workspace with tab-based UI
+- **Cross-Project Threads**: One agent can work across multiple project paths simultaneously
 - Unified multi-agent workspace
 - Local session lifecycle management
 - Remote session control and spawning

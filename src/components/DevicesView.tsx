@@ -1,3 +1,9 @@
+/**
+ * DevicesView Component
+ *
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
+ */
+
 import { createSignal, createMemo, For, Show, type Component } from "solid-js";
 import {
   FiServer,
@@ -50,45 +56,39 @@ export const DevicesView: Component = () => {
         <header class="flex items-start sm:items-center gap-3">
           <button
             type="button"
-            class="btn btn-square btn-ghost h-10 w-10 rounded-xl md:hidden shrink-0 -ml-2"
+            class="h-10 w-10 md:hidden shrink-0 -ml-2 border border-black/10 flex items-center justify-center text-zinc-500 hover:text-foreground hover:border-zinc-400"
             onClick={() => navigationStore.setSidebarOpen(true)}
             aria-label="Open menu"
           >
             <svg
-              width="24"
-              height="24"
-              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
               fill="none"
-              viewBox="0 0 24 24"
-              class="inline-block h-6 w-6 stroke-current"
+              stroke="currentColor"
+              stroke-width="2"
             >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              ></path>
+              <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
             </svg>
           </button>
           <div>
             <h1 class="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{t("devices.title")}</h1>
-            <p class="mt-1 text-sm text-muted-foreground">{t("devices.desc")}</p>
+            <p class="mt-1 text-sm text-zinc-500">{t("devices.desc")}</p>
           </div>
         </header>
 
         {/* Local Daemon Status */}
         <section>
-          <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("devices.localEnv")}</h2>
-          <div class="flex items-center justify-between rounded-2xl border border-border/50 bg-base-200 p-4 sm:p-5">
+          <h2 class="mb-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{t("devices.localEnv")}</h2>
+          <div class="flex items-center justify-between border border-black/10 p-4 sm:p-5">
             <div class="flex items-center gap-4">
-              <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
+              <div class="flex h-12 w-12 items-center justify-center border border-black/10 text-zinc-400">
                 <FiTerminal size={24} />
               </div>
               <div>
                 <h3 class="font-semibold text-foreground">{t("devices.localDaemon")}</h3>
                 <div class="flex items-center gap-2 mt-1">
-                  <span class="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
-                  <span class="text-sm text-muted-foreground font-medium">{t("devices.running")}</span>
+                  <span class="h-2.5 w-2.5 bg-green-500" />
+                  <span class="text-sm text-zinc-500 font-medium">{t("devices.running")}</span>
                 </div>
               </div>
             </div>
@@ -97,13 +97,13 @@ export const DevicesView: Component = () => {
 
         {/* Add New Connection */}
         <section>
-          <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("devices.addNew")}</h2>
-          <div class="rounded-2xl border border-border/50 bg-base-200 p-4 sm:p-5 flex flex-col gap-4 sm:flex-row sm:items-end">
+          <h2 class="mb-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{t("devices.addNew")}</h2>
+          <div class="border border-black/10 p-4 sm:p-5 flex flex-col gap-4 sm:flex-row sm:items-end">
             <div class="flex-1 space-y-2">
               <label class="text-sm font-medium text-foreground">{t("devices.sessionTicket")}</label>
               <input
                 type="text"
-                class="w-full rounded-xl border border-border/50 bg-background px-4 py-2.5 text-sm font-mono focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
+                class="w-full border border-black/10 bg-background px-4 py-2.5 text-sm font-mono focus:outline-none focus:border-zinc-400"
                 placeholder={t("devices.ticketPlaceholder")}
                 value={ticketInput()}
                 onInput={(e) => setTicketInput(e.currentTarget.value)}
@@ -113,15 +113,16 @@ export const DevicesView: Component = () => {
               />
             </div>
             <button
-              class="btn btn-primary rounded-xl px-6 py-2.5 min-w-[120px]"
+              class="border border-black/10 px-6 py-2.5 min-w-[120px] text-sm font-medium text-foreground hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!ticketInput() || isConnecting()}
               onClick={() => handleConnect(ticketInput())}
             >
               {isConnecting() ? (
-                <span class="loading loading-spinner loading-sm" />
+                <span class="inline-block w-4 h-4 border-2 border-zinc-300 border-t-zinc-600" />
               ) : (
                 <>
-                  <FiPlus size={18} class="mr-2" />{t("action.connect")}</>
+                  <FiPlus size={18} class="inline mr-2" />{t("action.connect")}
+                </>
               )}
             </button>
           </div>
@@ -129,39 +130,39 @@ export const DevicesView: Component = () => {
 
         {/* Active Remote Hosts */}
         <section>
-          <h2 class="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("devices.activeHosts")}</h2>
-          <div class="rounded-2xl border border-border/50 bg-base-200 overflow-hidden">
+          <h2 class="mb-4 text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{t("devices.activeHosts")}</h2>
+          <div class="border border-black/10 overflow-hidden">
             <Show
               when={connectedHosts().length > 0}
               fallback={
                 <div class="flex flex-col items-center justify-center py-10 px-4 text-center">
-                  <div class="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                    <FiServer size={24} class="text-muted-foreground/60" />
+                  <div class="mb-3 flex h-12 w-12 items-center justify-center border border-black/10 text-zinc-400">
+                    <FiServer size={24} />
                   </div>
-                  <p class="text-sm text-muted-foreground font-medium">{t("devices.noActiveHosts")}</p>
+                  <p class="text-sm text-zinc-500 font-medium">{t("devices.noActiveHosts")}</p>
                 </div>
               }
             >
-              <div class="divide-y divide-border/50">
+              <div>
                 <For each={connectedHosts()}>
                   {(host) => (
-                    <div class="flex items-center justify-between p-4 sm:p-5 transition-colors hover:bg-muted/30">
+                    <div class="flex items-center justify-between p-4 sm:p-5 border-b border-black/10 last:border-b-0">
                       <div class="flex items-center gap-4">
-                        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                        <div class="flex h-10 w-10 items-center justify-center border border-black/10 text-zinc-400">
                           <FiGlobe size={20} />
                         </div>
                         <div>
                           <h3 class="font-medium text-sm text-foreground">
                             {host.hostname}
                           </h3>
-                          <p class="mt-0.5 text-xs text-muted-foreground font-mono">
+                          <p class="mt-0.5 text-xs text-zinc-500 font-mono">
                             ID: {host.controlSessionId.slice(0, 8)}...
                           </p>
                         </div>
                       </div>
                       <div class="flex items-center gap-3">
-                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-500/10 text-green-500 text-xs font-semibold border border-green-500/20">
-                          <span class="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />{t("devices.connected")}</span>
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-green-600 border border-green-600/20">
+                          <span class="h-1.5 w-1.5 bg-green-500" />{t("devices.connected")}</span>
                       </div>
                     </div>
                   )}
@@ -175,12 +176,14 @@ export const DevicesView: Component = () => {
         <Show when={history().length > 0}>
           <section>
             <div class="flex items-center justify-between mb-4">
-              <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{t("devices.savedDevices")}</h2>
+              <h2 class="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">{t("devices.savedDevices")}</h2>
               <button
-                class="btn btn-ghost btn-xs text-error hover:bg-error/10 rounded-lg gap-1.5"
+                class="text-xs text-red-500 border border-red-500/20 px-3 py-1.5 hover:bg-red-500 hover:text-white"
                 onClick={handleClearHistory}
               >
-                <FiTrash2 size={12} />\n                <FiTrash2 size={12} />\n                {t("devices.clear")}\n              </button>
+                <FiTrash2 size={12} class="inline mr-1" />
+                {t("devices.clear")}
+              </button>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <For each={history()}>
@@ -189,29 +192,29 @@ export const DevicesView: Component = () => {
                     ticket.includes(h.controlSessionId),
                   );
                   return (
-                    <div class="group flex flex-col gap-3 rounded-2xl border border-border/50 bg-base-200 p-4 transition-all hover:border-primary/30">
+                    <div class="flex flex-col gap-3 border border-black/10 p-4">
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
-                          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                          <div class="flex h-8 w-8 items-center justify-center border border-black/10 text-zinc-400">
                             <FiWifi size={16} />
                           </div>
                           <div>
                             <p class="font-medium text-sm text-foreground">
                               Machine {getTicketDisplayId(ticket)}
                             </p>
-                            <p class="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
+                            <p class="text-[10px] text-zinc-500 font-mono truncate max-w-[120px]">
                               {ticket}
                             </p>
                           </div>
                         </div>
                         <Show when={!isActive}>
                           <button
-                            class="btn btn-outline btn-sm rounded-xl h-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            class="border border-black/10 px-3 py-1 text-xs font-medium hover:bg-zinc-100"
                             onClick={() => handleConnect(ticket)}
                           >{t("action.connect")}</button>
                         </Show>
                         <Show when={isActive}>
-                          <span class="text-xs font-semibold text-green-500">{t("devices.active")}</span>
+                          <span class="text-xs font-semibold text-green-600">{t("devices.active")}</span>
                         </Show>
                       </div>
                     </div>

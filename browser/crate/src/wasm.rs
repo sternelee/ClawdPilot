@@ -3,9 +3,9 @@
 use crate::node::{IrogenNode, IrogenSession};
 use crate::protocol::{
     AgentControlAction, AgentControlMessage, AgentMessageContent, AgentMessageMessage,
-    AgentPermissionMessage, AgentPermissionMessageInner,
-    AgentPermissionResponse, Message, MessagePayload, MessageType, PermissionMode,
-    RemoteSpawnAction, RemoteSpawnMessage, SystemAction, SystemControlMessage,
+    AgentPermissionMessage, AgentPermissionMessageInner, AgentPermissionResponse, Message,
+    MessagePayload, MessageType, PermissionMode, RemoteSpawnAction, RemoteSpawnMessage,
+    SystemAction, SystemControlMessage,
 };
 use wasm_bindgen::{prelude::wasm_bindgen, JsError, JsValue};
 use wasm_bindgen_futures::future_to_promise;

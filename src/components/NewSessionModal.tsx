@@ -1,8 +1,7 @@
 /**
  * NewSessionModal Component
  *
- * Global modal for creating new AI agent sessions (local or remote).
- * Managed by sessionStore for global accessibility.
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
  */
 
 import {
@@ -25,8 +24,6 @@ import {
   requestPermissions,
   scan,
 } from "@tauri-apps/plugin-barcode-scanner";
-// import { openUrl } from "@tauri-apps/plugin-opener";
-// import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { sessionStore, AgentType } from "../stores/sessionStore";
 import { isMobile } from "../stores/deviceStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -400,27 +397,27 @@ export const NewSessionModal: Component = () => {
           >
             <div
               role="tablist"
-              class="tabs tabs-border flex p-1 bg-muted rounded-lg mb-5"
+              class="flex p-1 border border-black/10 mb-5"
             >
-              <a
+              <button
                 role="tab"
-                class={`tab flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
+                class={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 text-sm font-medium ${
                   sessionStore.state.newSessionMode === "local"
-                    ? "bg-background text-foreground shadow-sm tab-active"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-zinc-900 text-white"
+                    : "text-zinc-500 hover:text-foreground"
                 }`}
                 onClick={() => {
                   sessionStore.setNewSessionMode("local");
                   sessionStore.setConnectionError(null);
                 }}
               >
-                <FiHome size={14} />{t("newSession.local")}</a>
-              <a
+                <FiHome size={14} />{t("newSession.local")}</button>
+              <button
                 role="tab"
-                class={`tab flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-md text-sm font-medium transition-all ${
+                class={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 text-sm font-medium ${
                   sessionStore.state.newSessionMode === "remote"
-                    ? "bg-background text-foreground shadow-sm tab-active"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-zinc-900 text-white"
+                    : "text-zinc-500 hover:text-foreground"
                 }`}
                 onClick={() => {
                   sessionStore.setNewSessionMode("remote");
@@ -433,7 +430,7 @@ export const NewSessionModal: Component = () => {
                   }
                 }}
               >
-                <FiCloud size={14} />{t("newSession.remote")}</a>
+                <FiCloud size={14} />{t("newSession.remote")}</button>
             </div>
           </Show>
 
@@ -676,7 +673,7 @@ export const NewSessionModal: Component = () => {
                   placeholder={t("newSession.projectPath")}
                   class="font-mono text-sm"
                 />
-                <p class="text-xs text-muted-foreground">{t("newSession.typeToAutocomplete")}</p>
+                <p class="text-xs text-zinc-500">{t("newSession.typeToAutocomplete")}</p>
               </div>
             </Show>
 
@@ -684,11 +681,11 @@ export const NewSessionModal: Component = () => {
               <div class="space-y-3">
                 <button
                   type="button"
-                  class="flex items-center gap-2 w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors border-t border-border/50 mt-2 pt-3"
+                  class="flex items-center gap-2 w-full py-2 text-sm text-zinc-500 hover:text-foreground border-t border-black/10 mt-2 pt-3"
                   onClick={() => setIsAdvancedExpanded(!isAdvancedExpanded())}
                 >
                   <span
-                    class={`transition-transform duration-200 ${isAdvancedExpanded() ? "rotate-90" : ""}`}
+                    class={`${isAdvancedExpanded() ? "rotate-90" : ""}`}
                   >
                     ▶
                   </span>
@@ -700,14 +697,14 @@ export const NewSessionModal: Component = () => {
                       <Label for="agent-args" class="text-xs">{t("newSession.agentArgs")}</Label>
                       <Textarea
                         id="agent-args"
-                        class="min-h-[80px] text-sm font-mono"
+                        class="min-h-[80px] text-sm font-mono border border-black/10"
                         placeholder={agentArgsConfig().placeholder}
                         value={sessionStore.state.newSessionArgs}
                         onInput={(e) => {
                           sessionStore.setNewSessionArgs(e.currentTarget.value);
                         }}
                       />
-                      <p class="text-xs text-muted-foreground">
+                      <p class="text-xs text-zinc-500">
                         {agentArgsConfig().hint}
                       </p>
                     </div>
@@ -716,7 +713,7 @@ export const NewSessionModal: Component = () => {
                     <Label for="mcp-servers" class="text-xs">{t("newSession.mcpServers")}</Label>
                     <Textarea
                       id="mcp-servers"
-                      class="min-h-[120px] text-xs font-mono"
+                      class="min-h-[120px] text-xs font-mono border border-black/10"
                       placeholder='[{"type":"stdio","name":"filesystem","command":"npx","args":["-y","@modelcontextprotocol/server-filesystem","."]}]'
                       value={sessionStore.state.newSessionMcpServers}
                       onInput={(e) => {
@@ -725,7 +722,7 @@ export const NewSessionModal: Component = () => {
                         );
                       }}
                     />
-                    <p class="text-xs text-muted-foreground">{t("newSession.mcpServersHint")}</p>
+                    <p class="text-xs text-zinc-500">{t("newSession.mcpServersHint")}</p>
                   </div>
                 </Show>
               </div>

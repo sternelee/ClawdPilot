@@ -53,7 +53,7 @@ export const ChatInputView: Component<ChatInputViewProps> = (props) => {
   return (
     <div
       class={cn(
-        "w-full transition-all duration-300",
+        "w-full",
         mobile() && keyboardHeight() > 0 && "pb-safe",
       )}
       style={{

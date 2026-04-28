@@ -1,3 +1,9 @@
+/**
+ * SessionsView Component
+ *
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
+ */
+
 import { createSignal, createMemo, For, Show, type Component } from "solid-js";
 import {
   FiActivity,
@@ -60,37 +66,31 @@ export const SessionsView: Component = () => {
           <div class="flex items-start sm:items-center gap-3">
             <button
               type="button"
-              class="btn btn-square btn-ghost h-10 w-10 rounded-xl md:hidden shrink-0 -ml-2"
+              class="h-10 w-10 md:hidden shrink-0 -ml-2 border border-black/10 flex items-center justify-center text-zinc-500 hover:text-foreground hover:border-zinc-400"
               onClick={() => navigationStore.setSidebarOpen(true)}
               aria-label="Open menu"
             >
               <svg
-                width="24"
-                height="24"
-                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
                 fill="none"
-                viewBox="0 0 24 24"
-                class="inline-block h-6 w-6 stroke-current"
+                stroke="currentColor"
+                stroke-width="2"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                ></path>
+                <path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" />
               </svg>
             </button>
             <div>
               <h1 class="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                 {t("sessionsView.title")}
               </h1>
-              <p class="mt-1 text-sm text-muted-foreground">
+              <p class="mt-1 text-sm text-zinc-500">
                 {t("sessionsView.desc")}
               </p>
             </div>
           </div>
           <button
-            class="btn btn-primary btn-sm rounded-xl gap-2"
+            class="border border-black/10 px-4 py-2 text-sm font-medium text-foreground hover:bg-zinc-100 flex items-center gap-2"
             onClick={() => sessionStore.openNewSessionModal()}
           >
             <FiPlus size={16} />
@@ -98,14 +98,14 @@ export const SessionsView: Component = () => {
           </button>
         </header>
 
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-base-200 p-2 rounded-2xl border border-border/50">
-          <div class="flex items-center gap-1 p-1 bg-background rounded-xl overflow-x-auto">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border border-black/10 p-2">
+          <div class="flex items-center gap-1 overflow-x-auto">
             {(["all", "active", "local", "remote"] as const).map((f) => (
               <button
-                class={`px-4 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                class={`px-4 py-1.5 text-sm font-medium whitespace-nowrap ${
                   filter() === f
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    ? "bg-zinc-900 text-white"
+                    : "text-zinc-500 hover:text-foreground"
                 }`}
                 onClick={() => setFilter(f)}
               >
@@ -118,13 +118,13 @@ export const SessionsView: Component = () => {
 
           <div class="relative max-w-xs w-full px-2 pb-2 sm:p-0">
             <FiSearch
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground sm:left-3"
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 sm:left-3"
               size={16}
             />
             <input
               type="text"
               placeholder={t("sessionsView.searchPlaceholder")}
-              class="w-full rounded-xl border border-border/50 bg-background py-2 pl-10 pr-4 text-sm focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all"
+              class="w-full border border-black/10 bg-background py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-zinc-400"
               value={searchQuery()}
               onInput={(e) => setSearchQuery(e.currentTarget.value)}
             />
@@ -132,18 +132,18 @@ export const SessionsView: Component = () => {
         </div>
 
         {/* Sessions List */}
-        <div class="rounded-2xl border border-border/50 bg-base-200 overflow-hidden">
+        <div class="border border-black/10 overflow-hidden">
           <Show
             when={sessions().length > 0}
             fallback={
               <div class="flex flex-col items-center justify-center py-16 px-4 text-center">
-                <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
-                  <FiActivity size={28} class="text-muted-foreground/60" />
+                <div class="mb-4 flex h-14 w-14 items-center justify-center border border-black/10 text-zinc-400">
+                  <FiActivity size={28} />
                 </div>
                 <h3 class="text-base font-semibold text-foreground">
                   {t("sessionsView.noSessions")}
                 </h3>
-                <p class="mt-1 max-w-xs text-sm text-muted-foreground">
+                <p class="mt-1 max-w-xs text-sm text-zinc-500">
                   {searchQuery() || filter() !== "all"
                     ? t("sessionsView.noSessionsDesc")
                     : t("home.noRecentSessionsDesc")}
@@ -151,21 +151,21 @@ export const SessionsView: Component = () => {
               </div>
             }
           >
-            <div class="divide-y divide-border/50">
+            <div>
               <For each={sessions()}>
                 {(session) => {
                   const isActive = activeSessionId() === session.sessionId;
                   return (
                     <div
-                      class="group flex flex-col sm:flex-row sm:items-center justify-between p-4 transition-colors hover:bg-muted/30 cursor-pointer gap-4"
+                      class="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-black/10 last:border-b-0 cursor-pointer"
                       onClick={() => handleResumeSession(session.sessionId)}
                     >
                       <div class="flex items-start sm:items-center gap-4 min-w-0">
                         <div
-                          class={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
+                          class={`flex h-12 w-12 shrink-0 items-center justify-center border ${
                             isActive
-                              ? "bg-primary/10 text-primary border-primary/20"
-                              : "bg-background text-muted-foreground border-border/50"
+                              ? "bg-zinc-900 text-white border-zinc-900"
+                              : "bg-background text-zinc-400 border-black/10"
                           }`}
                         >
                           <Show
@@ -183,24 +183,24 @@ export const SessionsView: Component = () => {
                             </h3>
                             <Show when={session.active}>
                               <span
-                                class="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"
+                                class="h-2 w-2 bg-green-500"
                                 title={t("devices.active")}
                               />
                             </Show>
                           </div>
-                          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-zinc-500">
                             <span class="inline-flex items-center gap-1.5 font-medium">
                               <span class="capitalize">
                                 {session.agentType}
                               </span>
                             </span>
-                            <span class="text-muted-foreground/40">•</span>
-                            <span class="truncate font-mono text-[11px] bg-background px-1.5 py-0.5 rounded border border-border/50">
+                            <span class="text-zinc-300">•</span>
+                            <span class="truncate font-mono text-[11px] bg-background px-1.5 py-0.5 border border-black/10">
                               {session.mode === "local"
                                 ? t("common.local")
                                 : `${t("common.remote")}: ${session.hostname || session.controlSessionId?.slice(0, 8)}`}
                             </span>
-                            <span class="text-muted-foreground/40 hidden sm:inline">
+                            <span class="text-zinc-300 hidden sm:inline">
                               •
                             </span>
                             <span class="hidden sm:inline">
@@ -210,9 +210,13 @@ export const SessionsView: Component = () => {
                         </div>
                       </div>
 
-                      <div class="flex items-center gap-2 shrink-0 ml-16 sm:ml-0">
+                      <div class="flex items-center gap-2 shrink-0 ml-16 sm:ml-0 mt-4 sm:mt-0">
                         <button
-                          class={`btn btn-sm rounded-xl ${isActive ? "btn-primary" : "btn-ghost border border-border/50 bg-background hover:border-primary/30"}`}
+                          class={`border px-3 py-1.5 text-sm font-medium ${
+                            isActive
+                              ? "bg-zinc-900 text-white border-zinc-900"
+                              : "border-black/10 hover:bg-zinc-100"
+                          }`}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleResumeSession(session.sessionId);
@@ -224,7 +228,7 @@ export const SessionsView: Component = () => {
                         </button>
                         <Show when={session.active}>
                           <button
-                            class="btn btn-ghost btn-sm btn-square rounded-xl text-error hover:bg-error/10"
+                            class="border border-black/10 p-1.5 text-zinc-400 hover:text-red-500 hover:border-red-500"
                             onClick={(e) =>
                               handleDeleteSession(e, session.sessionId)
                             }

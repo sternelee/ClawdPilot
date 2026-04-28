@@ -3445,14 +3445,16 @@ async fn local_start_agent(
     session_id: Option<String>,
     extra_args: Option<Vec<String>>,
     mcp_servers: Option<serde_json::Value>,
+    additional_project_paths: Option<Vec<String>>, // 跨项目线程：附加项目列表
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     // Log the received parameters
     tracing::info!(
-        "[local_start_agent] agent_type_str: {}, project_path: {}",
+        "[local_start_agent] agent_type_str: {}, project_path: {}, additional_project_paths: {:?}",
         agent_type_str,
-        project_path
+        project_path,
+        additional_project_paths
     );
 
     // Parse agent type
@@ -3530,16 +3532,25 @@ async fn local_start_agent(
         ));
     }
 
+    // Build extra args including additional project paths for cross-project threads
+    let mut final_extra_args = extra_args.unwrap_or_default();
+    if let Some(additional_paths) = additional_project_paths {
+        for path in additional_paths {
+            final_extra_args.push("--additional-project-path".to_string());
+            final_extra_args.push(path);
+        }
+    }
+
     let mut event_rx = manager
         .start_session_with_id(
             session_id.clone(),
             agent_type,
-            None,                           // binary_path
-            extra_args.unwrap_or_default(), // extra_args
-            working_dir,                    // working_dir
-            None,                           // home_dir
-            mcp_servers,                    // mcp_servers
-            "local".to_string(),            // source
+            None,                // binary_path
+            final_extra_args,    // extra_args (now includes additional paths)
+            working_dir,         // working_dir
+            None,                // home_dir
+            mcp_servers,         // mcp_servers
+            "local".to_string(), // source
         )
         .await
         .map_err(|e| format!("Failed to start local agent: {}", e))?;

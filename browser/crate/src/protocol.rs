@@ -165,9 +165,16 @@ pub enum TcpForwardingAction {
         session_id: Option<String>,
     },
     ListSessions,
-    StopSession { session_id: String },
-    GetSessionInfo { session_id: String },
-    Connect { ticket: String, local_addr: String },
+    StopSession {
+        session_id: String,
+    },
+    GetSessionInfo {
+        session_id: String,
+    },
+    Connect {
+        ticket: String,
+        local_addr: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -384,7 +391,9 @@ pub enum AgentMessageContent {
         thinking: bool,
         message_id: Option<String>,
     },
-    TurnStarted { turn_id: String },
+    TurnStarted {
+        turn_id: String,
+    },
     TextDelta {
         text: String,
         thinking: bool,
@@ -392,7 +401,9 @@ pub enum AgentMessageContent {
     TurnCompleted {
         content: Option<String>,
     },
-    TurnError { error: String },
+    TurnError {
+        error: String,
+    },
     ToolCallUpdate {
         tool_name: String,
         status: ToolCallStatus,
@@ -489,7 +500,9 @@ pub enum AgentControlAction {
     Pause,
     Resume,
     Terminate,
-    SetPermissionMode { mode: AgentPermissionMode },
+    SetPermissionMode {
+        mode: AgentPermissionMode,
+    },
     GetPermissionMode,
     SendInput {
         content: String,
@@ -548,15 +561,24 @@ pub struct FileBrowserMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileBrowserAction {
-    ListDirectory { path: String },
+    ListDirectory {
+        path: String,
+    },
     ListMentionCandidates {
         base_path: String,
         query: String,
         limit: Option<usize>,
     },
-    ReadFile { path: String },
-    WriteFile { path: String, content: String },
-    GetFileInfo { path: String },
+    ReadFile {
+        path: String,
+    },
+    WriteFile {
+        path: String,
+        content: String,
+    },
+    GetFileInfo {
+        path: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -648,25 +670,43 @@ pub enum BuiltinCommand {
         project_path: String,
         args: Vec<String>,
     },
-    StopSession { session_id: String },
+    StopSession {
+        session_id: String,
+    },
     ListCommands,
     GetAgentInfo,
-    Init { description: Option<String> },
-    Review { target: Option<String> },
+    Init {
+        description: Option<String>,
+    },
+    Review {
+        target: Option<String>,
+    },
     ReviewBranch,
     ReviewCommit,
-    Commit { message: Option<String> },
+    Commit {
+        message: Option<String>,
+    },
     Loop {
         task: String,
         iterations: Option<u32>,
     },
-    AddDir { path: String },
-    Branch { name: Option<String> },
-    Btw { message: String },
+    AddDir {
+        path: String,
+    },
+    Branch {
+        name: Option<String>,
+    },
+    Btw {
+        message: String,
+    },
     Clear,
     Compact,
-    Plan { description: String },
-    Rename { new_name: String },
+    Plan {
+        description: String,
+    },
+    Rename {
+        new_name: String,
+    },
     Logout,
 }
 

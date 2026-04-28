@@ -39,6 +39,7 @@ export interface AgentSessionMetadata {
   sessionId: string;
   agentType: AgentType;
   projectPath: string;
+  additionalProjectPaths: string[]; // 附加项目列表（跨项目线程）
   startedAt: number;
   active: boolean;
   controlledByRemote: boolean;
@@ -97,6 +98,7 @@ export const mapBackendSessionMetadata = (
   sessionId: session.session_id,
   agentType: normalizeAgentType(session.agent_type),
   projectPath: session.project_path,
+  additionalProjectPaths: [],  // 跨项目线程：附加项目列表
   startedAt: session.started_at,
   active: session.active,
   controlledByRemote: session.controlled_by_remote,
@@ -324,6 +326,30 @@ export const createSessionStore = () => {
             .filter((session) => session.active)
             .sort((a, b) => b.startedAt - a.startedAt)[0];
           s.activeSessionId = nextSession?.sessionId ?? null;
+        }
+      }),
+    );
+  };
+
+  const addAdditionalProjectPath = (sessionId: string, path: string) => {
+    setState(
+      produce((s: SessionState) => {
+        const session = s.sessions[sessionId];
+        if (session && !session.additionalProjectPaths.includes(path)) {
+          session.additionalProjectPaths.push(path);
+        }
+      }),
+    );
+  };
+
+  const removeAdditionalProjectPath = (sessionId: string, path: string) => {
+    setState(
+      produce((s: SessionState) => {
+        const session = s.sessions[sessionId];
+        if (session) {
+          session.additionalProjectPaths = session.additionalProjectPaths.filter(
+            (p) => p !== path,
+          );
         }
       }),
     );
@@ -763,6 +789,7 @@ export const createSessionStore = () => {
         sessionId: undefined,
         extraArgs: extraArgs.length > 0 ? extraArgs : undefined,
         mcpServers,
+        additionalProjectPaths: undefined,  // 跨项目线程：创建时暂无附加项目
       });
 
       saveProjectPath(state.newSessionPath);
@@ -771,6 +798,7 @@ export const createSessionStore = () => {
         sessionId,
         agentType: state.newSessionAgent,
         projectPath: state.newSessionPath,
+        additionalProjectPaths: [],  // 跨项目线程：附加项目列表
         startedAt: Date.now(),
         active: true,
         controlledByRemote: false,
@@ -921,6 +949,10 @@ export const createSessionStore = () => {
     stopSession,
     removeConnectedHost,
     setActiveSession,
+
+    // Cross-project threads
+    addAdditionalProjectPath,
+    removeAdditionalProjectPath,
 
     // Modal
     openNewSessionModal,

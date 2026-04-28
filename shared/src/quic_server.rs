@@ -521,7 +521,9 @@ impl QuicMessageServer {
             if conns.len() >= max_connections {
                 warn!(
                     "Too many connections ({} >= {}), rejecting node {:?}",
-                    conns.len(), max_connections, remote_endpoint_id
+                    conns.len(),
+                    max_connections,
+                    remote_endpoint_id
                 );
                 connection.close(0u32.into(), b"Too many connections");
                 return Ok(());
@@ -1010,7 +1012,10 @@ impl QuicMessageServer {
             match recv_stream.read_exact(&mut header).await {
                 Ok(()) => {}
                 Err(e) => {
-                    debug!("read_framed_message: stream closed while reading header: {}", e);
+                    debug!(
+                        "read_framed_message: stream closed while reading header: {}",
+                        e
+                    );
                     return Ok(None);
                 }
             }
@@ -1026,7 +1031,10 @@ impl QuicMessageServer {
             match recv_stream.read_exact(&mut payload).await {
                 Ok(()) => {}
                 Err(e) => {
-                    debug!("read_framed_message: stream closed while reading payload: {}", e);
+                    debug!(
+                        "read_framed_message: stream closed while reading payload: {}",
+                        e
+                    );
                     return Ok(None);
                 }
             }
@@ -1173,10 +1181,8 @@ impl QuicMessageServer {
             .collect();
 
         let results = futures::future::join_all(send_futures).await;
-        let failed_node_ids: Vec<(String, EndpointId)> = results
-            .into_iter()
-            .filter_map(|r| r.err())
-            .collect();
+        let failed_node_ids: Vec<(String, EndpointId)> =
+            results.into_iter().filter_map(|r| r.err()).collect();
 
         // 批量清理发送失败的连接
         if !failed_node_ids.is_empty() {

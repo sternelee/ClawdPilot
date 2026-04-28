@@ -26,9 +26,7 @@ fn start() {
 
     tracing_subscriber::fmt()
         .with_max_level(LevelFilter::DEBUG)
-        .with_writer(
-            MakeConsoleWriter::default().map_trace_level_to(tracing::Level::DEBUG),
-        )
+        .with_writer(MakeConsoleWriter::default().map_trace_level_to(tracing::Level::DEBUG))
         .without_time()
         .with_ansi(false)
         .init();
@@ -88,20 +86,11 @@ pub enum AgentEvent {
         agent: AgentType,
     },
     #[serde(rename = "turn:started")]
-    TurnStarted {
-        session_id: String,
-        turn_id: String,
-    },
+    TurnStarted { session_id: String, turn_id: String },
     #[serde(rename = "text:delta")]
-    TextDelta {
-        session_id: String,
-        text: String,
-    },
+    TextDelta { session_id: String, text: String },
     #[serde(rename = "reasoning:delta")]
-    ReasoningDelta {
-        session_id: String,
-        text: String,
-    },
+    ReasoningDelta { session_id: String, text: String },
     #[serde(rename = "tool:started")]
     ToolStarted {
         session_id: String,
@@ -154,9 +143,7 @@ pub enum AgentEvent {
         code: Option<String>,
     },
     #[serde(rename = "session:ended")]
-    SessionEnded {
-        session_id: String,
-    },
+    SessionEnded { session_id: String },
     #[serde(rename = "usage:update")]
     UsageUpdate {
         session_id: String,

@@ -327,12 +327,10 @@ async fn run_server_status_loop(server: &CliMessageServer) {
 /// Wait for shutdown signal (Ctrl+C or SIGTERM)
 #[cfg(unix)]
 async fn wait_for_shutdown_signal() {
-    use tokio::signal::unix::{signal, SignalKind};
+    use tokio::signal::unix::{SignalKind, signal};
 
-    let mut sigterm = signal(SignalKind::terminate())
-        .expect("Failed to create SIGTERM handler");
-    let mut sigint = signal(SignalKind::interrupt())
-        .expect("Failed to create SIGINT handler");
+    let mut sigterm = signal(SignalKind::terminate()).expect("Failed to create SIGTERM handler");
+    let mut sigint = signal(SignalKind::interrupt()).expect("Failed to create SIGINT handler");
 
     tokio::select! {
         _ = sigterm.recv() => {
@@ -355,9 +353,7 @@ async fn wait_for_shutdown_signal() {
 fn run_stop() -> Result<()> {
     let pid_file = std::path::PathBuf::from("irogen.pid");
     if !pid_file.exists() {
-        return Err(anyhow::anyhow!(
-            "No PID file found. Is the daemon running?"
-        ));
+        return Err(anyhow::anyhow!("No PID file found. Is the daemon running?"));
     }
 
     let pid_str = std::fs::read_to_string(&pid_file)?;

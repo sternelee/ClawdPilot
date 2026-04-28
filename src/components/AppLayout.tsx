@@ -1,9 +1,7 @@
 /**
  * AppLayout Component
  *
- * Main application layout integrating SessionSidebar and ChatView
- * for multi-session AI agent management.
- * UI refactored to match OpenChamber's clean, modern design language.
+ * Zed-inspired: hard lines, high contrast, no gradients/shadows/animations.
  */
 
 import {
@@ -27,6 +25,7 @@ import { i18nStore } from "../stores/i18nStore";
 import { isMobile } from "../stores/deviceStore";
 import { KeyboardShortcutsDialog } from "./ui/KeyboardShortcuts";
 import { SpinnerWithLabel } from "./ui/Spinner";
+import { cn } from "~/lib/utils";
 
 // ============================================================================
 // Main Layout Component
@@ -34,58 +33,31 @@ import { SpinnerWithLabel } from "./ui/Spinner";
 
 export const AppLayout: Component = () => {
   const [shortcutsDialogOpen, setShortcutsDialogOpen] = createSignal(false);
+
   // Keyboard shortcuts
   onMount(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
-
-      // Press 'b' to toggle sidebar (desktop only)
       if ((e.key === "b" || e.key === "B") && !isMobile()) {
         navigationStore.toggleSidebar();
       }
-
-      // Press ? to show keyboard shortcuts
       if (e.key === "?") {
         setShortcutsDialogOpen((prev) => !prev);
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
   });
 
-  // Use createMemo to make activeSession reactive
-  const activeSession = createMemo(() => sessionStore.getActiveSession());
-
-  // Navigation state
   const activeView = createMemo(() => navigationStore.state.activeView);
 
-  // Auto-expand sidebar on desktop (md and above)
+  // Auto-expand sidebar on desktop
   createEffect(() => {
     if (window.innerWidth >= 768 && !navigationStore.state.sidebarOpen) {
       navigationStore.setSidebarOpen(true);
     }
-  });
-
-  // Debug logging
-  createEffect(() => {
-    const session = activeSession();
-    console.log(
-      "[AppLayout] activeSession changed:",
-      session?.sessionId,
-      "projectPath:",
-      session?.projectPath,
-      "agentType:",
-      session?.agentType,
-      "mode:",
-      session?.mode,
-    );
   });
 
   const renderMainContent = () => {
@@ -109,7 +81,7 @@ export const AppLayout: Component = () => {
   };
 
   return (
-    <div class="app-root flex h-full max-sm:text-sm max-sm:leading-5 bg-background">
+    <div class="flex h-full bg-background">
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={shortcutsDialogOpen()}
@@ -118,36 +90,30 @@ export const AppLayout: Component = () => {
 
       {/* History loading overlay */}
       <Show when={sessionStore.state.isHistoryLoading}>
-        <div class="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div class="rounded-2xl bg-background/90 border border-border/50 px-6 py-5 shadow-2xl">
-            <SpinnerWithLabel
-              text={i18nStore.t("common.loadingHistory")}
-              size="lg"
-              variant="primary"
-            />
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60">
+          <div class="bg-background border border-black/10 px-6 py-4">
+            <SpinnerWithLabel text={i18nStore.t("common.loadingHistory")} size="lg" variant="primary" />
           </div>
         </div>
       </Show>
 
-      {/* Mobile overlay backdrop - hidden on desktop (md+) */}
-      <button
-        type="button"
-        class={`fixed inset-0 z-40 h-full w-full cursor-default border-none bg-black/50 backdrop-blur-sm transition-all duration-300 md:hidden ${
-          navigationStore.state.sidebarOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
-        onClick={() => navigationStore.setSidebarOpen(false)}
-        aria-label="Close sidebar"
-      />
+      {/* Mobile backdrop */}
+      <Show when={navigationStore.state.sidebarOpen && isMobile()}>
+        <button
+          type="button"
+          class="fixed inset-0 z-40 bg-black/50 md:hidden"
+          onClick={() => navigationStore.setSidebarOpen(false)}
+          aria-label="Close sidebar"
+        />
+      </Show>
 
-      {/* Session Sidebar */}
-      {/* Mobile: fixed overlay, slides in from left. Desktop (md+): always visible inline */}
+      {/* Sidebar */}
       <div
-        class={`flex-shrink-0 transition-all duration-300 ease-out md:relative md:inset-auto md:z-auto md:w-64 lg:w-68 md:shadow-none md:border-0
-          fixed inset-y-0 left-0 z-50 w-[85vw] max-w-80 shadow-2xl
-          ${navigationStore.state.sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        }`}
+        class={cn(
+          "fixed inset-y-0 left-0 z-50 w-[280px] md:relative md:z-auto md:w-64 lg:w-64",
+          "transform transition-transform duration-200 md:translate-x-0",
+          navigationStore.state.sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
       >
         <SessionSidebar
           isOpen={navigationStore.state.sidebarOpen}
@@ -156,8 +122,7 @@ export const AppLayout: Component = () => {
       </div>
 
       {/* Main Content */}
-      <div class="flex flex-1 min-h-0 flex-col overflow-hidden bg-background">
-        {/* Main Content Area */}
+      <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
         <main class="flex-1 flex min-h-0 flex-col min-w-0">
           {renderMainContent()}
         </main>
@@ -165,5 +130,3 @@ export const AppLayout: Component = () => {
     </div>
   );
 };
-
-export default AppLayout;

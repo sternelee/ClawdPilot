@@ -213,6 +213,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
         sessionId: newSessionId,
         agentType: agentType(),
         projectPath: projectPath(),
+        additionalProjectPaths: [],  // 跨项目线程：附加项目列表
         startedAt: Date.now(),
         active: true,
         controlledByRemote: false,

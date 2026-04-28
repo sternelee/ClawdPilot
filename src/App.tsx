@@ -103,6 +103,7 @@ export default function App() {
           sessionId: payload.session_id,
           agentType,
           projectPath: payload.project_path,
+          additionalProjectPaths: [],  // 跨项目线程：附加项目列表
           startedAt: Date.now(),
           active: true,
           controlledByRemote: true,
