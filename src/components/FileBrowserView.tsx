@@ -1,7 +1,8 @@
 /**
  * File Browser View
  *
- * P2P file browser component for browsing remote directories and viewing files.
+ * P2P file browser using @pierre/trees for the directory tree
+ * and @pierre/diffs File renderer for syntax-highlighted file preview.
  */
 
 import {
@@ -11,25 +12,12 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  onCleanup,
   onMount,
 } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import Prism from "prismjs";
-import "prismjs/themes/prism.css";
-import "prismjs/components/prism-clike";
-import "prismjs/components/prism-markup";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-jsx";
-import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-rust";
-import "prismjs/components/prism-toml";
-import "prismjs/components/prism-yaml";
-import "prismjs/components/prism-markdown";
-import "prismjs/components/prism-diff";
+import { FileTree } from "@pierre/trees";
+import { File as PierreFile } from "@pierre/diffs";
 import { fileBrowserStore } from "../stores/fileBrowserStore";
 import type { FileEntry } from "../stores/fileBrowserStore";
 import { notificationStore } from "../stores/notificationStore";
@@ -51,66 +39,30 @@ interface FileBrowserViewProps {
   onPathChange?: (path: string) => void;
 }
 
-const extensionLanguageMap: Record<string, string> = {
-  rs: "rust",
-  ts: "typescript",
-  tsx: "tsx",
-  js: "javascript",
-  jsx: "jsx",
-  json: "json",
-  md: "markdown",
-  html: "markup",
-  htm: "markup",
-  xml: "markup",
-  css: "css",
-  yml: "yaml",
-  yaml: "yaml",
-  toml: "toml",
-  sh: "bash",
-  bash: "bash",
-  zsh: "bash",
-  diff: "diff",
-  patch: "diff",
-};
+// ============================================================================
+// Helpers
+// ============================================================================
 
-const escapeHtml = (input: string): string =>
-  input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-const getLanguageFromPath = (path: string): string => {
-  const fileName = path.split("/").pop() ?? "";
-  const extension = fileName.includes(".")
-    ? fileName.split(".").pop()?.toLowerCase()
-    : undefined;
-  return (extension && extensionLanguageMap[extension]) || "none";
-};
+/**
+ * Build @pierre/trees path list from a flat FileEntry array.
+ * Trailing slash on directories tells the tree they are folders
+ * (per normalizeInputPath spec: "Trailing slashes explicitly mark directories").
+ */
+const buildTreePaths = (entries: FileEntry[]): string[] =>
+  entries.map((e) => (e.isDir ? `${e.name}/` : e.name));
 
 // ============================================================================
 // Icons
 // ============================================================================
 
-const FolderIcon = () => (
+const HomeIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    class="h-5 w-5"
+    class="h-4 w-4"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
-    <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-  </svg>
-);
-
-const FileIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    class="h-5 w-5"
-    viewBox="0 0 20 20"
-    fill="currentColor"
-  >
-    <path
-      fill-rule="evenodd"
-      d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
-      clip-rule="evenodd"
-    />
+    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
   </svg>
 );
 
@@ -129,14 +81,18 @@ const ChevronRightIcon = () => (
   </svg>
 );
 
-const HomeIcon = () => (
+const FileIcon = () => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
-    class="h-4 w-4"
+    class="h-5 w-5"
     viewBox="0 0 20 20"
     fill="currentColor"
   >
-    <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+    <path
+      fill-rule="evenodd"
+      d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
+      clip-rule="evenodd"
+    />
   </svg>
 );
 
@@ -153,16 +109,28 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     setError,
     viewFile,
     closeFile,
-    setViewMode,
     clearOpenRequest,
-    getDirectories,
-    getFiles,
   } = fileBrowserStore;
+
   let lastRootPath: string | null = null;
-  let filePreviewContainerRef: HTMLDivElement | undefined;
+  let treeContainerRef: HTMLDivElement | undefined;
+
+  // Use a signal for the file preview container so createEffect can react
+  // when the Dialog's Show block renders and sets the ref.
+  const [filePreviewContainer, setFilePreviewContainer] = createSignal<
+    HTMLDivElement | undefined
+  >(undefined);
   const [targetLine, setTargetLine] = createSignal<number | undefined>(
     undefined,
   );
+
+  // Pierre instances — stable across re-renders
+  let fileTreeInstance: FileTree;
+  let pierreFileInstance: PierreFile;
+
+  // ============================================================================
+  // Path helpers
+  // ============================================================================
 
   const rootPath = createMemo(() => {
     const raw = (props.projectPath || ".").trim();
@@ -174,20 +142,19 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
   const resolvePath = (path: string): string =>
     path === "." ? rootPath() : path;
 
-  const joinPath = (base: string, name: string): string => {
-    if (base === "/") return `/${name}`;
-    return `${base}/${name}`;
-  };
+  const joinPath = (base: string, name: string): string =>
+    base === "/" ? `/${name}` : `${base}/${name}`;
 
   const getRemoteControlSessionId = (): string => {
-    const controlSessionId = props.controlSessionId;
-    if (!controlSessionId) {
+    if (!props.controlSessionId)
       throw new Error("Remote control session is not available");
-    }
-    return controlSessionId;
+    return props.controlSessionId;
   };
 
-  // Load directory content
+  // ============================================================================
+  // Data fetching
+  // ============================================================================
+
   const loadDirectory = async (path: string) => {
     const resolvedPath = resolvePath(path);
     setLoading(true);
@@ -209,6 +176,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               entries?: FileEntry[];
               error?: string;
             }>("file_browser_list", { path: resolvedPath });
+
       if (response?.success) {
         setEntries(response.entries || []);
         navigateToPath(resolvedPath);
@@ -226,7 +194,6 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     }
   };
 
-  // Load file content
   const loadFile = async (path: string, jumpToLine?: number) => {
     setLoading(true);
     setError(null);
@@ -247,17 +214,16 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               content?: string;
               error?: string;
             }>("file_browser_read", { path });
+
       if (response?.success) {
         viewFile(path, response.content || "");
-        if (
+        setTargetLine(
           typeof jumpToLine === "number" &&
-          Number.isFinite(jumpToLine) &&
-          jumpToLine > 0
-        ) {
-          setTargetLine(Math.floor(jumpToLine));
-        } else {
-          setTargetLine(undefined);
-        }
+            Number.isFinite(jumpToLine) &&
+            jumpToLine > 0
+            ? Math.floor(jumpToLine)
+            : undefined,
+        );
       } else {
         throw new Error(response?.error || "Failed to read file");
       }
@@ -271,22 +237,34 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     }
   };
 
-  // Handle entry click
-  const handleEntryClick = (entry: { name: string; isDir: boolean }) => {
-    const basePath = resolvePath(state.currentPath);
-    const fullPath = joinPath(basePath, entry.name);
+  // ============================================================================
+  // @pierre/trees selection handler
+  // ============================================================================
 
-    if (entry.isDir) {
-      loadDirectory(fullPath);
+  /**
+   * Fired by FileTree when the user selects an item.
+   * Paths ending with "/" are directories (per @pierre/trees normalizeInputPath).
+   */
+  const handleTreeSelection = (selectedPaths: readonly string[]) => {
+    if (!selectedPaths.length) return;
+    const selected = selectedPaths[0];
+    const basePath = resolvePath(state.currentPath);
+
+    if (selected.endsWith("/")) {
+      // Directory — navigate into it
+      const dirName = selected.slice(0, -1);
+      void loadDirectory(joinPath(basePath, dirName));
     } else {
-      loadFile(fullPath);
+      // File — open preview
+      void loadFile(joinPath(basePath, selected));
     }
   };
 
-  // Refresh current directory
-  const refresh = () => {
-    loadDirectory(resolvePath(state.currentPath));
-  };
+  // ============================================================================
+  // Navigation helpers
+  // ============================================================================
+
+  const refresh = () => void loadDirectory(resolvePath(state.currentPath));
 
   const goUp = () => {
     const current = resolvePath(state.currentPath);
@@ -297,17 +275,73 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     const parentPath = current.startsWith("/")
       ? `/${parts.join("/")}` || "/"
       : parts.join("/") || ".";
-    loadDirectory(parentPath);
+    void loadDirectory(parentPath);
   };
 
+  // ============================================================================
+  // Lifecycle
+  // ============================================================================
+
   onMount(() => {
-    const hasCachedEntries = state.entries.length > 0;
-    const pathToLoad = hasCachedEntries
-      ? resolvePath(state.currentPath)
-      : rootPath();
-    loadDirectory(pathToLoad);
+    // Create the FileTree instance with whatever entries are already cached
+    fileTreeInstance = new FileTree({
+      paths: buildTreePaths(state.entries),
+      icons: "complete",
+      onSelectionChange: handleTreeSelection,
+      // Show all items expanded (flat directory listing mode)
+      initialExpansion: "open",
+      // Directories have no pre-loaded children, so keep them as-is
+      flattenEmptyDirectories: false,
+    });
+    if (treeContainerRef) {
+      fileTreeInstance.render({ containerWrapper: treeContainerRef });
+    }
+
+    // Create the Pierre File renderer for syntax-highlighted file preview
+    pierreFileInstance = new PierreFile({
+      theme: "pierre-dark",
+      disableFileHeader: false,
+    });
+
+    // Load the initial directory
+    const pathToLoad =
+      state.entries.length > 0 ? resolvePath(state.currentPath) : rootPath();
+    void loadDirectory(pathToLoad);
   });
 
+  onCleanup(() => {
+    fileTreeInstance?.cleanUp();
+    pierreFileInstance?.cleanUp();
+  });
+
+  // Sync FileTree paths whenever store entries change
+  createEffect(() => {
+    const paths = buildTreePaths(state.entries);
+    fileTreeInstance?.resetPaths(paths);
+  });
+
+  // Render file preview using @pierre/diffs File whenever the file or container changes
+  createEffect(() => {
+    const vf = state.viewingFile;
+    const container = filePreviewContainer();
+    if (!vf || !container || !pierreFileInstance) return;
+    const fileName = vf.path.split("/").pop() || "file";
+    pierreFileInstance.render({
+      file: { name: fileName, contents: vf.content },
+      containerWrapper: container,
+    });
+  });
+
+  // Scroll to target line after the preview renders
+  createEffect(() => {
+    const line = targetLine();
+    const container = filePreviewContainer();
+    if (!state.viewingFile || !line || !container) return;
+    const lineHeight = 20;
+    container.scrollTo({ top: Math.max((line - 1) * lineHeight - 80, 0), behavior: "smooth" });
+  });
+
+  // React to projectPath changes (re-load from new root)
   createEffect(() => {
     const nextRoot = rootPath();
     if (lastRootPath === null) {
@@ -316,10 +350,11 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     }
     if (lastRootPath !== nextRoot) {
       lastRootPath = nextRoot;
-      loadDirectory(nextRoot);
+      void loadDirectory(nextRoot);
     }
   });
 
+  // Handle external open-file requests (e.g. from chat card click)
   createEffect(() => {
     const req = state.openRequest;
     if (!req) return;
@@ -344,35 +379,16 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     void openRequestedFile();
   });
 
-  createEffect(() => {
-    const line = targetLine();
-    if (!state.viewingFile || !line || !filePreviewContainerRef) return;
-    const lineHeight = 20;
-    const top = Math.max((line - 1) * lineHeight - 80, 0);
-    filePreviewContainerRef.scrollTo({
-      top,
-      behavior: "smooth",
-    });
-  });
+  // ============================================================================
+  // Breadcrumb
+  // ============================================================================
 
-  // Format file size
-  const formatSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
-  // Breadcrumb path segments
   const pathSegments = () => {
     const root = rootPath();
     const current = resolvePath(state.currentPath);
     if (current === root) return [];
-
     const rootWithSlash = root.endsWith("/") ? root : `${root}/`;
-    if (!current.startsWith(rootWithSlash)) {
-      return [];
-    }
-
+    if (!current.startsWith(rootWithSlash)) return [];
     const relative = current.slice(rootWithSlash.length);
     const segments = relative.split("/").filter(Boolean);
     return segments.map((seg, i) => ({
@@ -381,32 +397,16 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
     }));
   };
 
-  const highlightedFileContent = createMemo(() => {
-    const viewingFile = state.viewingFile;
-    if (!viewingFile) return "";
-
-    const language = getLanguageFromPath(viewingFile.path);
-    const grammar = Prism.languages[language];
-    if (!grammar) return escapeHtml(viewingFile.content);
-
-    return Prism.highlight(viewingFile.content, grammar, language);
-  });
-
-  const viewingLanguage = createMemo(() => {
-    const viewingFile = state.viewingFile;
-    if (!viewingFile) return "none";
-    return getLanguageFromPath(viewingFile.path);
-  });
-
-  const hasCachedEntries = createMemo(() => state.entries.length > 0);
+  // ============================================================================
+  // Render
+  // ============================================================================
 
   return (
     <div class={`flex flex-col h-full bg-base-200 ${props.class || ""}`}>
-      {/* Header */}
+      {/* Header — navigation bar + breadcrumb */}
       <div class="flex-none border-b border-border/50 bg-base-200/80 backdrop-blur-sm">
-        {/* Navigation Bar */}
         <div class="flex items-center gap-1.5 p-2 sm:p-3">
-          {/* Navigation Buttons */}
+          {/* Up / Refresh / Home buttons */}
           <div class="flex items-center gap-1">
             <Button
               variant="ghost"
@@ -414,11 +414,11 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               class="h-7 w-7 rounded-lg"
               disabled={resolvePath(state.currentPath) === rootPath()}
               onClick={goUp}
-              title="Up"
+              title="Go up one level"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4 sm:h-4 sm:w-4"
+                class="h-4 w-4"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -432,22 +432,24 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               onClick={refresh}
               title="Refresh"
             >
-              <Show when={state.isLoading}>
+              <Show
+                when={state.isLoading}
+                fallback={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                }
+              >
                 <Spinner size="sm" />
-              </Show>
-              <Show when={!state.isLoading}>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-4 w-4 sm:h-4 sm:w-4"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
               </Show>
             </Button>
             <Button
@@ -455,7 +457,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               size="xs"
               class="h-7 w-7 rounded-lg"
               onClick={() => loadDirectory(rootPath())}
-              title="Home"
+              title="Go to root"
             >
               <HomeIcon />
             </Button>
@@ -464,77 +466,43 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           <div class="h-4 w-px bg-border/50 mx-1" />
 
           {/* Breadcrumb */}
-          <div class="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+          <div class="flex items-center flex-1 min-w-0 overflow-x-auto scrollbar-hide gap-0.5">
+            <button
+              class="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={() => loadDirectory(rootPath())}
+              title="Root"
+            >
+              <HomeIcon />
+            </button>
             <For each={pathSegments()}>
-              {(segment, i) => (
+              {(segment) => (
                 <div class="flex items-center shrink-0">
+                  <span class="text-muted-foreground/40">
+                    <ChevronRightIcon />
+                  </span>
                   <button
-                    class="max-w-24 sm:max-w-32 truncate rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    class="max-w-28 truncate rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                     onClick={() => loadDirectory(segment.path)}
                   >
                     {segment.name}
                   </button>
-                  <Show when={i() < pathSegments().length - 1}>
-                    <span class="text-muted-foreground/40 mx-0.5">
-                      <ChevronRightIcon />
-                    </span>
-                  </Show>
                 </div>
               )}
             </For>
-            <Show when={pathSegments().length === 0}>
-              <span class="px-1.5 text-xs font-medium text-muted-foreground">
-                /
-              </span>
-            </Show>
-          </div>
-
-          {/* View Mode Toggle */}
-          <div class="flex items-center rounded-lg bg-background p-0.5 border border-border/50 shadow-sm shrink-0">
-            <button
-              class={`rounded-md p-1 ${state.viewMode === "list" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setViewMode("list")}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </button>
-            <button
-              class={`rounded-md p-1 ${state.viewMode === "grid" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setViewMode("grid")}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-4 w-4"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Content Area */}
-      <div class="flex-1 overflow-y-auto">
-        {/* Loading State */}
-        <Show when={state.isLoading && !hasCachedEntries()}>
-          <div class="flex items-center justify-center h-64">
+      {/* Main content — @pierre/trees fills this area */}
+      <div class="flex-1 overflow-hidden relative">
+        {/* Loading overlay (only on initial load with no cached data) */}
+        <Show when={state.isLoading && !state.entries.length}>
+          <div class="absolute inset-0 flex items-center justify-center bg-base-200/70 z-10">
             <Spinner size="lg" class="text-primary" />
           </div>
         </Show>
 
-        {/* Error State */}
+        {/* Error banner */}
         <Show when={state.error}>
           <Alert variant="destructive" class="m-4">
             <svg
@@ -554,139 +522,11 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           </Alert>
         </Show>
 
-        {/* File List View */}
-        <Show when={state.viewMode === "list"}>
-          <div class="w-full">
-            <table class="w-full text-left text-sm whitespace-nowrap">
-              <thead class="sticky top-0 bg-base-200/90 backdrop-blur-sm z-10 border-b border-border/50 text-muted-foreground/70 text-xs uppercase tracking-wider font-semibold">
-                <tr>
-                  <th class="px-4 py-2 font-medium">Name</th>
-                  <th class="px-4 py-2 font-medium w-24 text-right">Size</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-border/30">
-                <Show
-                  when={
-                    getDirectories().length === 0 && getFiles().length === 0
-                  }
-                >
-                  <tr>
-                    <td
-                      colspan="2"
-                      class="py-12 text-center text-sm text-muted-foreground/50"
-                    >
-                      <div class="flex flex-col items-center justify-center gap-2">
-                        <FolderIcon />
-                        <span>This directory is empty</span>
-                      </div>
-                    </td>
-                  </tr>
-                </Show>
-                <For each={getDirectories()}>
-                  {(entry) => (
-                    <tr
-                      class="cursor-pointer hover:bg-background transition-colors group"
-                      onClick={() => handleEntryClick(entry)}
-                    >
-                      <td class="flex items-center gap-2.5 px-4 py-2 text-foreground font-medium">
-                        <span class="text-primary/80 group-hover:text-primary transition-colors">
-                          <FolderIcon />
-                        </span>
-                        <span class="truncate">{entry.name}</span>
-                      </td>
-                      <td class="px-4 py-2 text-muted-foreground/50 text-right text-xs">
-                        --
-                      </td>
-                    </tr>
-                  )}
-                </For>
-                <For each={getFiles()}>
-                  {(entry) => (
-                    <tr
-                      class="cursor-pointer hover:bg-background transition-colors group"
-                      onClick={() => handleEntryClick(entry)}
-                    >
-                      <td class="flex items-center gap-2.5 px-4 py-2 text-foreground/80 group-hover:text-foreground">
-                        <span class="text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
-                          <FileIcon />
-                        </span>
-                        <span class="truncate">{entry.name}</span>
-                      </td>
-                      <td class="px-4 py-2 text-muted-foreground/60 text-right text-xs font-mono">
-                        {formatSize(entry.size)}
-                      </td>
-                    </tr>
-                  )}
-                </For>
-              </tbody>
-            </table>
-          </div>
-        </Show>
-
-        {/* Grid View */}
-        <Show when={state.viewMode === "grid"}>
-          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 sm:gap-4 p-4">
-            <Show
-              when={getDirectories().length === 0 && getFiles().length === 0}
-            >
-              <div class="col-span-full flex flex-col items-center justify-center gap-2 py-12 text-sm text-muted-foreground/50">
-                <FolderIcon />
-                <span>This directory is empty</span>
-              </div>
-            </Show>
-            <For each={getDirectories()}>
-              {(entry) => (
-                <div
-                  class="group flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-background border border-transparent hover:border-border/50 hover:shadow-sm cursor-pointer transition-all"
-                  onClick={() => handleEntryClick(entry)}
-                >
-                  <span class="text-primary/80 group-hover:text-primary transition-colors drop-shadow-sm h-10 w-10 flex items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-8 w-8"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                    </svg>
-                  </span>
-                  <span class="text-xs font-medium text-center truncate w-full px-1 text-foreground">
-                    {entry.name}
-                  </span>
-                </div>
-              )}
-            </For>
-            <For each={getFiles()}>
-              {(entry) => (
-                <div
-                  class="group flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-background border border-transparent hover:border-border/50 hover:shadow-sm cursor-pointer transition-all"
-                  onClick={() => handleEntryClick(entry)}
-                >
-                  <span class="text-muted-foreground/60 group-hover:text-muted-foreground transition-colors h-10 w-10 flex items-center justify-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-7 w-7"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fill-rule="evenodd"
-                        d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
-                  </span>
-                  <span class="text-xs text-center truncate w-full px-1 text-foreground/80 group-hover:text-foreground">
-                    {entry.name}
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
+        {/* @pierre/trees container — FileTree renders its shadow DOM here */}
+        <div ref={treeContainerRef} class="h-full" />
       </div>
 
-      {/* File Content Modal */}
+      {/* File preview Dialog — uses @pierre/diffs File renderer */}
       <Show when={state.viewingFile}>
         <Dialog
           open={!!state.viewingFile}
@@ -694,26 +534,26 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           contentClass="max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-background rounded-2xl"
         >
           <div class="flex flex-col h-full min-h-0">
+            {/* Dialog header */}
             <div class="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-base-200/50 shrink-0">
-              <h3 class="font-medium text-sm text-foreground flex items-center gap-2 truncate">
-                <FileIcon />
-                {state.viewingFile?.path.split("/").pop() || "File"}
-                <span class="text-muted-foreground/50 font-normal text-xs ml-2 hidden sm:inline-block truncate">
+              <h3 class="font-medium text-sm text-foreground flex items-center gap-2 min-w-0">
+                <span class="shrink-0">
+                  <FileIcon />
+                </span>
+                <span class="truncate">
+                  {state.viewingFile?.path.split("/").pop() || "File"}
+                </span>
+                <span class="text-muted-foreground/50 font-normal text-xs hidden sm:block truncate">
                   {state.viewingFile?.path}
                 </span>
               </h3>
             </div>
+
+            {/* @pierre/diffs File renderer container */}
             <div
-              ref={filePreviewContainerRef}
-              class="flex-1 overflow-auto bg-base-100 p-4"
-            >
-              <pre class="file-preview-prism text-[13px] leading-relaxed m-0 h-full">
-                <code
-                  class={`language-${viewingLanguage()} font-mono`}
-                  innerHTML={highlightedFileContent()}
-                />
-              </pre>
-            </div>
+              ref={setFilePreviewContainer}
+              class="flex-1 overflow-auto"
+            />
           </div>
         </Dialog>
       </Show>
