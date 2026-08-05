@@ -8,7 +8,7 @@
 - `app/` - Tauri backend (Rust) for desktop/mobile app with agent session management
 - `shared/` - Rust networking and protocol library (iroh QUIC) shared by CLI/app
 - `src/` - SolidJS frontend for desktop/mobile (Vite + TailwindCSS v4 + DaisyUI + Kobalte)
-- `web/` - **Separate** Cloudflare Workers SSR app (TanStack Start + SolidJS) - see Web section below
+- `web/` - **Separate** Cloudflare Workers SSR app (TanStack Start + SolidJS) — see Web section below
 - `browser/` - WebAssembly browser client
 - `plugins/` - Vite/Tauri build helpers
 
@@ -105,6 +105,30 @@ cd web && pnpm lint && pnpm format
 - Use environment variables for sensitive configuration
 - `shared/src/message_protocol.rs` uses chacha20poly1305 for encryption
 
+## Commit & Pull Request Guidelines
+
+### Commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/). Common prefixes:
+
+| Prefix | When |
+| -------- | ------ |
+| `feat:` | New feature |
+| `fix:` | Bug fix |
+| `refactor:` | Restructuring (no behavior change) |
+| `perf:` | Performance improvement |
+| `style:` | UI/layout/formatting (no logic change) |
+| `chore:` | Maintenance, deps, rename |
+
+Add a scope when relevant: `feat(ui):`, `fix(windows):`, `fix(protocol):`.
+
+### Pull Requests
+
+- Keep PRs focused — one change, one PR
+- Link related issues in the description
+- Include screenshots or GIFs for UI changes
+- Ensure the verification order passes: `cargo fmt --all && cargo clippy --workspace -- -D warnings && pnpm tsc`
+
 ## Release
 
 ```bash
@@ -113,9 +137,9 @@ git tag v0.x.y && git push origin v0.x.y
 
 ## Adding a New Agent Integration
 
-1. `shared/src/message_protocol.rs` - add agent type
-2. `shared/src/agent/factory.rs` - process/binary detection
-3. `shared/src/agent/mod.rs` - session startup
-4. `shared/src/agent/` - streaming format and permissions handling
-5. `app/src/lib.rs` - backend commands/events
-6. `src/stores/` and components - frontend session/UI handling
+1. `shared/src/message_protocol.rs` — add agent type
+2. `shared/src/agent/factory.rs` — process/binary detection
+3. `shared/src/agent/mod.rs` — session startup
+4. `shared/src/agent/` — streaming format and permissions handling
+5. `app/src/lib.rs` — backend commands/events
+6. `src/stores/` and components — frontend session/UI handling

@@ -16,30 +16,30 @@ iroh = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 rand = { workspace = true }
-data-encoding = "2.6"
-url = "2.5"
+data-encoding = { workspace = true }
+url = { workspace = true }
 tracing-appender.workspace = true
 bincode = { workspace = true }
-chacha20poly1305 = "0.10"
-aead = "0.5"
+chacha20poly1305 = { workspace = true }
+aead = { workspace = true }
 base64 = { workspace = true }
 hex = { workspace = true }
-regex = "1.10"
+regex = { workspace = true }
 lazy_static = "1.5"
-dirs = "5.0"
-gethostname = "0.5"
+dirs = { workspace = true }
+gethostname = { workspace = true }
 fast_qr = "0.13"
-libc = "0.2"
+libc = { workspace = true }
 iroh-tickets = { workspace = true }
 
 
 shared = { path = "../shared" }
 
 # QUIC protocol dependencies
-async-trait = "0.1"
-futures-util = "0.3"
-agent-client-protocol = "0.12.1"
-tokio-util = { version = "0.7", features = ["compat"] }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+agent-client-protocol = { workspace = true }
+tokio-util = { workspace = true }
 
 # Logging dependencies
 chrono = "0.4"

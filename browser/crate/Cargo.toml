@@ -7,33 +7,33 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = "1.0.86"
+anyhow = { workspace = true }
 console_error_panic_hook = "0.1.7"
-futures = "0.3"
-serde = "1.0.217"
+futures = { workspace = true }
+serde = { workspace = true }
 serde-wasm-bindgen = "0.6.5"
-serde_json = "1.0.117"
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 tracing-subscriber-wasm = "0.1.0"
-wasm-bindgen = "=0.2.106"
+wasm-bindgen = "=0.2"
 wasm-bindgen-futures = "0.4"
-wasm-streams = "0.4.2"
+wasm-streams = "0.6"
 js-sys = "0.3"
 web-sys = "0.3"
-gloo-timers = { version = "0.3.0", features = ["futures"] }
+gloo-timers = { version = "0.4", features = ["futures"] }
 async-stream = "0.3.5"
-futures-util = "0.3.30"
+futures-util = { workspace = true }
 bincode = { workspace = true }
 base64 = { workspace = true }
-data-encoding = "2.6.0"
-n0-future = "0.1.2"
+data-encoding = { workspace = true }
+n0-future = { workspace = true }
 iroh = { workspace = true, default-features = false, features = ["tls-ring"] }
 iroh-tickets = { workspace = true }
 iroh-base = { workspace = true, default-features = false }
-postcard = "1.1.1"
+postcard = { workspace = true }
 tokio = { version = "1.47", default-features = false, features = ["sync"] }
-getrandom = { version = "0.3", features = [] }
+getrandom = { version = "0.4", features = [] }
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = [
