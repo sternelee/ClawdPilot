@@ -8,6 +8,7 @@
 import { createSignal, onMount, onCleanup } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import { type as osType } from "@tauri-apps/plugin-os";
+import { styleStore } from "./stores/styleStore";
 
 // Components
 import { AppLayout } from "./components/AppLayout";
@@ -49,6 +50,9 @@ export default function App() {
 
   // Initialize app on mount
   onMount(() => {
+    // Initialize style system
+    styleStore.applyForAgent();
+
     // Initialize device detection for mobile support
     initializeDeviceDetection();
     if (isMobilePlatform()) {
