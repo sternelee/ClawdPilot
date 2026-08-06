@@ -38,6 +38,7 @@ import { chatStore } from "../stores/chatStore";
 import type { AgentSessionMetadata } from "../stores/sessionStore";
 import { cn } from "~/lib/utils";
 import { t } from "../stores/i18nStore";
+import { styleStore } from "../stores/styleStore";
 
 // ============================================================================
 // Agent Avatar Helpers
@@ -190,7 +191,7 @@ const SessionItem: Component<{
     const last = msgs[msgs.length - 1];
     const text = last.content || "";
     // Strip markdown formatting for preview
-    return text.replace(/[#*`\[\]]/g, "").substring(0, 60);
+    return text.replace(/[#*`[\]]/g, "").substring(0, 60);
   });
 
   return (
@@ -464,10 +465,16 @@ export const SessionSidebar: Component<SessionSidebarProps> = (props) => {
     return count;
   });
 
+  const densityClass = () => {
+    const s = styleStore.currentStyle();
+    return s === "claude" ? "gap-0.5 py-1" : s === "grok" ? "gap-2 py-3" : "gap-1 py-2";
+  };
+
   return (
     <aside class={cn(
       "flex h-full flex-col bg-base-100 border-r border-base-content/10 transition-all duration-200",
       collapsed() ? "w-16" : "w-full",
+      densityClass(),
     )}>
       {/* Header — collapsed shows only logo */}
       <div class={cn(

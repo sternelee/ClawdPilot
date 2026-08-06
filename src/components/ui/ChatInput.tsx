@@ -143,7 +143,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
     <div class={cn("relative bg-base-100 border-t border-base-content/10", props.class)}>
       {/* Slash Suggestions */}
       <Show when={showSlashSuggestions()}>
-        <div class="absolute left-4 right-4 bottom-full z-50 mb-1 rounded-xl border border-base-content/10 bg-base-100 shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+        <div class="absolute left-4 right-4 bottom-full z-50 mb-1 rounded-[var(--as-radius-lg,1rem)] border border-base-content/10 bg-base-100 shadow-lg overflow-hidden max-h-56 overflow-y-auto">
           <For each={slashSuggestions()}>
             {(item, index) => (
               <button
@@ -157,7 +157,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 onClick={() => props.onSelectSlash?.(item.value || item.name)}
                 onMouseEnter={() => setActiveSlashIndex(index())}
               >
-                <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold">
+                <span class="flex items-center justify-center w-7 h-7 rounded-[var(--as-radius,0.5rem)] bg-primary/10 text-primary text-xs font-bold">
                   /
                 </span>
                 <div class="flex-1 min-w-0">
@@ -174,7 +174,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
 
       {/* Mention Suggestions */}
       <Show when={showMentionSuggestions()}>
-        <div class="absolute left-4 right-4 bottom-full z-50 mb-1 rounded-xl border border-base-content/10 bg-base-100 shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+        <div class="absolute left-4 right-4 bottom-full z-50 mb-1 rounded-[var(--as-radius-lg,1rem)] border border-base-content/10 bg-base-100 shadow-lg overflow-hidden max-h-48 overflow-y-auto">
           <For each={mentionSuggestions()}>
             {(item, index) => (
               <button
@@ -188,7 +188,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
                 onClick={() => props.onSelectMention?.(item.path)}
                 onMouseEnter={() => setActiveSlashIndex(index())}
               >
-                <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-base-200 text-base-content/40">
+                <span class="flex items-center justify-center w-7 h-7 rounded-[var(--as-radius,0.5rem)] bg-base-200 text-base-content/40">
                   <FiFolder size={12} />
                 </span>
                 <span class="text-sm font-mono text-base-content truncate">{item.path}</span>
@@ -205,7 +205,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           <div class="flex flex-wrap gap-1.5">
             <For each={props.attachments}>
               {(file) => (
-                <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-base-200/70 border border-base-content/10 text-xs text-base-content/60">
+                <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-[var(--as-radius,0.5rem)] bg-base-200/70 border border-base-content/10 text-xs text-base-content/60">
                   <FiFolder size={10} />
                   <span class="truncate max-w-[100px]">{file.name}</span>
                   <button
@@ -225,7 +225,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         </Show>
 
         {/* Textarea Row */}
-        <div class="flex items-end gap-1.5 rounded-xl border transition-colors duration-150"
+        <div class="flex items-end gap-1.5 rounded-[var(--as-radius-lg,1rem)] border transition-colors duration-150"
           classList={{
             "border-base-content/30": focused(),
             "border-base-content/10": !focused(),
@@ -268,7 +268,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             }}
             disabled={!props.isStreaming && !props.value.trim() && !props.disabled}
             class={cn(
-              "p-2.5 shrink-0 rounded-lg transition-all duration-150",
+              "p-2.5 shrink-0 rounded-[var(--as-radius,0.5rem)] transition-all duration-150",
               props.isStreaming
                 ? "text-error hover:bg-error/10"
                 : props.value.trim()

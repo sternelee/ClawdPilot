@@ -67,7 +67,7 @@ export const AppLayout: Component = () => {
   });
 
   return (
-    <div class="flex h-full bg-base-100">
+    <div class="flex h-full bg-base-100 gap-[var(--as-section-gap,1rem)]">
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog
         open={shortcutsDialogOpen()}
