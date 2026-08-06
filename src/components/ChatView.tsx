@@ -27,17 +27,18 @@ import { sessionEventRouter } from "../stores/sessionEventRouter";
 import type { AcpEvent } from "../types/acpEvents";
 import { isMobile } from "../stores/deviceStore";
 import { t } from "../stores/i18nStore";
-import type { ChatMessage } from "../stores/chatStore";
 import type { SlashCommandItem } from "../stores/chatStore";
 import type { SystemCard } from "../stores/chatStore";
 import type { AgentType } from "../stores/sessionStore";
 import { notificationStore } from "../stores/notificationStore";
-import { fileBrowserStore } from "../stores/fileBrowserStore";
-import { MessageBubble } from "./ui/MessageBubble";
+
 import { ChatInput } from "./ui/ChatInput";
 import { TcpForwardingModal } from "./TcpForwardingModal";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ChatEmptyState } from "./chat/MessageListView";
+import { MessageRow } from "./chat/MessageRow";
+import { ThinkingRow } from "./chat/ThinkingRow";
+import { ToolCallRow } from "./chat/ToolCallRow";
 import { PermissionPanel } from "./chat/PermissionPanel";
 import { UserQuestionPanel } from "./chat/UserQuestionPanel";
 
@@ -110,37 +111,6 @@ const normalizeSlashName = (value: string): string =>
   value.trim().replace(/^\/+/, "");
 
 type RightPanelView = "none" | "file" | "git" | "permissions";
-
-interface VirtualMessageRowProps {
-  key?: string;
-  message: ChatMessage;
-  onQuote?: (content: string) => void;
-  onResend?: (content: string) => void;
-  onToggleFileBrowser?: () => void;
-  onSyncTodoList?: (content: string) => void;
-  onOpenFileLocation?: (path: string, line?: number) => void;
-  onApplyEditReview?: (path: string, action: "accept" | "reject") => void;
-  onTerminalAction?: (
-    terminalId: string,
-    action: "attach" | "stop" | "status",
-  ) => void;
-}
-
-const VirtualMessageRow = (props: VirtualMessageRowProps) => {
-  return (
-    <MessageBubble
-      message={props.message}
-      onQuote={props.onQuote}
-      onResend={props.onResend}
-      onToggleFileBrowser={props.onToggleFileBrowser}
-      onSyncTodoList={props.onSyncTodoList}
-      onOpenFileLocation={props.onOpenFileLocation}
-      onApplyEditReview={props.onApplyEditReview}
-      onTerminalAction={props.onTerminalAction}
-      class="pb-4"
-    />
-  );
-};
 
 // Skeleton loader for streaming messages
 const MessageSkeleton: Component = () => (
@@ -1301,36 +1271,6 @@ export function ChatView(props: ChatViewProps) {
       }
     };
 
-    const handleSyncTodoList = async (content: string) => {
-      const sessionId = props.sessionId;
-      if (!sessionId || !content.trim() || isStreaming()) return;
-
-      setIsStreaming(true);
-      setShouldAutoFollow(true);
-      chatStore.addMessage(sessionId, {
-        role: "user",
-        content,
-      });
-
-      try {
-        await dispatchMessageToAgent(sessionId, content, []);
-        props.onSendMessage?.(content);
-      } catch (error) {
-        const errorMsg =
-          error instanceof Error
-            ? error.message
-            : props.sessionMode === "remote"
-              ? "Failed to sync TODO list to remote agent"
-              : "Failed to sync TODO list to local agent";
-        notificationStore.error(errorMsg, "TODO Sync Error");
-        chatStore.addMessage(sessionId, {
-          role: "system",
-          content: `Error: ${errorMsg}`,
-        });
-        setIsStreaming(false);
-      }
-    };
-
     const handleSelectSlash = (value: string) => {
       const normalized = normalizeSlashName(value);
       if (!normalized) return;
@@ -1339,41 +1279,7 @@ export function ChatView(props: ChatViewProps) {
       setSlashSuggestions([]);
     };
 
-    const handleApplyEditReview = async (
-      path: string,
-      action: "accept" | "reject",
-    ) => {
-      const content =
-        action === "accept"
-          ? `Please apply the proposed edit review changes for \`${path}\`.`
-          : `Please discard/revert the proposed edit review changes for \`${path}\` and explain the reason.`;
-      await handleSyncTodoList(content);
-    };
-
-    const handleTerminalAction = async (
-      terminalId: string,
-      action: "attach" | "stop" | "status",
-    ) => {
-      if (!terminalId) return;
-      const content =
-        action === "attach"
-          ? `Attach to terminal ${terminalId} and continue running commands in that terminal.`
-          : action === "stop"
-            ? `Stop terminal ${terminalId} and summarize final output.`
-            : `Check terminal ${terminalId} status and latest output.`;
-      await handleSyncTodoList(content);
-    };
-
-    const handleOpenFileLocation = (path: string, line?: number) => {
-      if (!path) return;
-      toggleRightPanel("file");
-      const activeSession = session();
-      const basePath = activeSession?.projectPath || props.projectPath || ".";
-      const normalizedPath = path.startsWith("/")
-        ? path
-        : `${basePath.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
-      fileBrowserStore.requestOpenFile(normalizedPath, line);
-    };
+  
 
     const handleSend = async () => {
       const sessionId = props.sessionId;
@@ -1585,24 +1491,7 @@ export function ChatView(props: ChatViewProps) {
       ),
     );
 
-    const handleQuoteMessage = (content: string) => {
-      const quoted = content
-        .split("\n")
-        .map((line) => `> ${line}`)
-        .join("\n");
-      setSessionInputValue((prev) =>
-        prev.trim() ? `${prev}\n\n${quoted}\n` : `${quoted}\n`,
-      );
-    };
 
-    const handleResendMessage = (content: string) => {
-      if (!content.trim() || isStreaming()) return;
-      chatStore.clearAttachments(props.sessionId);
-      setSessionInputValue(content);
-      queueMicrotask(() => {
-        void handleSend();
-      });
-    };
 
     const handleAbort = async () => {
       try {
@@ -1815,17 +1704,20 @@ export function ChatView(props: ChatViewProps) {
             <div class="max-w-3xl 2xl:max-w-4xl mx-auto w-full space-y-5">
               <Show when={messages().length > 0}>
                 <For each={messages()}>
-                  {(message: ReturnType<typeof messages>[number]) => (
-                    <VirtualMessageRow
-                      message={message}
-                      onQuote={handleQuoteMessage}
-                      onResend={handleResendMessage}
-                      onToggleFileBrowser={() => toggleRightPanel("file")}
-                      onSyncTodoList={handleSyncTodoList}
-                      onOpenFileLocation={handleOpenFileLocation}
-                      onApplyEditReview={handleApplyEditReview}
-                      onTerminalAction={handleTerminalAction}
-                    />
+                  {(message) => (
+                    <div>
+                      {message.role !== "user" && message.thinking && (
+                        <ThinkingRow
+                          thinking={message.thinkingContent}
+                          isStreaming={isStreaming() && message === messages()[messages().length - 1]}
+                          elapsed={message.thinkingElapsed}
+                        />
+                      )}
+                      <MessageRow message={message} />
+                      {message.toolCalls?.map((tc) => (
+                        <ToolCallRow tool={tc} />
+                      ))}
+                    </div>
                   )}
                 </For>
               </Show>

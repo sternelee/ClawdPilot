@@ -70,6 +70,10 @@ export interface ChatMessage {
   toolCalls?: ToolCall[]
   attachments?: Attachment[]
   systemCard?: SystemCard
+  thinkingContent?: string
+  thinkingElapsed?: number
+  diffs?: { hunks: { lines: { kind: "add" | "remove" | "context"; text: string; ln?: number }[] }[] }[]
+  todos?: { id: string; title: string; status: "in-progress" | "completed" | "pending" | "not-started" }[]
 }
 
 export interface ToolCall {
