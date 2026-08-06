@@ -3,3 +3,8 @@ export { MessageListView, ChatEmptyState } from "./MessageListView";
 export { PermissionPanel } from "./PermissionPanel";
 export { UserQuestionPanel } from "./UserQuestionPanel";
 export { ChatInputView } from "./ChatInputView";
+export { WelcomeHeader } from "./WelcomeHeader";
+export { ThinkingRow } from "./ThinkingRow";
+export { ToolCallRow } from "./ToolCallRow";
+export { DiffBlock } from "./DiffBlock";
+export { TodoListBlock } from "./TodoListBlock";
