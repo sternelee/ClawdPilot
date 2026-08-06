@@ -1,10 +1,11 @@
 import { Show } from "solid-js";
 import {
   settingsStore,
-  ThemeType,
-  LanguageType,
-  FontSizeType,
+  type ThemeType,
+  type LanguageType,
+  type FontSizeType,
 } from "../stores/settingsStore";
+import type { StyleName } from "../stores/styleStore";
 import { t } from "../stores/i18nStore";
 import { Button } from "./ui/primitives";
 import { Dialog } from "./ui/primitives";
@@ -30,6 +31,13 @@ export function SettingsModal(props: SettingsModalProps) {
     { value: "synthwave", label: t("theme.synthwave") as string },
     { value: "caramellatte", label: "Caramel Latte" },
     { value: "lofi", label: "Lofi" },
+  ];
+
+  const styleOptions = [
+    { value: "auto", label: t("style.auto") as string },
+    { value: "claude", label: t("style.claude") as string },
+    { value: "codex", label: t("style.codex") as string },
+    { value: "grok", label: t("style.grok") as string },
   ];
 
   return (
@@ -84,6 +92,20 @@ export function SettingsModal(props: SettingsModalProps) {
               <option value="extra-large">
                 {t("settings.fontSizeExtraLarge") as string}
               </option>
+            </Select>
+          </div>
+
+          <div class="space-y-2">
+            <Label>{t("style.title")}</Label>
+            <Select
+              value={settingsStore.get().agentStyle}
+              onChange={(val) =>
+                settingsStore.setAgentStyle(val as "auto" | StyleName)
+              }
+            >
+              {styleOptions.map((opt) => (
+                <option value={opt.value}>{opt.label}</option>
+              ))}
             </Select>
           </div>
 

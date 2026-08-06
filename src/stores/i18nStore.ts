@@ -150,6 +150,13 @@ const dictionaries = {
         agentDesc: "Real-time sharing",
       },
     },
+    style: {
+      title: "Agent UI Style",
+      auto: "Auto (by agent)",
+      claude: "Claude Terminal",
+      codex: "Codex Panel",
+      grok: "Grok Chat",
+    },
     sidebar: {
       platform: "AI Platform",
       home: "Home",
@@ -419,6 +426,13 @@ const dictionaries = {
         agentTitle: "Agent",
         agentDesc: "实时协作共享",
       },
+    },
+    style: {
+      title: "Agent 界面风格",
+      auto: "自动（按 Agent）",
+      claude: "Claude 终端",
+      codex: "Codex 面板",
+      grok: "Grok 聊天",
     },
     sidebar: {
       platform: "AI 平台",

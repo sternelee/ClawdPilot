@@ -1,4 +1,5 @@
 import { createSignal, createEffect } from "solid-js";
+import { type StyleName, styleStore } from "./styleStore";
 
 export type ThemeType =
   | "sunset"
@@ -21,6 +22,7 @@ export interface UserSettings {
   language: LanguageType;
   fontSize: FontSizeType;
   enableAnimations: boolean;
+  agentStyle: "auto" | StyleName;
   enableScanLines: boolean;
   enableMatrixRain: boolean;
   enableSoundEffects: boolean;
@@ -38,6 +40,7 @@ const defaultSettings: UserSettings = {
   language: "en",
   fontSize: "medium",
   enableAnimations: true,
+  agentStyle: "auto",
   enableScanLines: false,
   enableMatrixRain: false,
   enableSoundEffects: false,
@@ -218,6 +221,15 @@ export const settingsStore = {
     } catch (error) {
       console.error("Failed to import settings:", error);
       return false;
+    }
+  },
+
+  setAgentStyle: (style: "auto" | StyleName) => {
+    setSettings((prev) => ({ ...prev, agentStyle: style }));
+    if (style === "auto") {
+      styleStore.restoreAuto();
+    } else {
+      styleStore.setManualStyle(style);
     }
   },
 };
