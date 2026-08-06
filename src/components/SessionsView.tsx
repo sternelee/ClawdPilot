@@ -60,9 +60,9 @@ export const SessionsView: Component = () => {
   };
 
   return (
-    <div class="flex h-full flex-col overflow-y-auto bg-base-100 p-4 sm:p-6 lg:p-8">
+    <div class="flex h-full flex-col overflow-y-auto bg-base-100 p-[var(--as-section-gap,1rem)] sm:p-[var(--as-section-gap,1.5rem)] lg:p-8">
       <div class="mx-auto w-full max-w-6xl space-y-6">
-        <header class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <header class="flex flex-col gap-[var(--as-section-gap,1rem)] sm:flex-row sm:items-center sm:justify-between">
           <div class="flex items-start sm:items-center gap-3">
             <button
               type="button"
@@ -84,7 +84,7 @@ export const SessionsView: Component = () => {
               <h1 class="text-2xl font-bold tracking-tight text-base-content sm:text-3xl">
                 {t("sessionsView.title")}
               </h1>
-              <p class="mt-1 text-sm text-base-content/50">
+              <p class="mt-1 text-[var(--as-font-size-sm,0.8125rem)] text-base-content/50">
                 {t("sessionsView.desc")}
               </p>
             </div>
@@ -98,11 +98,11 @@ export const SessionsView: Component = () => {
           </button>
         </header>
 
-        <div class="card card-bordered bg-base-100 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-2">
+        <div class="card card-bordered bg-base-100 flex-col gap-[var(--as-section-gap,1rem)] sm:flex-row sm:items-center sm:justify-between p-2">
           <div class="flex items-center gap-1 overflow-x-auto">
             {(["all", "active", "local", "remote"] as const).map((f) => (
               <button
-                class={`px-4 py-1.5 text-sm font-medium whitespace-nowrap rounded-lg transition-colors duration-150 ${
+                class={`px-4 py-1.5 text-[var(--as-font-size-sm,0.8125rem)] font-medium whitespace-nowrap rounded-[var(--as-radius,0.5rem)] transition-colors duration-150 ${
                   filter() === f
                     ? "bg-primary text-primary-content"
                     : "text-base-content/50 hover:text-base-content hover:bg-base-200/50"
@@ -124,7 +124,7 @@ export const SessionsView: Component = () => {
             <input
               type="text"
               placeholder={t("sessionsView.searchPlaceholder")}
-              class="input input-bordered w-full pl-10 pr-4 text-sm"
+              class="input input-bordered w-full pl-10 pr-4 text-[var(--as-font-size-sm,0.8125rem)]"
               value={searchQuery()}
               onInput={(e) => setSearchQuery(e.currentTarget.value)}
             />
@@ -137,13 +137,13 @@ export const SessionsView: Component = () => {
             when={sessions().length > 0}
             fallback={
               <div class="flex flex-col items-center justify-center py-20 px-4 text-center">
-                <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-base-200/60 text-base-content/30 shadow-sm">
+                <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--as-radius-lg,1rem)] bg-base-200/60 text-base-content/30 shadow-sm">
                   <FiActivity size={32} />
                 </div>
-                <h3 class="text-base font-semibold text-base-content mb-1">
+                <h3 class="text-[var(--as-font-size-base,0.875rem)] font-semibold text-base-content mb-1">
                   {t("sessionsView.noSessions")}
                 </h3>
-                <p class="max-w-xs text-sm text-base-content/50">
+                <p class="max-w-xs text-[var(--as-font-size-sm,0.8125rem)] text-base-content/50">
                   {searchQuery() || filter() !== "all"
                     ? t("sessionsView.noSessionsDesc")
                     : t("home.noRecentSessionsDesc")}
@@ -166,12 +166,12 @@ export const SessionsView: Component = () => {
                   const isActive = activeSessionId() === session.sessionId;
                   return (
                     <div
-                      class="flex flex-col sm:flex-row sm:items-center justify-between p-4 border-b border-base-content/10 last:border-b-0 cursor-pointer hover:bg-base-200/30 transition-colors duration-150 focus-ring"
+                      class="flex flex-col sm:flex-row sm:items-center justify-between p-[var(--as-section-gap,1rem)] border-b border-base-content/10 last:border-b-0 cursor-pointer hover:bg-base-200/30 transition-colors duration-150 focus-ring"
                       onClick={() => handleResumeSession(session.sessionId)}
                     >
-                      <div class="flex items-start sm:items-center gap-4 min-w-0">
+                      <div class="flex items-start sm:items-center gap-[var(--as-section-gap,1rem)] min-w-0">
                         <div
-                          class={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+                          class={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--as-radius-lg,0.75rem)] border ${
                             isActive
                               ? "bg-primary text-primary-content border-base-content"
                               : "bg-base-100 text-base-content/40 border-base-content/10"
@@ -186,7 +186,7 @@ export const SessionsView: Component = () => {
                         </div>
                         <div class="min-w-0 flex-1">
                           <div class="flex items-center gap-2">
-                            <h3 class="truncate font-semibold text-base text-base-content">
+                            <h3 class="truncate font-semibold text-[var(--as-font-size-base,0.875rem)] text-base-content">
                               {session.projectPath.split("/").pop() ||
                                 t("common.unknownProject")}
                             </h3>
@@ -221,7 +221,7 @@ export const SessionsView: Component = () => {
 
                       <div class="flex items-center gap-2 shrink-0 ml-16 sm:ml-0 mt-4 sm:mt-0">
                         <button
-                          class={`border px-3 py-1.5 text-sm font-medium ${
+                          class={`border px-3 py-1.5 text-[var(--as-font-size-sm,0.8125rem)] font-medium ${
                             isActive
                               ? "bg-primary text-primary-content border-base-content"
                               : "border-base-content/10 hover:bg-base-200"

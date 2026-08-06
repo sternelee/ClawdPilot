@@ -536,7 +536,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           <Button
             variant="ghost"
             size="xs"
-            class="h-7 w-7 rounded-lg"
+            class="h-7 w-7 rounded-[var(--as-radius,0.5rem)]"
             onClick={() => fileTreeInstance?.openSearch()}
             title="Search files (Ctrl+F)"
           >
@@ -547,7 +547,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
           <Button
             variant="ghost"
             size="xs"
-            class="h-7 w-7 rounded-lg"
+            class="h-7 w-7 rounded-[var(--as-radius,0.5rem)]"
             onClick={refresh}
             disabled={isLoading()}
             title="Refresh"
@@ -584,7 +584,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
                 d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span class="text-sm">{state.error}</span>
+            <span class="text-[var(--as-font-size-sm,0.8125rem)]">{state.error}</span>
           </Alert>
         </Show>
 
@@ -597,7 +597,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
         <Dialog
           open={!!state.viewingFile}
           onClose={closeFile}
-          contentClass="max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-base-100 rounded-2xl"
+          contentClass="max-w-4xl max-h-[85vh] flex flex-col p-0 overflow-hidden bg-base-100 rounded-[var(--as-radius-lg,1rem)]"
         >
           <div class="flex flex-col h-full min-h-0">
             {/* Dialog header */}
@@ -605,7 +605,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
               <span class="shrink-0 text-base-content/50">
                 <FileIcon />
               </span>
-              <span class="font-medium text-sm text-base-content truncate">
+              <span class="font-medium text-[var(--as-font-size-sm,0.8125rem)] text-base-content truncate">
                 {state.viewingFile?.path.split("/").pop() || "File"}
               </span>
               <span class="text-base-content/50/50 font-normal text-xs hidden sm:block truncate">
@@ -616,7 +616,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
             {/* Body — differs by file kind */}
             <Show when={viewingKind() === "image" && imageSrc()}>
               {/* Local image preview */}
-              <div class="flex-1 overflow-auto flex items-center justify-center p-4 bg-base-content">
+              <div class="flex-1 overflow-auto flex items-center justify-center p-[var(--as-section-gap,1rem)] bg-base-content">
                 <img
                   src={imageSrc()}
                   alt={state.viewingFile?.path.split("/").pop() || "image"}
@@ -647,7 +647,7 @@ export const FileBrowserView: Component<FileBrowserViewProps> = (props) => {
                     d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
                   />
                 </svg>
-                <span class="text-sm">不支持预览此文件类型</span>
+                <span class="text-[var(--as-font-size-sm,0.8125rem)]">不支持预览此文件类型</span>
                 <span class="text-xs opacity-60">
                   {state.viewingFile?.path.split("/").pop()}
                 </span>

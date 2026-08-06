@@ -32,7 +32,7 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
 
   return (
     <div class={cn("flex h-full flex-col bg-base-100", props.class)}>
-      <header class="flex items-center gap-4 px-6 py-5 border-b border-base-content/10">
+      <header class="flex items-center gap-[var(--as-section-gap,1rem)] px-6 py-5 border-b border-base-content/10">
         <button
           type="button"
           class="text-base-content/50 hover:text-base-content md:hidden"
@@ -45,11 +45,11 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
         </button>
         <div>
           <h1 class="text-xl font-bold text-base-content">{t("settings.title")}</h1>
-          <p class="text-sm text-base-content/50">{t("settings.desc")}</p>
+          <p class="text-[var(--as-font-size-sm,0.8125rem)] text-base-content/50">{t("settings.desc")}</p>
         </div>
       </header>
 
-      <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+      <div class="flex-1 overflow-y-auto p-[var(--as-section-gap,1rem)] sm:p-[var(--as-section-gap,1.5rem)] lg:p-8">
         <div class="max-w-3xl mx-auto space-y-6">
           {/* Appearance */}
           <section>
@@ -60,19 +60,19 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
             <div class="card card-bordered bg-base-100">
               <div class="flex items-center justify-between px-4 py-3 border-b border-base-content/5">
                 <div>
-                  <p class="text-sm font-medium text-base-content">{t("settings.theme")}</p>
+                  <p class="text-[var(--as-font-size-sm,0.8125rem)] font-medium text-base-content">{t("settings.theme")}</p>
                   <p class="text-xs text-base-content/50">{t("settings.themeDesc")}</p>
                 </div>
                 <ThemeSwitcher />
               </div>
               <div class="flex items-center justify-between px-4 py-3 border-b border-base-content/5">
                 <div>
-                  <label for="font-size-select" class="text-sm font-medium text-base-content">{t("settings.fontSize")}</label>
+                  <label for="font-size-select" class="text-[var(--as-font-size-sm,0.8125rem)] font-medium text-base-content">{t("settings.fontSize")}</label>
                   <p class="text-xs text-base-content/50">{t("settings.fontSizeDesc")}</p>
                 </div>
                 <select
                   id="font-size-select"
-                  class="border border-base-content/10 px-2 py-1 text-sm bg-base-100 rounded-lg focus:outline-none focus:border-base-content/30 transition-colors duration-150"
+                  class="border border-base-content/10 px-2 py-1 text-[var(--as-font-size-sm,0.8125rem)] bg-base-100 rounded-[var(--as-radius,0.5rem)] focus:outline-none focus:border-base-content/30 transition-colors duration-150"
                   value={settingsStore.get().fontSize}
                   onChange={(e) => settingsStore.setFontSize(e.currentTarget.value as FontSizeType)}
                 >
@@ -83,7 +83,7 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
               </div>
               <div class="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p class="text-sm font-medium text-base-content">{t("settings.animations")}</p>
+                  <p class="text-[var(--as-font-size-sm,0.8125rem)] font-medium text-base-content">{t("settings.animations")}</p>
                   <p class="text-xs text-base-content/50">{t("settings.animationsDesc")}</p>
                 </div>
                 <input
@@ -107,7 +107,7 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
             <div class="card card-bordered bg-base-100">
               <div class="flex items-center justify-between px-4 py-3">
                 <div>
-                  <p class="text-sm font-medium text-base-content">{t("settings.language")}</p>
+                  <p class="text-[var(--as-font-size-sm,0.8125rem)] font-medium text-base-content">{t("settings.language")}</p>
                   <p class="text-xs text-base-content/50">{t("settings.languageDesc")}</p>
                 </div>
                 <LanguageSwitcher />
@@ -123,12 +123,12 @@ export const SettingsView: Component<SettingsViewProps> = (props) => {
             </h2>
             <div class="card card-bordered bg-base-100 px-4 py-3 flex flex-row items-center justify-between">
               <div>
-                <p class="text-sm font-medium text-base-content">Irogen</p>
+                <p class="text-[var(--as-font-size-sm,0.8125rem)] font-medium text-base-content">Irogen</p>
                 <p class="text-xs text-base-content/50">Multi-agent local/remote management platform</p>
                 <p class="text-xs text-base-content/40 font-mono mt-1">v0.8.0</p>
               </div>
               <button
-                class="text-xs text-error border border-error/20 px-3 py-1.5 rounded-lg hover:bg-error hover:text-error-content transition-all duration-150"
+                class="text-xs text-error border border-error/20 px-3 py-1.5 rounded-[var(--as-radius,0.5rem)] hover:bg-error hover:text-error-content transition-all duration-150"
                 onClick={handleResetSettings}
               >
                 <FiRefreshCw size={12} class="inline mr-1" />

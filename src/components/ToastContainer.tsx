@@ -6,7 +6,7 @@ import { cn } from "../lib/utils";
 
 export const ToastContainer = () => {
   return (
-    <div class="toast toast-top toast-end z-[100] p-4 pointer-events-none">
+    <div class="toast toast-top toast-end z-[100] p-[var(--as-section-gap,1rem)] pointer-events-none">
       <TransitionGroup
         onEnter={(el, done) => {
           const a = el.animate(
@@ -56,7 +56,7 @@ export const ToastContainer = () => {
                   </Show>
                 </div>
                 <div class="flex flex-col gap-0.5 text-left flex-1 min-w-0">
-                  <h3 class="font-bold text-sm leading-none">
+                  <h3 class="font-bold text-[var(--as-font-size-sm,0.8125rem)] leading-none">
                     {notification.title}
                   </h3>
                   <div class="text-xs opacity-90 leading-tight">

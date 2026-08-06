@@ -171,9 +171,9 @@ export const TcpForwardingModal: Component<TcpForwardingModalProps> = (
         <div class="flex-1 min-h-0 overflow-y-auto px-4 py-5 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]">
           <div class="mx-auto flex min-h-full w-full max-w-2xl flex-col">
             <Show when={isAdding()}>
-              <div class="bg-base-200/50 p-5 rounded-2xl mb-8 border border-base-content/5 animate-in zoom-in-95 fade-in duration-200 shadow-sm">
+              <div class="bg-base-200/50 p-5 rounded-[var(--as-radius-lg,1rem)] mb-8 border border-base-content/5 animate-in zoom-in-95 fade-in duration-200 shadow-sm">
                 <div class="flex items-center gap-2 mb-6">
-                  <div class="bg-primary/10 p-2 rounded-lg text-primary">
+                  <div class="bg-primary/10 p-2 rounded-[var(--as-radius,0.5rem)] text-primary">
                     <FiPlus size={18} />
                   </div>
                   <h4 class="font-bold">{t("tcpForwarding.createNew")}</h4>
@@ -217,7 +217,7 @@ export const TcpForwardingModal: Component<TcpForwardingModalProps> = (
                   </Button>
                   <Button
                     variant="primary"
-                    class="px-6 rounded-xl font-bold"
+                    class="px-6 rounded-[var(--as-radius-lg,0.75rem)] font-bold"
                     onClick={handleCreate}
                     disabled={tcpForwardingStore.state.loading}
                   >
@@ -241,12 +241,12 @@ export const TcpForwardingModal: Component<TcpForwardingModalProps> = (
                   <h3 class="text-lg font-bold opacity-40">
                     {t("tcpForwarding.noSessions")}
                   </h3>
-                  <p class="text-sm opacity-30 mt-2 max-w-xs">
+                  <p class="text-[var(--as-font-size-sm,0.8125rem)] opacity-30 mt-2 max-w-xs">
                     {t("tcpForwarding.noSessionsDesc")}
                   </p>
                   <Button
                     variant="primary"
-                    class="mt-8 rounded-xl px-6"
+                    class="mt-8 rounded-[var(--as-radius-lg,0.75rem)] px-6"
                     onClick={() => setIsAdding(true)}
                   >
                     <FiPlus size={18} class="mr-2" />
@@ -267,10 +267,10 @@ export const TcpForwardingModal: Component<TcpForwardingModalProps> = (
 
                 <For each={sessions()}>
                   {(session) => (
-                    <div class="flex items-center justify-between p-5 bg-base-200/30 border border-base-content/5 rounded-2xl hover:bg-base-200/50 transition-all group">
-                      <div class="flex items-center gap-4 min-w-0">
+                    <div class="flex items-center justify-between p-5 bg-base-200/30 border border-base-content/5 rounded-[var(--as-radius-lg,1rem)] hover:bg-base-200/50 transition-all group">
+                      <div class="flex items-center gap-[var(--as-section-gap,1rem)] min-w-0">
                         <div
-                          class={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center shadow-sm ${
+                          class={`w-12 h-12 shrink-0 rounded-[var(--as-radius-lg,0.75rem)] flex items-center justify-center shadow-sm ${
                             session.status === "running"
                               ? "bg-success/10 text-success ring-1 ring-success/20"
                               : "bg-warning/10 text-warning ring-1 ring-warning/20"
@@ -287,7 +287,7 @@ export const TcpForwardingModal: Component<TcpForwardingModalProps> = (
                         </div>
                         <div class="min-w-0">
                           <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-black text-sm tracking-tight">
+                            <span class="font-black text-[var(--as-font-size-sm,0.8125rem)] tracking-tight">
                               {session.local_addr}
                             </span>
                             <span class="text-base-content/20 text-xs">→</span>

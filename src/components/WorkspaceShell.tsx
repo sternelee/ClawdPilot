@@ -45,7 +45,7 @@ const RightPanelHeader: Component<{
 
   return (
     <div class="flex items-center justify-between px-4 py-3 border-b border-base-content/10 bg-base-100">
-      <div class="flex items-center gap-2 text-sm font-semibold text-base-content">
+      <div class="flex items-center gap-2 text-[var(--as-font-size-sm,0.8125rem)] font-semibold text-base-content">
         <Show when={props.view === "file"}><FiFolder size={14} /></Show>
         <Show when={props.view === "git"}><FiGitBranch size={14} /></Show>
         <Show when={props.view === "permissions"}><FiShield size={14} /></Show>
@@ -53,7 +53,7 @@ const RightPanelHeader: Component<{
       </div>
       <button
         type="button"
-        class="h-8 w-8 rounded-lg flex items-center justify-center text-base-content/40 hover:text-base-content hover:bg-base-200 transition-colors"
+        class="h-8 w-8 rounded-[var(--as-radius,0.5rem)] flex items-center justify-center text-base-content/40 hover:text-base-content hover:bg-base-200 transition-colors"
         onClick={props.onClose}
         title="Close panel"
       >

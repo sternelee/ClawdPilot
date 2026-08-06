@@ -261,9 +261,9 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
       open={props.isOpen}
       onClose={props.onClose}
       class="modal-bottom sm:modal-middle"
-      contentClass="rounded-t-3xl rounded-b-none sm:rounded-2xl"
+      contentClass="rounded-t-3xl rounded-b-none sm:rounded-[var(--as-radius-lg,1rem)]"
     >
-      <div class="p-4">
+      <div class="p-[var(--as-section-gap,1rem)]">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-2">
             <FiClock class="w-5 h-5 text-primary" />
@@ -308,7 +308,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
             <input
               id="history-project-path"
               type="text"
-              class="input input-sm input-bordered w-full font-mono text-sm"
+              class="input input-sm input-bordered w-full font-mono text-[var(--as-font-size-sm,0.8125rem)]"
               placeholder="Enter project path"
               value={projectPath()}
               onInput={(e) => setProjectPath(e.currentTarget.value)}
@@ -348,7 +348,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
                   <div>
                     <button
                       type="button"
-                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-base-content/5 transition-colors"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-[var(--as-radius,0.5rem)] hover:bg-base-content/5 transition-colors"
                       onClick={() => toggleNodeExpanded(node.id)}
                     >
                       <Show
@@ -386,7 +386,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
                           {(child) => (
                             <button
                               type="button"
-                              class={`w-full p-2 rounded-lg border text-left transition-all text-xs ${
+                              class={`w-full p-2 rounded-[var(--as-radius,0.5rem)] border text-left transition-all text-xs ${
                                 selectedSession() === child.id
                                   ? "border-primary bg-primary/10"
                                   : "border-base-content/10 hover:bg-base-content/5"
@@ -428,7 +428,7 @@ export const HistorySelectionModal: Component<HistorySelectionModalProps> = (
         >
           <div class="text-center py-8 text-base-content/50">
             <FiClock class="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p class="text-sm">No history sessions found for this project</p>
+            <p class="text-[var(--as-font-size-sm,0.8125rem)]">No history sessions found for this project</p>
           </div>
         </Show>
 

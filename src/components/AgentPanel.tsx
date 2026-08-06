@@ -297,9 +297,9 @@ export const AgentPanel: Component<AgentPanelProps> = (props) => {
 
 const EmptyState: Component<{ onNewTab: () => void }> = (props) => {
   return (
-    <div class="flex flex-col items-center justify-center h-full text-center p-6">
+    <div class="flex flex-col items-center justify-center h-full text-center p-[var(--as-section-gap,1.5rem)]">
       <FiMessageSquare size={32} class="text-base-content/30 dark:text-base-content/60 mb-4" />
-      <p class="text-sm font-medium text-base-content mb-1">
+      <p class="text-[var(--as-font-size-sm,0.8125rem)] font-medium text-base-content mb-1">
         No active threads
       </p>
       <p class="text-xs text-base-content/50 mb-4 max-w-xs">
