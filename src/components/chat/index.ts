@@ -8,3 +8,4 @@ export { ThinkingRow } from "./ThinkingRow";
 export { ToolCallRow } from "./ToolCallRow";
 export { DiffBlock } from "./DiffBlock";
 export { TodoListBlock } from "./TodoListBlock";
+export { MessageRow } from "./MessageRow";
