@@ -114,7 +114,7 @@ export const MobileBottomTabBar: Component = () => {
                 <Show when={badgeCount() > 0}>
                   <span
                     class={cn(
-                      "absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold leading-none flex items-center justify-center",
+                      "absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-[var(--as-radius,9999px)] text-[9px] font-bold leading-none flex items-center justify-center",
                       tab.id === "sessions"
                         ? "bg-primary text-primary-content"
                         : "bg-success text-success-content",
@@ -129,7 +129,7 @@ export const MobileBottomTabBar: Component = () => {
               </span>
               <span
                 class={cn(
-                  "absolute top-0 left-1/2 -translate-x-1/2 h-0.5 rounded-full bg-primary transition-all duration-200",
+                  "absolute top-0 left-1/2 -translate-x-1/2 h-0.5 rounded-[var(--as-radius,9999px)] bg-primary transition-all duration-200",
                   active() ? "w-8 opacity-100" : "w-0 opacity-0",
                 )}
               />

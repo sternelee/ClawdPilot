@@ -79,3 +79,14 @@
   --as-font-size-base: 1rem;
   --as-transition-speed: 0.25s;
 }
+
+/* ---- Mobile: narrow-screen adjustments ---- */
+
+@media (max-width: 640px) {
+  [data-style="claude"] {
+    --as-msg-gap: 0.5rem;
+  }
+  [data-style="grok"] .message-bubble {
+    max-width: 90%;
+  }
+}
