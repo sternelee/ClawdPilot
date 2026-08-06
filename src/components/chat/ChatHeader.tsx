@@ -10,17 +10,19 @@
  * - Tool panel toggle buttons
  */
 
-import { type Component, Show, For, createMemo } from "solid-js";
+import { type Component, Show, For, createMemo, createSignal } from "solid-js";
 import {
   FiSidebar,
   FiFolder,
   FiGitBranch,
   FiChevronRight,
+  FiChevronDown,
 } from "solid-icons/fi";
 import { sessionStore, type PermissionMode } from "../../stores/sessionStore";
 import { sessionEventRouter } from "../../stores/sessionEventRouter";
 import { PermissionModeSwitcher } from "../ui/PermissionModeSwitcher";
 import { cn } from "~/lib/utils";
+import { styleStore, type StyleName } from "~/stores/styleStore";
 
 // ============================================================================
 // Helpers
@@ -43,6 +45,14 @@ function agentAvatarColor(name: string): string {
 
 function agentInitial(name: string): string {
   return name.charAt(0).toUpperCase();
+}
+
+function styleAppearanceLabel(s: StyleName): string {
+  switch (s) {
+    case "claude": return "Claude";
+    case "codex": return "Codex";
+    case "grok": return "Grok";
+  }
 }
 
 // ============================================================================
@@ -127,6 +137,8 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
     const agentType = props.agentType || session()?.agentType || "agent";
     return agentType.charAt(0).toUpperCase() + agentType.slice(1);
   });
+
+  const [stylePickerOpen, setStylePickerOpen] = createSignal(false);
 
   return (
     <header class="z-20 flex min-h-14 shrink-0 items-center justify-between gap-2 border-b border-base-content/10 px-3 py-2.5 bg-base-100">
@@ -242,6 +254,43 @@ export const ChatHeader: Component<ChatHeaderProps> = (props) => {
             >
               <FiGitBranch size={14} />
             </button>
+          </Show>
+        </div>
+
+        {/* Agent UI style switcher */}
+        <div class="relative">
+          <button
+            type="button"
+            class="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-base-200 transition-colors"
+            onClick={() => setStylePickerOpen((v) => !v)}
+            aria-label="Switch agent style"
+          >
+            <span class="text-[11px] font-medium text-base-content/50">
+              {styleStore.manualOverride() ? styleAppearanceLabel(styleStore.currentStyle()) : "Auto"}
+            </span>
+            <FiChevronDown size={10} class="text-base-content/30" />
+          </button>
+          <Show when={stylePickerOpen()}>
+            <div class="absolute right-0 top-full mt-1 bg-base-100 border border-base-content/10 rounded-md shadow-lg z-50 min-w-[120px] overflow-hidden">
+              <button
+                class="block w-full text-left px-3 py-1.5 text-xs hover:bg-base-200 transition-colors"
+                classList={{ "text-primary font-medium": !styleStore.manualOverride() }}
+                onClick={() => { styleStore.restoreAuto(); setStylePickerOpen(false); }}
+              >
+                Auto
+              </button>
+              <For each={(["claude", "codex", "grok"] as StyleName[])}>
+                {(s) => (
+                  <button
+                    class="block w-full text-left px-3 py-1.5 text-xs hover:bg-base-200 transition-colors"
+                    classList={{ "text-primary font-medium": styleStore.manualOverride() && styleStore.currentStyle() === s }}
+                    onClick={() => { styleStore.setManualStyle(s); setStylePickerOpen(false); }}
+                  >
+                    {styleAppearanceLabel(s)}
+                  </button>
+                )}
+              </For>
+            </div>
           </Show>
         </div>
       </div>
