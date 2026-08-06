@@ -13,6 +13,7 @@ import { navigationStore } from "./navigationStore";
 import { invoke } from "@tauri-apps/api/core";
 import { notificationStore } from "./notificationStore";
 import { sessionEventRouter } from "./sessionEventRouter";
+import { styleStore } from "./styleStore";
 import {
   getLastTicket,
   getProjectPathHistory,
@@ -421,6 +422,16 @@ export const createSessionStore = () => {
       return;
     }
     setState("activeSessionId", sessionId);
+
+    // 按 agent 类型自动映射 UI 风格（ClaudeCode→claude, Codex→codex, 其余→defaultStyle）
+    if (sessionId) {
+      const session = state.sessions[sessionId];
+      if (session) {
+        styleStore.applyForAgent(session.agentType);
+      }
+    } else {
+      styleStore.applyForAgent(undefined);
+    }
   };
 
   // ========================================================================
@@ -645,8 +656,8 @@ export const createSessionStore = () => {
       }
     }
 
-    const matches = raw.match(/(?:[^\s\"]+|\"[^\"]*\")+/g) || [];
-    return matches.map((arg) => arg.replace(/^\"|\"$/g, ""));
+    const matches = raw.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+    return matches.map((arg) => arg.replace(/^"|"$/g, ""));
   };
 
   const parseMcpServers = (): unknown | undefined => {

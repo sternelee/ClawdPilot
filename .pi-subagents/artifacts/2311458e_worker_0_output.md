@@ -1,0 +1,1 @@
+Pure whitespace formatter noise (space→tab). Not our task concern. Write report and finish.

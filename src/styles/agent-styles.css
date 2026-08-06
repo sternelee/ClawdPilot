@@ -8,85 +8,85 @@
 /* ---- Claude Style: 极简终端 ---- */
 
 [data-style="claude"] {
-  --as-density: 0; /* compact */
-  --as-radius: 0.25rem;
-  --as-radius-lg: 0.375rem;
-  --as-font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
-  --as-msg-bubble: none; /* 纯文本行 */
-  --as-msg-align: left;
-  --as-msg-gap: 0.25rem;
-  --as-msg-avatar: symbol; /* prefix symbol */
-  --as-msg-prefix: "❯";
-  --as-msg-prefix-user: "❯";
-  --as-msg-prefix-assistant: "";
-  --as-thinking-row: "inline";
-  --as-tool-call-row: "inline";
-  --as-card-border: 0;
-  --as-card-bg: transparent;
-  --as-input-radius: 0;
-  --as-section-gap: 1rem;
-  --as-font-size-sm: 0.8125rem;
-  --as-font-size-base: 0.875rem;
-  --as-transition-speed: 0.15s;
+	--as-density: 0; /* compact */
+	--as-radius: 0.25rem;
+	--as-radius-lg: 0.375rem;
+	--as-font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+	--as-msg-bubble: none; /* 纯文本行 */
+	--as-msg-align: left;
+	--as-msg-gap: 0.25rem;
+	--as-msg-avatar: symbol; /* prefix symbol */
+	--as-msg-prefix: "❯";
+	--as-msg-prefix-user: "❯";
+	--as-msg-prefix-assistant: "";
+	--as-thinking-row: "inline";
+	--as-tool-call-row: "inline";
+	--as-card-border: 0;
+	--as-card-bg: transparent;
+	--as-input-radius: 0;
+	--as-section-gap: 1rem;
+	--as-font-size-sm: 0.8125rem;
+	--as-font-size-base: 0.875rem;
+	--as-transition-speed: 0.15s;
 }
 
 /* ---- Codex Style: 结构化分步面板 ---- */
 
 [data-style="codex"] {
-  --as-density: 1; /* normal */
-  --as-radius: 0.5rem;
-  --as-radius-lg: 0.75rem;
-  --as-font-mono: inherit;
-  --as-msg-bubble: none; /* 分步卡片 */
-  --as-msg-align: left;
-  --as-msg-gap: 0.75rem;
-  --as-msg-avatar: tag;
-  --as-msg-prefix: "";
-  --as-msg-prefix-user: "";
-  --as-msg-prefix-assistant: "";
-  --as-thinking-row: "card";
-  --as-tool-call-row: "card";
-  --as-card-border: 1px;
-  --as-card-bg: hsl(var(--b2) / 0.4);
-  --as-input-radius: 0.5rem;
-  --as-section-gap: 1.5rem;
-  --as-font-size-sm: 0.8125rem;
-  --as-font-size-base: 0.875rem;
-  --as-transition-speed: 0.2s;
+	--as-density: 1; /* normal */
+	--as-radius: 0.5rem;
+	--as-radius-lg: 0.75rem;
+	--as-font-mono: inherit;
+	--as-msg-bubble: none; /* 分步卡片 */
+	--as-msg-align: left;
+	--as-msg-gap: 0.75rem;
+	--as-msg-avatar: tag;
+	--as-msg-prefix: "";
+	--as-msg-prefix-user: "";
+	--as-msg-prefix-assistant: "";
+	--as-thinking-row: "card";
+	--as-tool-call-row: "card";
+	--as-card-border: 1px;
+	--as-card-bg: hsl(var(--b2) / 0.4);
+	--as-input-radius: 0.5rem;
+	--as-section-gap: 1.5rem;
+	--as-font-size-sm: 0.8125rem;
+	--as-font-size-base: 0.875rem;
+	--as-transition-speed: 0.2s;
 }
 
 /* ---- Grok Style: 圆润现代气泡 ---- */
 
 [data-style="grok"] {
-  --as-density: 2; /* spacious */
-  --as-radius: 1rem;
-  --as-radius-lg: 1.25rem;
-  --as-font-mono: inherit;
-  --as-msg-bubble: block; /* 气泡 */
-  --as-msg-align: left;
-  --as-msg-gap: 1rem;
-  --as-msg-avatar: avatar;
-  --as-msg-prefix: "";
-  --as-msg-prefix-user: "";
-  --as-msg-prefix-assistant: "";
-  --as-thinking-row: "bubble";
-  --as-tool-call-row: "bubble";
-  --as-card-border: 1px;
-  --as-card-bg: hsl(var(--b2) / 0.6);
-  --as-input-radius: 1.5rem;
-  --as-section-gap: 2rem;
-  --as-font-size-sm: 0.875rem;
-  --as-font-size-base: 1rem;
-  --as-transition-speed: 0.25s;
+	--as-density: 2; /* spacious */
+	--as-radius: 1rem;
+	--as-radius-lg: 1.25rem;
+	--as-font-mono: inherit;
+	--as-msg-bubble: block; /* 气泡 */
+	--as-msg-align: left;
+	--as-msg-gap: 1rem;
+	--as-msg-avatar: avatar;
+	--as-msg-prefix: "";
+	--as-msg-prefix-user: "";
+	--as-msg-prefix-assistant: "";
+	--as-thinking-row: "bubble";
+	--as-tool-call-row: "bubble";
+	--as-card-border: 1px;
+	--as-card-bg: hsl(var(--b2) / 0.6);
+	--as-input-radius: 1.5rem;
+	--as-section-gap: 2rem;
+	--as-font-size-sm: 0.875rem;
+	--as-font-size-base: 1rem;
+	--as-transition-speed: 0.25s;
 }
 
 /* ---- Mobile: narrow-screen adjustments ---- */
 
 @media (max-width: 640px) {
-  [data-style="claude"] {
-    --as-msg-gap: 0.5rem;
-  }
-  [data-style="grok"] .message-bubble {
-    max-width: 90%;
-  }
+	[data-style="claude"] {
+		--as-msg-gap: 0.5rem;
+	}
+	[data-style="grok"] .message-bubble {
+		max-width: 90%;
+	}
 }

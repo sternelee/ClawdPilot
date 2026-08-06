@@ -1,9 +1,9 @@
 import { Show } from "solid-js";
 import {
-  settingsStore,
-  type ThemeType,
-  type LanguageType,
-  type FontSizeType,
+	settingsStore,
+	type ThemeType,
+	type LanguageType,
+	type FontSizeType,
 } from "../stores/settingsStore";
 import type { StyleName } from "../stores/styleStore";
 import { t } from "../stores/i18nStore";
@@ -14,125 +14,125 @@ import { Select } from "./ui/primitives";
 import { Switch } from "./ui/primitives";
 
 interface SettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+	isOpen: boolean;
+	onClose: () => void;
 }
 
 export function SettingsModal(props: SettingsModalProps) {
-  const themeOptions = [
-    { value: "dark", label: t("theme.dark") as string },
-    { value: "light", label: t("theme.light") as string },
-    { value: "corporate", label: t("theme.corporate") as string },
-    { value: "business", label: t("theme.business") as string },
-    { value: "night", label: t("theme.night") as string },
-    { value: "black", label: t("theme.black") as string },
-    { value: "abyss", label: t("theme.abyss") as string },
-    { value: "luxury", label: t("theme.luxury") as string },
-    { value: "synthwave", label: t("theme.synthwave") as string },
-    { value: "caramellatte", label: "Caramel Latte" },
-    { value: "lofi", label: "Lofi" },
-  ];
+	const themeOptions = [
+		{ value: "dark", label: t("theme.dark") as string },
+		{ value: "light", label: t("theme.light") as string },
+		{ value: "corporate", label: t("theme.corporate") as string },
+		{ value: "business", label: t("theme.business") as string },
+		{ value: "night", label: t("theme.night") as string },
+		{ value: "black", label: t("theme.black") as string },
+		{ value: "abyss", label: t("theme.abyss") as string },
+		{ value: "luxury", label: t("theme.luxury") as string },
+		{ value: "synthwave", label: t("theme.synthwave") as string },
+		{ value: "caramellatte", label: "Caramel Latte" },
+		{ value: "lofi", label: "Lofi" },
+	];
 
-  const styleOptions = [
-    { value: "auto", label: t("style.auto") as string },
-    { value: "claude", label: t("style.claude") as string },
-    { value: "codex", label: t("style.codex") as string },
-    { value: "grok", label: t("style.grok") as string },
-  ];
+	const styleOptions = [
+		{ value: "auto", label: t("style.auto") as string },
+		{ value: "claude", label: t("style.claude") as string },
+		{ value: "codex", label: t("style.codex") as string },
+		{ value: "grok", label: t("style.grok") as string },
+	];
 
-  return (
-    <Show when={props.isOpen}>
-      <Dialog
-        open={props.isOpen}
-        onClose={props.onClose}
-        contentClass="w-11/12 max-w-2xl"
-      >
-        <h3 class="text-lg font-bold">{t("settings.title")}</h3>
+	return (
+		<Show when={props.isOpen}>
+			<Dialog
+				open={props.isOpen}
+				onClose={props.onClose}
+				contentClass="w-11/12 max-w-2xl"
+			>
+				<h3 class="text-lg font-bold">{t("settings.title")}</h3>
 
-        <div class="space-y-6 py-4">
-          <div class="space-y-2">
-            <Label>{t("settings.theme")}</Label>
-            <Select
-              value={settingsStore.get().theme}
-              onChange={(val) => settingsStore.setTheme(val as ThemeType)}
-            >
-              {themeOptions.map((theme) => (
-                <option value={theme.value}>{theme.label}</option>
-              ))}
-            </Select>
-          </div>
+				<div class="space-y-6 py-4">
+					<div class="space-y-2">
+						<Label>{t("settings.theme")}</Label>
+						<Select
+							value={settingsStore.get().theme}
+							onChange={(val) => settingsStore.setTheme(val as ThemeType)}
+						>
+							{themeOptions.map((theme) => (
+								<option value={theme.value}>{theme.label}</option>
+							))}
+						</Select>
+					</div>
 
-          <div class="space-y-2">
-            <Label>{t("settings.language")}</Label>
-            <Select
-              value={settingsStore.get().language}
-              onChange={(val) => settingsStore.setLanguage(val as LanguageType)}
-            >
-              <option value="en">English</option>
-              <option value="zh-CN">简体中文</option>
-            </Select>
-          </div>
+					<div class="space-y-2">
+						<Label>{t("settings.language")}</Label>
+						<Select
+							value={settingsStore.get().language}
+							onChange={(val) => settingsStore.setLanguage(val as LanguageType)}
+						>
+							<option value="en">English</option>
+							<option value="zh-CN">简体中文</option>
+						</Select>
+					</div>
 
-          <div class="space-y-2">
-            <Label>{t("settings.fontSize")}</Label>
-            <Select
-              value={settingsStore.get().fontSize}
-              onChange={(val) => settingsStore.setFontSize(val as FontSizeType)}
-              class="w-fit max-w-20 ml-auto"
-            >
-              <option value="small">
-                {t("settings.fontSizeSmall") as string}
-              </option>
-              <option value="medium">
-                {t("settings.fontSizeMedium") as string}
-              </option>
-              <option value="large">
-                {t("settings.fontSizeLarge") as string}
-              </option>
-              <option value="extra-large">
-                {t("settings.fontSizeExtraLarge") as string}
-              </option>
-            </Select>
-          </div>
+					<div class="space-y-2">
+						<Label>{t("settings.fontSize")}</Label>
+						<Select
+							value={settingsStore.get().fontSize}
+							onChange={(val) => settingsStore.setFontSize(val as FontSizeType)}
+							class="w-fit max-w-20 ml-auto"
+						>
+							<option value="small">
+								{t("settings.fontSizeSmall") as string}
+							</option>
+							<option value="medium">
+								{t("settings.fontSizeMedium") as string}
+							</option>
+							<option value="large">
+								{t("settings.fontSizeLarge") as string}
+							</option>
+							<option value="extra-large">
+								{t("settings.fontSizeExtraLarge") as string}
+							</option>
+						</Select>
+					</div>
 
-          <div class="space-y-2">
-            <Label>{t("style.title")}</Label>
-            <Select
-              value={settingsStore.get().agentStyle}
-              onChange={(val) =>
-                settingsStore.setAgentStyle(val as "auto" | StyleName)
-              }
-            >
-              {styleOptions.map((opt) => (
-                <option value={opt.value}>{opt.label}</option>
-              ))}
-            </Select>
-          </div>
+					<div class="space-y-2">
+						<Label>{t("style.title")}</Label>
+						<Select
+							value={settingsStore.get().agentStyle}
+							onChange={(val) =>
+								settingsStore.setAgentStyle(val as "auto" | StyleName)
+							}
+						>
+							{styleOptions.map((opt) => (
+								<option value={opt.value}>{opt.label}</option>
+							))}
+						</Select>
+					</div>
 
-          <div class="flex items-center justify-between rounded-lg border border-base-300 p-3">
-            <Label>{t("settings.animations")}</Label>
-            <Switch
-              checked={settingsStore.get().enableAnimations}
-              onChange={() => settingsStore.toggleAnimations()}
-            />
-          </div>
-        </div>
+					<div class="flex items-center justify-between rounded-lg border border-base-300 p-3">
+						<Label>{t("settings.animations")}</Label>
+						<Switch
+							checked={settingsStore.get().enableAnimations}
+							onChange={() => settingsStore.toggleAnimations()}
+						/>
+					</div>
+				</div>
 
-        <div class="flex justify-end gap-2">
-          <Button variant="ghost" onClick={props.onClose}>
-            {t("action.cancel")}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              settingsStore.resetToDefaults();
-              props.onClose();
-            }}
-          >
-            {t("action.reset")}
-          </Button>
-        </div>
-      </Dialog>
-    </Show>
-  );
+				<div class="flex justify-end gap-2">
+					<Button variant="ghost" onClick={props.onClose}>
+						{t("action.cancel")}
+					</Button>
+					<Button
+						variant="destructive"
+						onClick={() => {
+							settingsStore.resetToDefaults();
+							props.onClose();
+						}}
+					>
+						{t("action.reset")}
+					</Button>
+				</div>
+			</Dialog>
+		</Show>
+	);
 }

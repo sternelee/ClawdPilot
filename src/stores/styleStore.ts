@@ -33,10 +33,11 @@ function styleStoreFactory() {
   const [manualOverride, setManualOverride] = createSignal(false);
   const [manualStyle, setManualStyle] = createSignal<StyleName>("claude");
   const [currentStyle, setCurrentStyle] = createSignal<StyleName>("claude");
+  const [currentAgentType, setCurrentAgentType] = createSignal<string | undefined>(undefined);
 
   const updateStyle = (agentType?: string) => {
     const next = deriveStyle(
-      agentType,
+      agentType ?? currentAgentType(),
       defaultStyle(),
       manualOverride(),
       manualStyle(),
@@ -50,11 +51,11 @@ function styleStoreFactory() {
     defaultStyle,
     manualOverride,
     manualStyle,
-    // 切换默认风格（自动映射模式下生效）
+    // 切换默认风格（自动映射模式下重新求值）
     setDefaultStyle: (s: StyleName) => {
       setDefaultStyle(s);
       if (!manualOverride()) {
-        // re-evaluate current from agentType of active session
+        updateStyle(currentAgentType());
       }
     },
     // 全局手动切换
@@ -67,10 +68,14 @@ function styleStoreFactory() {
     // 恢复自动映射
     restoreAuto: (agentType?: string) => {
       setManualOverride(false);
-      updateStyle(agentType);
+      const effectiveAgentType = agentType ?? currentAgentType();
+      updateStyle(effectiveAgentType);
     },
     // agent 映射驱动（会话切换时调用）
     applyForAgent: (agentType?: string) => {
+      if (agentType !== undefined) {
+        setCurrentAgentType(agentType);
+      }
       updateStyle(agentType);
     },
   };

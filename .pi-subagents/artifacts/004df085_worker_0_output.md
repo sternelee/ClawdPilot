@@ -1,0 +1,4 @@
+- **Status:** DONE
+- **提交：** `5c7f341` feat(style): add chat core components — WelcomeHeader, ThinkingRow, ToolCallRow, DiffBlock, TodoListBlock
+- **测试小结：** tsc 通过（5 个新文件无错误；2 个 pre-existing 错误与本次无关）
+- **疑虑：** 无（适配了真实 ToolCall 接口；i18n key 使用已有值）

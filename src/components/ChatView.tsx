@@ -41,6 +41,7 @@ import { ThinkingRow } from "./chat/ThinkingRow";
 import { ToolCallRow } from "./chat/ToolCallRow";
 import { DiffBlock } from "./chat/DiffBlock";
 import { TodoListBlock } from "./chat/TodoListBlock";
+import { WelcomeHeader } from "./chat/WelcomeHeader";
 import { PermissionPanel } from "./chat/PermissionPanel";
 import { UserQuestionPanel } from "./chat/UserQuestionPanel";
 
@@ -1702,6 +1703,7 @@ export function ChatView(props: ChatViewProps) {
 								messages().length === 0 && pendingPermissions().length === 0
 							}
 						>
+							<WelcomeHeader agentType={props.agentType} />
 							<ChatEmptyState agentType={props.agentType} />
 						</Show>
 
